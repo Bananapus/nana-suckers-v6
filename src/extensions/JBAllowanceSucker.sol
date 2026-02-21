@@ -17,6 +17,7 @@ abstract contract JBAllowanceSucker is JBSucker {
     //*********************************************************************//
 
     error JBAllowanceSucker_NoTerminalForToken(uint256 projectId, address token);
+    error JBAllowanceSucker_NotRegisteredSucker();
     error JBAllowanceSucker_TokenNotAccepted(uint256 projectId, address token);
 
     //*********************************************************************//
@@ -70,6 +71,13 @@ abstract contract JBAllowanceSucker is JBSucker {
         );
 
         uint256 backingAssets = mulDiv(count, surplus, totalSupply);
+
+        // Defense-in-depth: verify the deployer recognizes this contract as a legitimate sucker
+        // before invoking the feeless allowance. This guards against a misconfigured or
+        // compromised deployer that omits the isSucker[msg.sender] check in useAllowanceFeeless.
+        if (!IJBSuckerDeployerFeeless(deployer).isSucker(address(this))) {
+            revert JBAllowanceSucker_NotRegisteredSucker();
+        }
 
         // Get the balance before we cash out.
         uint256 balanceBefore = _balanceOf(token, address(this));
