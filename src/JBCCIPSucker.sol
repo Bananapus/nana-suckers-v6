@@ -34,8 +34,16 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
     // --------------------------- custom errors ------------------------- //
     //*********************************************************************//
 
-    error JBCCIPSucker_FailedToRefundFee();
     error JBCCIPSucker_InvalidRouter(address router);
+
+    //*********************************************************************//
+    // ------------------------------ events ----------------------------- //
+    //*********************************************************************//
+
+    /// @notice Emitted when a transport payment refund fails after a successful CCIP send.
+    /// @param recipient The address that was supposed to receive the refund.
+    /// @param amount The amount of the failed refund (remains in the contract).
+    event TransportPaymentRefundFailed(address indexed recipient, uint256 amount);
 
     //*********************************************************************//
     // --------------- public immutable stored properties ---------------- //
@@ -239,10 +247,15 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
         // slither-disable-next-line calls-loop,unused-return
         CCIP_ROUTER.ccipSend{value: fees}({destinationChainSelector: REMOTE_CHAIN_SELECTOR, message: message});
 
-        // Refund remaining balance.
-        // slither-disable-next-line calls-loop,msg-value-loop
-        (bool sent,) = _msgSender().call{value: transportPayment - fees}("");
-        if (!sent) revert JBCCIPSucker_FailedToRefundFee();
+        // Refund remaining balance. Use a low-level call that does not revert on failure
+        // so that a non-payable recipient cannot cause the entire bridge operation to revert
+        // after CCIP has already accepted the message and committed the funds.
+        uint256 refundAmount = transportPayment - fees;
+        if (refundAmount != 0) {
+            // slither-disable-next-line calls-loop,msg-value-loop
+            (bool sent,) = _msgSender().call{value: refundAmount}("");
+            if (!sent) emit TransportPaymentRefundFailed(_msgSender(), refundAmount);
+        }
     }
 
     /// @notice Allow sucker implementations to add/override mapping rules to suite their specific needs.
