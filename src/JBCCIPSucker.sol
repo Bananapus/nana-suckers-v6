@@ -36,6 +36,7 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
 
     error JBCCIPSucker_FailedToRefundFee();
     error JBCCIPSucker_InvalidRouter(address router);
+    error JBCCIPSucker_ReceivedAmountMismatch(uint256 rootAmount, uint256 receivedAmount);
 
     //*********************************************************************//
     // --------------- public immutable stored properties ---------------- //
@@ -130,6 +131,16 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
         // Make sure that the message came from our peer.
         if (origin != peer() || any2EvmMessage.sourceChainSelector != REMOTE_CHAIN_SELECTOR) {
             revert JBSucker_NotPeer(origin);
+        }
+
+        // Validate that the amount claimed in the merkle root does not exceed the actual tokens received.
+        // This prevents the merkle tree from authorizing more token claims than are backed by bridged tokens.
+        {
+            uint256 receivedAmount =
+                any2EvmMessage.destTokenAmounts.length == 1 ? any2EvmMessage.destTokenAmounts[0].amount : 0;
+            if (root.amount > receivedAmount) {
+                revert JBCCIPSucker_ReceivedAmountMismatch(root.amount, receivedAmount);
+            }
         }
 
         // We either send no tokens or a single token.
