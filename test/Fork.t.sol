@@ -382,7 +382,7 @@ contract CCIPSuckerForkedTests is TestBaseWorkflow, JBTest {
         JBTokenMapping memory map = JBTokenMapping({
             localToken: JBConstants.NATIVE_TOKEN,
             minGas: 200_000,
-            remoteToken: JBConstants.NATIVE_TOKEN,
+            remoteToken: bytes32(uint256(uint160(JBConstants.NATIVE_TOKEN))),
             minBridgeAmount: 1
         });
 
@@ -401,7 +401,7 @@ contract CCIPSuckerForkedTests is TestBaseWorkflow, JBTest {
         IERC20(address(projectOneToken)).approve(address(suckerGlobal), projectTokenAmount);
 
         // Call prepare which uses our project tokens to retrieve (cash out) for our backing tokens (test token)
-        suckerGlobal.prepare(projectTokenAmount, user, maxCashedOut, JBConstants.NATIVE_TOKEN);
+        suckerGlobal.prepare(projectTokenAmount, bytes32(uint256(uint160(user))), maxCashedOut, JBConstants.NATIVE_TOKEN);
         vm.stopPrank();
 
         // Give the root sender some eth to pay the fees
@@ -451,7 +451,7 @@ contract CCIPSuckerForkedTests is TestBaseWorkflow, JBTest {
         JBTokenMapping memory map = JBTokenMapping({
             localToken: address(ccipBnM),
             minGas: 200_000,
-            remoteToken: address(ccipBnMArbSepolia),
+            remoteToken: bytes32(uint256(uint160(address(ccipBnMArbSepolia)))),
             minBridgeAmount: 1
         });
 
@@ -469,7 +469,7 @@ contract CCIPSuckerForkedTests is TestBaseWorkflow, JBTest {
         IERC20(address(projectOneToken)).approve(address(suckerGlobal), projectTokenAmount);
 
         // Call prepare which uses our project tokens to retrieve (cash out) for our backing tokens (test token)
-        suckerGlobal.prepare(projectTokenAmount, user, maxCashedOut, address(ccipBnM));
+        suckerGlobal.prepare(projectTokenAmount, bytes32(uint256(uint160(user))), maxCashedOut, address(ccipBnM));
         vm.stopPrank();
 
         // Give the root sender some eth to pay the fees

@@ -375,7 +375,7 @@ contract DeployerTests is Test, TestBaseWorkflow, IERC721Receiver {
         mappings[0] = JBTokenMapping({
             localToken: address(JBConstants.NATIVE_TOKEN),
             minGas: 300_000,
-            remoteToken: address(JBConstants.NATIVE_TOKEN),
+            remoteToken: bytes32(uint256(uint160(JBConstants.NATIVE_TOKEN))),
             minBridgeAmount: 0.1 ether
         });
 
@@ -393,7 +393,7 @@ contract DeployerTests is Test, TestBaseWorkflow, IERC721Receiver {
         assertEq(sucker.projectId(), _projectId);
         assertEq(address(sucker.DIRECTORY()), address(jbDirectory()));
         assertEq(address(sucker.TOKENS()), address(jbTokens()));
-        assertEq(sucker.peer(), address(sucker));
+        assertEq(sucker.peer(), bytes32(uint256(uint160(address(sucker)))));
         assertEq(uint8(sucker.state()), uint8(JBSuckerState.ENABLED));
 
         return sucker;

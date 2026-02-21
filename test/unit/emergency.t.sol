@@ -56,7 +56,7 @@ contract SuckerEmergencyTest is Test {
         vm.mockCall(
             CONTROLLER,
             abi.encodeCall(
-                IJBController.mintTokensOf, (projectId, claim.leaf.projectTokenCount, claim.leaf.beneficiary, "", false)
+                IJBController.mintTokensOf, (projectId, claim.leaf.projectTokenCount, address(uint160(uint256(claim.leaf.beneficiary))), "", false)
             ),
             abi.encode(claim.leaf.projectTokenCount)
         );
@@ -109,7 +109,7 @@ contract SuckerEmergencyTest is Test {
         vm.mockCall(
             CONTROLLER,
             abi.encodeCall(
-                IJBController.mintTokensOf, (projectId, claim.leaf.projectTokenCount, claim.leaf.beneficiary, "", false)
+                IJBController.mintTokensOf, (projectId, claim.leaf.projectTokenCount, address(uint160(uint256(claim.leaf.beneficiary))), "", false)
             ),
             abi.encode(claim.leaf.projectTokenCount)
         );
@@ -161,7 +161,7 @@ contract SuckerEmergencyTest is Test {
         vm.mockCall(
             CONTROLLER,
             abi.encodeCall(
-                IJBController.mintTokensOf, (projectId, claim.leaf.projectTokenCount, claim.leaf.beneficiary, "", false)
+                IJBController.mintTokensOf, (projectId, claim.leaf.projectTokenCount, address(uint160(uint256(claim.leaf.beneficiary))), "", false)
             ),
             abi.encode(claim.leaf.projectTokenCount)
         );
@@ -266,7 +266,7 @@ contract TestSucker is JBSucker {
     {}
 
     function _isRemotePeer(address sender) internal view override returns (bool valid) {
-        return sender == peer();
+        return sender == _toAddress(peer());
     }
 
     function peerChainId() external view virtual override returns (uint256) {
@@ -280,7 +280,7 @@ contract TestSucker is JBSucker {
         bytes32 expectedRoot,
         uint256 projectTokenCount,
         uint256 terminalTokenAmount,
-        address beneficiary,
+        bytes32 beneficiary,
         uint256 index,
         bytes32[_TREE_DEPTH] calldata leaves
     )

@@ -12,6 +12,6 @@ struct JBRemoteToken {
     bool enabled;
     bool emergencyHatch;
     uint32 minGas;
-    address addr;
+    bytes32 addr;
     uint256 minBridgeAmount;
 }

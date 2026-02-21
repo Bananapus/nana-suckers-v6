@@ -48,7 +48,7 @@ contract AttackTestSucker is JBSucker {
     ) internal override {}
 
     function _isRemotePeer(address sender) internal view override returns (bool) {
-        return sender == peer();
+        return sender == _toAddress(peer());
     }
 
     function peerChainId() external view virtual override returns (uint256) {
@@ -59,7 +59,7 @@ contract AttackTestSucker is JBSucker {
         bytes32 expectedRoot,
         uint256 projectTokenCount,
         uint256 terminalTokenAmount,
-        address beneficiary,
+        bytes32 beneficiary,
         uint256 index,
         bytes32[_TREE_DEPTH] calldata leaves
     ) internal virtual override {
@@ -86,7 +86,7 @@ contract AttackTestSucker is JBSucker {
         uint256 projectTokenCount,
         address token,
         uint256 terminalTokenAmount,
-        address beneficiary
+        bytes32 beneficiary
     ) external {
         _insertIntoTree(projectTokenCount, token, terminalTokenAmount, beneficiary);
     }
@@ -171,7 +171,8 @@ contract SuckerAttacks is Test {
         address spoofedRouter = makeAddr("spoofedRouter");
 
         JBMessageRoot memory fakeRoot = JBMessageRoot({
-            token: JBConstants.NATIVE_TOKEN,
+            version: 1,
+            token: bytes32(uint256(uint160(JBConstants.NATIVE_TOKEN))),
             amount: 1 ether,
             remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(123))})
         });
@@ -192,7 +193,8 @@ contract SuckerAttacks is Test {
         address wrongSender = makeAddr("wrongPeer");
 
         JBMessageRoot memory root = JBMessageRoot({
-            token: JBConstants.NATIVE_TOKEN,
+            version: 1,
+            token: bytes32(uint256(uint160(JBConstants.NATIVE_TOKEN))),
             amount: 1 ether,
             remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(456))})
         });
@@ -211,7 +213,8 @@ contract SuckerAttacks is Test {
         AttackTestSucker otherSucker = _createTestSucker(2, "other_salt");
 
         JBMessageRoot memory root = JBMessageRoot({
-            token: JBConstants.NATIVE_TOKEN,
+            version: 1,
+            token: bytes32(uint256(uint160(JBConstants.NATIVE_TOKEN))),
             amount: 0,
             remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(789))})
         });
@@ -229,13 +232,14 @@ contract SuckerAttacks is Test {
     function test_ccipReceive_malformedMessage() public {
         // Set the peer so we can call fromRemote from it
         // First, initialize a peer
-        address peerAddr = sucker.peer();
+        bytes32 peerAddr = sucker.peer();
 
-        // If no peer is set (address(0)), fromRemote from any address will revert with NotPeer
+        // If no peer is set (bytes32(0)), fromRemote from any address will revert with NotPeer
         // This is the expected behavior — only the peer can submit roots
-        if (peerAddr == address(0)) {
+        if (peerAddr == bytes32(0)) {
             JBMessageRoot memory root = JBMessageRoot({
-                token: JBConstants.NATIVE_TOKEN,
+                version: 1,
+                token: bytes32(uint256(uint160(JBConstants.NATIVE_TOKEN))),
                 amount: 0,
                 remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(0)})
             });
@@ -257,7 +261,7 @@ contract SuckerAttacks is Test {
         address token = JBConstants.NATIVE_TOKEN;
 
         // Insert items to create root 1
-        sucker.test_insertIntoTree(10 ether, token, 5 ether, address(1000));
+        sucker.test_insertIntoTree(10 ether, token, 5 ether, bytes32(uint256(uint160(address(1000)))));
 
         bytes32 root1 = sucker.test_getOutboxRoot(token);
 
@@ -265,7 +269,7 @@ contract SuckerAttacks is Test {
         sucker.test_setInboxRoot(token, 1, root1);
 
         // Now insert more items to create root 2 (different root)
-        sucker.test_insertIntoTree(20 ether, token, 15 ether, address(2000));
+        sucker.test_insertIntoTree(20 ether, token, 15 ether, bytes32(uint256(uint160(address(2000)))));
         bytes32 root2 = sucker.test_getOutboxRoot(token);
 
         // Overwrite inbox with root 2 (higher nonce)
@@ -288,7 +292,7 @@ contract SuckerAttacks is Test {
         address token = JBConstants.NATIVE_TOKEN;
 
         // Insert a known item
-        sucker.test_insertIntoTree(5 ether, token, 5 ether, address(120));
+        sucker.test_insertIntoTree(5 ether, token, 5 ether, bytes32(uint256(uint160(address(120)))));
 
         // Set the inbox root to match the outbox
         bytes32 root = sucker.test_getOutboxRoot(token);
@@ -309,7 +313,7 @@ contract SuckerAttacks is Test {
         bytes32[32] memory proof;
         JBClaim memory claimData = JBClaim({
             token: token,
-            leaf: JBLeaf({index: 0, beneficiary: address(120), projectTokenCount: 5 ether, terminalTokenAmount: 5 ether}),
+            leaf: JBLeaf({index: 0, beneficiary: bytes32(uint256(uint160(address(120)))), projectTokenCount: 5 ether, terminalTokenAmount: 5 ether}),
             proof: proof
         });
 
@@ -336,13 +340,13 @@ contract SuckerAttacks is Test {
                 enabled: true,
                 emergencyHatch: false,
                 minGas: 200_000,
-                addr: makeAddr("remoteTokenX"),
+                addr: bytes32(uint256(uint160(makeAddr("remoteTokenX")))),
                 minBridgeAmount: 0
             })
         );
 
         // Insert items for tokenX
-        sucker.test_insertIntoTree(10 ether, tokenX, 5 ether, address(1000));
+        sucker.test_insertIntoTree(10 ether, tokenX, 5 ether, bytes32(uint256(uint160(address(1000)))));
         bytes32 rootX = sucker.test_getOutboxRoot(tokenX);
 
         // Set inbox root for tokenX
@@ -355,7 +359,7 @@ contract SuckerAttacks is Test {
                 enabled: true,
                 emergencyHatch: false,
                 minGas: 200_000,
-                addr: makeAddr("remoteTokenY"),
+                addr: bytes32(uint256(uint160(makeAddr("remoteTokenY")))),
                 minBridgeAmount: 0
             })
         );
@@ -380,8 +384,8 @@ contract SuckerAttacks is Test {
         address token = JBConstants.NATIVE_TOKEN;
 
         // Insert items simulating prepare
-        sucker.test_insertIntoTree(10 ether, token, 5 ether, address(1000));
-        sucker.test_insertIntoTree(20 ether, token, 10 ether, address(2000));
+        sucker.test_insertIntoTree(10 ether, token, 5 ether, bytes32(uint256(uint160(address(1000)))));
+        sucker.test_insertIntoTree(20 ether, token, 10 ether, bytes32(uint256(uint160(address(2000)))));
 
         uint256 count = sucker.test_getOutboxCount(token);
         assertEq(count, 2, "Outbox should have 2 items");
@@ -436,7 +440,7 @@ contract SuckerAttacks is Test {
             token: token,
             leaf: JBLeaf({
                 index: 0,
-                beneficiary: address(this),
+                beneficiary: bytes32(uint256(uint160(address(this)))),
                 projectTokenCount: 1 ether,
                 terminalTokenAmount: 1 ether
             }),
@@ -464,7 +468,7 @@ contract SuckerAttacks is Test {
         // Insert several items and verify root changes each time
         for (uint256 i = 0; i < 10; i++) {
             sucker.test_insertIntoTree(
-                (i + 1) * 1 ether, token, (i + 1) * 0.5 ether, address(uint160(1000 + i))
+                (i + 1) * 1 ether, token, (i + 1) * 0.5 ether, bytes32(uint256(1000 + i))
             );
 
             bytes32 newRoot = sucker.test_getOutboxRoot(token);

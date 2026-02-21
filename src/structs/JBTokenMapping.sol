@@ -8,6 +8,6 @@ pragma solidity ^0.8.0;
 struct JBTokenMapping {
     address localToken;
     uint32 minGas;
-    address remoteToken;
+    bytes32 remoteToken;
     uint256 minBridgeAmount;
 }

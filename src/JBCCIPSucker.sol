@@ -128,7 +128,7 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
         address origin = abi.decode(any2EvmMessage.sender, (address));
 
         // Make sure that the message came from our peer.
-        if (origin != peer() || any2EvmMessage.sourceChainSelector != REMOTE_CHAIN_SELECTOR) {
+        if (origin != _toAddress(peer()) || any2EvmMessage.sourceChainSelector != REMOTE_CHAIN_SELECTOR) {
             revert JBSucker_NotPeer(origin);
         }
 
@@ -136,7 +136,7 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
         if (any2EvmMessage.destTokenAmounts.length == 1) {
             // As far as the sucker contract is aware wrapped natives are not a thing, it only handles ERC20s or native.
             Client.EVMTokenAmount memory tokenAmount = any2EvmMessage.destTokenAmounts[0];
-            if (root.token == JBConstants.NATIVE_TOKEN) {
+            if (root.token == _toBytes32(JBConstants.NATIVE_TOKEN)) {
                 // We can (safely) assume that the token that is set in the `destTokenAmounts` is a valid wrapped
                 // native.
                 // If this ends up not being the case then our sanity check to see if we unwrapped the native asset will
@@ -215,8 +215,9 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
         }
 
         // Create an EVM2AnyMessage struct in memory with necessary information for sending a cross-chain message
+        // CCIP requires EVM addresses, so convert the bytes32 peer to an address for the receiver field.
         Client.EVM2AnyMessage memory message = Client.EVM2AnyMessage({
-            receiver: abi.encode(peer()),
+            receiver: abi.encode(_toAddress(peer())),
             data: abi.encode(sucker_message),
             tokenAmounts: tokenAmounts,
             extraArgs: Client._argsToBytes(
