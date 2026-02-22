@@ -1296,5 +1296,118 @@ contract SuckerDeepAttacks is Test {
         assertEq(sucker.test_getOutboxNonce(TOKEN), 1);
     }
 
+    // =========================================================================
+    // L-10: StaleRootRejected event emission
+    // =========================================================================
+
+    /// @notice fromRemote with stale nonce should emit StaleRootRejected event.
+    function test_fromRemote_staleNonce_emitsEvent() public {
+        sucker.test_setInboxRoot(TOKEN, 5, bytes32(uint256(0xdead)));
+
+        JBMessageRoot memory root = JBMessageRoot({
+            token: TOKEN,
+            amount: 1 ether,
+            remoteRoot: JBInboxTreeRoot({nonce: 3, root: bytes32(uint256(0xbeef))})
+        });
+
+        vm.expectEmit(true, false, false, true, address(sucker));
+        emit IJBSucker.StaleRootRejected({token: TOKEN, receivedNonce: 3, currentNonce: 5});
+
+        vm.prank(address(sucker));
+        sucker.fromRemote(root);
+    }
+
+    /// @notice fromRemote with same nonce (not strictly greater) should emit StaleRootRejected.
+    function test_fromRemote_sameNonce_emitsEvent() public {
+        sucker.test_setInboxRoot(TOKEN, 5, bytes32(uint256(0xdead)));
+
+        JBMessageRoot memory root = JBMessageRoot({
+            token: TOKEN,
+            amount: 1 ether,
+            remoteRoot: JBInboxTreeRoot({nonce: 5, root: bytes32(uint256(0xbeef))})
+        });
+
+        vm.expectEmit(true, false, false, true, address(sucker));
+        emit IJBSucker.StaleRootRejected({token: TOKEN, receivedNonce: 5, currentNonce: 5});
+
+        vm.prank(address(sucker));
+        sucker.fromRemote(root);
+
+        // Inbox should remain unchanged.
+        assertEq(sucker.test_getInboxNonce(TOKEN), 5, "Nonce should remain unchanged");
+    }
+
+    // =========================================================================
+    // L-21: InboxNotEmpty guard on token remapping
+    // =========================================================================
+
+    /// @notice Remapping a token with non-zero inbox nonce should revert.
+    function test_mapToken_remapWithNonEmptyInbox_reverts() public {
+        vm.mockCall(PERMISSIONS, abi.encodeWithSelector(IJBPermissions.hasPermission.selector), abi.encode(true));
+
+        address token = makeAddr("erc20Token");
+        address remoteA = makeAddr("remoteA");
+        address remoteB = makeAddr("remoteB");
+
+        // Set up initial mapping with no outbox entries (to avoid TokenAlreadyMapped).
+        sucker.test_setRemoteToken(
+            token,
+            JBRemoteToken({enabled: true, emergencyHatch: false, minGas: 200_000, addr: remoteA, minBridgeAmount: 0})
+        );
+
+        // Set inbox nonce to non-zero (simulating unclaimed inbox entries).
+        sucker.test_setInboxRoot(token, 3, bytes32(uint256(0xabc)));
+
+        // Try to remap to a different remote token — should revert.
+        vm.expectRevert(abi.encodeWithSelector(JBSucker.JBSucker_InboxNotEmpty.selector, token, 3));
+        sucker.mapToken(
+            JBTokenMapping({localToken: token, minGas: 200_000, remoteToken: remoteB, minBridgeAmount: 0})
+        );
+    }
+
+    /// @notice Disabling a token (remoteToken=0) with non-empty inbox should succeed.
+    /// The inbox guard only blocks remapping to a NEW remote token, not disabling.
+    function test_mapToken_disableWithNonEmptyInbox_succeeds() public {
+        vm.mockCall(PERMISSIONS, abi.encodeWithSelector(IJBPermissions.hasPermission.selector), abi.encode(true));
+
+        address token = makeAddr("erc20Token");
+        address remoteA = makeAddr("remoteA");
+
+        sucker.test_setRemoteToken(
+            token,
+            JBRemoteToken({enabled: true, emergencyHatch: false, minGas: 200_000, addr: remoteA, minBridgeAmount: 0})
+        );
+
+        // Non-zero inbox nonce.
+        sucker.test_setInboxRoot(token, 3, bytes32(uint256(0xabc)));
+
+        // Disabling (setting to address(0)) should NOT revert.
+        sucker.mapToken(
+            JBTokenMapping({localToken: token, minGas: 200_000, remoteToken: address(0), minBridgeAmount: 0})
+        );
+    }
+
+    /// @notice Remapping with empty inbox (nonce=0) should succeed.
+    function test_mapToken_remapWithEmptyInbox_succeeds() public {
+        vm.mockCall(PERMISSIONS, abi.encodeWithSelector(IJBPermissions.hasPermission.selector), abi.encode(true));
+
+        address token = makeAddr("erc20Token");
+        address remoteA = makeAddr("remoteA");
+        address remoteB = makeAddr("remoteB");
+
+        sucker.test_setRemoteToken(
+            token,
+            JBRemoteToken({enabled: true, emergencyHatch: false, minGas: 200_000, addr: remoteA, minBridgeAmount: 0})
+        );
+
+        // Inbox nonce is 0 (default / empty).
+        // No outbox entries either.
+
+        // Remap should succeed.
+        sucker.mapToken(
+            JBTokenMapping({localToken: token, minGas: 200_000, remoteToken: remoteB, minBridgeAmount: 0})
+        );
+    }
+
     receive() external payable {}
 }
