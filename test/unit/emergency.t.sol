@@ -184,15 +184,15 @@ contract SuckerEmergencyTest is Test {
     /// @notice tests that the deprecation can be set, changed and cancelled.
     function testCancelDeprecation(uint40 currentTime, uint40 deprecateAt, uint40 changeDeprecationTo) external {
         uint40 messagingDelay = 14 days;
+
+        // Use bound() instead of vm.assume() to avoid excessive fuzz rejection.
+        uint40 maxSafe = type(uint40).max - 3 * messagingDelay;
+        currentTime = uint40(bound(currentTime, 0, maxSafe));
+        deprecateAt = uint40(bound(deprecateAt, currentTime + messagingDelay + 1, maxSafe + messagingDelay));
+        changeDeprecationTo = uint40(bound(changeDeprecationTo, deprecateAt + messagingDelay + 1, maxSafe + 2 * messagingDelay));
+
         // The time that we have to change the deprecation.
         uint40 bufferTime;
-        // Ensure that none of the math overflows which would cause unexpected test results.
-        vm.assume(type(uint40).max - messagingDelay > currentTime);
-        vm.assume(type(uint40).max - messagingDelay > deprecateAt);
-        vm.assume(type(uint40).max - messagingDelay > changeDeprecationTo);
-        // Ensure that the inputs are within the expected bounds.
-        vm.assume(currentTime + messagingDelay < deprecateAt);
-        vm.assume(deprecateAt + messagingDelay < changeDeprecationTo || changeDeprecationTo == 0);
         bufferTime = deprecateAt - messagingDelay - currentTime;
 
         uint256 projectId = 1;
