@@ -265,6 +265,9 @@ contract DeployerTests is Test, TestBaseWorkflow, IERC721Receiver {
         // Ensure that its not a precompile.
         vm.assume(uint160(address(_ccipRouter)) > 100);
 
+        // Exclude deployed contracts to prevent vm.etch from overwriting them.
+        _assumeNotDeployed(address(_ccipRouter));
+
         // We have a sanity check that requires code to be at the router address.
         vm.etch(address(_ccipRouter), "0x1");
 
@@ -287,6 +290,9 @@ contract DeployerTests is Test, TestBaseWorkflow, IERC721Receiver {
 
         // Ensure that its not a precompile.
         vm.assume(uint160(address(_ccipRouter)) > 100);
+
+        // Exclude deployed contracts to prevent vm.etch from overwriting them.
+        _assumeNotDeployed(address(_ccipRouter));
 
         // We have a sanity check that requires code to be at the router address.
         vm.etch(address(_ccipRouter), "0x1");
@@ -383,6 +389,20 @@ contract DeployerTests is Test, TestBaseWorkflow, IERC721Receiver {
         configurations[0] = JBSuckerDeployerConfig({deployer: deployer, mappings: mappings});
 
         return IJBSucker(registry.deploySuckersFor(_projectId, salt, configurations)[0]);
+    }
+
+    /// @notice Exclude addresses of contracts deployed during setUp to prevent vm.etch from overwriting them.
+    function _assumeNotDeployed(address addr) internal view {
+        vm.assume(addr != address(jbPermissions()));
+        vm.assume(addr != address(jbDirectory()));
+        vm.assume(addr != address(jbProjects()));
+        vm.assume(addr != address(jbController()));
+        vm.assume(addr != address(jbMultiTerminal()));
+        vm.assume(addr != address(jbTokens()));
+        vm.assume(addr != address(jbSplits()));
+        vm.assume(addr != address(jbRulesets()));
+        vm.assume(addr != address(jbTerminalStore()));
+        vm.assume(addr != address(registry));
     }
 
     //*********************************************************************//
