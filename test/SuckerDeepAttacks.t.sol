@@ -1302,5 +1302,185 @@ contract SuckerDeepAttacks is Test {
         assertEq(sucker.test_getOutboxNonce(TOKEN), 1);
     }
 
+    // =========================================================================
+    // SECTION 16: MESSAGE_VERSION validation (INTEROP)
+    // =========================================================================
+
+    /// @notice fromRemote with wrong message version → should revert with InvalidMessageVersion.
+    function test_fromRemote_wrongVersion_reverts() public {
+        JBMessageRoot memory root = JBMessageRoot({
+            version: 0, // Wrong version — current is 1
+            token: bytes32(uint256(uint160(TOKEN))),
+            amount: 1 ether,
+            remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(0xbeef))})
+        });
+
+        vm.expectRevert(
+            abi.encodeWithSelector(JBSucker.JBSucker_InvalidMessageVersion.selector, 0, sucker.MESSAGE_VERSION())
+        );
+        vm.prank(address(sucker)); // peer
+        sucker.fromRemote(root);
+    }
+
+    /// @notice fromRemote with future message version → should revert with InvalidMessageVersion.
+    function test_fromRemote_futureVersion_reverts() public {
+        JBMessageRoot memory root = JBMessageRoot({
+            version: 2, // Future version
+            token: bytes32(uint256(uint160(TOKEN))),
+            amount: 1 ether,
+            remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(0xbeef))})
+        });
+
+        vm.expectRevert(
+            abi.encodeWithSelector(JBSucker.JBSucker_InvalidMessageVersion.selector, 2, sucker.MESSAGE_VERSION())
+        );
+        vm.prank(address(sucker));
+        sucker.fromRemote(root);
+    }
+
+    /// @notice fromRemote with correct version → should NOT revert with InvalidMessageVersion.
+    function test_fromRemote_correctVersion_passesVersionCheck() public {
+        JBMessageRoot memory root = JBMessageRoot({
+            version: sucker.MESSAGE_VERSION(),
+            token: bytes32(uint256(uint160(TOKEN))),
+            amount: 0,
+            remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(0xbeef))})
+        });
+
+        vm.prank(address(sucker));
+        sucker.fromRemote(root);
+
+        // Should update inbox since version is correct and nonce is higher.
+        assertEq(sucker.test_getInboxNonce(TOKEN), 1, "Nonce should be 1 after valid message");
+        assertEq(sucker.test_getInboxRoot(TOKEN), bytes32(uint256(0xbeef)), "Root should be updated");
+    }
+
+    // =========================================================================
+    // SECTION 17: uint128 overflow guard (INTEROP-5)
+    // =========================================================================
+
+    /// @notice prepare with terminalTokenAmount > uint128 max → should revert.
+    function test_prepare_terminalAmountExceedsUint128_reverts() public {
+        _enableTokenMapping(TOKEN);
+
+        vm.mockCall(TOKENS, abi.encodeCall(IJBTokens.tokenOf, (PROJECT_ID)), abi.encode(makeAddr("projectToken")));
+
+        // Mock the token transfer for prepare
+        vm.mockCall(
+            makeAddr("projectToken"),
+            abi.encodeWithSelector(IERC20.transferFrom.selector),
+            abi.encode(true)
+        );
+
+        // The overflow guard fires inside _insertIntoTree, which is called from prepare
+        // after computing terminalTokenAmount. For a direct test, use the test helper.
+        uint256 overflowAmount = uint256(type(uint128).max) + 1;
+
+        vm.expectRevert(abi.encodeWithSelector(JBSucker.JBSucker_AmountExceedsUint128.selector, overflowAmount));
+        sucker.test_insertIntoTree(1 ether, TOKEN, overflowAmount, bytes32(uint256(uint160(address(this)))));
+    }
+
+    /// @notice prepare with projectTokenCount > uint128 max → should revert.
+    function test_prepare_projectTokenCountExceedsUint128_reverts() public {
+        uint256 overflowAmount = uint256(type(uint128).max) + 1;
+
+        vm.expectRevert(abi.encodeWithSelector(JBSucker.JBSucker_AmountExceedsUint128.selector, overflowAmount));
+        sucker.test_insertIntoTree(overflowAmount, TOKEN, 1 ether, bytes32(uint256(uint160(address(this)))));
+    }
+
+    /// @notice Amounts at exactly uint128 max → should succeed.
+    function test_insertIntoTree_exactUint128Max_succeeds() public {
+        uint256 maxU128 = uint256(type(uint128).max);
+
+        // Both at max should work.
+        sucker.test_insertIntoTree(maxU128, TOKEN, maxU128, bytes32(uint256(uint160(address(this)))));
+        assertEq(sucker.test_getOutboxCount(TOKEN), 1, "Should have 1 item");
+    }
+
+    /// @notice Fuzz: any amount > uint128 max should revert.
+    function test_insertIntoTree_fuzz_uint128Overflow_reverts(uint256 amount) public {
+        amount = bound(amount, uint256(type(uint128).max) + 1, type(uint256).max);
+
+        vm.expectRevert(abi.encodeWithSelector(JBSucker.JBSucker_AmountExceedsUint128.selector, amount));
+        sucker.test_insertIntoTree(amount, TOKEN, 1 ether, bytes32(uint256(uint160(address(this)))));
+    }
+
+    // =========================================================================
+    // SECTION 18: bytes32 peer and beneficiary (INTEROP cross-VM compat)
+    // =========================================================================
+
+    /// @notice peer() returns bytes32 representation of address(this).
+    function test_peer_returnBytes32() public view {
+        bytes32 peerValue = sucker.peer();
+        assertEq(peerValue, bytes32(uint256(uint160(address(sucker)))), "peer should be bytes32 of address");
+    }
+
+    /// @notice prepare with bytes32(0) beneficiary → reverts with ZeroBeneficiary.
+    function test_prepare_zeroBeneficiaryBytes32_reverts() public {
+        _enableTokenMapping(TOKEN);
+
+        vm.expectRevert(abi.encodeWithSelector(JBSucker.JBSucker_ZeroBeneficiary.selector));
+        sucker.prepare(10 ether, bytes32(0), 0, TOKEN);
+    }
+
+    /// @notice prepare with a valid 32-byte SVM beneficiary (non-EVM format) → should succeed past beneficiary check.
+    function test_prepare_svmBeneficiary_passesCheck() public {
+        _enableTokenMapping(TOKEN);
+        vm.mockCall(TOKENS, abi.encodeCall(IJBTokens.tokenOf, (PROJECT_ID)), abi.encode(makeAddr("projectToken")));
+
+        // A typical SVM address has all 32 bytes used (high bits non-zero).
+        bytes32 svmBeneficiary = bytes32(uint256(0xdeadbeefcafebabe1234567890abcdef1234567890abcdef1234567890abcdef));
+
+        // This will proceed past the beneficiary check. It may fail later (e.g., token transfer),
+        // but should NOT fail with ZeroBeneficiary.
+        vm.mockCall(
+            makeAddr("projectToken"),
+            abi.encodeWithSelector(IERC20.transferFrom.selector),
+            abi.encode(true)
+        );
+
+        // May revert for other reasons (token handling), but NOT ZeroBeneficiary.
+        try sucker.prepare(10 ether, svmBeneficiary, 0, TOKEN) {} catch (bytes memory reason) {
+            bytes4 selector = bytes4(reason);
+            assertTrue(
+                selector != JBSucker.JBSucker_ZeroBeneficiary.selector,
+                "Should not revert with ZeroBeneficiary"
+            );
+        }
+    }
+
+    /// @notice mapToken with bytes32(0) remoteToken disables the mapping.
+    function test_mapToken_bytes32ZeroDisables() public {
+        vm.mockCall(PERMISSIONS, abi.encodeWithSelector(IJBPermissions.hasPermission.selector), abi.encode(true));
+
+        address token = makeAddr("erc20Token");
+
+        // First enable a mapping.
+        sucker.test_setRemoteToken(
+            token,
+            JBRemoteToken({
+                enabled: true,
+                emergencyHatch: false,
+                minGas: 200_000,
+                addr: bytes32(uint256(uint160(makeAddr("remoteA")))),
+                minBridgeAmount: 0
+            })
+        );
+
+        // Map to bytes32(0) to disable.
+        sucker.mapToken(
+            JBTokenMapping({localToken: token, minGas: 200_000, remoteToken: bytes32(0), minBridgeAmount: 0})
+        );
+
+        JBRemoteToken memory mapping_ = sucker.test_getRemoteToken(token);
+        assertFalse(mapping_.enabled, "Should be disabled");
+        // addr is preserved (so it can be re-enabled to the same remote).
+        assertEq(
+            mapping_.addr,
+            bytes32(uint256(uint160(makeAddr("remoteA")))),
+            "Remote addr should be preserved"
+        );
+    }
+
     receive() external payable {}
 }
