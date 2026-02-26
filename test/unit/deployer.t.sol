@@ -306,8 +306,8 @@ contract DeployerTests is Test, TestBaseWorkflow, IERC721Receiver {
     }
 
     function testArbDeployer(bool _layer, IInbox _inbox, IArbGatewayRouter _gatewayRouter) public {
-        // One of these has to be set in order for it to be a 'valid' configuration.
-        vm.assume(_inbox != IInbox(address(0)) || _gatewayRouter != IArbGatewayRouter(address(0)));
+        // All of these must be set for a valid configuration.
+        vm.assume(_inbox != IInbox(address(0)) && _gatewayRouter != IArbGatewayRouter(address(0)));
 
         IJBSuckerDeployer deployer = _setupArbitrumDeployer(_layer ? JBLayer.L1 : JBLayer.L2, _inbox, _gatewayRouter);
         IJBSucker sucker = _deployDirectly(deployer, projectId, bytes32(0));
@@ -316,8 +316,8 @@ contract DeployerTests is Test, TestBaseWorkflow, IERC721Receiver {
     }
 
     function testArbDeployerThroughRegistry(bool _layer, IInbox _inbox, IArbGatewayRouter _gatewayRouter) public {
-        // One of these has to be set in order for it to be a 'valid' configuration.
-        vm.assume(_inbox != IInbox(address(0)) || _gatewayRouter != IArbGatewayRouter(address(0)));
+        // All of these must be set for a valid configuration.
+        vm.assume(_inbox != IInbox(address(0)) && _gatewayRouter != IArbGatewayRouter(address(0)));
 
         _allowMapping(projectId, address(registry));
         IJBSuckerDeployer deployer =

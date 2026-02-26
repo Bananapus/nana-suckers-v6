@@ -250,6 +250,15 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
         // This sucker has an override since it could connect to a non-ETH chain, so we allow the `NATIVE_TOKEN` to map
         // to a token that is not the wrapped token on the remote.
 
+        // If the local token is the native token, the remote token must also be the native token or address(0) to
+        // disable.
+        if (
+            map.localToken == JBConstants.NATIVE_TOKEN && map.remoteToken != JBConstants.NATIVE_TOKEN
+                && map.remoteToken != address(0)
+        ) {
+            revert JBSucker_InvalidNativeRemoteAddress(map.remoteToken);
+        }
+
         // Enforce a reasonable minimum gas limit for bridging. A minimum which is too low could lead to the loss of
         // funds.
         if (map.minGas < MESSENGER_ERC20_MIN_GAS_LIMIT && map.localToken != JBConstants.NATIVE_TOKEN) {

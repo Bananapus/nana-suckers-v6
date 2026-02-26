@@ -49,8 +49,9 @@ contract JBArbitrumSuckerDeployer is JBSuckerDeployer, IJBArbitrumSuckerDeployer
 
     /// @notice Check if the layer specific configuration is set or not. Used as a sanity check.
     function _layerSpecificConfigurationIsSet() internal view override returns (bool) {
-        return uint256(arbLayer) != uint256(0) || address(arbInbox) != address(0)
-            || address(arbGatewayRouter) != address(0);
+        // We don't check arbLayer here because JBLayer.L1 == 0 which is the default/unset value.
+        // Since all fields are set atomically in setChainSpecificConstants, checking inbox + gateway is sufficient.
+        return address(arbInbox) != address(0) && address(arbGatewayRouter) != address(0);
     }
 
     //*********************************************************************//
