@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Cross-chain token and fund bridging for Juicebox V5 projects, using merkle trees to batch claims and chain-specific bridges (Chainlink CCIP, OP Stack, Arbitrum) to move assets.
+Cross-chain token and fund bridging for Juicebox V6 projects, using merkle trees to batch claims and chain-specific bridges (Chainlink CCIP, OP Stack, Arbitrum) to move assets.
 
 ## Contracts
 
@@ -48,9 +48,9 @@ Cross-chain token and fund bridging for Juicebox V5 projects, using merkle trees
 
 | Dependency | Import | Used For |
 |------------|--------|----------|
-| `@bananapus/core-v5` | `IJBDirectory`, `IJBController`, `IJBTokens`, `IJBTerminal`, `IJBCashOutTerminal`, `IJBPayoutTerminal` | Project lookup, token minting/burning, cash-outs, `addToBalanceOf` |
-| `@bananapus/core-v5` | `JBConstants` | `NATIVE_TOKEN` sentinel address |
-| `@bananapus/permission-ids-v5` | `JBPermissionIds` | `MAP_SUCKER_TOKEN`, `DEPLOY_SUCKERS`, `SUCKER_SAFETY`, `MINT_TOKENS` permission IDs |
+| `@bananapus/core-v6` | `IJBDirectory`, `IJBController`, `IJBTokens`, `IJBTerminal`, `IJBCashOutTerminal`, `IJBPayoutTerminal` | Project lookup, token minting/burning, cash-outs, `addToBalanceOf` |
+| `@bananapus/core-v6` | `JBConstants` | `NATIVE_TOKEN` sentinel address |
+| `@bananapus/permission-ids-v6` | `JBPermissionIds` | `MAP_SUCKER_TOKEN`, `DEPLOY_SUCKERS`, `SUCKER_SAFETY`, `MINT_TOKENS` permission IDs |
 | `@chainlink/contracts-ccip` | `Client`, `IAny2EVMMessageReceiver` | CCIP message encoding/decoding, receiver interface |
 | `@arbitrum/nitro-contracts` | `IInbox`, `IOutbox`, `IBridge`, `ArbSys`, `AddressAliasHelper` | Arbitrum retryable tickets, L2->L1 messages, address aliasing |
 | `@openzeppelin/contracts` | `SafeERC20`, `BitMaps`, `ERC165`, `Initializable`, `Ownable`, `ERC2771Context`, `EnumerableMap` | Token safety, leaf tracking, clone init, registry ownership, meta-transactions |
