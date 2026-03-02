@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: UNLICENSED
+// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.21;
 
 import {IJBDirectory} from "@bananapus/core-v5/src/interfaces/IJBDirectory.sol";

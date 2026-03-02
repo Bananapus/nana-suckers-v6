@@ -152,9 +152,9 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         IJBPermissions permissions,
         IJBTokens tokens,
         JBAddToBalanceMode addToBalanceMode,
-        address trusted_forwarder
+        address trustedForwarder
     )
-        ERC2771Context(trusted_forwarder)
+        ERC2771Context(trustedForwarder)
         JBPermissioned(permissions)
     {
         DIRECTORY = directory;

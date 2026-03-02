@@ -36,9 +36,9 @@ contract JBOptimismSuckerDeployer is JBSuckerDeployer, IJBOpSuckerDeployer {
         IJBPermissions permissions,
         IJBTokens tokens,
         address configurator,
-        address trusted_forwarder
+        address trustedForwarder
     )
-        JBSuckerDeployer(directory, permissions, tokens, configurator, trusted_forwarder)
+        JBSuckerDeployer(directory, permissions, tokens, configurator, trustedForwarder)
     {}
 
     //*********************************************************************//
