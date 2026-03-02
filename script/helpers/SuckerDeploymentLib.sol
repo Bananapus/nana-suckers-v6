@@ -14,6 +14,7 @@ struct SuckerDeployment {
     IJBSuckerDeployer optimismDeployer;
     IJBSuckerDeployer baseDeployer;
     IJBSuckerDeployer arbitrumDeployer;
+    IJBSuckerDeployer celoDeployer;
 }
 
 library SuckerDeploymentLib {
@@ -56,6 +57,7 @@ library SuckerDeploymentLib {
         bool _isOP = _network == keccak256("optimism") || _network == keccak256("optimism_sepolia");
         bool _isBase = _network == keccak256("base") || _network == keccak256("base_sepolia");
         bool _isArb = _network == keccak256("arbitrum") || _network == keccak256("arbitrum_sepolia");
+        bool _isCelo = _network == keccak256("celo") || _network == keccak256("celo_sepolia");
 
         if (_isMainnet || _isOP) {
             deployment.optimismDeployer = IJBSuckerDeployer(
@@ -71,6 +73,12 @@ library SuckerDeploymentLib {
         if (_isMainnet || _isArb) {
             deployment.arbitrumDeployer = IJBSuckerDeployer(
                 _getDeploymentAddress(path, "nana-suckers-v5", network_name, "JBArbitrumSuckerDeployer")
+            );
+        }
+
+        if (_isCelo) {
+            deployment.celoDeployer = IJBSuckerDeployer(
+                _getDeploymentAddress(path, "nana-suckers-v5", network_name, "JBCCIPSuckerDeployer")
             );
         }
     }

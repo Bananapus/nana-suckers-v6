@@ -19,6 +19,8 @@ ethereum_sepolia ="${RPC_ETHEREUM_SEPOLIA}"
 optimism_sepolia = "${RPC_OPTIMISM_SEPOLIA}"
 polygon_mumbai = "${RPC_POLYGON_MUMBAI}"
 base_sepolia = "${RPC_BASE_SEPOLIA}"
+celo = "${RPC_CELO_MAINNET}"
+celo_sepolia = "${RPC_CELO_SEPOLIA}"
 
 [profile.ci_sizes]
 optimizer_runs = 200

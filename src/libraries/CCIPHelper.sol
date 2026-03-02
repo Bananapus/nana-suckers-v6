@@ -15,6 +15,7 @@ library CCIPHelper {
     address public constant BNB_ROUTER = 0x34B03Cb9086d7D758AC55af71584F81A598759FE;
     address public constant BASE_ROUTER = 0x881e3A65B4d4a04dD529061dd0071cf975F58bCD;
     address public constant BASE_SEP_ROUTER = 0xD3b06cEbF099CE7DA4AcCf578aaebFDBd6e88a93;
+    address public constant CELO_ROUTER = 0xfB48f15480926A4ADf9116Dca468bDd2EE6C5F62;
 
     /// @notice The respective chain ids per network
     uint256 public constant ETH_ID = 1;
@@ -28,6 +29,7 @@ library CCIPHelper {
     uint256 public constant BNB_ID = 56;
     uint256 public constant BASE_ID = 8453;
     uint256 public constant BASE_SEP_ID = 84_532;
+    uint256 public constant CELO_ID = 42_220;
 
     /// @notice The chain selector per network
     uint64 public constant ETH_SEL = 5_009_297_550_715_157_269;
@@ -41,6 +43,7 @@ library CCIPHelper {
     uint64 public constant BNB_SEL = 11_344_663_589_394_136_015;
     uint64 public constant BASE_SEL = 15_971_525_489_660_198_786;
     uint64 public constant BASE_SEP_SEL = 10_344_971_235_874_465_080;
+    uint64 public constant CELO_SEL = 1_346_049_177_634_351_622;
 
     /// @notice The WETH address of each chain
     address public constant ETH_WETH = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
@@ -52,6 +55,7 @@ library CCIPHelper {
     address public constant AVA_WETH = 0xB31f66AA3C1e785363F0875A1B74E27b85FD66c7;
     address public constant BNB_WETH = 0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c;
     address public constant BASE_WETH = 0x4200000000000000000000000000000000000006;
+    address public constant CELO_WETH = 0xD221812de1BD094f35587EE8E174B07B6167D9Af;
 
     function routerOfChain(uint256 _chainId) internal pure returns (address router) {
         if (_chainId == ETH_ID) {
@@ -76,6 +80,8 @@ library CCIPHelper {
             return OP_SEP_ROUTER;
         } else if (_chainId == BASE_SEP_ID) {
             return BASE_SEP_ROUTER;
+        } else if (_chainId == CELO_ID) {
+            return CELO_ROUTER;
         } else {
             revert("Unsupported chain");
         }
@@ -104,6 +110,8 @@ library CCIPHelper {
             return OP_SEP_SEL;
         } else if (_chainId == BASE_SEP_ID) {
             return BASE_SEP_SEL;
+        } else if (_chainId == CELO_ID) {
+            return CELO_SEL;
         } else {
             revert("Unsupported chain");
         }
@@ -128,6 +136,8 @@ library CCIPHelper {
             return ETH_SEP_WETH;
         } else if (_chainId == ARB_SEP_ID) {
             return ARB_SEP_WETH;
+        } else if (_chainId == CELO_ID) {
+            return CELO_WETH;
         } else {
             revert("Unsupported chain");
         }

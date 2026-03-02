@@ -31,14 +31,18 @@ contract DeployScript is Script, Sphinx {
     bytes32 ARB_BASE_SALT = "_SUCKER_ARB_BASE_";
     bytes32 ARB_OP_SALT = "_SUCKER_ARB_OP_";
     bytes32 OP_BASE_SALT = "_SUCKER_OP_BASE_";
+    bytes32 CELO_SALT = "_SUCKER_ETH_CELO_";
+    bytes32 ARB_CELO_SALT = "_SUCKER_ARB_CELO_";
+    bytes32 OP_CELO_SALT = "_SUCKER_OP_CELO_";
+    bytes32 BASE_CELO_SALT = "_SUCKER_BASE_CELO";
 
     bytes32 REGISTRY_SALT = "REGISTRY";
 
     function configureSphinx() public override {
         // TODO: Update to contain JB Emergency Developers
         sphinxConfig.projectName = "nana-suckers-v5";
-        sphinxConfig.mainnets = ["ethereum", "optimism", "base", "arbitrum"];
-        sphinxConfig.testnets = ["ethereum_sepolia", "optimism_sepolia", "base_sepolia", "arbitrum_sepolia"];
+        sphinxConfig.mainnets = ["ethereum", "optimism", "base", "arbitrum", "celo"];
+        sphinxConfig.testnets = ["ethereum_sepolia", "optimism_sepolia", "base_sepolia", "arbitrum_sepolia", "celo_sepolia"];
     }
 
     function run() public {
@@ -371,6 +375,11 @@ contract DeployScript is Script, Sphinx {
             PRE_APPROVED_DEPLOYERS.push(
                 address(_deployCCIPSuckerFor(ARB_SALT, block.chainid == 1 ? CCIPHelper.ARB_ID : CCIPHelper.ARB_SEP_ID))
             );
+
+            // Celo (mainnet only — CCIP not available on Celo Sepolia).
+            if (block.chainid == 1) {
+                PRE_APPROVED_DEPLOYERS.push(address(_deployCCIPSuckerFor(CELO_SALT, CCIPHelper.CELO_ID)));
+            }
         }
 
         // Check if we should do the L2 portion.
@@ -399,6 +408,11 @@ contract DeployScript is Script, Sphinx {
                 )
             );
 
+            // ARB -> CELO (mainnet only — CCIP not available on Celo Sepolia).
+            if (block.chainid == 42_161) {
+                PRE_APPROVED_DEPLOYERS.push(address(_deployCCIPSuckerFor(ARB_CELO_SALT, CCIPHelper.CELO_ID)));
+            }
+
             // OP & OP Sepolia.
         } else if (block.chainid == 10 || block.chainid == 11_155_420) {
             // L1.
@@ -421,6 +435,11 @@ contract DeployScript is Script, Sphinx {
                     )
                 )
             );
+
+            // OP -> CELO (mainnet only — CCIP not available on Celo Sepolia).
+            if (block.chainid == 10) {
+                PRE_APPROVED_DEPLOYERS.push(address(_deployCCIPSuckerFor(OP_CELO_SALT, CCIPHelper.CELO_ID)));
+            }
 
             // BASE & BASE Sepolia.
         } else if (block.chainid == 8453 || block.chainid == 84_532) {
@@ -446,6 +465,25 @@ contract DeployScript is Script, Sphinx {
                     )
                 )
             );
+
+            // BASE -> CELO (mainnet only — CCIP not available on Celo Sepolia).
+            if (block.chainid == 8453) {
+                PRE_APPROVED_DEPLOYERS.push(address(_deployCCIPSuckerFor(BASE_CELO_SALT, CCIPHelper.CELO_ID)));
+            }
+
+            // Celo Mainnet (CCIP not available on Celo Sepolia).
+        } else if (block.chainid == 42_220) {
+            // CELO -> L1.
+            PRE_APPROVED_DEPLOYERS.push(address(_deployCCIPSuckerFor(CELO_SALT, CCIPHelper.ETH_ID)));
+
+            // CELO -> OP.
+            PRE_APPROVED_DEPLOYERS.push(address(_deployCCIPSuckerFor(OP_CELO_SALT, CCIPHelper.OP_ID)));
+
+            // CELO -> BASE.
+            PRE_APPROVED_DEPLOYERS.push(address(_deployCCIPSuckerFor(BASE_CELO_SALT, CCIPHelper.BASE_ID)));
+
+            // CELO -> ARB.
+            PRE_APPROVED_DEPLOYERS.push(address(_deployCCIPSuckerFor(ARB_CELO_SALT, CCIPHelper.ARB_ID)));
         }
     }
 
