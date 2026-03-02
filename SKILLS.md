@@ -91,6 +91,44 @@ Cross-chain token and fund bridging for Juicebox V6 projects, using merkle trees
 - `JBAllowanceSucker._pullBackingAssets` burns tokens first, then calculates backing assets as `mulDiv(count, surplus, totalSupply)` using the pre-burn total supply.
 - The outbox tree tracks `numberOfClaimsSent` separately from `tree.count`. Emergency hatch exit is only available for leaves whose index is `>= numberOfClaimsSent` (not yet sent to remote).
 
+### CRITICAL: NATIVE_TOKEN Mismatch on Non-ETH Chains
+
+`JBConstants.NATIVE_TOKEN` (`0x000...EEEe`) represents whatever is native on the current chain -- ETH on Ethereum/Optimism/Base/Arbitrum, but CELO on Celo, MATIC on Polygon, etc.
+
+**Mapping `NATIVE_TOKEN -> NATIVE_TOKEN` across chains with different native assets is dangerous:**
+
+- The sucker bridges raw amounts without exchange rate conversion
+- 1 CELO bridged as if it were 1 ETH massively overvalues the payment
+- Project issuance (`baseCurrency=1`, i.e. ETH) treats CELO at 1:1 with ETH
+
+**Safe chains** (ETH is native): Ethereum, Optimism, Base, Arbitrum -- `NATIVE_TOKEN -> NATIVE_TOKEN` works correctly.
+
+**Unsafe chains** (non-ETH native): Celo, Polygon, Avalanche, BNB -- use ERC-20 WETH or USDC as the terminal accounting context, NOT `NATIVE_TOKEN`.
+
+**Correct token mapping on Celo:**
+```solidity
+// Map WETH (ERC-20) on Ethereum to WETH (ERC-20) on Celo
+JBTokenMapping({
+    localToken: WETH_ETHEREUM,
+    remoteToken: WETH_CELO,  // 0xD221812de1BD094f35587EE8E174B07B6167D9Af
+    minGas: 200_000,
+    minBridgeAmount: 0.01 ether
+})
+```
+
+**Wrong token mapping on Celo:**
+```solidity
+// NATIVE_TOKEN on Ethereum is ETH, but on Celo it's CELO!
+JBTokenMapping({
+    localToken: JBConstants.NATIVE_TOKEN,
+    remoteToken: JBConstants.NATIVE_TOKEN,  // WRONG on non-ETH chains
+    minGas: 200_000,
+    minBridgeAmount: 0.01 ether
+})
+```
+
+See also: `SECURITY.md` in this repo and INTEROP-6 in `AUDIT_FINDINGS.md`.
+
 ## Example Integration
 
 ```solidity
