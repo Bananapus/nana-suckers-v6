@@ -47,6 +47,8 @@ contract JBOptimismSuckerDeployer is JBSuckerDeployer, IJBOpSuckerDeployer {
 
     /// @notice Check if the layer specific configuration is set or not. Used as a sanity check.
     function _layerSpecificConfigurationIsSet() internal view override returns (bool) {
+        // Use && (not ||) so the post-set check in setChainSpecificConstants rejects partial configurations
+        // where only one of messenger/bridge is provided. Both are required for the sucker to function.
         return address(opMessenger) != address(0) && address(opBridge) != address(0);
     }
 
