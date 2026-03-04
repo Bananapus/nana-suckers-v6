@@ -66,7 +66,6 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     error JBSucker_ZeroBeneficiary();
     error JBSucker_ZeroERC20Token();
     error JBSucker_Deprecated();
-    error JBSucker_InboxNotEmpty(address token, uint64 inboxNonce);
 
     //*********************************************************************//
     // ------------------------- public constants ------------------------ //
@@ -823,15 +822,10 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
             revert JBSucker_TokenAlreadyMapped(token, currentMapping.addr);
         }
 
-        // L-21: Prevent remapping while there are unclaimed inbox entries for this token.
-        // If the inbox has a non-zero nonce, there may be unclaimed leaves in the inbox merkle tree.
-        // Remapping the token while unclaimed data exists could strand those claims or cause accounting confusion.
-        if (
-            currentMapping.addr != address(0) && currentMapping.addr != map.remoteToken && map.remoteToken != address(0)
-                && _inboxOf[token].nonce != 0
-        ) {
-            revert JBSucker_InboxNotEmpty(token, _inboxOf[token].nonce);
-        }
+        // Note (L-21): No inbox guard needed here. Token remapping only affects the outbound (sending) path —
+        // it changes where tokens get bridged TO. Existing inbox claims are resolved against the inbox merkle
+        // tree keyed by the local token address. Changing the remote token doesn't invalidate those claims
+        // since the tokens have already arrived and the merkle proofs remain valid.
 
         // If the remote token is being set to the 0 address (which disables bridging), send any remaining outbox funds
         // to the remote chain.
