@@ -132,6 +132,12 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
             revert JBSucker_NotPeer(origin);
         }
 
+        // Note (M-28): We intentionally do NOT validate root.amount against destTokenAmounts[0].amount here.
+        // CCIP fees are paid separately (via feeToken), so delivered amounts should always match what was sent.
+        // If we reverted on a mismatch, the tokens already transferred by CCIP would be locked in the router
+        // with no recovery path — a concrete fund-loss risk that outweighs the theoretical defense-in-depth
+        // benefit against a CCIP-level failure or peer compromise. See AUDIT_FINDINGS.md M-28.
+
         // We either send no tokens or a single token.
         if (any2EvmMessage.destTokenAmounts.length == 1) {
             // As far as the sucker contract is aware wrapped natives are not a thing, it only handles ERC20s or native.
