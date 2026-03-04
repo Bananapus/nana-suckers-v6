@@ -10,7 +10,7 @@ import {IArbGatewayRouter} from "../interfaces/IArbGatewayRouter.sol";
 import {ARBAddresses} from "../libraries/ARBAddresses.sol";
 import {ARBChains} from "../libraries/ARBChains.sol";
 
-/// @notice An `IJBSuckerDeployerFeeless` implementation to deploy `JBOptimismSucker` contracts.
+/// @notice An `IJBSuckerDeployer` implementation to deploy `JBArbitrumSucker` contracts.
 contract JBArbitrumSuckerDeployer is JBSuckerDeployer, IJBArbitrumSuckerDeployer {
     //*********************************************************************//
     // ---------------------- public stored properties ------------------- //

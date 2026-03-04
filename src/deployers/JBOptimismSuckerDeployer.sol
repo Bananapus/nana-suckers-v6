@@ -11,7 +11,7 @@ import {IJBSuckerDeployer} from "./../interfaces/IJBSuckerDeployer.sol";
 import {IOPMessenger} from "../interfaces/IOPMessenger.sol";
 import {IOPStandardBridge} from "../interfaces/IOPStandardBridge.sol";
 
-/// @notice An `IJBSuckerDeployerFeeless` implementation to deploy `JBOptimismSucker` contracts.
+/// @notice An `IJBSuckerDeployer` implementation to deploy `JBOptimismSucker` contracts.
 contract JBOptimismSuckerDeployer is JBSuckerDeployer, IJBOpSuckerDeployer {
     //*********************************************************************//
     // ---------------------- public stored properties ------------------- //
