@@ -1296,5 +1296,46 @@ contract SuckerDeepAttacks is Test {
         assertEq(sucker.test_getOutboxNonce(TOKEN), 1);
     }
 
+    // =========================================================================
+    // L-10: StaleRootRejected event emission
+    // =========================================================================
+
+    /// @notice fromRemote with stale nonce should emit StaleRootRejected event.
+    function test_fromRemote_staleNonce_emitsEvent() public {
+        sucker.test_setInboxRoot(TOKEN, 5, bytes32(uint256(0xdead)));
+
+        JBMessageRoot memory root = JBMessageRoot({
+            token: TOKEN,
+            amount: 1 ether,
+            remoteRoot: JBInboxTreeRoot({nonce: 3, root: bytes32(uint256(0xbeef))})
+        });
+
+        vm.expectEmit(true, false, false, true, address(sucker));
+        emit IJBSucker.StaleRootRejected({token: TOKEN, receivedNonce: 3, currentNonce: 5});
+
+        vm.prank(address(sucker));
+        sucker.fromRemote(root);
+    }
+
+    /// @notice fromRemote with same nonce (not strictly greater) should emit StaleRootRejected.
+    function test_fromRemote_sameNonce_emitsEvent() public {
+        sucker.test_setInboxRoot(TOKEN, 5, bytes32(uint256(0xdead)));
+
+        JBMessageRoot memory root = JBMessageRoot({
+            token: TOKEN,
+            amount: 1 ether,
+            remoteRoot: JBInboxTreeRoot({nonce: 5, root: bytes32(uint256(0xbeef))})
+        });
+
+        vm.expectEmit(true, false, false, true, address(sucker));
+        emit IJBSucker.StaleRootRejected({token: TOKEN, receivedNonce: 5, currentNonce: 5});
+
+        vm.prank(address(sucker));
+        sucker.fromRemote(root);
+
+        // Inbox should remain unchanged.
+        assertEq(sucker.test_getInboxNonce(TOKEN), 5, "Nonce should remain unchanged");
+    }
+
     receive() external payable {}
 }
