@@ -38,6 +38,11 @@ import {JBSuckerState} from "./enums/JBSuckerState.sol";
 /// chain to the remote chain, and the inbox tree is used to receive from the remote chain to the local chain.
 /// @dev Throughout this contract, "terminal token" refers to any token accepted by a project's terminal.
 /// @dev This contract does *NOT* support tokens that have a fee on regular transfers and rebasing tokens.
+/// @dev Cross-chain message authentication is delegated entirely to each bridge-specific subclass via the
+/// `_isRemotePeer` virtual function. Each implementation authenticates differently: Optimism uses its native
+/// `CrossDomainMessenger`, Arbitrum validates against the `Bridge` and `Outbox` contracts, and CCIP verifies
+/// through the Chainlink `Router`. Deployers of new bridge integrations must implement `_isRemotePeer` to
+/// guarantee that only messages from the legitimate remote peer are accepted.
 abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC165, IJBSuckerExtended {
     using BitMaps for BitMaps.BitMap;
     using MerkleLib for MerkleLib.Tree;
@@ -214,12 +219,14 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     //*********************************************************************//
 
     /// @notice The peer sucker on the remote chain.
+    /// @dev Defaults to `address(this)`, assuming deterministic cross-chain deployment via CREATE2. The deployer
+    /// (`JBSuckerDeployer`) uses `salt = keccak256(abi.encode(_msgSender(), salt))` to ensure sender-specific
+    /// determinism. This assumption breaks if CREATE2 conditions differ across chains (e.g., different factory
+    /// nonces, different init code, or different deployer addresses). In such cases, subclasses must override this
+    /// function to return the correct peer address. Note that overriding `peer()` is fully supported by the sucker
+    /// implementation and off-chain infrastructure, but for revnets it breaks the assumption of matching
+    /// configurations on both chains -- for this reason the default same-address behavior is preferred.
     function peer() public view virtual returns (address) {
-        /// This can be overridden by the inheriting contract to return a different address. This is fully supported by
-        /// the sucker implementation and all its off-chain infrastructure, This does however break some
-        /// invariants/assumptions, for revnets it would break the assumption of matching configurations on both chains,
-        /// for this reason we only support a matching address.
-
         // The peer is at the same address on the other chain.
         return address(this);
     }
@@ -762,6 +769,12 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
 
     /// @notice Map an ERC-20 token on the local chain to an ERC-20 token on the remote chain, allowing that token to be
     /// bridged or disabled.
+    /// @dev Once a token has outbox tree entries (`_outboxOf[token].tree.count != 0`), it cannot be remapped to a
+    /// different remote token -- it can only be disabled by mapping to `address(0)`, which triggers a final root
+    /// flush to settle outstanding claims. This permanence prevents double-spending: if a remapping were allowed
+    /// after outbox activity, the same local funds could be claimed against two different remote tokens. A
+    /// misconfigured mapping therefore requires deploying a new sucker. Re-enabling a previously disabled mapping
+    /// (back to the same remote token) is supported.
     /// @param map The local and remote terminal token addresses to map, and minimum amount/gas limits for bridging
     /// them.
     /// @param transportPaymentValue The amount of `msg.value` to send for the token mapping.
