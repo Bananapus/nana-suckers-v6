@@ -94,7 +94,7 @@ contract CCIPTestSucker is JBCCIPSucker {
         uint256 projectTokenCount,
         address token,
         uint256 terminalTokenAmount,
-        address beneficiary
+        bytes32 beneficiary
     ) external {
         _insertIntoTree(projectTokenCount, token, terminalTokenAmount, beneficiary);
     }
@@ -223,7 +223,7 @@ contract CCIPNativeInteropTest is Test {
         JBTokenMapping memory map = JBTokenMapping({
             localToken: JBConstants.NATIVE_TOKEN,
             minGas: 200_000,
-            remoteToken: celoETH,
+            remoteToken: bytes32(uint256(uint160(celoETH))),
             minBridgeAmount: 0.01 ether
         });
 
@@ -239,11 +239,11 @@ contract CCIPNativeInteropTest is Test {
         JBTokenMapping memory map = JBTokenMapping({
             localToken: JBConstants.NATIVE_TOKEN,
             minGas: 200_000,
-            remoteToken: celoETH,
+            remoteToken: bytes32(uint256(uint160(celoETH))),
             minBridgeAmount: 0.01 ether
         });
 
-        vm.expectRevert(abi.encodeWithSelector(JBSucker.JBSucker_InvalidNativeRemoteAddress.selector, celoETH));
+        vm.expectRevert(abi.encodeWithSelector(JBSucker.JBSucker_InvalidNativeRemoteAddress.selector, bytes32(uint256(uint160(celoETH)))));
         baseSucker.exposed_validateTokenMapping(map);
     }
 
@@ -255,7 +255,7 @@ contract CCIPNativeInteropTest is Test {
         JBTokenMapping memory map = JBTokenMapping({
             localToken: JBConstants.NATIVE_TOKEN,
             minGas: 200_000,
-            remoteToken: JBConstants.NATIVE_TOKEN,
+            remoteToken: bytes32(uint256(uint160(JBConstants.NATIVE_TOKEN))),
             minBridgeAmount: 0.01 ether
         });
 
@@ -271,7 +271,7 @@ contract CCIPNativeInteropTest is Test {
         JBTokenMapping memory map = JBTokenMapping({
             localToken: JBConstants.NATIVE_TOKEN,
             minGas: 200_000,
-            remoteToken: address(0),
+            remoteToken: bytes32(0),
             minBridgeAmount: 0
         });
 
@@ -287,7 +287,7 @@ contract CCIPNativeInteropTest is Test {
         JBTokenMapping memory map = JBTokenMapping({
             localToken: JBConstants.NATIVE_TOKEN,
             minGas: 100_000, // Below MESSENGER_ERC20_MIN_GAS_LIMIT (200_000)
-            remoteToken: celoETH,
+            remoteToken: bytes32(uint256(uint160(celoETH))),
             minBridgeAmount: 0.01 ether
         });
 
@@ -315,7 +315,8 @@ contract CCIPNativeInteropTest is Test {
 
         // Build CCIP message with NATIVE_TOKEN root.
         JBMessageRoot memory msgRoot = JBMessageRoot({
-            token: JBConstants.NATIVE_TOKEN,
+            version: 1,
+            token: bytes32(uint256(uint160(JBConstants.NATIVE_TOKEN))),
             amount: bridgeAmount,
             remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(0xdead))})
         });
@@ -350,7 +351,8 @@ contract CCIPNativeInteropTest is Test {
         uint256 bridgeAmount = 1 ether;
 
         JBMessageRoot memory msgRoot = JBMessageRoot({
-            token: celoETH, // ERC20, not NATIVE_TOKEN
+            version: 1,
+            token: bytes32(uint256(uint160(celoETH))), // ERC20, not NATIVE_TOKEN
             amount: bridgeAmount,
             remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(0xbeef))})
         });
@@ -393,12 +395,13 @@ contract CCIPNativeInteropTest is Test {
             enabled: true,
             emergencyHatch: false,
             minGas: 200_000,
-            addr: celoETH,
+            addr: bytes32(uint256(uint160(celoETH))),
             minBridgeAmount: 0.01 ether
         });
 
         JBMessageRoot memory msgRoot = JBMessageRoot({
-            token: celoETH,
+            version: 1,
+            token: bytes32(uint256(uint160(celoETH))),
             amount: amount,
             remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(0xdead))})
         });
@@ -428,7 +431,7 @@ contract CCIPNativeInteropTest is Test {
         JBTokenMapping memory map = JBTokenMapping({
             localToken: JBConstants.NATIVE_TOKEN,
             minGas: 200_000,
-            remoteToken: celoETH,
+            remoteToken: bytes32(uint256(uint160(celoETH))),
             minBridgeAmount: 0.01 ether
         });
         ccipSucker.exposed_validateTokenMapping(map);
@@ -436,7 +439,7 @@ contract CCIPNativeInteropTest is Test {
         // Step 2: Set up the token mapping on the sucker.
         ccipSucker.test_setRemoteToken(
             JBConstants.NATIVE_TOKEN,
-            JBRemoteToken({enabled: true, emergencyHatch: false, minGas: 200_000, addr: celoETH, minBridgeAmount: 0.01 ether})
+            JBRemoteToken({enabled: true, emergencyHatch: false, minGas: 200_000, addr: bytes32(uint256(uint160(celoETH))), minBridgeAmount: 0.01 ether})
         );
 
         // Step 3: Insert a leaf into the outbox (simulating a user preparing to bridge).
@@ -444,7 +447,7 @@ contract CCIPNativeInteropTest is Test {
             projectTokenCount: 10 ether,
             token: JBConstants.NATIVE_TOKEN,
             terminalTokenAmount: 1 ether,
-            beneficiary: address(0x1234)
+            beneficiary: bytes32(uint256(uint160(address(0x1234))))
         });
 
         bytes32 outboxRoot = ccipSucker.test_getOutboxRoot(JBConstants.NATIVE_TOKEN);
@@ -453,7 +456,8 @@ contract CCIPNativeInteropTest is Test {
         // Step 4: Simulate receiving on the "Celo side" — the message arrives with
         // root.token = celoETH (the ERC20 representation of ETH on Celo).
         JBMessageRoot memory msgRoot = JBMessageRoot({
-            token: celoETH,
+            version: 1,
+            token: bytes32(uint256(uint160(celoETH))),
             amount: 1 ether,
             remoteRoot: JBInboxTreeRoot({nonce: 1, root: outboxRoot})
         });
@@ -492,7 +496,8 @@ contract CCIPNativeInteropTest is Test {
         // Simulate receiving on ETH mainnet — root.token = NATIVE_TOKEN because
         // on mainnet, ETH is the native token. CCIP delivers WETH.
         JBMessageRoot memory msgRoot = JBMessageRoot({
-            token: JBConstants.NATIVE_TOKEN,
+            version: 1,
+            token: bytes32(uint256(uint160(JBConstants.NATIVE_TOKEN))),
             amount: bridgeAmount,
             remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(0xcafe))})
         });
@@ -541,7 +546,7 @@ contract CCIPNativeInteropTest is Test {
         JBTokenMapping memory outboundMap = JBTokenMapping({
             localToken: JBConstants.NATIVE_TOKEN,
             minGas: 200_000,
-            remoteToken: celoETH,
+            remoteToken: bytes32(uint256(uint160(celoETH))),
             minBridgeAmount: 0.01 ether
         });
         ccipSucker.exposed_validateTokenMapping(outboundMap);
@@ -549,7 +554,7 @@ contract CCIPNativeInteropTest is Test {
         // 2. Set the mapping and simulate outbox.
         ccipSucker.test_setRemoteToken(
             JBConstants.NATIVE_TOKEN,
-            JBRemoteToken({enabled: true, emergencyHatch: false, minGas: 200_000, addr: celoETH, minBridgeAmount: 0.01 ether})
+            JBRemoteToken({enabled: true, emergencyHatch: false, minGas: 200_000, addr: bytes32(uint256(uint160(celoETH))), minBridgeAmount: 0.01 ether})
         );
 
         // 3. Wrap native ETH -> WETH for CCIP transport.
@@ -557,10 +562,11 @@ contract CCIPNativeInteropTest is Test {
         assertEq(mockWETH.balanceOf(address(ccipSucker)), 0, "No WETH before send");
 
         JBRemoteToken memory remoteToken = JBRemoteToken({
-            enabled: true, emergencyHatch: false, minGas: 200_000, addr: celoETH, minBridgeAmount: 0.01 ether
+            enabled: true, emergencyHatch: false, minGas: 200_000, addr: bytes32(uint256(uint160(celoETH))), minBridgeAmount: 0.01 ether
         });
         JBMessageRoot memory sendMsg = JBMessageRoot({
-            token: celoETH,
+            version: 1,
+            token: bytes32(uint256(uint160(celoETH))),
             amount: bridgeAmount,
             remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(0xaaa))})
         });
@@ -586,7 +592,8 @@ contract CCIPNativeInteropTest is Test {
         uint256 ethBefore = address(ccipSucker).balance;
 
         JBMessageRoot memory recvMsg = JBMessageRoot({
-            token: JBConstants.NATIVE_TOKEN,
+            version: 1,
+            token: bytes32(uint256(uint160(JBConstants.NATIVE_TOKEN))),
             amount: bridgeAmount,
             remoteRoot: JBInboxTreeRoot({nonce: 2, root: bytes32(uint256(0xbbb))})
         });
@@ -625,7 +632,7 @@ contract CCIPNativeInteropTest is Test {
         JBTokenMapping memory map = JBTokenMapping({
             localToken: address(0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48), // USDC-like
             minGas: 200_000,
-            remoteToken: address(0xef4229c8c3250C675F21BCefa42f58EfbfF6002a), // celoUSDC-like
+            remoteToken: bytes32(uint256(uint160(address(0xef4229c8c3250C675F21BCefa42f58EfbfF6002a)))), // celoUSDC-like
             minBridgeAmount: 1e6
         });
 
@@ -641,7 +648,7 @@ contract CCIPNativeInteropTest is Test {
         JBTokenMapping memory map = JBTokenMapping({
             localToken: makeAddr("USDC"),
             minGas: 50_000, // Below MESSENGER_ERC20_MIN_GAS_LIMIT (200_000)
-            remoteToken: makeAddr("celoUSDC"),
+            remoteToken: bytes32(uint256(uint160(makeAddr("celoUSDC")))),
             minBridgeAmount: 1e6
         });
 
@@ -660,7 +667,7 @@ contract CCIPNativeInteropTest is Test {
         JBTokenMapping memory map = JBTokenMapping({
             localToken: JBConstants.NATIVE_TOKEN,
             minGas: 0, // Zero minGas
-            remoteToken: JBConstants.NATIVE_TOKEN,
+            remoteToken: bytes32(uint256(uint160(JBConstants.NATIVE_TOKEN))),
             minBridgeAmount: 0.01 ether
         });
 
@@ -676,7 +683,7 @@ contract CCIPNativeInteropTest is Test {
         JBTokenMapping memory map = JBTokenMapping({
             localToken: JBConstants.NATIVE_TOKEN,
             minGas: 0, // Zero minGas
-            remoteToken: JBConstants.NATIVE_TOKEN,
+            remoteToken: bytes32(uint256(uint160(JBConstants.NATIVE_TOKEN))),
             minBridgeAmount: 0.01 ether
         });
 

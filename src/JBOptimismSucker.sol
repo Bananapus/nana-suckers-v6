@@ -83,7 +83,7 @@ contract JBOptimismSucker is JBSucker, IJBOptimismSucker {
     /// @notice Checks if the `sender` (`_msgSender()`) is a valid representative of the remote peer.
     /// @param sender The message's sender.
     function _isRemotePeer(address sender) internal override returns (bool valid) {
-        return sender == address(OPMESSENGER) && OPMESSENGER.xDomainMessageSender() == peer();
+        return sender == address(OPMESSENGER) && _toBytes32(OPMESSENGER.xDomainMessageSender()) == peer();
     }
 
     /// @notice Use the `OPMESSENGER` to send the outbox tree for the `token` and the corresponding funds to the peer
@@ -116,12 +116,12 @@ contract JBOptimismSucker is JBSucker, IJBOptimismSucker {
             // slither-disable-next-line reentrancy-events
             SafeERC20.forceApprove({token: IERC20(token), spender: address(OPBRIDGE), value: amount});
 
-            // Bridge the tokens to the peer sucker.
+            // Bridge the tokens to the peer sucker. Convert bytes32 types to address at the OP Bridge API boundary.
             // slither-disable-next-line reentrency-events,calls-loop
             OPBRIDGE.bridgeERC20To({
                 localToken: token,
-                remoteToken: remoteToken.addr,
-                to: peer(),
+                remoteToken: _toAddress(remoteToken.addr),
+                to: _toAddress(peer()),
                 amount: amount,
                 minGasLimit: remoteToken.minGas,
                 extraData: bytes("")
@@ -132,9 +132,10 @@ contract JBOptimismSucker is JBSucker, IJBOptimismSucker {
         }
 
         // Send the message to the peer with the reclaimed ETH.
+        // Convert bytes32 peer to address at the OP Messenger API boundary.
         // slither-disable-next-line arbitrary-send-eth,reentrency-events,calls-loop
         OPMESSENGER.sendMessage{value: nativeValue}(
-            peer(), abi.encodeCall(JBSucker.fromRemote, (message)), MESSENGER_BASE_GAS_LIMIT
+            _toAddress(peer()), abi.encodeCall(JBSucker.fromRemote, (message)), MESSENGER_BASE_GAS_LIMIT
         );
     }
 }

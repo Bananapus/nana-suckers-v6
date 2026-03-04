@@ -8,7 +8,7 @@ pragma solidity ^0.8.0;
 /// @custom:member terminalTokenAmount The amount of terminal tokens to claim.
 struct JBLeaf {
     uint256 index;
-    address beneficiary;
+    bytes32 beneficiary;
     uint256 projectTokenCount;
     uint256 terminalTokenAmount;
 }

@@ -6,6 +6,6 @@ pragma solidity ^0.8.21;
 /// @custom:member remoteChainId The chain ID of the remote address.
 struct JBSuckersPair {
     address local;
-    address remote;
+    bytes32 remote;
     uint256 remoteChainId;
 }

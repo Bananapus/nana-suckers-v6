@@ -40,7 +40,7 @@ contract CCIPSuckerHarness is JBCCIPSucker {
         uint256 projectTokenCount,
         address token,
         uint256 terminalTokenAmount,
-        address beneficiary
+        bytes32 beneficiary
     ) external {
         _insertIntoTree(projectTokenCount, token, terminalTokenAmount, beneficiary);
     }
@@ -147,13 +147,13 @@ contract CCIPRefundTest is Test {
                 enabled: true,
                 emergencyHatch: false,
                 minGas: 200_000,
-                addr: makeAddr("remoteToken"),
+                addr: bytes32(uint256(uint160(makeAddr("remoteToken")))),
                 minBridgeAmount: 0
             })
         );
 
         // Insert a leaf into the outbox.
-        sucker.test_insertIntoTree(1 ether, token, amount, address(this));
+        sucker.test_insertIntoTree(1 ether, token, amount, bytes32(uint256(uint160(address(this)))));
     }
 
     // =========================================================================

@@ -18,7 +18,7 @@ import {JBMessageRoot} from "../structs/JBMessageRoot.sol";
 // @notice The minimal interface for a sucker contract.
 interface IJBSucker is IERC165 {
     event Claimed(
-        address beneficiary,
+        bytes32 beneficiary,
         address token,
         uint256 projectTokenCount,
         uint256 terminalTokenAmount,
@@ -27,7 +27,7 @@ interface IJBSucker is IERC165 {
         address caller
     );
     event InsertToOutboxTree(
-        address indexed beneficiary,
+        bytes32 indexed beneficiary,
         address indexed token,
         bytes32 hashed,
         uint256 index,
@@ -48,7 +48,7 @@ interface IJBSucker is IERC165 {
     function TOKENS() external view returns (IJBTokens);
 
     function deployer() external view returns (address);
-    function peer() external view returns (address);
+    function peer() external view returns (bytes32);
     function projectId() external view returns (uint256);
 
     function amountToAddToBalanceOf(address token) external view returns (uint256 amount);
@@ -66,7 +66,7 @@ interface IJBSucker is IERC165 {
     function mapTokens(JBTokenMapping[] calldata maps) external payable;
     function prepare(
         uint256 projectTokenCount,
-        address beneficiary,
+        bytes32 beneficiary,
         uint256 minTokensReclaimed,
         address token
     )

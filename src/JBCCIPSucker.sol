@@ -131,15 +131,15 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
     /// @dev Extremely important to ensure only router calls this.
     function ccipReceive(Client.Any2EVMMessage calldata any2EvmMessage) external override {
         // only calls from the set router are accepted.
-        if (_msgSender() != address(CCIP_ROUTER)) revert JBSucker_NotPeer(_msgSender());
+        if (_msgSender() != address(CCIP_ROUTER)) revert JBSucker_NotPeer(_toBytes32(_msgSender()));
 
         // Decode the message root from the peer
         JBMessageRoot memory root = abi.decode(any2EvmMessage.data, (JBMessageRoot));
         address origin = abi.decode(any2EvmMessage.sender, (address));
 
         // Make sure that the message came from our peer.
-        if (origin != peer() || any2EvmMessage.sourceChainSelector != REMOTE_CHAIN_SELECTOR) {
-            revert JBSucker_NotPeer(origin);
+        if (origin != _toAddress(peer()) || any2EvmMessage.sourceChainSelector != REMOTE_CHAIN_SELECTOR) {
+            revert JBSucker_NotPeer(_toBytes32(origin));
         }
 
         // Note (M-28): We intentionally do NOT validate root.amount against destTokenAmounts[0].amount here.
@@ -154,7 +154,7 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
             Client.EVMTokenAmount memory tokenAmount = any2EvmMessage.destTokenAmounts[0];
             // Unwrap WETH -> ETH only when the root says the token is NATIVE_TOKEN.
             // When root.token is an ERC-20 address (e.g., bridging to a chain where ETH is an ERC-20), no unwrap.
-            if (root.token == JBConstants.NATIVE_TOKEN) {
+            if (root.token == _toBytes32(JBConstants.NATIVE_TOKEN)) {
                 // We can (safely) assume that the token that is set in the `destTokenAmounts` is a valid wrapped
                 // native.
                 // If this ends up not being the case then our sanity check to see if we unwrapped the native asset will
@@ -234,8 +234,9 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
         }
 
         // Create an EVM2AnyMessage struct in memory with necessary information for sending a cross-chain message
+        // CCIP requires EVM addresses, so convert the bytes32 peer to an address for the receiver field.
         Client.EVM2AnyMessage memory message = Client.EVM2AnyMessage({
-            receiver: abi.encode(peer()),
+            receiver: abi.encode(_toAddress(peer())),
             data: abi.encode(sucker_message),
             tokenAmounts: tokenAmounts,
             extraArgs: Client._argsToBytes(

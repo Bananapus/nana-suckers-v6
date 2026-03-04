@@ -58,7 +58,7 @@ contract DeepAttackSucker is JBSucker {
     }
 
     function _isRemotePeer(address sender) internal view override returns (bool) {
-        return sender == peer();
+        return sender == _toAddress(peer());
     }
 
     function peerChainId() external view virtual override returns (uint256) {
@@ -69,7 +69,7 @@ contract DeepAttackSucker is JBSucker {
         bytes32 expectedRoot,
         uint256 projectTokenCount,
         uint256 terminalTokenAmount,
-        address beneficiary,
+        bytes32 beneficiary,
         uint256 index,
         bytes32[_TREE_DEPTH] calldata leaves
     ) internal virtual override {
@@ -101,7 +101,7 @@ contract DeepAttackSucker is JBSucker {
         uint256 projectTokenCount,
         address token,
         uint256 terminalTokenAmount,
-        address beneficiary
+        bytes32 beneficiary
     ) external {
         _insertIntoTree(projectTokenCount, token, terminalTokenAmount, beneficiary);
     }
@@ -226,7 +226,7 @@ contract SuckerDeepAttacks is Test {
                 enabled: true,
                 emergencyHatch: false,
                 minGas: 200_000,
-                addr: makeAddr("remoteToken"),
+                addr: bytes32(uint256(uint160(makeAddr("remoteToken")))),
                 minBridgeAmount: 0
             })
         );
@@ -243,7 +243,8 @@ contract SuckerDeepAttacks is Test {
 
         // Try to deliver a root with nonce=5 (same as current).
         JBMessageRoot memory root = JBMessageRoot({
-            token: TOKEN,
+            version: 1,
+            token: bytes32(uint256(uint160(TOKEN))),
             amount: 1 ether,
             remoteRoot: JBInboxTreeRoot({nonce: 5, root: bytes32(uint256(0xbeef))})
         });
@@ -261,7 +262,8 @@ contract SuckerDeepAttacks is Test {
         sucker.test_setInboxRoot(TOKEN, 10, bytes32(uint256(0xdead)));
 
         JBMessageRoot memory root = JBMessageRoot({
-            token: TOKEN,
+            version: 1,
+            token: bytes32(uint256(uint160(TOKEN))),
             amount: 1 ether,
             remoteRoot: JBInboxTreeRoot({nonce: 3, root: bytes32(uint256(0xbeef))})
         });
@@ -278,7 +280,8 @@ contract SuckerDeepAttacks is Test {
         sucker.test_setInboxRoot(TOKEN, 1, bytes32(uint256(0xaaa)));
 
         JBMessageRoot memory root = JBMessageRoot({
-            token: TOKEN,
+            version: 1,
+            token: bytes32(uint256(uint160(TOKEN))),
             amount: 1 ether,
             remoteRoot: JBInboxTreeRoot({nonce: 5, root: bytes32(uint256(0xbbb))})
         });
@@ -299,7 +302,8 @@ contract SuckerDeepAttacks is Test {
         sucker.test_setInboxRoot(TOKEN, 1, bytes32(uint256(0xaaaa)));
 
         JBMessageRoot memory root = JBMessageRoot({
-            token: TOKEN,
+            version: 1,
+            token: bytes32(uint256(uint160(TOKEN))),
             amount: 1 ether,
             remoteRoot: JBInboxTreeRoot({nonce: 2, root: bytes32(uint256(0xbbbb))})
         });
@@ -325,7 +329,8 @@ contract SuckerDeepAttacks is Test {
         assertEq(uint256(sucker.state()), uint256(JBSuckerState.SENDING_DISABLED), "Should be SENDING_DISABLED");
 
         JBMessageRoot memory root = JBMessageRoot({
-            token: TOKEN,
+            version: 1,
+            token: bytes32(uint256(uint160(TOKEN))),
             amount: 1 ether,
             remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(0xabc))})
         });
@@ -347,7 +352,7 @@ contract SuckerDeepAttacks is Test {
         address fakeBeneficiary = address(0xBBB);
 
         // Insert a leaf for the real beneficiary.
-        sucker.test_insertIntoTree(10 ether, TOKEN, 5 ether, realBeneficiary);
+        sucker.test_insertIntoTree(10 ether, TOKEN, 5 ether, bytes32(uint256(uint160(realBeneficiary))));
         bytes32 root = sucker.test_getOutboxRoot(TOKEN);
         sucker.test_setInboxRoot(TOKEN, 1, root);
         sucker.test_setOutboxBalance(TOKEN, 100 ether);
@@ -358,7 +363,7 @@ contract SuckerDeepAttacks is Test {
             token: TOKEN,
             leaf: JBLeaf({
                 index: 0,
-                beneficiary: fakeBeneficiary, // WRONG
+                beneficiary: bytes32(uint256(uint160(fakeBeneficiary))), // WRONG
                 projectTokenCount: 10 ether,
                 terminalTokenAmount: 5 ether
             }),
@@ -374,7 +379,7 @@ contract SuckerDeepAttacks is Test {
     function test_claim_wrongAmount_reverts() public {
         address beneficiary = address(0xAAA);
 
-        sucker.test_insertIntoTree(10 ether, TOKEN, 5 ether, beneficiary);
+        sucker.test_insertIntoTree(10 ether, TOKEN, 5 ether, bytes32(uint256(uint160(beneficiary))));
         bytes32 root = sucker.test_getOutboxRoot(TOKEN);
         sucker.test_setInboxRoot(TOKEN, 1, root);
         sucker.test_setOutboxBalance(TOKEN, 100 ether);
@@ -385,7 +390,7 @@ contract SuckerDeepAttacks is Test {
             token: TOKEN,
             leaf: JBLeaf({
                 index: 0,
-                beneficiary: beneficiary,
+                beneficiary: bytes32(uint256(uint160(beneficiary))),
                 projectTokenCount: 10 ether,
                 terminalTokenAmount: 100 ether // WRONG — real is 5 ether
             }),
@@ -402,7 +407,7 @@ contract SuckerDeepAttacks is Test {
         address tokenB = makeAddr("tokenB");
 
         // Insert into tokenA's tree.
-        sucker.test_insertIntoTree(10 ether, tokenA, 5 ether, address(0xAAA));
+        sucker.test_insertIntoTree(10 ether, tokenA, 5 ether, bytes32(uint256(uint160(address(0xAAA)))));
 
         // Set token B's inbox root to something different.
         sucker.test_setInboxRoot(tokenB, 1, bytes32(uint256(0xcccc)));
@@ -413,7 +418,7 @@ contract SuckerDeepAttacks is Test {
             token: tokenB, // targeting token B's inbox
             leaf: JBLeaf({
                 index: 0,
-                beneficiary: address(0xAAA),
+                beneficiary: bytes32(uint256(uint160(address(0xAAA)))),
                 projectTokenCount: 10 ether,
                 terminalTokenAmount: 5 ether
             }),
@@ -433,7 +438,7 @@ contract SuckerDeepAttacks is Test {
     ///         different trees (inbox vs outbox).
     function test_claimAndEmergencyExit_differentSlots() public {
         // Insert a leaf at index 0 in the outbox.
-        sucker.test_insertIntoTree(10 ether, TOKEN, 5 ether, address(this));
+        sucker.test_insertIntoTree(10 ether, TOKEN, 5 ether, bytes32(uint256(uint160(address(this)))));
 
         bytes32 outboxRoot = sucker.test_getOutboxRoot(TOKEN);
 
@@ -451,7 +456,7 @@ contract SuckerDeepAttacks is Test {
             token: TOKEN,
             leaf: JBLeaf({
                 index: 0,
-                beneficiary: address(this),
+                beneficiary: bytes32(uint256(uint160(address(this)))),
                 projectTokenCount: 10 ether,
                 terminalTokenAmount: 5 ether
             }),
@@ -471,9 +476,9 @@ contract SuckerDeepAttacks is Test {
     ///         emergency exit should reject the claim to prevent double-spend.
     function test_emergencyExit_alreadySentRoot_reverts() public {
         // Insert 3 leaves.
-        sucker.test_insertIntoTree(1 ether, TOKEN, 1 ether, address(this));
-        sucker.test_insertIntoTree(2 ether, TOKEN, 2 ether, address(this));
-        sucker.test_insertIntoTree(3 ether, TOKEN, 3 ether, address(this));
+        sucker.test_insertIntoTree(1 ether, TOKEN, 1 ether, bytes32(uint256(uint160(address(this)))));
+        sucker.test_insertIntoTree(2 ether, TOKEN, 2 ether, bytes32(uint256(uint160(address(this)))));
+        sucker.test_insertIntoTree(3 ether, TOKEN, 3 ether, bytes32(uint256(uint160(address(this)))));
 
         // Mark that 2 claims were sent (indices 0 and 1 covered).
         sucker.test_setNumberOfClaimsSent(TOKEN, 2);
@@ -483,7 +488,7 @@ contract SuckerDeepAttacks is Test {
         // Enable emergency hatch.
         sucker.test_setRemoteToken(
             TOKEN,
-            JBRemoteToken({enabled: false, emergencyHatch: true, minGas: 0, addr: makeAddr("remote"), minBridgeAmount: 0})
+            JBRemoteToken({enabled: false, emergencyHatch: true, minGas: 0, addr: bytes32(uint256(uint160(makeAddr("remote")))), minBridgeAmount: 0})
         );
 
         // Index 0 was part of the sent root → should revert (could be double-spent on remote).
@@ -493,7 +498,7 @@ contract SuckerDeepAttacks is Test {
             token: TOKEN,
             leaf: JBLeaf({
                 index: 0,
-                beneficiary: address(this),
+                beneficiary: bytes32(uint256(uint160(address(this)))),
                 projectTokenCount: 1 ether,
                 terminalTokenAmount: 1 ether
             }),
@@ -516,9 +521,9 @@ contract SuckerDeepAttacks is Test {
     /// @notice Index NOT covered by numberOfClaimsSent → emergency exit should succeed.
     function test_emergencyExit_unsentIndex_succeeds() public {
         // Insert 3 leaves.
-        sucker.test_insertIntoTree(1 ether, TOKEN, 1 ether, address(this));
-        sucker.test_insertIntoTree(2 ether, TOKEN, 2 ether, address(this));
-        sucker.test_insertIntoTree(3 ether, TOKEN, 3 ether, address(this));
+        sucker.test_insertIntoTree(1 ether, TOKEN, 1 ether, bytes32(uint256(uint160(address(this)))));
+        sucker.test_insertIntoTree(2 ether, TOKEN, 2 ether, bytes32(uint256(uint160(address(this)))));
+        sucker.test_insertIntoTree(3 ether, TOKEN, 3 ether, bytes32(uint256(uint160(address(this)))));
 
         // Only 2 were sent (indices 0 and 1). Index 2 was NOT sent.
         sucker.test_setNumberOfClaimsSent(TOKEN, 2);
@@ -528,7 +533,7 @@ contract SuckerDeepAttacks is Test {
         // Enable emergency hatch.
         sucker.test_setRemoteToken(
             TOKEN,
-            JBRemoteToken({enabled: false, emergencyHatch: true, minGas: 0, addr: makeAddr("remote"), minBridgeAmount: 0})
+            JBRemoteToken({enabled: false, emergencyHatch: true, minGas: 0, addr: bytes32(uint256(uint160(makeAddr("remote")))), minBridgeAmount: 0})
         );
 
         _mockMint(address(this), 3 ether);
@@ -540,7 +545,7 @@ contract SuckerDeepAttacks is Test {
             token: TOKEN,
             leaf: JBLeaf({
                 index: 2,
-                beneficiary: address(this),
+                beneficiary: bytes32(uint256(uint160(address(this)))),
                 projectTokenCount: 3 ether,
                 terminalTokenAmount: 3 ether
             }),
@@ -555,13 +560,13 @@ contract SuckerDeepAttacks is Test {
 
     /// @notice Double emergency exit with the same index → should revert on second try.
     function test_emergencyExit_doubleClaim_reverts() public {
-        sucker.test_insertIntoTree(5 ether, TOKEN, 5 ether, address(this));
+        sucker.test_insertIntoTree(5 ether, TOKEN, 5 ether, bytes32(uint256(uint160(address(this)))));
         sucker.test_setOutboxBalance(TOKEN, 100 ether);
         vm.deal(address(sucker), 100 ether);
 
         sucker.test_setRemoteToken(
             TOKEN,
-            JBRemoteToken({enabled: false, emergencyHatch: true, minGas: 0, addr: makeAddr("remote"), minBridgeAmount: 0})
+            JBRemoteToken({enabled: false, emergencyHatch: true, minGas: 0, addr: bytes32(uint256(uint160(makeAddr("remote")))), minBridgeAmount: 0})
         );
 
         _mockMint(address(this), 5 ether);
@@ -572,7 +577,7 @@ contract SuckerDeepAttacks is Test {
             token: TOKEN,
             leaf: JBLeaf({
                 index: 0,
-                beneficiary: address(this),
+                beneficiary: bytes32(uint256(uint160(address(this)))),
                 projectTokenCount: 5 ether,
                 terminalTokenAmount: 5 ether
             }),
@@ -590,7 +595,7 @@ contract SuckerDeepAttacks is Test {
 
     /// @notice Emergency exit when hatch not enabled and not deprecated → should revert.
     function test_emergencyExit_noHatchNoDeprecation_reverts() public {
-        sucker.test_insertIntoTree(5 ether, TOKEN, 5 ether, address(this));
+        sucker.test_insertIntoTree(5 ether, TOKEN, 5 ether, bytes32(uint256(uint160(address(this)))));
         sucker.test_setOutboxBalance(TOKEN, 100 ether);
 
         // Token is enabled (not emergency hatch), sucker is ENABLED (not deprecated).
@@ -602,7 +607,7 @@ contract SuckerDeepAttacks is Test {
             token: TOKEN,
             leaf: JBLeaf({
                 index: 0,
-                beneficiary: address(this),
+                beneficiary: bytes32(uint256(uint160(address(this)))),
                 projectTokenCount: 5 ether,
                 terminalTokenAmount: 5 ether
             }),
@@ -615,7 +620,7 @@ contract SuckerDeepAttacks is Test {
 
     /// @notice Emergency exit balance underflow — claim more than tracked outbox balance.
     function test_emergencyExit_balanceUnderflow_reverts() public {
-        sucker.test_insertIntoTree(10 ether, TOKEN, 10 ether, address(this));
+        sucker.test_insertIntoTree(10 ether, TOKEN, 10 ether, bytes32(uint256(uint160(address(this)))));
 
         // Set outbox balance to only 1 ether, but claim asks for 10 ether.
         sucker.test_setOutboxBalance(TOKEN, 1 ether);
@@ -623,7 +628,7 @@ contract SuckerDeepAttacks is Test {
 
         sucker.test_setRemoteToken(
             TOKEN,
-            JBRemoteToken({enabled: false, emergencyHatch: true, minGas: 0, addr: makeAddr("remote"), minBridgeAmount: 0})
+            JBRemoteToken({enabled: false, emergencyHatch: true, minGas: 0, addr: bytes32(uint256(uint160(makeAddr("remote")))), minBridgeAmount: 0})
         );
 
         sucker.test_setNextMerkleCheckToBe(true);
@@ -632,7 +637,7 @@ contract SuckerDeepAttacks is Test {
             token: TOKEN,
             leaf: JBLeaf({
                 index: 0,
-                beneficiary: address(this),
+                beneficiary: bytes32(uint256(uint160(address(this)))),
                 projectTokenCount: 10 ether,
                 terminalTokenAmount: 10 ether
             }),
@@ -728,16 +733,16 @@ contract SuckerDeepAttacks is Test {
         // Initial mapping.
         sucker.test_setRemoteToken(
             token,
-            JBRemoteToken({enabled: true, emergencyHatch: false, minGas: 200_000, addr: remoteA, minBridgeAmount: 0})
+            JBRemoteToken({enabled: true, emergencyHatch: false, minGas: 200_000, addr: bytes32(uint256(uint160(remoteA))), minBridgeAmount: 0})
         );
 
         // Insert items into the outbox (creating tree count > 0).
-        sucker.test_insertIntoTree(10 ether, token, 5 ether, address(this));
+        sucker.test_insertIntoTree(10 ether, token, 5 ether, bytes32(uint256(uint160(address(this)))));
 
         // Try to remap to a different remote token.
-        vm.expectRevert(abi.encodeWithSelector(JBSucker.JBSucker_TokenAlreadyMapped.selector, token, remoteA));
+        vm.expectRevert(abi.encodeWithSelector(JBSucker.JBSucker_TokenAlreadyMapped.selector, token, bytes32(uint256(uint160(remoteA)))));
         sucker.mapToken(
-            JBTokenMapping({localToken: token, minGas: 200_000, remoteToken: remoteB, minBridgeAmount: 0})
+            JBTokenMapping({localToken: token, minGas: 200_000, remoteToken: bytes32(uint256(uint160(remoteB))), minBridgeAmount: 0})
         );
     }
 
@@ -754,7 +759,7 @@ contract SuckerDeepAttacks is Test {
                 enabled: false,
                 emergencyHatch: true,
                 minGas: 200_000,
-                addr: makeAddr("remote"),
+                addr: bytes32(uint256(uint160(makeAddr("remote")))),
                 minBridgeAmount: 0
             })
         );
@@ -762,7 +767,7 @@ contract SuckerDeepAttacks is Test {
         // Try any mapping operation.
         vm.expectRevert(abi.encodeWithSelector(JBSucker.JBSucker_TokenHasInvalidEmergencyHatchState.selector, token));
         sucker.mapToken(
-            JBTokenMapping({localToken: token, minGas: 200_000, remoteToken: makeAddr("newRemote"), minBridgeAmount: 0})
+            JBTokenMapping({localToken: token, minGas: 200_000, remoteToken: bytes32(uint256(uint160(makeAddr("newRemote")))), minBridgeAmount: 0})
         );
     }
 
@@ -778,7 +783,7 @@ contract SuckerDeepAttacks is Test {
             JBTokenMapping({
                 localToken: makeAddr("token"),
                 minGas: 200_000,
-                remoteToken: makeAddr("remote"),
+                remoteToken: bytes32(uint256(uint160(makeAddr("remote")))),
                 minBridgeAmount: 0
             })
         );
@@ -788,14 +793,15 @@ contract SuckerDeepAttacks is Test {
     function test_mapToken_nativeToNonNative_reverts() public {
         vm.mockCall(PERMISSIONS, abi.encodeWithSelector(IJBPermissions.hasPermission.selector), abi.encode(true));
 
+        bytes32 nonNativeRemote = bytes32(uint256(uint160(makeAddr("nonNative"))));
         vm.expectRevert(
-            abi.encodeWithSelector(JBSucker.JBSucker_InvalidNativeRemoteAddress.selector, makeAddr("nonNative"))
+            abi.encodeWithSelector(JBSucker.JBSucker_InvalidNativeRemoteAddress.selector, nonNativeRemote)
         );
         sucker.mapToken(
             JBTokenMapping({
                 localToken: JBConstants.NATIVE_TOKEN,
                 minGas: 0,
-                remoteToken: makeAddr("nonNative"),
+                remoteToken: nonNativeRemote,
                 minBridgeAmount: 0
             })
         );
@@ -816,7 +822,7 @@ contract SuckerDeepAttacks is Test {
             JBTokenMapping({
                 localToken: makeAddr("erc20"),
                 minGas: 100, // Way below MESSENGER_ERC20_MIN_GAS_LIMIT
-                remoteToken: makeAddr("remote"),
+                remoteToken: bytes32(uint256(uint160(makeAddr("remote")))),
                 minBridgeAmount: 0
             })
         );
@@ -831,7 +837,7 @@ contract SuckerDeepAttacks is Test {
         _enableTokenMapping(TOKEN);
 
         vm.expectRevert(abi.encodeWithSelector(JBSucker.JBSucker_ZeroBeneficiary.selector));
-        sucker.prepare(10 ether, address(0), 0, TOKEN);
+        sucker.prepare(10 ether, bytes32(0), 0, TOKEN);
     }
 
     /// @notice prepare when SENDING_DISABLED → should revert.
@@ -848,7 +854,7 @@ contract SuckerDeepAttacks is Test {
         assertEq(uint256(sucker.state()), uint256(JBSuckerState.SENDING_DISABLED));
 
         vm.expectRevert(abi.encodeWithSelector(JBSucker.JBSucker_Deprecated.selector));
-        sucker.prepare(10 ether, address(this), 0, TOKEN);
+        sucker.prepare(10 ether, bytes32(uint256(uint160(address(this)))), 0, TOKEN);
     }
 
     /// @notice prepare when DEPRECATED → should revert.
@@ -862,7 +868,7 @@ contract SuckerDeepAttacks is Test {
         assertEq(uint256(sucker.state()), uint256(JBSuckerState.DEPRECATED));
 
         vm.expectRevert(abi.encodeWithSelector(JBSucker.JBSucker_Deprecated.selector));
-        sucker.prepare(10 ether, address(this), 0, TOKEN);
+        sucker.prepare(10 ether, bytes32(uint256(uint160(address(this)))), 0, TOKEN);
     }
 
     /// @notice prepare with unmapped token → should revert.
@@ -873,7 +879,7 @@ contract SuckerDeepAttacks is Test {
         vm.mockCall(TOKENS, abi.encodeCall(IJBTokens.tokenOf, (PROJECT_ID)), abi.encode(makeAddr("projectToken")));
 
         vm.expectRevert(abi.encodeWithSelector(JBSucker.JBSucker_TokenNotMapped.selector, unmapped));
-        sucker.prepare(10 ether, address(this), 0, unmapped);
+        sucker.prepare(10 ether, bytes32(uint256(uint160(address(this)))), 0, unmapped);
     }
 
     // =========================================================================
@@ -884,7 +890,7 @@ contract SuckerDeepAttacks is Test {
     function test_toRemote_emergencyHatch_reverts() public {
         sucker.test_setRemoteToken(
             TOKEN,
-            JBRemoteToken({enabled: false, emergencyHatch: true, minGas: 0, addr: makeAddr("remote"), minBridgeAmount: 0})
+            JBRemoteToken({enabled: false, emergencyHatch: true, minGas: 0, addr: bytes32(uint256(uint160(makeAddr("remote")))), minBridgeAmount: 0})
         );
 
         vm.expectRevert(abi.encodeWithSelector(JBSucker.JBSucker_TokenHasInvalidEmergencyHatchState.selector, TOKEN));
@@ -899,13 +905,13 @@ contract SuckerDeepAttacks is Test {
                 enabled: true,
                 emergencyHatch: false,
                 minGas: 200_000,
-                addr: makeAddr("remote"),
+                addr: bytes32(uint256(uint160(makeAddr("remote")))),
                 minBridgeAmount: 10 ether
             })
         );
 
         // Insert only 1 ether into outbox.
-        sucker.test_insertIntoTree(1 ether, TOKEN, 1 ether, address(this));
+        sucker.test_insertIntoTree(1 ether, TOKEN, 1 ether, bytes32(uint256(uint160(address(this)))));
 
         vm.expectRevert(abi.encodeWithSelector(JBSucker.JBSucker_QueueInsufficientSize.selector, 1 ether, 10 ether));
         sucker.toRemote(TOKEN);
@@ -916,8 +922,8 @@ contract SuckerDeepAttacks is Test {
         _enableTokenMapping(TOKEN);
 
         // Insert items with total balance of 10 ether.
-        sucker.test_insertIntoTree(5 ether, TOKEN, 5 ether, address(this));
-        sucker.test_insertIntoTree(5 ether, TOKEN, 5 ether, address(0xBBB));
+        sucker.test_insertIntoTree(5 ether, TOKEN, 5 ether, bytes32(uint256(uint160(address(this)))));
+        sucker.test_insertIntoTree(5 ether, TOKEN, 5 ether, bytes32(uint256(uint160(address(0xBBB)))));
 
         assertEq(sucker.test_getOutboxBalance(TOKEN), 10 ether, "Outbox balance should be 10 ether");
 
@@ -941,7 +947,7 @@ contract SuckerDeepAttacks is Test {
     function test_sendRoot_AMBRevert_fundsLost() public {
         _enableTokenMapping(TOKEN);
 
-        sucker.test_insertIntoTree(10 ether, TOKEN, 10 ether, address(this));
+        sucker.test_insertIntoTree(10 ether, TOKEN, 10 ether, bytes32(uint256(uint160(address(this)))));
 
         // Make AMB revert.
         sucker.test_setShouldRevertAMB(true);
@@ -1046,7 +1052,7 @@ contract SuckerDeepAttacks is Test {
                 (i + 1) * 1 ether,
                 TOKEN,
                 (i + 1) * 0.5 ether,
-                address(uint160(1000 + i))
+                bytes32(uint256(1000 + i))
             );
             roots[i] = sucker.test_getOutboxRoot(TOKEN);
         }
@@ -1063,9 +1069,9 @@ contract SuckerDeepAttacks is Test {
 
     /// @notice Verify that the _buildTreeHash is deterministic and order-sensitive.
     function test_treeHash_deterministic() public pure {
-        bytes32 hash1 = keccak256(abi.encode(uint256(10 ether), uint256(5 ether), address(0xAAA)));
-        bytes32 hash2 = keccak256(abi.encode(uint256(10 ether), uint256(5 ether), address(0xAAA)));
-        bytes32 hash3 = keccak256(abi.encode(uint256(5 ether), uint256(10 ether), address(0xAAA))); // swapped
+        bytes32 hash1 = keccak256(abi.encode(uint256(10 ether), uint256(5 ether), bytes32(uint256(uint160(address(0xAAA))))));
+        bytes32 hash2 = keccak256(abi.encode(uint256(10 ether), uint256(5 ether), bytes32(uint256(uint160(address(0xAAA))))));
+        bytes32 hash3 = keccak256(abi.encode(uint256(5 ether), uint256(10 ether), bytes32(uint256(uint160(address(0xAAA)))))); // swapped
 
         assertEq(hash1, hash2, "Same inputs should produce same hash");
         assertTrue(hash1 != hash3, "Different inputs should produce different hash");
@@ -1085,7 +1091,7 @@ contract SuckerDeepAttacks is Test {
             token: TOKEN,
             leaf: JBLeaf({
                 index: 0,
-                beneficiary: address(this),
+                beneficiary: bytes32(uint256(uint160(address(this)))),
                 projectTokenCount: 10 ether,
                 terminalTokenAmount: 5 ether
             }),
@@ -1104,7 +1110,7 @@ contract SuckerDeepAttacks is Test {
     /// @notice toRemote when DEPRECATED → _sendRoot should revert.
     function test_toRemote_deprecated_reverts() public {
         _enableTokenMapping(TOKEN);
-        sucker.test_insertIntoTree(1 ether, TOKEN, 1 ether, address(this));
+        sucker.test_insertIntoTree(1 ether, TOKEN, 1 ether, bytes32(uint256(uint160(address(this)))));
 
         sucker.test_setDeprecatedAfter(block.timestamp - 1);
         assertEq(uint256(sucker.state()), uint256(JBSuckerState.DEPRECATED));
@@ -1116,7 +1122,7 @@ contract SuckerDeepAttacks is Test {
     /// @notice toRemote when SENDING_DISABLED → _sendRoot should revert.
     function test_toRemote_sendingDisabled_reverts() public {
         _enableTokenMapping(TOKEN);
-        sucker.test_insertIntoTree(1 ether, TOKEN, 1 ether, address(this));
+        sucker.test_insertIntoTree(1 ether, TOKEN, 1 ether, bytes32(uint256(uint160(address(this)))));
 
         uint256 deprecateAt = block.timestamp + 1 days;
         sucker.test_setDeprecatedAfter(deprecateAt);
@@ -1134,7 +1140,7 @@ contract SuckerDeepAttacks is Test {
     /// @notice When sucker is DEPRECATED (not per-token hatch), emergency exit should work.
     function test_emergencyExit_viaDeprecation_succeeds() public {
         // Insert a leaf.
-        sucker.test_insertIntoTree(5 ether, TOKEN, 5 ether, address(this));
+        sucker.test_insertIntoTree(5 ether, TOKEN, 5 ether, bytes32(uint256(uint160(address(this)))));
         sucker.test_setOutboxBalance(TOKEN, 100 ether);
         vm.deal(address(sucker), 100 ether);
 
@@ -1151,7 +1157,7 @@ contract SuckerDeepAttacks is Test {
             token: TOKEN,
             leaf: JBLeaf({
                 index: 0,
-                beneficiary: address(this),
+                beneficiary: bytes32(uint256(uint160(address(this)))),
                 projectTokenCount: 5 ether,
                 terminalTokenAmount: 5 ether
             }),
@@ -1165,7 +1171,7 @@ contract SuckerDeepAttacks is Test {
 
     /// @notice When SENDING_DISABLED, emergency exit should also work.
     function test_emergencyExit_viaSendingDisabled_succeeds() public {
-        sucker.test_insertIntoTree(5 ether, TOKEN, 5 ether, address(this));
+        sucker.test_insertIntoTree(5 ether, TOKEN, 5 ether, bytes32(uint256(uint160(address(this)))));
         sucker.test_setOutboxBalance(TOKEN, 100 ether);
         vm.deal(address(sucker), 100 ether);
 
@@ -1185,7 +1191,7 @@ contract SuckerDeepAttacks is Test {
             token: TOKEN,
             leaf: JBLeaf({
                 index: 0,
-                beneficiary: address(this),
+                beneficiary: bytes32(uint256(uint160(address(this)))),
                 projectTokenCount: 5 ether,
                 terminalTokenAmount: 5 ether
             }),
@@ -1204,7 +1210,7 @@ contract SuckerDeepAttacks is Test {
     function test_claim_multipleIndices_eachSucceedsOnce() public {
         // Insert 5 leaves.
         for (uint256 i = 0; i < 5; i++) {
-            sucker.test_insertIntoTree((i + 1) * 1 ether, TOKEN, (i + 1) * 0.5 ether, address(uint160(100 + i)));
+            sucker.test_insertIntoTree((i + 1) * 1 ether, TOKEN, (i + 1) * 0.5 ether, bytes32(uint256(100 + i)));
         }
 
         bytes32 root = sucker.test_getOutboxRoot(TOKEN);
@@ -1221,7 +1227,7 @@ contract SuckerDeepAttacks is Test {
                 token: TOKEN,
                 leaf: JBLeaf({
                     index: i,
-                    beneficiary: address(uint160(100 + i)),
+                    beneficiary: bytes32(uint256(100 + i)),
                     projectTokenCount: (i + 1) * 1 ether,
                     terminalTokenAmount: (i + 1) * 0.5 ether
                 }),
@@ -1239,7 +1245,7 @@ contract SuckerDeepAttacks is Test {
             token: TOKEN,
             leaf: JBLeaf({
                 index: 2,
-                beneficiary: address(uint160(102)),
+                beneficiary: bytes32(uint256(102)),
                 projectTokenCount: 3 ether,
                 terminalTokenAmount: 1.5 ether
             }),
@@ -1259,17 +1265,17 @@ contract SuckerDeepAttacks is Test {
         _enableTokenMapping(TOKEN);
 
         // Round 1.
-        sucker.test_insertIntoTree(1 ether, TOKEN, 1 ether, address(this));
+        sucker.test_insertIntoTree(1 ether, TOKEN, 1 ether, bytes32(uint256(uint160(address(this)))));
         sucker.toRemote(TOKEN);
         assertEq(sucker.test_getOutboxNonce(TOKEN), 1);
 
         // Round 2.
-        sucker.test_insertIntoTree(2 ether, TOKEN, 2 ether, address(this));
+        sucker.test_insertIntoTree(2 ether, TOKEN, 2 ether, bytes32(uint256(uint160(address(this)))));
         sucker.toRemote(TOKEN);
         assertEq(sucker.test_getOutboxNonce(TOKEN), 2);
 
         // Round 3.
-        sucker.test_insertIntoTree(3 ether, TOKEN, 3 ether, address(this));
+        sucker.test_insertIntoTree(3 ether, TOKEN, 3 ether, bytes32(uint256(uint160(address(this)))));
         sucker.toRemote(TOKEN);
         assertEq(sucker.test_getOutboxNonce(TOKEN), 3);
     }
@@ -1283,17 +1289,70 @@ contract SuckerDeepAttacks is Test {
                 enabled: true,
                 emergencyHatch: false,
                 minGas: 200_000,
-                addr: makeAddr("remote"),
+                addr: bytes32(uint256(uint160(makeAddr("remote")))),
                 minBridgeAmount: 0
             })
         );
 
         // Insert an item with 0 terminal token amount.
-        sucker.test_insertIntoTree(1 ether, TOKEN, 0, address(this));
+        sucker.test_insertIntoTree(1 ether, TOKEN, 0, bytes32(uint256(uint160(address(this)))));
 
         // Balance is 0, min is 0 → should pass the check.
         sucker.toRemote(TOKEN);
         assertEq(sucker.test_getOutboxNonce(TOKEN), 1);
+    }
+
+    // =========================================================================
+    // SECTION 16: MESSAGE_VERSION validation (INTEROP)
+    // =========================================================================
+
+    /// @notice fromRemote with wrong message version → should revert with InvalidMessageVersion.
+    function test_fromRemote_wrongVersion_reverts() public {
+        JBMessageRoot memory root = JBMessageRoot({
+            version: 0, // Wrong version — current is 1
+            token: bytes32(uint256(uint160(TOKEN))),
+            amount: 1 ether,
+            remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(0xbeef))})
+        });
+
+        vm.expectRevert(
+            abi.encodeWithSelector(JBSucker.JBSucker_InvalidMessageVersion.selector, 0, sucker.MESSAGE_VERSION())
+        );
+        vm.prank(address(sucker)); // peer
+        sucker.fromRemote(root);
+    }
+
+    /// @notice fromRemote with future message version → should revert with InvalidMessageVersion.
+    function test_fromRemote_futureVersion_reverts() public {
+        JBMessageRoot memory root = JBMessageRoot({
+            version: 2, // Future version
+            token: bytes32(uint256(uint160(TOKEN))),
+            amount: 1 ether,
+            remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(0xbeef))})
+        });
+
+        vm.expectRevert(
+            abi.encodeWithSelector(JBSucker.JBSucker_InvalidMessageVersion.selector, 2, sucker.MESSAGE_VERSION())
+        );
+        vm.prank(address(sucker));
+        sucker.fromRemote(root);
+    }
+
+    /// @notice fromRemote with correct version → should NOT revert with InvalidMessageVersion.
+    function test_fromRemote_correctVersion_passesVersionCheck() public {
+        JBMessageRoot memory root = JBMessageRoot({
+            version: sucker.MESSAGE_VERSION(),
+            token: bytes32(uint256(uint160(TOKEN))),
+            amount: 0,
+            remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(0xbeef))})
+        });
+
+        vm.prank(address(sucker));
+        sucker.fromRemote(root);
+
+        // Should update inbox since version is correct and nonce is higher.
+        assertEq(sucker.test_getInboxNonce(TOKEN), 1, "Nonce should be 1 after valid message");
+        assertEq(sucker.test_getInboxRoot(TOKEN), bytes32(uint256(0xbeef)), "Root should be updated");
     }
 
     // =========================================================================
@@ -1305,7 +1364,8 @@ contract SuckerDeepAttacks is Test {
         sucker.test_setInboxRoot(TOKEN, 5, bytes32(uint256(0xdead)));
 
         JBMessageRoot memory root = JBMessageRoot({
-            token: TOKEN,
+            version: sucker.MESSAGE_VERSION(),
+            token: bytes32(uint256(uint160(TOKEN))),
             amount: 1 ether,
             remoteRoot: JBInboxTreeRoot({nonce: 3, root: bytes32(uint256(0xbeef))})
         });
@@ -1317,12 +1377,140 @@ contract SuckerDeepAttacks is Test {
         sucker.fromRemote(root);
     }
 
+    // =========================================================================
+    // SECTION 17: uint128 overflow guard (INTEROP-5)
+    // =========================================================================
+
+    /// @notice prepare with terminalTokenAmount > uint128 max → should revert.
+    function test_prepare_terminalAmountExceedsUint128_reverts() public {
+        _enableTokenMapping(TOKEN);
+
+        vm.mockCall(TOKENS, abi.encodeCall(IJBTokens.tokenOf, (PROJECT_ID)), abi.encode(makeAddr("projectToken")));
+
+        // Mock the token transfer for prepare
+        vm.mockCall(
+            makeAddr("projectToken"),
+            abi.encodeWithSelector(IERC20.transferFrom.selector),
+            abi.encode(true)
+        );
+
+        // The overflow guard fires inside _insertIntoTree, which is called from prepare
+        // after computing terminalTokenAmount. For a direct test, use the test helper.
+        uint256 overflowAmount = uint256(type(uint128).max) + 1;
+
+        vm.expectRevert(abi.encodeWithSelector(JBSucker.JBSucker_AmountExceedsUint128.selector, overflowAmount));
+        sucker.test_insertIntoTree(1 ether, TOKEN, overflowAmount, bytes32(uint256(uint160(address(this)))));
+    }
+
+    /// @notice prepare with projectTokenCount > uint128 max → should revert.
+    function test_prepare_projectTokenCountExceedsUint128_reverts() public {
+        uint256 overflowAmount = uint256(type(uint128).max) + 1;
+
+        vm.expectRevert(abi.encodeWithSelector(JBSucker.JBSucker_AmountExceedsUint128.selector, overflowAmount));
+        sucker.test_insertIntoTree(overflowAmount, TOKEN, 1 ether, bytes32(uint256(uint160(address(this)))));
+    }
+
+    /// @notice Amounts at exactly uint128 max → should succeed.
+    function test_insertIntoTree_exactUint128Max_succeeds() public {
+        uint256 maxU128 = uint256(type(uint128).max);
+
+        // Both at max should work.
+        sucker.test_insertIntoTree(maxU128, TOKEN, maxU128, bytes32(uint256(uint160(address(this)))));
+        assertEq(sucker.test_getOutboxCount(TOKEN), 1, "Should have 1 item");
+    }
+
+    /// @notice Fuzz: any amount > uint128 max should revert.
+    function test_insertIntoTree_fuzz_uint128Overflow_reverts(uint256 amount) public {
+        amount = bound(amount, uint256(type(uint128).max) + 1, type(uint256).max);
+
+        vm.expectRevert(abi.encodeWithSelector(JBSucker.JBSucker_AmountExceedsUint128.selector, amount));
+        sucker.test_insertIntoTree(amount, TOKEN, 1 ether, bytes32(uint256(uint160(address(this)))));
+    }
+
+    // =========================================================================
+    // SECTION 18: bytes32 peer and beneficiary (INTEROP cross-VM compat)
+    // =========================================================================
+
+    /// @notice peer() returns bytes32 representation of address(this).
+    function test_peer_returnBytes32() public view {
+        bytes32 peerValue = sucker.peer();
+        assertEq(peerValue, bytes32(uint256(uint160(address(sucker)))), "peer should be bytes32 of address");
+    }
+
+    /// @notice prepare with bytes32(0) beneficiary → reverts with ZeroBeneficiary.
+    function test_prepare_zeroBeneficiaryBytes32_reverts() public {
+        _enableTokenMapping(TOKEN);
+
+        vm.expectRevert(abi.encodeWithSelector(JBSucker.JBSucker_ZeroBeneficiary.selector));
+        sucker.prepare(10 ether, bytes32(0), 0, TOKEN);
+    }
+
+    /// @notice prepare with a valid 32-byte SVM beneficiary (non-EVM format) → should succeed past beneficiary check.
+    function test_prepare_svmBeneficiary_passesCheck() public {
+        _enableTokenMapping(TOKEN);
+        vm.mockCall(TOKENS, abi.encodeCall(IJBTokens.tokenOf, (PROJECT_ID)), abi.encode(makeAddr("projectToken")));
+
+        // A typical SVM address has all 32 bytes used (high bits non-zero).
+        bytes32 svmBeneficiary = bytes32(uint256(0xdeadbeefcafebabe1234567890abcdef1234567890abcdef1234567890abcdef));
+
+        // This will proceed past the beneficiary check. It may fail later (e.g., token transfer),
+        // but should NOT fail with ZeroBeneficiary.
+        vm.mockCall(
+            makeAddr("projectToken"),
+            abi.encodeWithSelector(IERC20.transferFrom.selector),
+            abi.encode(true)
+        );
+
+        // May revert for other reasons (token handling), but NOT ZeroBeneficiary.
+        try sucker.prepare(10 ether, svmBeneficiary, 0, TOKEN) {} catch (bytes memory reason) {
+            bytes4 selector = bytes4(reason);
+            assertTrue(
+                selector != JBSucker.JBSucker_ZeroBeneficiary.selector,
+                "Should not revert with ZeroBeneficiary"
+            );
+        }
+    }
+
+    /// @notice mapToken with bytes32(0) remoteToken disables the mapping.
+    function test_mapToken_bytes32ZeroDisables() public {
+        vm.mockCall(PERMISSIONS, abi.encodeWithSelector(IJBPermissions.hasPermission.selector), abi.encode(true));
+
+        address token = makeAddr("erc20Token");
+
+        // First enable a mapping.
+        sucker.test_setRemoteToken(
+            token,
+            JBRemoteToken({
+                enabled: true,
+                emergencyHatch: false,
+                minGas: 200_000,
+                addr: bytes32(uint256(uint160(makeAddr("remoteA")))),
+                minBridgeAmount: 0
+            })
+        );
+
+        // Map to bytes32(0) to disable.
+        sucker.mapToken(
+            JBTokenMapping({localToken: token, minGas: 200_000, remoteToken: bytes32(0), minBridgeAmount: 0})
+        );
+
+        JBRemoteToken memory mapping_ = sucker.test_getRemoteToken(token);
+        assertFalse(mapping_.enabled, "Should be disabled");
+        // addr is preserved (so it can be re-enabled to the same remote).
+        assertEq(
+            mapping_.addr,
+            bytes32(uint256(uint160(makeAddr("remoteA")))),
+            "Remote addr should be preserved"
+        );
+    }
+
     /// @notice fromRemote with same nonce (not strictly greater) should emit StaleRootRejected.
     function test_fromRemote_sameNonce_emitsEvent() public {
         sucker.test_setInboxRoot(TOKEN, 5, bytes32(uint256(0xdead)));
 
         JBMessageRoot memory root = JBMessageRoot({
-            token: TOKEN,
+            version: sucker.MESSAGE_VERSION(),
+            token: bytes32(uint256(uint160(TOKEN))),
             amount: 1 ether,
             remoteRoot: JBInboxTreeRoot({nonce: 5, root: bytes32(uint256(0xbeef))})
         });
