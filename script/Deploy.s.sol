@@ -24,15 +24,15 @@ contract DeployScript is Script, Sphinx {
     address TRUSTED_FORWARDER;
 
     /// @notice the nonces that are used to deploy the contracts.
-    bytes32 OP_SALT = "_SUCKER_ETH_OP_";
-    bytes32 BASE_SALT = "_SUCKER_ETH_BASE_";
-    bytes32 ARB_SALT = "_SUCKER_ETH_ARB_";
+    bytes32 OP_SALT = "_SUCKER_ETH_OP_V6_";
+    bytes32 BASE_SALT = "_SUCKER_ETH_BASE_V6_";
+    bytes32 ARB_SALT = "_SUCKER_ETH_ARB_V6_";
 
-    bytes32 ARB_BASE_SALT = "_SUCKER_ARB_BASE_";
-    bytes32 ARB_OP_SALT = "_SUCKER_ARB_OP_";
-    bytes32 OP_BASE_SALT = "_SUCKER_OP_BASE_";
+    bytes32 ARB_BASE_SALT = "_SUCKER_ARB_BASE_V6_";
+    bytes32 ARB_OP_SALT = "_SUCKER_ARB_OP_V6_";
+    bytes32 OP_BASE_SALT = "_SUCKER_OP_BASE_V6_";
 
-    bytes32 REGISTRY_SALT = "REGISTRY";
+    bytes32 REGISTRY_SALT = "REGISTRYV6";
 
     function configureSphinx() public override {
         // TODO: Update to contain JB Emergency Developers
