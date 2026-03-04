@@ -179,7 +179,7 @@ contract SuckerAttacks is Test {
 
         // Non-peer calling fromRemote should revert
         vm.prank(spoofedRouter);
-        vm.expectRevert(abi.encodeWithSelector(JBSucker.JBSucker_NotPeer.selector, spoofedRouter));
+        vm.expectRevert(abi.encodeWithSelector(JBSucker.JBSucker_NotPeer.selector, bytes32(uint256(uint160(spoofedRouter)))));
         sucker.fromRemote(fakeRoot);
     }
 
@@ -200,7 +200,7 @@ contract SuckerAttacks is Test {
         });
 
         vm.prank(wrongSender);
-        vm.expectRevert(abi.encodeWithSelector(JBSucker.JBSucker_NotPeer.selector, wrongSender));
+        vm.expectRevert(abi.encodeWithSelector(JBSucker.JBSucker_NotPeer.selector, bytes32(uint256(uint160(wrongSender)))));
         sucker.fromRemote(root);
     }
 
@@ -221,7 +221,7 @@ contract SuckerAttacks is Test {
 
         // Other sucker calling fromRemote should be rejected
         vm.prank(address(otherSucker));
-        vm.expectRevert(abi.encodeWithSelector(JBSucker.JBSucker_NotPeer.selector, address(otherSucker)));
+        vm.expectRevert(abi.encodeWithSelector(JBSucker.JBSucker_NotPeer.selector, bytes32(uint256(uint160(address(otherSucker))))));
         sucker.fromRemote(root);
     }
 

@@ -56,7 +56,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     error JBSucker_ManualNotAllowed(JBAddToBalanceMode mode);
     error JBSucker_DeprecationTimestampTooSoon(uint256 givenTime, uint256 minimumTime);
     error JBSucker_NoTerminalForToken(uint256 projectId, address token);
-    error JBSucker_NotPeer(address caller);
+    error JBSucker_NotPeer(bytes32 caller);
     error JBSucker_QueueInsufficientSize(uint256 amount, uint256 minimumAmount);
     error JBSucker_TokenNotMapped(address token);
     error JBSucker_TokenHasInvalidEmergencyHatchState(address token);
@@ -220,12 +220,10 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
 
     /// @notice The peer sucker on the remote chain, as a bytes32 for cross-VM compatibility.
     function peer() public view virtual returns (bytes32) {
-        /// This can be overridden by the inheriting contract to return a different address. This is fully supported by
-        /// the sucker implementation and all its off-chain infrastructure, This does however break some
-        /// invariants/assumptions, for revnets it would break the assumption of matching configurations on both chains,
-        /// for this reason we only support a matching address.
-
-        // The peer is at the same address on the other chain.
+        /// This default assumes the peer is at the same address on the other chain (EVM-EVM only, e.g. CREATE2).
+        /// Override for cross-VM deployments (EVM-SVM) where the peer is a Solana program/PDA address.
+        /// Overriding is fully supported by the sucker implementation and all its off-chain infrastructure,
+        /// but for revnets it would break the assumption of matching configurations on both chains.
         return _toBytes32(address(this));
     }
 
@@ -420,7 +418,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     function fromRemote(JBMessageRoot calldata root) external payable {
         // Make sure that the message came from our peer.
         if (!_isRemotePeer(_msgSender())) {
-            revert JBSucker_NotPeer(_msgSender());
+            revert JBSucker_NotPeer(_toBytes32(_msgSender()));
         }
 
         // Validate the message version to reject incompatible messages.
@@ -507,7 +505,9 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     /// @dev This adds the tokens and funds to the outbox tree for the `token`. They will be bridged by the next call to
     /// `toRemote` for the same `token`.
     /// @param projectTokenCount The number of project tokens to prepare for bridging.
-    /// @param beneficiary The address of the recipient of the tokens on the remote chain.
+    /// @param beneficiary The recipient on the remote chain (bytes32 for cross-VM compatibility).
+    ///   For EVM peers: the EVM address left-padded to 32 bytes via `_toBytes32`.
+    ///   For SVM peers: the full 32-byte Solana public key.
     /// @param minTokensReclaimed The minimum amount of terminal tokens to cash out for. If the amount cashed out is
     /// less
     /// than this, the transaction will revert.
@@ -981,7 +981,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     /// @param projectTokenCount The number of project tokens which were cashed out.
     /// @param terminalToken The terminal token that the project tokens were cashed out for.
     /// @param terminalTokenAmount The amount of terminal tokens reclaimed by the cash out.
-    /// @param beneficiary The beneficiary which will receive the project tokens.
+    /// @param beneficiary The beneficiary of the project tokens (bytes32 for cross-VM compatibility).
     /// @param index The index of the leaf being proved in the terminal token's inbox tree.
     /// @param leaves The leaves that prove that the leaf at the `index` is in the tree (i.e. the merkle branch that the
     /// leaf is on).
@@ -1016,7 +1016,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     /// @param projectTokenCount The number of project tokens which were cashed out.
     /// @param terminalToken The terminal token that the project tokens were cashed out for.
     /// @param terminalTokenAmount The amount of terminal tokens reclaimed by the cash out.
-    /// @param beneficiary The beneficiary which will receive the project tokens.
+    /// @param beneficiary The beneficiary of the project tokens (bytes32 for cross-VM compatibility).
     /// @param index The index of the leaf being proved in the terminal token's inbox tree.
     /// @param leaves The leaves that prove that the leaf at the `index` is in the tree (i.e. the merkle branch that the
     /// leaf is on).

@@ -121,7 +121,7 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
     /// @dev Extremely important to ensure only router calls this.
     function ccipReceive(Client.Any2EVMMessage calldata any2EvmMessage) external override {
         // only calls from the set router are accepted.
-        if (_msgSender() != address(CCIP_ROUTER)) revert JBSucker_NotPeer(_msgSender());
+        if (_msgSender() != address(CCIP_ROUTER)) revert JBSucker_NotPeer(_toBytes32(_msgSender()));
 
         // Decode the message root from the peer
         JBMessageRoot memory root = abi.decode(any2EvmMessage.data, (JBMessageRoot));
@@ -129,7 +129,7 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
 
         // Make sure that the message came from our peer.
         if (origin != _toAddress(peer()) || any2EvmMessage.sourceChainSelector != REMOTE_CHAIN_SELECTOR) {
-            revert JBSucker_NotPeer(origin);
+            revert JBSucker_NotPeer(_toBytes32(origin));
         }
 
         // We either send no tokens or a single token.
