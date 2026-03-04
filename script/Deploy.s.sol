@@ -24,15 +24,15 @@ contract DeployScript is Script, Sphinx {
     address TRUSTED_FORWARDER;
 
     /// @notice the nonces that are used to deploy the contracts.
-    bytes32 OP_SALT = "_SUCKER_ETH_OP_";
-    bytes32 BASE_SALT = "_SUCKER_ETH_BASE_";
-    bytes32 ARB_SALT = "_SUCKER_ETH_ARB_";
+    bytes32 OP_SALT = "_SUCKER_ETH_OP_V6_";
+    bytes32 BASE_SALT = "_SUCKER_ETH_BASE_V6_";
+    bytes32 ARB_SALT = "_SUCKER_ETH_ARB_V6_";
 
-    bytes32 ARB_BASE_SALT = "_SUCKER_ARB_BASE_";
-    bytes32 ARB_OP_SALT = "_SUCKER_ARB_OP_";
-    bytes32 OP_BASE_SALT = "_SUCKER_OP_BASE_";
+    bytes32 ARB_BASE_SALT = "_SUCKER_ARB_BASE_V6_";
+    bytes32 ARB_OP_SALT = "_SUCKER_ARB_OP_V6_";
+    bytes32 OP_BASE_SALT = "_SUCKER_OP_BASE_V6_";
 
-    bytes32 REGISTRY_SALT = "REGISTRY";
+    bytes32 REGISTRY_SALT = "REGISTRYV6";
 
     function configureSphinx() public override {
         // TODO: Update to contain JB Emergency Developers
@@ -76,7 +76,7 @@ contract DeployScript is Script, Sphinx {
                 directory: core.directory,
                 permissions: core.permissions,
                 initialOwner: safeAddress(),
-                trusted_forwarder: TRUSTED_FORWARDER
+                trustedForwarder: TRUSTED_FORWARDER
             });
 
             // Before transferring ownership to JBDAO we approve the deployers.
@@ -118,7 +118,7 @@ contract DeployScript is Script, Sphinx {
                 permissions: core.permissions,
                 tokens: core.tokens,
                 configurator: safeAddress(),
-                trusted_forwarder: TRUSTED_FORWARDER
+                trustedForwarder: TRUSTED_FORWARDER
             });
 
             _opDeployer.setChainSpecificConstants(
@@ -141,7 +141,7 @@ contract DeployScript is Script, Sphinx {
                 permissions: core.permissions,
                 tokens: core.tokens,
                 addToBalanceMode: JBAddToBalanceMode.ON_CLAIM,
-                trusted_forwarder: TRUSTED_FORWARDER
+                trustedForwarder: TRUSTED_FORWARDER
             });
 
             // Configure the deployer to use the singleton instance.
@@ -158,7 +158,7 @@ contract DeployScript is Script, Sphinx {
                 permissions: core.permissions,
                 tokens: core.tokens,
                 configurator: safeAddress(),
-                trusted_forwarder: TRUSTED_FORWARDER
+                trustedForwarder: TRUSTED_FORWARDER
             });
 
             _opDeployer.setChainSpecificConstants(
@@ -173,7 +173,7 @@ contract DeployScript is Script, Sphinx {
                 permissions: core.permissions,
                 tokens: core.tokens,
                 addToBalanceMode: JBAddToBalanceMode.ON_CLAIM,
-                trusted_forwarder: TRUSTED_FORWARDER
+                trustedForwarder: TRUSTED_FORWARDER
             });
 
             // Configure the deployer to use the singleton instance.
@@ -203,7 +203,7 @@ contract DeployScript is Script, Sphinx {
                 permissions: core.permissions,
                 tokens: core.tokens,
                 configurator: safeAddress(),
-                trusted_forwarder: TRUSTED_FORWARDER
+                trustedForwarder: TRUSTED_FORWARDER
             });
 
             _baseDeployer.setChainSpecificConstants(
@@ -226,7 +226,7 @@ contract DeployScript is Script, Sphinx {
                 permissions: core.permissions,
                 tokens: core.tokens,
                 addToBalanceMode: JBAddToBalanceMode.ON_CLAIM,
-                trusted_forwarder: TRUSTED_FORWARDER
+                trustedForwarder: TRUSTED_FORWARDER
             });
 
             // Configure the deployer to use the singleton instance.
@@ -243,7 +243,7 @@ contract DeployScript is Script, Sphinx {
                 permissions: core.permissions,
                 tokens: core.tokens,
                 configurator: safeAddress(),
-                trusted_forwarder: TRUSTED_FORWARDER
+                trustedForwarder: TRUSTED_FORWARDER
             });
 
             _baseDeployer.setChainSpecificConstants(
@@ -258,7 +258,7 @@ contract DeployScript is Script, Sphinx {
                 permissions: core.permissions,
                 tokens: core.tokens,
                 addToBalanceMode: JBAddToBalanceMode.ON_CLAIM,
-                trusted_forwarder: TRUSTED_FORWARDER
+                trustedForwarder: TRUSTED_FORWARDER
             });
 
             // Configure the deployer to use the singleton instance.
@@ -289,7 +289,7 @@ contract DeployScript is Script, Sphinx {
                 permissions: core.permissions,
                 tokens: core.tokens,
                 configurator: safeAddress(),
-                trusted_forwarder: TRUSTED_FORWARDER
+                trustedForwarder: TRUSTED_FORWARDER
             });
 
             _arbDeployer.setChainSpecificConstants({
@@ -307,7 +307,7 @@ contract DeployScript is Script, Sphinx {
                 permissions: core.permissions,
                 tokens: core.tokens,
                 addToBalanceMode: JBAddToBalanceMode.ON_CLAIM,
-                trusted_forwarder: TRUSTED_FORWARDER
+                trustedForwarder: TRUSTED_FORWARDER
             });
 
             // Configure the deployer to use the singleton instance.
@@ -324,7 +324,7 @@ contract DeployScript is Script, Sphinx {
                 permissions: core.permissions,
                 tokens: core.tokens,
                 configurator: safeAddress(),
-                trusted_forwarder: TRUSTED_FORWARDER
+                trustedForwarder: TRUSTED_FORWARDER
             });
 
             _arbDeployer.setChainSpecificConstants({
@@ -342,7 +342,7 @@ contract DeployScript is Script, Sphinx {
                 permissions: core.permissions,
                 tokens: core.tokens,
                 addToBalanceMode: JBAddToBalanceMode.ON_CLAIM,
-                trusted_forwarder: TRUSTED_FORWARDER
+                trustedForwarder: TRUSTED_FORWARDER
             });
 
             // Configure the deployer to use the singleton instance.
@@ -477,7 +477,7 @@ contract DeployScript is Script, Sphinx {
         IJBPermissions permissions,
         IJBTokens tokens,
         address configurator,
-        address trusted_forwarder,
+        address trustedForwarder,
         uint256 remoteChainId,
         uint64 remoteChainSelector,
         ICCIPRouter router
@@ -485,7 +485,7 @@ contract DeployScript is Script, Sphinx {
         internal
         returns (JBCCIPSuckerDeployer deployer)
     {
-        deployer = new JBCCIPSuckerDeployer{salt: salt}(directory, permissions, tokens, configurator, trusted_forwarder);
+        deployer = new JBCCIPSuckerDeployer{salt: salt}(directory, permissions, tokens, configurator, trustedForwarder);
 
         deployer.setChainSpecificConstants(remoteChainId, remoteChainSelector, router);
 
@@ -496,7 +496,7 @@ contract DeployScript is Script, Sphinx {
             tokens: tokens,
             permissions: permissions,
             addToBalanceMode: JBAddToBalanceMode.ON_CLAIM,
-            trusted_forwarder: trusted_forwarder
+            trustedForwarder: trustedForwarder
         });
 
         // Configure the singleton.

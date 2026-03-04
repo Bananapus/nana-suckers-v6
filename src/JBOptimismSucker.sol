@@ -52,9 +52,9 @@ contract JBOptimismSucker is JBSucker, IJBOptimismSucker {
         IJBPermissions permissions,
         IJBTokens tokens,
         JBAddToBalanceMode addToBalanceMode,
-        address trusted_forwarder
+        address trustedForwarder
     )
-        JBSucker(directory, permissions, tokens, addToBalanceMode, trusted_forwarder)
+        JBSucker(directory, permissions, tokens, addToBalanceMode, trustedForwarder)
     {
         // Fetch the messenger and bridge by doing a callback to the deployer contract.
         OPBRIDGE = JBOptimismSuckerDeployer(deployer).opBridge();

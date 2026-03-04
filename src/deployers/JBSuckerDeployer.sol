@@ -51,9 +51,9 @@ abstract contract JBSuckerDeployer is ERC2771Context, JBPermissioned, IJBSuckerD
         IJBPermissions permissions,
         IJBTokens tokens,
         address configurator,
-        address trusted_forwarder
+        address trustedForwarder
     )
-        ERC2771Context(trusted_forwarder)
+        ERC2771Context(trustedForwarder)
         JBPermissioned(permissions)
     {
         DIRECTORY = directory;

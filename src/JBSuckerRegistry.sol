@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: UNLICENSED
+// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.23;
 
 import {JBPermissioned} from "@bananapus/core-v5/src/abstract/JBPermissioned.sol";
@@ -76,9 +76,9 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
         IJBDirectory directory,
         IJBPermissions permissions,
         address initialOwner,
-        address trusted_forwarder
+        address trustedForwarder
     )
-        ERC2771Context(trusted_forwarder)
+        ERC2771Context(trustedForwarder)
         JBPermissioned(permissions)
         Ownable(initialOwner)
     {

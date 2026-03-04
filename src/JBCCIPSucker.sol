@@ -34,8 +34,18 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
     // --------------------------- custom errors ------------------------- //
     //*********************************************************************//
 
-    error JBCCIPSucker_FailedToRefundFee();
     error JBCCIPSucker_InvalidRouter(address router);
+
+    //*********************************************************************//
+    // ------------------------------ events ----------------------------- //
+    //*********************************************************************//
+
+    /// @notice Emitted when a transport payment refund fails after a successful CCIP send.
+    /// @dev The refunded ETH is permanently stuck in this contract — there is no recovery function.
+    /// This is an accepted tradeoff to avoid reverting after CCIP has committed the bridge message.
+    /// @param recipient The address that was supposed to receive the refund.
+    /// @param amount The amount of the failed refund (permanently stuck in this contract).
+    event TransportPaymentRefundFailed(address indexed recipient, uint256 amount);
 
     //*********************************************************************//
     // --------------- public immutable stored properties ---------------- //
@@ -65,9 +75,9 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
         IJBTokens tokens,
         IJBPermissions permissions,
         JBAddToBalanceMode addToBalanceMode,
-        address trusted_forwarder
+        address trustedForwarder
     )
-        JBSucker(directory, permissions, tokens, addToBalanceMode, trusted_forwarder)
+        JBSucker(directory, permissions, tokens, addToBalanceMode, trustedForwarder)
     {
         REMOTE_CHAIN_ID = IJBCCIPSuckerDeployer(deployer).ccipRemoteChainId();
         REMOTE_CHAIN_SELECTOR = IJBCCIPSuckerDeployer(deployer).ccipRemoteChainSelector();
@@ -132,10 +142,18 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
             revert JBSucker_NotPeer(_toBytes32(origin));
         }
 
+        // Note (M-28): We intentionally do NOT validate root.amount against destTokenAmounts[0].amount here.
+        // CCIP fees are paid separately (via feeToken), so delivered amounts should always match what was sent.
+        // If we reverted on a mismatch, the tokens already transferred by CCIP would be locked in the router
+        // with no recovery path — a concrete fund-loss risk that outweighs the theoretical defense-in-depth
+        // benefit against a CCIP-level failure or peer compromise. See AUDIT_FINDINGS.md M-28.
+
         // We either send no tokens or a single token.
         if (any2EvmMessage.destTokenAmounts.length == 1) {
-            // As far as the sucker contract is aware wrapped natives are not a thing, it only handles ERC20s or native.
+            // The sucker only handles ERC-20s or native. CCIP delivers wrapped native (WETH).
             Client.EVMTokenAmount memory tokenAmount = any2EvmMessage.destTokenAmounts[0];
+            // Unwrap WETH -> ETH only when the root says the token is NATIVE_TOKEN.
+            // When root.token is an ERC-20 address (e.g., bridging to a chain where ETH is an ERC-20), no unwrap.
             if (root.token == _toBytes32(JBConstants.NATIVE_TOKEN)) {
                 // We can (safely) assume that the token that is set in the `destTokenAmounts` is a valid wrapped
                 // native.
@@ -194,7 +212,8 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
             // If we also do an asset transfer then we increase the min required gas amount.
             gasLimit += remoteToken.minGas;
 
-            // Wrap the token if it's native
+            // Wrap native ETH -> WETH for CCIP bridging. CCIP only transports ERC-20s.
+            // This is why `_validateTokenMapping` enforces minGas for native tokens too.
             if (token == JBConstants.NATIVE_TOKEN) {
                 // Get the wrapped native token.
                 // slither-disable-next-line calls-loop
@@ -240,20 +259,44 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
         // slither-disable-next-line calls-loop,unused-return
         CCIP_ROUTER.ccipSend{value: fees}({destinationChainSelector: REMOTE_CHAIN_SELECTOR, message: message});
 
-        // Refund remaining balance.
-        // slither-disable-next-line calls-loop,msg-value-loop
-        (bool sent,) = _msgSender().call{value: transportPayment - fees}("");
-        if (!sent) revert JBCCIPSucker_FailedToRefundFee();
+        // Refund remaining balance. We use a low-level call that does not revert on failure because
+        // `ccipSend` above has already committed the bridge message and transferred the tokens. If we
+        // reverted here (e.g. because the caller is a non-payable contract), the entire transaction
+        // would roll back — but the CCIP message is already in-flight. The tokens would be gone, the
+        // merkle root never gets processed, and the outbox state is inconsistent.
+        //
+        // If the refund fails, the ETH (transportPayment - fees) will be permanently stuck in this
+        // contract. There is no sweep or recovery function — `addOutstandingAmountToBalance` only
+        // moves funds tracked via `fromRemote`, not arbitrary ETH. This is an accepted tradeoff:
+        // stuck dust from a fee overpayment is far less harmful than bricking the entire bridge
+        // operation. The event provides observability so it doesn't go unnoticed.
+        //
+        // See AUDIT_FINDINGS.md M-2 for the full analysis.
+        uint256 refundAmount = transportPayment - fees;
+        if (refundAmount != 0) {
+            // slither-disable-next-line calls-loop,msg-value-loop
+            (bool sent,) = _msgSender().call{value: refundAmount}("");
+            if (!sent) emit TransportPaymentRefundFailed(_msgSender(), refundAmount);
+        }
     }
 
     /// @notice Allow sucker implementations to add/override mapping rules to suite their specific needs.
+    /// @dev Unlike OP/Arbitrum suckers (which share ETH as native on both chains), this CCIP sucker can connect
+    /// chains with different native tokens. This means `NATIVE_TOKEN` may map to an ERC-20 on the remote chain.
+    ///
+    /// Example: ETH mainnet (native = ETH) <-> Celo (native = CELO, ETH is an ERC-20).
+    ///   - On mainnet: `mapToken({localToken: NATIVE_TOKEN, remoteToken: celoETH_address})`
+    ///   - Sending: `_sendRootOverAMB` wraps native ETH -> WETH, bridges WETH via CCIP.
+    ///   - Receiving: `ccipReceive` checks `root.token == NATIVE_TOKEN` to decide whether to unwrap WETH -> ETH.
+    ///     If `root.token` is an ERC-20 address (like celoETH), no unwrap occurs — tokens stay as ERC-20.
+    ///
+    /// The base class restriction (`NATIVE_TOKEN` can only map to `NATIVE_TOKEN` or `address(0)`) is intentionally
+    /// removed here. The base class retains that restriction for OP/Arbitrum where both chains share ETH as native.
     function _validateTokenMapping(JBTokenMapping calldata map) internal pure virtual override {
-        // This sucker has an override since it could connect to a non-ETH chain, so we allow the `NATIVE_TOKEN` to map
-        // to a token that is not the wrapped token on the remote.
-
         // Enforce a reasonable minimum gas limit for bridging. A minimum which is too low could lead to the loss of
-        // funds.
-        if (map.minGas < MESSENGER_ERC20_MIN_GAS_LIMIT && map.localToken != JBConstants.NATIVE_TOKEN) {
+        // funds. CCIP wraps native tokens to WETH before bridging (see `_sendRootOverAMB`), so ALL tokens —
+        // including native — need sufficient gas for an ERC-20 transfer on the remote chain.
+        if (map.minGas < MESSENGER_ERC20_MIN_GAS_LIMIT) {
             revert JBSucker_BelowMinGas(map.minGas, MESSENGER_ERC20_MIN_GAS_LIMIT);
         }
     }

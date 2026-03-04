@@ -70,9 +70,9 @@ contract JBArbitrumSucker is JBSucker, IJBArbitrumSucker {
         IJBPermissions permissions,
         IJBTokens tokens,
         JBAddToBalanceMode addToBalanceMode,
-        address trusted_forwarder
+        address trustedForwarder
     )
-        JBSucker(directory, permissions, tokens, addToBalanceMode, trusted_forwarder)
+        JBSucker(directory, permissions, tokens, addToBalanceMode, trustedForwarder)
     {
         GATEWAYROUTER = JBArbitrumSuckerDeployer(deployer).arbGatewayRouter();
         ARBINBOX = JBArbitrumSuckerDeployer(deployer).arbInbox();

@@ -38,6 +38,11 @@ import {JBSuckerState} from "./enums/JBSuckerState.sol";
 /// chain to the remote chain, and the inbox tree is used to receive from the remote chain to the local chain.
 /// @dev Throughout this contract, "terminal token" refers to any token accepted by a project's terminal.
 /// @dev This contract does *NOT* support tokens that have a fee on regular transfers and rebasing tokens.
+/// @dev Cross-chain message authentication is delegated entirely to each bridge-specific subclass via the
+/// `_isRemotePeer` virtual function. Each implementation authenticates differently: Optimism uses its native
+/// `CrossDomainMessenger`, Arbitrum validates against the `Bridge` and `Outbox` contracts, and CCIP verifies
+/// through the Chainlink `Router`. Deployers of new bridge integrations must implement `_isRemotePeer` to
+/// guarantee that only messages from the legitimate remote peer are accepted.
 abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC165, IJBSuckerExtended {
     using BitMaps for BitMaps.BitMap;
     using MerkleLib for MerkleLib.Tree;
@@ -157,9 +162,9 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         IJBPermissions permissions,
         IJBTokens tokens,
         JBAddToBalanceMode addToBalanceMode,
-        address trusted_forwarder
+        address trustedForwarder
     )
-        ERC2771Context(trusted_forwarder)
+        ERC2771Context(trustedForwarder)
         JBPermissioned(permissions)
     {
         DIRECTORY = directory;
@@ -219,11 +224,15 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     //*********************************************************************//
 
     /// @notice The peer sucker on the remote chain, as a bytes32 for cross-VM compatibility.
+    /// @dev Defaults to `_toBytes32(address(this))`, assuming deterministic cross-chain deployment via CREATE2. The
+    /// deployer (`JBSuckerDeployer`) uses `salt = keccak256(abi.encode(_msgSender(), salt))` to ensure
+    /// sender-specific determinism. This assumption breaks if CREATE2 conditions differ across chains (e.g.,
+    /// different factory nonces, different init code, or different deployer addresses). In such cases, subclasses
+    /// must override this function to return the correct peer address (e.g., a Solana program/PDA address for
+    /// EVM-SVM deployments). Note that overriding `peer()` is fully supported by the sucker implementation and
+    /// off-chain infrastructure, but for revnets it breaks the assumption of matching configurations on both
+    /// chains -- for this reason the default same-address behavior is preferred.
     function peer() public view virtual returns (bytes32) {
-        /// This default assumes the peer is at the same address on the other chain (EVM-EVM only, e.g. CREATE2).
-        /// Override for cross-VM deployments (EVM-SVM) where the peer is a Solana program/PDA address.
-        /// Overriding is fully supported by the sucker implementation and all its off-chain infrastructure,
-        /// but for revnets it would break the assumption of matching configurations on both chains.
         return _toBytes32(address(this));
     }
 
@@ -414,6 +423,14 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
 
     /// @notice Receive a merkle root for a terminal token from the remote project.
     /// @dev This can only be called by the messenger contract on the local chain, with a message from the remote peer.
+    /// @dev Nonce ordering: This function accepts any nonce strictly greater than the current inbox nonce, rather than
+    /// requiring sequential (nonce == inbox.nonce + 1) processing. This is intentional because some bridges (e.g.,
+    /// Chainlink CCIP) do not guarantee in-order message delivery. As a result, if nonces arrive out of order
+    /// (e.g., nonce 3 before nonce 2), the earlier nonce's root will be silently skipped. This means the claims
+    /// in the skipped root's merkle tree become permanently unclaimable on this chain. The sender would need to
+    /// use the emergency exit on the source chain to recover funds from skipped roots. This trade-off is accepted
+    /// because enforcing sequential nonces could permanently block a token's inbox if a single message is delayed
+    /// or lost by the bridge.
     /// @param root The merkle root, token, and amount being received.
     function fromRemote(JBMessageRoot calldata root) external payable {
         // Make sure that the message came from our peer.
@@ -443,6 +460,14 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
                 nonce: root.remoteRoot.nonce,
                 root: root.remoteRoot.root,
                 caller: _msgSender()
+            });
+        } else {
+            // L-10: Emit an event when a root is rejected due to a stale (non-increasing) nonce.
+            // This aids off-chain monitoring in detecting out-of-order or duplicate deliveries.
+            emit StaleRootRejected({
+                token: localToken,
+                receivedNonce: root.remoteRoot.nonce,
+                currentNonce: inbox.nonce
             });
         }
     }
@@ -651,7 +676,15 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     // ---------------------------- receive  ----------------------------- //
     //*********************************************************************//
 
-    /// @notice Used to receive cashed out native tokens.
+    /// @notice Accepts incoming native token (ETH) transfers.
+    /// @dev This receive function is intentionally unrestricted. It must accept ETH from multiple sources:
+    /// - Bridge contracts (e.g., Optimism's StandardBridge, Arbitrum's gateway) delivering bridged native tokens.
+    /// - WETH contracts during unwrapping (e.g., CCIP sucker unwraps WETH via `withdraw()` which sends ETH here).
+    /// - Terminals returning native tokens during `cashOutTokensOf` (backing asset pulls).
+    /// @dev Restricting this to known senders would risk breaking bridge integrations, as bridge contracts may change
+    /// addresses or use proxy patterns. The sucker's accounting (`_outboxOf[token].balance` and
+    /// `amountToAddToBalanceOf`) already tracks expected native token amounts, so excess ETH sent here does not
+    /// create a double-spend risk -- it would simply increase the `amountToAddToBalance` for the project.
     receive() external payable {}
 
     //*********************************************************************//
@@ -798,6 +831,12 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
 
     /// @notice Map an ERC-20 token on the local chain to an ERC-20 token on the remote chain, allowing that token to be
     /// bridged or disabled.
+    /// @dev Once a token has outbox tree entries (`_outboxOf[token].tree.count != 0`), it cannot be remapped to a
+    /// different remote token -- it can only be disabled by mapping to `address(0)`, which triggers a final root
+    /// flush to settle outstanding claims. This permanence prevents double-spending: if a remapping were allowed
+    /// after outbox activity, the same local funds could be claimed against two different remote tokens. A
+    /// misconfigured mapping therefore requires deploying a new sucker. Re-enabling a previously disabled mapping
+    /// (back to the same remote token) is supported.
     /// @param map The local and remote terminal token addresses to map, and minimum amount/gas limits for bridging
     /// them.
     /// @param transportPaymentValue The amount of `msg.value` to send for the token mapping.
@@ -833,6 +872,11 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         ) {
             revert JBSucker_TokenAlreadyMapped(token, currentMapping.addr);
         }
+
+        // Note (L-21): No inbox guard needed here. Token remapping only affects the outbound (sending) path —
+        // it changes where tokens get bridged TO. Existing inbox claims are resolved against the inbox merkle
+        // tree keyed by the local token address. Changing the remote token doesn't invalidate those claims
+        // since the tokens have already arrived and the merkle proofs remain valid.
 
         // If the remote token is being set to the 0 address (which disables bridging), send any remaining outbox funds
         // to the remote chain.
@@ -1013,6 +1057,23 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     /// @notice Validates a leaf as being in the outbox merkle tree and not being send over the amb, and registers the
     /// leaf as executed (to prevent double-spending).
     /// @dev Reverts if the leaf is invalid.
+    /// @dev IMPORTANT: Emergency exit safety depends on `numberOfClaimsSent` being accurately tracked.
+    /// `numberOfClaimsSent` is updated in `_sendRoot` to equal `outbox.tree.count` at the time the root is sent
+    /// over the bridge. This value determines which leaves have already been communicated to the remote peer and
+    /// are therefore NOT safe to reclaim locally (as they could be claimed on the remote chain too, enabling
+    /// double-spending).
+    /// @dev Assumptions:
+    /// 1. `numberOfClaimsSent` is only updated in `_sendRoot`, which is called from `toRemote` and `_mapToken`
+    ///    (when disabling a token). If `_sendRoot` fails or is never called, `numberOfClaimsSent` remains 0,
+    ///    allowing all leaves to be emergency-exited (which is correct -- nothing was sent).
+    /// 2. If the bridge delivers the root but `numberOfClaimsSent` was set before additional leaves were added
+    ///    to the outbox tree, those additional leaves (with index >= numberOfClaimsSent) are safe to emergency-exit
+    ///    because they were never part of the sent root.
+    /// 3. A compromised or buggy `_sendRootOverAMB` implementation that fails silently (does not revert but also
+    ///    does not deliver the message) could lead to `numberOfClaimsSent` being incremented without the remote
+    ///    peer receiving the root. In this scenario, leaves with index < numberOfClaimsSent would be blocked from
+    ///    emergency exit even though they were never claimable remotely. This is a conservative failure mode --
+    ///    funds are locked rather than double-spent. The emergency hatch or deprecation flow would need to be used.
     /// @param projectTokenCount The number of project tokens which were cashed out.
     /// @param terminalToken The terminal token that the project tokens were cashed out for.
     /// @param terminalTokenAmount The amount of terminal tokens reclaimed by the cash out.
