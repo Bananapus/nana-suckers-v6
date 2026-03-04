@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Cross-chain token and fund bridging for Juicebox V6 projects, using merkle trees to batch claims and chain-specific bridges (Chainlink CCIP, OP Stack, Arbitrum) to move assets.
+Cross-chain token and fund bridging for Juicebox V5 projects, using merkle trees to batch claims and chain-specific bridges (Chainlink CCIP, OP Stack, Arbitrum) to move assets.
 
 ## Contracts
 
@@ -13,7 +13,6 @@ Cross-chain token and fund bridging for Juicebox V6 projects, using merkle trees
 | `JBOptimismSucker` | OP Stack bridge implementation. Uses `IOPMessenger.sendMessage` and `IOPStandardBridge.bridgeERC20To`. |
 | `JBBaseSucker` | Extends `JBOptimismSucker` with Base<->Ethereum chain ID mapping. |
 | `JBArbitrumSucker` | Arbitrum bridge implementation. Uses retryable tickets (`unsafeCreateRetryableTicket`) for L1->L2, `ArbSys.sendTxToL1` for L2->L1. Handles L1/L2 address aliasing. |
-| `JBAllowanceSucker` | Abstract extension that pulls backing assets via `useAllowanceFeeless` instead of `cashOutTokensOf`. Burns tokens then withdraws from surplus. |
 | `JBSuckerRegistry` | Entry point for deploying and tracking suckers. Manages deployer allowlist. Requires `DEPLOY_SUCKERS` permission. |
 | `JBSuckerDeployer` | Abstract deployer base. Uses Solady `LibClone.cloneDeterministic` to deploy suckers as minimal proxies. |
 | `JBCCIPSuckerDeployer` | CCIP-specific deployer. Stores `ccipRouter`, `ccipRemoteChainId`, `ccipRemoteChainSelector`. |
@@ -48,14 +47,14 @@ Cross-chain token and fund bridging for Juicebox V6 projects, using merkle trees
 
 | Dependency | Import | Used For |
 |------------|--------|----------|
-| `@bananapus/core-v6` | `IJBDirectory`, `IJBController`, `IJBTokens`, `IJBTerminal`, `IJBCashOutTerminal`, `IJBPayoutTerminal` | Project lookup, token minting/burning, cash-outs, `addToBalanceOf` |
-| `@bananapus/core-v6` | `JBConstants` | `NATIVE_TOKEN` sentinel address |
-| `@bananapus/permission-ids-v6` | `JBPermissionIds` | `MAP_SUCKER_TOKEN`, `DEPLOY_SUCKERS`, `SUCKER_SAFETY`, `MINT_TOKENS` permission IDs |
+| `@bananapus/core-v5` | `IJBDirectory`, `IJBController`, `IJBTokens`, `IJBTerminal`, `IJBCashOutTerminal`, `IJBPayoutTerminal` | Project lookup, token minting/burning, cash-outs, `addToBalanceOf` |
+| `@bananapus/core-v5` | `JBConstants` | `NATIVE_TOKEN` sentinel address |
+| `@bananapus/permission-ids-v5` | `JBPermissionIds` | `MAP_SUCKER_TOKEN`, `DEPLOY_SUCKERS`, `SUCKER_SAFETY`, `MINT_TOKENS` permission IDs |
 | `@chainlink/contracts-ccip` | `Client`, `IAny2EVMMessageReceiver` | CCIP message encoding/decoding, receiver interface |
 | `@arbitrum/nitro-contracts` | `IInbox`, `IOutbox`, `IBridge`, `ArbSys`, `AddressAliasHelper` | Arbitrum retryable tickets, L2->L1 messages, address aliasing |
 | `@openzeppelin/contracts` | `SafeERC20`, `BitMaps`, `ERC165`, `Initializable`, `Ownable`, `ERC2771Context`, `EnumerableMap` | Token safety, leaf tracking, clone init, registry ownership, meta-transactions |
 | `solady` | `LibClone` | Deterministic minimal proxy deployment |
-| `@prb/math` | `mulDiv` | Safe fixed-point multiplication in `JBAllowanceSucker` |
+| `@prb/math` | `mulDiv` | Safe fixed-point multiplication |
 
 ## Key Types
 
@@ -88,7 +87,6 @@ Cross-chain token and fund bridging for Juicebox V6 projects, using merkle trees
 - Deployer `setChainSpecificConstants` and `configureSingleton` are both one-shot functions -- they revert if called twice.
 - `MESSENGER_BASE_GAS_LIMIT` is 300,000. `MESSENGER_ERC20_MIN_GAS_LIMIT` is 200,000. Token mappings must specify `minGas >= 200,000` for ERC-20s.
 - `JBArbitrumSucker` uses `unsafeCreateRetryableTicket` (not `safeCreateRetryableTicket`) to avoid L2 address aliasing of the refund address.
-- `JBAllowanceSucker._pullBackingAssets` burns tokens first, then calculates backing assets as `mulDiv(count, surplus, totalSupply)` using the pre-burn total supply.
 - The outbox tree tracks `numberOfClaimsSent` separately from `tree.count`. Emergency hatch exit is only available for leaves whose index is `>= numberOfClaimsSent` (not yet sent to remote).
 
 ### CRITICAL: NATIVE_TOKEN Mismatch on Non-ETH Chains
