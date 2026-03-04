@@ -41,8 +41,10 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
     //*********************************************************************//
 
     /// @notice Emitted when a transport payment refund fails after a successful CCIP send.
+    /// @dev The refunded ETH is permanently stuck in this contract — there is no recovery function.
+    /// This is an accepted tradeoff to avoid reverting after CCIP has committed the bridge message.
     /// @param recipient The address that was supposed to receive the refund.
-    /// @param amount The amount of the failed refund (remains in the contract).
+    /// @param amount The amount of the failed refund (permanently stuck in this contract).
     event TransportPaymentRefundFailed(address indexed recipient, uint256 amount);
 
     //*********************************************************************//
@@ -247,9 +249,19 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
         // slither-disable-next-line calls-loop,unused-return
         CCIP_ROUTER.ccipSend{value: fees}({destinationChainSelector: REMOTE_CHAIN_SELECTOR, message: message});
 
-        // Refund remaining balance. Use a low-level call that does not revert on failure
-        // so that a non-payable recipient cannot cause the entire bridge operation to revert
-        // after CCIP has already accepted the message and committed the funds.
+        // Refund remaining balance. We use a low-level call that does not revert on failure because
+        // `ccipSend` above has already committed the bridge message and transferred the tokens. If we
+        // reverted here (e.g. because the caller is a non-payable contract), the entire transaction
+        // would roll back — but the CCIP message is already in-flight. The tokens would be gone, the
+        // merkle root never gets processed, and the outbox state is inconsistent.
+        //
+        // If the refund fails, the ETH (transportPayment - fees) will be permanently stuck in this
+        // contract. There is no sweep or recovery function — `addOutstandingAmountToBalance` only
+        // moves funds tracked via `fromRemote`, not arbitrary ETH. This is an accepted tradeoff:
+        // stuck dust from a fee overpayment is far less harmful than bricking the entire bridge
+        // operation. The event provides observability so it doesn't go unnoticed.
+        //
+        // See AUDIT_FINDINGS.md M-2 for the full analysis.
         uint256 refundAmount = transportPayment - fees;
         if (refundAmount != 0) {
             // slither-disable-next-line calls-loop,msg-value-loop
