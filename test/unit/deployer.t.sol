@@ -137,7 +137,7 @@ contract DeployerTests is Test, TestBaseWorkflow, IERC721Receiver {
             permissions: jbPermissions(),
             tokens: jbTokens(),
             configurator: address(this),
-            trusted_forwarder: address(0)
+            trustedForwarder: address(0)
         });
 
         deployer = OPDeployer;
@@ -150,7 +150,7 @@ contract DeployerTests is Test, TestBaseWorkflow, IERC721Receiver {
             permissions: jbPermissions(),
             tokens: jbTokens(),
             addToBalanceMode: JBAddToBalanceMode.MANUAL,
-            trusted_forwarder: address(0)
+            trustedForwarder: address(0)
         });
 
         // Set the singleton.
@@ -173,7 +173,7 @@ contract DeployerTests is Test, TestBaseWorkflow, IERC721Receiver {
             permissions: jbPermissions(),
             tokens: jbTokens(),
             configurator: address(this),
-            trusted_forwarder: address(0)
+            trustedForwarder: address(0)
         });
 
         deployer = CCIPDeployer;
@@ -190,7 +190,7 @@ contract DeployerTests is Test, TestBaseWorkflow, IERC721Receiver {
             permissions: jbPermissions(),
             tokens: jbTokens(),
             addToBalanceMode: JBAddToBalanceMode.MANUAL,
-            trusted_forwarder: address(0)
+            trustedForwarder: address(0)
         });
 
         // Set the singleton.
@@ -214,7 +214,7 @@ contract DeployerTests is Test, TestBaseWorkflow, IERC721Receiver {
             permissions: jbPermissions(),
             tokens: jbTokens(),
             configurator: address(this),
-            trusted_forwarder: address(0)
+            trustedForwarder: address(0)
         });
 
         deployer = ARBDeployer;
@@ -227,7 +227,7 @@ contract DeployerTests is Test, TestBaseWorkflow, IERC721Receiver {
             permissions: jbPermissions(),
             tokens: jbTokens(),
             addToBalanceMode: JBAddToBalanceMode.MANUAL,
-            trusted_forwarder: address(0)
+            trustedForwarder: address(0)
         });
 
         // Set the singleton.
