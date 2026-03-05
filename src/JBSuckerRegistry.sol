@@ -192,9 +192,7 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
         returns (address[] memory suckers)
     {
         _requirePermissionFrom({
-            account: PROJECTS.ownerOf(projectId),
-            projectId: projectId,
-            permissionId: JBPermissionIds.DEPLOY_SUCKERS
+            account: PROJECTS.ownerOf(projectId), projectId: projectId, permissionId: JBPermissionIds.DEPLOY_SUCKERS
         });
 
         // Create an array to store the suckers as they are deployed.
@@ -227,10 +225,7 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
             // slither-disable-next-line reentrancy-events,calls-loop
             sucker.mapTokens(configuration.mappings);
             emit SuckerDeployedFor({
-                projectId: projectId,
-                sucker: address(sucker),
-                configuration: configuration,
-                caller: _msgSender()
+                projectId: projectId, sucker: address(sucker), configuration: configuration, caller: _msgSender()
             });
         }
     }

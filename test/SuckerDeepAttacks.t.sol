@@ -40,7 +40,9 @@ contract DeepAttackSucker is JBSucker {
         IJBTokens tokens,
         JBAddToBalanceMode addToBalanceMode,
         address forwarder
-    ) JBSucker(directory, permissions, tokens, addToBalanceMode, forwarder) {}
+    )
+        JBSucker(directory, permissions, tokens, addToBalanceMode, forwarder)
+    {}
 
     function _sendRootOverAMB(
         uint256,
@@ -49,7 +51,10 @@ contract DeepAttackSucker is JBSucker {
         uint256 amount,
         JBRemoteToken memory,
         JBMessageRoot memory
-    ) internal override {
+    )
+        internal
+        override
+    {
         lastAMBAmount = amount;
         if (shouldRevertAMB) {
             sendRootOverAMBReverted = true;
@@ -72,7 +77,11 @@ contract DeepAttackSucker is JBSucker {
         bytes32 beneficiary,
         uint256 index,
         bytes32[_TREE_DEPTH] calldata leaves
-    ) internal virtual override {
+    )
+        internal
+        virtual
+        override
+    {
         if (!nextCheckShouldPass) {
             super._validateBranchRoot(expectedRoot, projectTokenCount, terminalTokenAmount, beneficiary, index, leaves);
         }
@@ -102,7 +111,9 @@ contract DeepAttackSucker is JBSucker {
         address token,
         uint256 terminalTokenAmount,
         bytes32 beneficiary
-    ) external {
+    )
+        external
+    {
         _insertIntoTree(projectTokenCount, token, terminalTokenAmount, beneficiary);
     }
 
@@ -488,7 +499,13 @@ contract SuckerDeepAttacks is Test {
         // Enable emergency hatch.
         sucker.test_setRemoteToken(
             TOKEN,
-            JBRemoteToken({enabled: false, emergencyHatch: true, minGas: 0, addr: bytes32(uint256(uint160(makeAddr("remote")))), minBridgeAmount: 0})
+            JBRemoteToken({
+                enabled: false,
+                emergencyHatch: true,
+                minGas: 0,
+                addr: bytes32(uint256(uint160(makeAddr("remote")))),
+                minBridgeAmount: 0
+            })
         );
 
         // Index 0 was part of the sent root → should revert (could be double-spent on remote).
@@ -533,7 +550,13 @@ contract SuckerDeepAttacks is Test {
         // Enable emergency hatch.
         sucker.test_setRemoteToken(
             TOKEN,
-            JBRemoteToken({enabled: false, emergencyHatch: true, minGas: 0, addr: bytes32(uint256(uint160(makeAddr("remote")))), minBridgeAmount: 0})
+            JBRemoteToken({
+                enabled: false,
+                emergencyHatch: true,
+                minGas: 0,
+                addr: bytes32(uint256(uint160(makeAddr("remote")))),
+                minBridgeAmount: 0
+            })
         );
 
         _mockMint(address(this), 3 ether);
@@ -566,7 +589,13 @@ contract SuckerDeepAttacks is Test {
 
         sucker.test_setRemoteToken(
             TOKEN,
-            JBRemoteToken({enabled: false, emergencyHatch: true, minGas: 0, addr: bytes32(uint256(uint160(makeAddr("remote")))), minBridgeAmount: 0})
+            JBRemoteToken({
+                enabled: false,
+                emergencyHatch: true,
+                minGas: 0,
+                addr: bytes32(uint256(uint160(makeAddr("remote")))),
+                minBridgeAmount: 0
+            })
         );
 
         _mockMint(address(this), 5 ether);
@@ -628,7 +657,13 @@ contract SuckerDeepAttacks is Test {
 
         sucker.test_setRemoteToken(
             TOKEN,
-            JBRemoteToken({enabled: false, emergencyHatch: true, minGas: 0, addr: bytes32(uint256(uint160(makeAddr("remote")))), minBridgeAmount: 0})
+            JBRemoteToken({
+                enabled: false,
+                emergencyHatch: true,
+                minGas: 0,
+                addr: bytes32(uint256(uint160(makeAddr("remote")))),
+                minBridgeAmount: 0
+            })
         );
 
         sucker.test_setNextMerkleCheckToBe(true);
@@ -733,16 +768,28 @@ contract SuckerDeepAttacks is Test {
         // Initial mapping.
         sucker.test_setRemoteToken(
             token,
-            JBRemoteToken({enabled: true, emergencyHatch: false, minGas: 200_000, addr: bytes32(uint256(uint160(remoteA))), minBridgeAmount: 0})
+            JBRemoteToken({
+                enabled: true,
+                emergencyHatch: false,
+                minGas: 200_000,
+                addr: bytes32(uint256(uint160(remoteA))),
+                minBridgeAmount: 0
+            })
         );
 
         // Insert items into the outbox (creating tree count > 0).
         sucker.test_insertIntoTree(10 ether, token, 5 ether, bytes32(uint256(uint160(address(this)))));
 
         // Try to remap to a different remote token.
-        vm.expectRevert(abi.encodeWithSelector(JBSucker.JBSucker_TokenAlreadyMapped.selector, token, bytes32(uint256(uint160(remoteA)))));
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                JBSucker.JBSucker_TokenAlreadyMapped.selector, token, bytes32(uint256(uint160(remoteA)))
+            )
+        );
         sucker.mapToken(
-            JBTokenMapping({localToken: token, minGas: 200_000, remoteToken: bytes32(uint256(uint160(remoteB))), minBridgeAmount: 0})
+            JBTokenMapping({
+                localToken: token, minGas: 200_000, remoteToken: bytes32(uint256(uint160(remoteB))), minBridgeAmount: 0
+            })
         );
     }
 
@@ -767,7 +814,12 @@ contract SuckerDeepAttacks is Test {
         // Try any mapping operation.
         vm.expectRevert(abi.encodeWithSelector(JBSucker.JBSucker_TokenHasInvalidEmergencyHatchState.selector, token));
         sucker.mapToken(
-            JBTokenMapping({localToken: token, minGas: 200_000, remoteToken: bytes32(uint256(uint160(makeAddr("newRemote")))), minBridgeAmount: 0})
+            JBTokenMapping({
+                localToken: token,
+                minGas: 200_000,
+                remoteToken: bytes32(uint256(uint160(makeAddr("newRemote")))),
+                minBridgeAmount: 0
+            })
         );
     }
 
@@ -794,15 +846,10 @@ contract SuckerDeepAttacks is Test {
         vm.mockCall(PERMISSIONS, abi.encodeWithSelector(IJBPermissions.hasPermission.selector), abi.encode(true));
 
         bytes32 nonNativeRemote = bytes32(uint256(uint160(makeAddr("nonNative"))));
-        vm.expectRevert(
-            abi.encodeWithSelector(JBSucker.JBSucker_InvalidNativeRemoteAddress.selector, nonNativeRemote)
-        );
+        vm.expectRevert(abi.encodeWithSelector(JBSucker.JBSucker_InvalidNativeRemoteAddress.selector, nonNativeRemote));
         sucker.mapToken(
             JBTokenMapping({
-                localToken: JBConstants.NATIVE_TOKEN,
-                minGas: 0,
-                remoteToken: nonNativeRemote,
-                minBridgeAmount: 0
+                localToken: JBConstants.NATIVE_TOKEN, minGas: 0, remoteToken: nonNativeRemote, minBridgeAmount: 0
             })
         );
     }
@@ -890,7 +937,13 @@ contract SuckerDeepAttacks is Test {
     function test_toRemote_emergencyHatch_reverts() public {
         sucker.test_setRemoteToken(
             TOKEN,
-            JBRemoteToken({enabled: false, emergencyHatch: true, minGas: 0, addr: bytes32(uint256(uint160(makeAddr("remote")))), minBridgeAmount: 0})
+            JBRemoteToken({
+                enabled: false,
+                emergencyHatch: true,
+                minGas: 0,
+                addr: bytes32(uint256(uint160(makeAddr("remote")))),
+                minBridgeAmount: 0
+            })
         );
 
         vm.expectRevert(abi.encodeWithSelector(JBSucker.JBSucker_TokenHasInvalidEmergencyHatchState.selector, TOKEN));
@@ -1048,12 +1101,7 @@ contract SuckerDeepAttacks is Test {
         bytes32[] memory roots = new bytes32[](20);
 
         for (uint256 i = 0; i < 20; i++) {
-            sucker.test_insertIntoTree(
-                (i + 1) * 1 ether,
-                TOKEN,
-                (i + 1) * 0.5 ether,
-                bytes32(uint256(1000 + i))
-            );
+            sucker.test_insertIntoTree((i + 1) * 1 ether, TOKEN, (i + 1) * 0.5 ether, bytes32(uint256(1000 + i)));
             roots[i] = sucker.test_getOutboxRoot(TOKEN);
         }
 
@@ -1069,9 +1117,12 @@ contract SuckerDeepAttacks is Test {
 
     /// @notice Verify that the _buildTreeHash is deterministic and order-sensitive.
     function test_treeHash_deterministic() public pure {
-        bytes32 hash1 = keccak256(abi.encode(uint256(10 ether), uint256(5 ether), bytes32(uint256(uint160(address(0xAAA))))));
-        bytes32 hash2 = keccak256(abi.encode(uint256(10 ether), uint256(5 ether), bytes32(uint256(uint160(address(0xAAA))))));
-        bytes32 hash3 = keccak256(abi.encode(uint256(5 ether), uint256(10 ether), bytes32(uint256(uint160(address(0xAAA)))))); // swapped
+        bytes32 hash1 =
+            keccak256(abi.encode(uint256(10 ether), uint256(5 ether), bytes32(uint256(uint160(address(0xAAA))))));
+        bytes32 hash2 =
+            keccak256(abi.encode(uint256(10 ether), uint256(5 ether), bytes32(uint256(uint160(address(0xAAA))))));
+        bytes32 hash3 =
+            keccak256(abi.encode(uint256(5 ether), uint256(10 ether), bytes32(uint256(uint160(address(0xAAA)))))); // swapped
 
         assertEq(hash1, hash2, "Same inputs should produce same hash");
         assertTrue(hash1 != hash3, "Different inputs should produce different hash");
@@ -1244,10 +1295,7 @@ contract SuckerDeepAttacks is Test {
         JBClaim memory dupClaim = JBClaim({
             token: TOKEN,
             leaf: JBLeaf({
-                index: 2,
-                beneficiary: bytes32(uint256(102)),
-                projectTokenCount: 3 ether,
-                terminalTokenAmount: 1.5 ether
+                index: 2, beneficiary: bytes32(uint256(102)), projectTokenCount: 3 ether, terminalTokenAmount: 1.5 ether
             }),
             proof: dupProof
         });
@@ -1388,11 +1436,7 @@ contract SuckerDeepAttacks is Test {
         vm.mockCall(TOKENS, abi.encodeCall(IJBTokens.tokenOf, (PROJECT_ID)), abi.encode(makeAddr("projectToken")));
 
         // Mock the token transfer for prepare
-        vm.mockCall(
-            makeAddr("projectToken"),
-            abi.encodeWithSelector(IERC20.transferFrom.selector),
-            abi.encode(true)
-        );
+        vm.mockCall(makeAddr("projectToken"), abi.encodeWithSelector(IERC20.transferFrom.selector), abi.encode(true));
 
         // The overflow guard fires inside _insertIntoTree, which is called from prepare
         // after computing terminalTokenAmount. For a direct test, use the test helper.
@@ -1455,19 +1499,13 @@ contract SuckerDeepAttacks is Test {
 
         // This will proceed past the beneficiary check. It may fail later (e.g., token transfer),
         // but should NOT fail with ZeroBeneficiary.
-        vm.mockCall(
-            makeAddr("projectToken"),
-            abi.encodeWithSelector(IERC20.transferFrom.selector),
-            abi.encode(true)
-        );
+        vm.mockCall(makeAddr("projectToken"), abi.encodeWithSelector(IERC20.transferFrom.selector), abi.encode(true));
 
         // May revert for other reasons (token handling), but NOT ZeroBeneficiary.
-        try sucker.prepare(10 ether, svmBeneficiary, 0, TOKEN) {} catch (bytes memory reason) {
+        try sucker.prepare(10 ether, svmBeneficiary, 0, TOKEN) {}
+        catch (bytes memory reason) {
             bytes4 selector = bytes4(reason);
-            assertTrue(
-                selector != JBSucker.JBSucker_ZeroBeneficiary.selector,
-                "Should not revert with ZeroBeneficiary"
-            );
+            assertTrue(selector != JBSucker.JBSucker_ZeroBeneficiary.selector, "Should not revert with ZeroBeneficiary");
         }
     }
 
@@ -1497,11 +1535,7 @@ contract SuckerDeepAttacks is Test {
         JBRemoteToken memory mapping_ = sucker.test_getRemoteToken(token);
         assertFalse(mapping_.enabled, "Should be disabled");
         // addr is preserved (so it can be re-enabled to the same remote).
-        assertEq(
-            mapping_.addr,
-            bytes32(uint256(uint160(makeAddr("remoteA")))),
-            "Remote addr should be preserved"
-        );
+        assertEq(mapping_.addr, bytes32(uint256(uint160(makeAddr("remoteA")))), "Remote addr should be preserved");
     }
 
     /// @notice fromRemote with same nonce (not strictly greater) should emit StaleRootRejected.

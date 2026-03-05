@@ -43,8 +43,8 @@ contract MultiChainEvolutionTest is Test, TestBaseWorkflow, IERC721Receiver {
     address constant MOCK_CCIP_ROUTER_ADDR = address(0xA003);
 
     // Celo chain constants.
-    uint256 constant CELO_CHAIN_ID = 42220;
-    uint64 constant CELO_CHAIN_SELECTOR = 1311226;
+    uint256 constant CELO_CHAIN_ID = 42_220;
+    uint64 constant CELO_CHAIN_SELECTOR = 1_311_226;
 
     // Token addresses representing tokens on remote chains.
     // On Celo, ETH is an ERC-20 (not native).
@@ -156,22 +156,20 @@ contract MultiChainEvolutionTest is Test, TestBaseWorkflow, IERC721Receiver {
 
         JBAccountingContext[] memory tokensToAccept = new JBAccountingContext[](1);
         tokensToAccept[0] = JBAccountingContext({
-            token: JBConstants.NATIVE_TOKEN,
-            decimals: 18,
-            currency: uint32(uint160(JBConstants.NATIVE_TOKEN))
+            token: JBConstants.NATIVE_TOKEN, decimals: 18, currency: uint32(uint160(JBConstants.NATIVE_TOKEN))
         });
 
         JBTerminalConfig[] memory terminalConfigs = new JBTerminalConfig[](1);
-        terminalConfigs[0] =
-            JBTerminalConfig({terminal: jbMultiTerminal(), accountingContextsToAccept: tokensToAccept});
+        terminalConfigs[0] = JBTerminalConfig({terminal: jbMultiTerminal(), accountingContextsToAccept: tokensToAccept});
 
-        projectId = jbController().launchProjectFor({
-            owner: address(this),
-            projectUri: "myproject",
-            rulesetConfigurations: rulesetConfigs,
-            terminalConfigurations: terminalConfigs,
-            memo: ""
-        });
+        projectId = jbController()
+            .launchProjectFor({
+                owner: address(this),
+                projectUri: "myproject",
+                rulesetConfigurations: rulesetConfigs,
+                terminalConfigurations: terminalConfigs,
+                memo: ""
+            });
     }
 
     // =========================================================================
@@ -219,7 +217,9 @@ contract MultiChainEvolutionTest is Test, TestBaseWorkflow, IERC721Receiver {
 
         JBRemoteToken memory opNative = _opSucker.remoteTokenFor(JBConstants.NATIVE_TOKEN);
         assertTrue(opNative.enabled, "Phase 2: native mapping enabled on OP");
-        assertEq(opNative.addr, bytes32(uint256(uint160(JBConstants.NATIVE_TOKEN))), "Phase 2: native maps to native on OP");
+        assertEq(
+            opNative.addr, bytes32(uint256(uint160(JBConstants.NATIVE_TOKEN))), "Phase 2: native maps to native on OP"
+        );
 
         // ---------------------------------------------------------------
         // Phase 3: Add USDC bridging to Optimism.
@@ -227,11 +227,18 @@ contract MultiChainEvolutionTest is Test, TestBaseWorkflow, IERC721Receiver {
         // ---------------------------------------------------------------
 
         _opSucker.mapToken(
-            JBTokenMapping({localToken: localUSDC, minGas: 200_000, remoteToken: bytes32(uint256(uint160(opUSDC))), minBridgeAmount: 1e6})
+            JBTokenMapping({
+                localToken: localUSDC,
+                minGas: 200_000,
+                remoteToken: bytes32(uint256(uint160(opUSDC))),
+                minBridgeAmount: 1e6
+            })
         );
 
         assertTrue(_opSucker.remoteTokenFor(localUSDC).enabled, "Phase 3: USDC enabled on OP");
-        assertEq(_opSucker.remoteTokenFor(localUSDC).addr, bytes32(uint256(uint160(opUSDC))), "Phase 3: USDC maps to opUSDC");
+        assertEq(
+            _opSucker.remoteTokenFor(localUSDC).addr, bytes32(uint256(uint160(opUSDC))), "Phase 3: USDC maps to opUSDC"
+        );
         assertTrue(_opSucker.remoteTokenFor(JBConstants.NATIVE_TOKEN).enabled, "Phase 3: native still works");
 
         // ---------------------------------------------------------------
@@ -267,7 +274,9 @@ contract MultiChainEvolutionTest is Test, TestBaseWorkflow, IERC721Receiver {
 
         JBRemoteToken memory celoNative = _celoSucker.remoteTokenFor(JBConstants.NATIVE_TOKEN);
         assertTrue(celoNative.enabled, "Phase 4: native mapping enabled on Celo");
-        assertEq(celoNative.addr, bytes32(uint256(uint160(celoETH))), "Phase 4: native maps to celoETH (ERC-20) on Celo");
+        assertEq(
+            celoNative.addr, bytes32(uint256(uint160(celoETH))), "Phase 4: native maps to celoETH (ERC-20) on Celo"
+        );
         assertEq(registry.suckerPairsOf(projectId).length, 2, "Phase 4: two sucker pairs");
 
         // ---------------------------------------------------------------
@@ -276,11 +285,20 @@ contract MultiChainEvolutionTest is Test, TestBaseWorkflow, IERC721Receiver {
         // ---------------------------------------------------------------
 
         _celoSucker.mapToken(
-            JBTokenMapping({localToken: localUSDC, minGas: 200_000, remoteToken: bytes32(uint256(uint160(celoUSDC))), minBridgeAmount: 1e6})
+            JBTokenMapping({
+                localToken: localUSDC,
+                minGas: 200_000,
+                remoteToken: bytes32(uint256(uint160(celoUSDC))),
+                minBridgeAmount: 1e6
+            })
         );
 
         assertTrue(_celoSucker.remoteTokenFor(localUSDC).enabled, "Phase 5: USDC enabled on Celo");
-        assertEq(_celoSucker.remoteTokenFor(localUSDC).addr, bytes32(uint256(uint160(celoUSDC))), "Phase 5: USDC maps to celoUSDC");
+        assertEq(
+            _celoSucker.remoteTokenFor(localUSDC).addr,
+            bytes32(uint256(uint160(celoUSDC))),
+            "Phase 5: USDC maps to celoUSDC"
+        );
 
         // OP sucker is completely independent — its mappings unchanged.
         assertEq(
@@ -288,7 +306,11 @@ contract MultiChainEvolutionTest is Test, TestBaseWorkflow, IERC721Receiver {
             bytes32(uint256(uint160(JBConstants.NATIVE_TOKEN))),
             "Phase 5: OP native mapping unchanged"
         );
-        assertEq(_opSucker.remoteTokenFor(localUSDC).addr, bytes32(uint256(uint160(opUSDC))), "Phase 5: OP USDC mapping unchanged");
+        assertEq(
+            _opSucker.remoteTokenFor(localUSDC).addr,
+            bytes32(uint256(uint160(opUSDC))),
+            "Phase 5: OP USDC mapping unchanged"
+        );
 
         // ---------------------------------------------------------------
         // Phase 6: Deprecate the OP sucker.
@@ -306,8 +328,7 @@ contract MultiChainEvolutionTest is Test, TestBaseWorkflow, IERC721Receiver {
 
         assertEq(uint8(_celoSucker.state()), uint8(JBSuckerState.ENABLED), "Phase 6: Celo still enabled");
         assertTrue(
-            _celoSucker.remoteTokenFor(JBConstants.NATIVE_TOKEN).enabled,
-            "Phase 6: Celo native mapping still works"
+            _celoSucker.remoteTokenFor(JBConstants.NATIVE_TOKEN).enabled, "Phase 6: Celo native mapping still works"
         );
         assertEq(
             _celoSucker.remoteTokenFor(JBConstants.NATIVE_TOKEN).addr,
@@ -396,7 +417,12 @@ contract MultiChainEvolutionTest is Test, TestBaseWorkflow, IERC721Receiver {
 
         // Later: project owner adds USDC.
         sucker.mapToken(
-            JBTokenMapping({localToken: localUSDC, minGas: 200_000, remoteToken: bytes32(uint256(uint160(celoUSDC))), minBridgeAmount: 1e6})
+            JBTokenMapping({
+                localToken: localUSDC,
+                minGas: 200_000,
+                remoteToken: bytes32(uint256(uint160(celoUSDC))),
+                minBridgeAmount: 1e6
+            })
         );
 
         // Now both are mapped.
@@ -445,7 +471,12 @@ contract MultiChainEvolutionTest is Test, TestBaseWorkflow, IERC721Receiver {
 
         // Map USDC only on the Celo sucker.
         celoSucker.mapToken(
-            JBTokenMapping({localToken: localUSDC, minGas: 200_000, remoteToken: bytes32(uint256(uint160(celoUSDC))), minBridgeAmount: 1e6})
+            JBTokenMapping({
+                localToken: localUSDC,
+                minGas: 200_000,
+                remoteToken: bytes32(uint256(uint160(celoUSDC))),
+                minBridgeAmount: 1e6
+            })
         );
 
         // OP sucker should NOT have USDC mapped.
@@ -456,7 +487,9 @@ contract MultiChainEvolutionTest is Test, TestBaseWorkflow, IERC721Receiver {
 
         // Disable native on OP sucker.
         opSucker.mapToken(
-            JBTokenMapping({localToken: JBConstants.NATIVE_TOKEN, minGas: 200_000, remoteToken: bytes32(0), minBridgeAmount: 0})
+            JBTokenMapping({
+                localToken: JBConstants.NATIVE_TOKEN, minGas: 200_000, remoteToken: bytes32(0), minBridgeAmount: 0
+            })
         );
 
         // OP native disabled, Celo native unaffected.
@@ -508,11 +541,19 @@ contract MultiChainEvolutionTest is Test, TestBaseWorkflow, IERC721Receiver {
 
         // OP sucker: try to map NATIVE -> celoETH (ERC-20). Should REVERT.
         vm.expectRevert(
-            abi.encodeWithSelector(JBSucker.JBSucker_InvalidNativeRemoteAddress.selector, bytes32(uint256(uint160(celoETH))))
+            abi.encodeWithSelector(
+                JBSucker.JBSucker_InvalidNativeRemoteAddress.selector, bytes32(uint256(uint160(celoETH)))
+            )
         );
-        IJBSucker(opSuckers[0]).mapToken(
-            JBTokenMapping({localToken: JBConstants.NATIVE_TOKEN, minGas: 200_000, remoteToken: bytes32(uint256(uint160(celoETH))), minBridgeAmount: 0.01 ether})
-        );
+        IJBSucker(opSuckers[0])
+            .mapToken(
+                JBTokenMapping({
+                    localToken: JBConstants.NATIVE_TOKEN,
+                    minGas: 200_000,
+                    remoteToken: bytes32(uint256(uint160(celoETH))),
+                    minBridgeAmount: 0.01 ether
+                })
+            );
     }
 
     // =========================================================================
@@ -566,10 +607,11 @@ contract MultiChainEvolutionTest is Test, TestBaseWorkflow, IERC721Receiver {
         uint8[] memory permissions = new uint8[](1);
         permissions[0] = JBPermissionIds.MAP_SUCKER_TOKEN;
 
-        jbPermissions().setPermissionsFor(
-            address(this),
-            JBPermissionsData({operator: operator, projectId: uint56(projectId), permissionIds: permissions})
-        );
+        jbPermissions()
+            .setPermissionsFor(
+                address(this),
+                JBPermissionsData({operator: operator, projectId: uint56(projectId), permissionIds: permissions})
+            );
     }
 
     function onERC721Received(address, address, uint256, bytes calldata) external pure returns (bytes4) {

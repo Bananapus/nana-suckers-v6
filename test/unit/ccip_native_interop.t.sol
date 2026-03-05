@@ -74,7 +74,9 @@ contract CCIPTestSucker is JBCCIPSucker {
         IJBDirectory directory,
         IJBTokens tokens,
         IJBPermissions permissions
-    ) JBCCIPSucker(deployer, directory, tokens, permissions, JBAddToBalanceMode.MANUAL, address(0)) {}
+    )
+        JBCCIPSucker(deployer, directory, tokens, permissions, JBAddToBalanceMode.MANUAL, address(0))
+    {}
 
     function exposed_validateTokenMapping(JBTokenMapping calldata map) external pure {
         _validateTokenMapping(map);
@@ -86,7 +88,10 @@ contract CCIPTestSucker is JBCCIPSucker {
         uint256 amount,
         JBRemoteToken memory remoteToken,
         JBMessageRoot memory message
-    ) external payable {
+    )
+        external
+        payable
+    {
         _sendRootOverAMB(transportPayment, 0, token, amount, remoteToken, message);
     }
 
@@ -95,7 +100,9 @@ contract CCIPTestSucker is JBCCIPSucker {
         address token,
         uint256 terminalTokenAmount,
         bytes32 beneficiary
-    ) external {
+    )
+        external
+    {
         _insertIntoTree(projectTokenCount, token, terminalTokenAmount, beneficiary);
     }
 
@@ -122,13 +129,22 @@ contract BaseTestSucker is JBSucker {
         IJBDirectory directory,
         IJBPermissions permissions,
         IJBTokens tokens
-    ) JBSucker(directory, permissions, tokens, JBAddToBalanceMode.MANUAL, address(0)) {}
+    )
+        JBSucker(directory, permissions, tokens, JBAddToBalanceMode.MANUAL, address(0))
+    {}
 
     function exposed_validateTokenMapping(JBTokenMapping calldata map) external pure {
         _validateTokenMapping(map);
     }
 
-    function _sendRootOverAMB(uint256, uint256, address, uint256, JBRemoteToken memory, JBMessageRoot memory)
+    function _sendRootOverAMB(
+        uint256,
+        uint256,
+        address,
+        uint256,
+        JBRemoteToken memory,
+        JBMessageRoot memory
+    )
         internal
         override
     {}
@@ -155,8 +171,8 @@ contract CCIPNativeInteropTest is Test {
     address constant MOCK_PROJECTS = address(0xD5);
 
     uint256 constant PROJECT_ID = 1;
-    uint256 constant REMOTE_CHAIN_ID = 42220; // Celo
-    uint64 constant REMOTE_CHAIN_SELECTOR = 1311226; // Celo CCIP selector
+    uint256 constant REMOTE_CHAIN_ID = 42_220; // Celo
+    uint64 constant REMOTE_CHAIN_SELECTOR = 1_311_226; // Celo CCIP selector
 
     /// @notice Represents ETH as an ERC20 on Celo.
     address celoETH = makeAddr("celoETH");
@@ -187,9 +203,7 @@ contract CCIPNativeInteropTest is Test {
         vm.mockCall(MOCK_ROUTER, abi.encodeWithSignature("getWrappedNative()"), abi.encode(address(mockWETH)));
 
         // Mock CCIP router getFee and ccipSend.
-        vm.mockCall(
-            MOCK_ROUTER, abi.encodeWithSelector(IRouterClient.getFee.selector), abi.encode(uint256(0.01 ether))
-        );
+        vm.mockCall(MOCK_ROUTER, abi.encodeWithSelector(IRouterClient.getFee.selector), abi.encode(uint256(0.01 ether)));
         vm.mockCall(
             MOCK_ROUTER, abi.encodeWithSelector(IRouterClient.ccipSend.selector), abi.encode(bytes32(uint256(1)))
         );
@@ -243,7 +257,11 @@ contract CCIPNativeInteropTest is Test {
             minBridgeAmount: 0.01 ether
         });
 
-        vm.expectRevert(abi.encodeWithSelector(JBSucker.JBSucker_InvalidNativeRemoteAddress.selector, bytes32(uint256(uint160(celoETH)))));
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                JBSucker.JBSucker_InvalidNativeRemoteAddress.selector, bytes32(uint256(uint160(celoETH)))
+            )
+        );
         baseSucker.exposed_validateTokenMapping(map);
     }
 
@@ -269,10 +287,7 @@ contract CCIPNativeInteropTest is Test {
 
     function test_mapToken_nativeToZero_disablesOnBoth() public view {
         JBTokenMapping memory map = JBTokenMapping({
-            localToken: JBConstants.NATIVE_TOKEN,
-            minGas: 200_000,
-            remoteToken: bytes32(0),
-            minBridgeAmount: 0
+            localToken: JBConstants.NATIVE_TOKEN, minGas: 200_000, remoteToken: bytes32(0), minBridgeAmount: 0
         });
 
         ccipSucker.exposed_validateTokenMapping(map);
@@ -439,7 +454,13 @@ contract CCIPNativeInteropTest is Test {
         // Step 2: Set up the token mapping on the sucker.
         ccipSucker.test_setRemoteToken(
             JBConstants.NATIVE_TOKEN,
-            JBRemoteToken({enabled: true, emergencyHatch: false, minGas: 200_000, addr: bytes32(uint256(uint160(celoETH))), minBridgeAmount: 0.01 ether})
+            JBRemoteToken({
+                enabled: true,
+                emergencyHatch: false,
+                minGas: 200_000,
+                addr: bytes32(uint256(uint160(celoETH))),
+                minBridgeAmount: 0.01 ether
+            })
         );
 
         // Step 3: Insert a leaf into the outbox (simulating a user preparing to bridge).
@@ -487,11 +508,7 @@ contract CCIPNativeInteropTest is Test {
 
         // Give MockWETH ETH backing and credit sucker's WETH balance.
         vm.deal(address(mockWETH), bridgeAmount);
-        vm.store(
-            address(mockWETH),
-            keccak256(abi.encode(address(ccipSucker), uint256(0))),
-            bytes32(bridgeAmount)
-        );
+        vm.store(address(mockWETH), keccak256(abi.encode(address(ccipSucker), uint256(0))), bytes32(bridgeAmount));
 
         // Simulate receiving on ETH mainnet — root.token = NATIVE_TOKEN because
         // on mainnet, ETH is the native token. CCIP delivers WETH.
@@ -554,7 +571,13 @@ contract CCIPNativeInteropTest is Test {
         // 2. Set the mapping and simulate outbox.
         ccipSucker.test_setRemoteToken(
             JBConstants.NATIVE_TOKEN,
-            JBRemoteToken({enabled: true, emergencyHatch: false, minGas: 200_000, addr: bytes32(uint256(uint160(celoETH))), minBridgeAmount: 0.01 ether})
+            JBRemoteToken({
+                enabled: true,
+                emergencyHatch: false,
+                minGas: 200_000,
+                addr: bytes32(uint256(uint160(celoETH))),
+                minBridgeAmount: 0.01 ether
+            })
         );
 
         // 3. Wrap native ETH -> WETH for CCIP transport.
@@ -562,7 +585,11 @@ contract CCIPNativeInteropTest is Test {
         assertEq(mockWETH.balanceOf(address(ccipSucker)), 0, "No WETH before send");
 
         JBRemoteToken memory remoteToken = JBRemoteToken({
-            enabled: true, emergencyHatch: false, minGas: 200_000, addr: bytes32(uint256(uint160(celoETH))), minBridgeAmount: 0.01 ether
+            enabled: true,
+            emergencyHatch: false,
+            minGas: 200_000,
+            addr: bytes32(uint256(uint160(celoETH))),
+            minBridgeAmount: 0.01 ether
         });
         JBMessageRoot memory sendMsg = JBMessageRoot({
             version: 1,
@@ -583,11 +610,7 @@ contract CCIPNativeInteropTest is Test {
         // 4. Simulate CCIP delivering WETH back (router unwrap path).
         //    On mainnet, root.token = NATIVE_TOKEN, so ccipReceive unwraps WETH -> ETH.
         vm.deal(address(mockWETH), bridgeAmount);
-        vm.store(
-            address(mockWETH),
-            keccak256(abi.encode(address(ccipSucker), uint256(0))),
-            bytes32(bridgeAmount)
-        );
+        vm.store(address(mockWETH), keccak256(abi.encode(address(ccipSucker), uint256(0))), bytes32(bridgeAmount));
 
         uint256 ethBefore = address(ccipSucker).balance;
 
