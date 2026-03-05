@@ -2,10 +2,10 @@
 pragma solidity ^0.8.13;
 
 import "forge-std/Test.sol";
-import /* {*} from */ "@bananapus/core-v5/test/helpers/TestBaseWorkflow.sol";
+import /* {*} from */ "@bananapus/core-v6/test/helpers/TestBaseWorkflow.sol";
 import "@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol";
 
-import {IJBController} from "@bananapus/core-v5/src/interfaces/IJBController.sol";
+import {IJBController} from "@bananapus/core-v6/src/interfaces/IJBController.sol";
 import "../../src/JBSucker.sol";
 
 import "../../src/deployers/JBOptimismSuckerDeployer.sol";
@@ -23,9 +23,9 @@ import {JBLeaf} from "../../src/structs/JBLeaf.sol";
 import {JBClaim} from "../../src/structs/JBClaim.sol";
 import {JBSuckerDeployerConfig} from "../../src/structs/JBSuckerDeployerConfig.sol";
 
-import {JBProjects} from "@bananapus/core-v5/src/JBProjects.sol";
-import {JBDirectory} from "@bananapus/core-v5/src/JBDirectory.sol";
-import {JBPermissions} from "@bananapus/core-v5/src/JBPermissions.sol";
+import {JBProjects} from "@bananapus/core-v6/src/JBProjects.sol";
+import {JBDirectory} from "@bananapus/core-v6/src/JBDirectory.sol";
+import {JBPermissions} from "@bananapus/core-v6/src/JBPermissions.sol";
 
 import {JBOptimismSuckerDeployer} from "../../src/deployers/JBOptimismSuckerDeployer.sol";
 import {JBSuckerRegistry} from "./../../src/JBSuckerRegistry.sol";
