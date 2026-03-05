@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.19;
+pragma solidity ^0.8.0;
 
 import {JBLayer} from "../enums/JBLayer.sol";
 import {IArbGatewayRouter} from "../interfaces/IArbGatewayRouter.sol";

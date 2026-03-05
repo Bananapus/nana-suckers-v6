@@ -125,7 +125,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     uint256 internal deprecatedAfter;
 
     /// @notice The ID of the project (on the local chain) that this sucker is associated with.
-    uint256 private localProjectId;
+    uint256 private _localProjectId;
 
     //*********************************************************************//
     // -------------------- internal stored properties ------------------- //
@@ -238,7 +238,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
 
     /// @notice The ID of the project (on the local chain) that this sucker is associated with.
     function projectId() public view returns (uint256) {
-        return localProjectId;
+        return _localProjectId;
     }
 
     /// @notice Reports the deprecation state of the sucker.
@@ -354,17 +354,17 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         return bytes32(uint256(uint160(addr)));
     }
 
+    //*********************************************************************//
+    // --------------------- external transactions ----------------------- //
+    //*********************************************************************//
+
     /// @notice Initializes the sucker with the project ID and peer address.
     /// @param _projectId The ID of the project (on the local chain) that this sucker is associated with.
     function initialize(uint256 _projectId) public initializer {
         // slither-disable-next-line missing-zero-check
-        localProjectId = _projectId;
+        _localProjectId = _projectId;
         deployer = msg.sender;
     }
-
-    //*********************************************************************//
-    // --------------------- external transactions ----------------------- //
-    //*********************************************************************//
 
     /// @notice Adds the reclaimed `token` balance to the projects terminal. Can only be used if `ADD_TO_BALANCE_MODE`
     /// is

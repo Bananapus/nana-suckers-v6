@@ -2,7 +2,7 @@
 pragma solidity ^0.8.0;
 
 /// @notice A struct that represents a token on the remote chain.
-/// @dev Invarient: If the `emergencyHatch` is true then the `enabled` is always false.
+/// @dev Invariant: If the `emergencyHatch` is true then the `enabled` is always false.
 /// @custom:member enabled Whether the token is enabled.
 /// @custom:member emergencyHatchOpened Whether the emergency hatch is opened.
 /// @custom:member minGas The minimum gas to use when bridging.
