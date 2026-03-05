@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.23;
 
-/// @notice Global constants used across Juicebox contracts.
+/// @notice CCIP chain-specific constants used across Juicebox sucker contracts.
 library CCIPHelper {
+    error CCIPHelper_UnsupportedChain(uint256 chainId);
     /// @notice The respective CCIP router used by the chain
     address public constant ETH_ROUTER = 0x80226fc0Ee2b096224EeAc085Bb9a8cba1146f7D;
     address public constant ETH_SEP_ROUTER = 0x0BF3dE8c5D3e8A2B34D2BEeB17ABfCeBaf363A59;
@@ -77,7 +78,7 @@ library CCIPHelper {
         } else if (_chainId == BASE_SEP_ID) {
             return BASE_SEP_ROUTER;
         } else {
-            revert("Unsupported chain");
+            revert CCIPHelper_UnsupportedChain(_chainId);
         }
     }
 
@@ -105,7 +106,7 @@ library CCIPHelper {
         } else if (_chainId == BASE_SEP_ID) {
             return BASE_SEP_SEL;
         } else {
-            revert("Unsupported chain");
+            revert CCIPHelper_UnsupportedChain(_chainId);
         }
     }
 
@@ -129,7 +130,7 @@ library CCIPHelper {
         } else if (_chainId == ARB_SEP_ID) {
             return ARB_SEP_WETH;
         } else {
-            revert("Unsupported chain");
+            revert CCIPHelper_UnsupportedChain(_chainId);
         }
     }
 }

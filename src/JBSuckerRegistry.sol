@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.23;
+pragma solidity 0.8.23;
 
 import {JBPermissioned} from "@bananapus/core-v5/src/abstract/JBPermissioned.sol";
 import {IJBDirectory} from "@bananapus/core-v5/src/interfaces/IJBDirectory.sol";
@@ -29,7 +29,6 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
     //*********************************************************************//
 
     error JBSuckerRegistry_InvalidDeployer(IJBSuckerDeployer deployer);
-    error JBSuckerRegistry_RulesetDoesNotAllowAddingSucker(uint256 projectId);
     error JBSuckerRegistry_SuckerDoesNotBelongToProject(uint256 projectId, address sucker);
     error JBSuckerRegistry_SuckerIsNotDeprecated(address sucker, JBSuckerState suckerState);
 

@@ -40,7 +40,6 @@ contract JBArbitrumSucker is JBSucker, IJBArbitrumSucker {
     // --------------------------- custom errors ------------------------- //
     //*********************************************************************//
 
-    error JBArbitrumSucker_ChainNotSupported(uint256 chainId);
     error JBArbitrumSucker_NotEnoughGas(uint256 payment, uint256 cost);
 
     //*********************************************************************//

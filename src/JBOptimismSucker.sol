@@ -112,12 +112,12 @@ contract JBOptimismSucker is JBSucker, IJBOptimismSucker {
         // If the token is an ERC20, bridge it to the peer.
         // If the amount is `0` then we do not need to bridge any ERC20.
         if (token != JBConstants.NATIVE_TOKEN && amount != 0) {
-            // Approve the tokens bing bridged.
+            // Approve the tokens being bridged.
             // slither-disable-next-line reentrancy-events
             SafeERC20.forceApprove({token: IERC20(token), spender: address(OPBRIDGE), value: amount});
 
             // Bridge the tokens to the peer sucker. Convert bytes32 types to address at the OP Bridge API boundary.
-            // slither-disable-next-line reentrency-events,calls-loop
+            // slither-disable-next-line reentrancy-events,calls-loop
             OPBRIDGE.bridgeERC20To({
                 localToken: token,
                 remoteToken: _toAddress(remoteToken.addr),
@@ -133,7 +133,7 @@ contract JBOptimismSucker is JBSucker, IJBOptimismSucker {
 
         // Send the message to the peer with the reclaimed ETH.
         // Convert bytes32 peer to address at the OP Messenger API boundary.
-        // slither-disable-next-line arbitrary-send-eth,reentrency-events,calls-loop
+        // slither-disable-next-line arbitrary-send-eth,reentrancy-events,calls-loop
         OPMESSENGER.sendMessage{value: nativeValue}(
             _toAddress(peer()), abi.encodeCall(JBSucker.fromRemote, (message)), MESSENGER_BASE_GAS_LIMIT
         );

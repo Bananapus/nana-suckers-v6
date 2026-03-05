@@ -58,10 +58,11 @@ contract JBArbitrumSuckerDeployer is JBSuckerDeployer, IJBArbitrumSuckerDeployer
     // --------------------- external transactions ----------------------- //
     //*********************************************************************//
 
-    /// @notice handles some layer specific configuration that can't be done in the constructor otherwise deployment
+    /// @notice Handles some layer specific configuration that can't be done in the constructor otherwise deployment
     /// addresses would change.
-    /// @notice messenger the OPMesssenger on this layer.
-    /// @notice bridge the OPStandardBridge on this layer.
+    /// @param layer The Arbitrum layer (L1 or L2).
+    /// @param inbox The Arbitrum inbox on this layer.
+    /// @param gatewayRouter The Arbitrum gateway router on this layer.
     function setChainSpecificConstants(JBLayer layer, IInbox inbox, IArbGatewayRouter gatewayRouter) external {
         if (_layerSpecificConfigurationIsSet()) {
             revert JBSuckerDeployer_AlreadyConfigured();
