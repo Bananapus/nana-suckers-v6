@@ -36,7 +36,9 @@ contract AttackTestSucker is JBSucker {
         IJBTokens tokens,
         JBAddToBalanceMode addToBalanceMode,
         address forwarder
-    ) JBSucker(directory, permissions, tokens, addToBalanceMode, forwarder) {}
+    )
+        JBSucker(directory, permissions, tokens, addToBalanceMode, forwarder)
+    {}
 
     function _sendRootOverAMB(
         uint256,
@@ -45,7 +47,10 @@ contract AttackTestSucker is JBSucker {
         uint256,
         JBRemoteToken memory,
         JBMessageRoot memory
-    ) internal override {}
+    )
+        internal
+        override
+    {}
 
     function _isRemotePeer(address sender) internal view override returns (bool) {
         return sender == _toAddress(peer());
@@ -62,7 +67,11 @@ contract AttackTestSucker is JBSucker {
         bytes32 beneficiary,
         uint256 index,
         bytes32[_TREE_DEPTH] calldata leaves
-    ) internal virtual override {
+    )
+        internal
+        virtual
+        override
+    {
         if (!nextCheckShouldPass) {
             super._validateBranchRoot(expectedRoot, projectTokenCount, terminalTokenAmount, beneficiary, index, leaves);
         }
@@ -87,7 +96,9 @@ contract AttackTestSucker is JBSucker {
         address token,
         uint256 terminalTokenAmount,
         bytes32 beneficiary
-    ) external {
+    )
+        external
+    {
         _insertIntoTree(projectTokenCount, token, terminalTokenAmount, beneficiary);
     }
 
@@ -179,7 +190,9 @@ contract SuckerAttacks is Test {
 
         // Non-peer calling fromRemote should revert
         vm.prank(spoofedRouter);
-        vm.expectRevert(abi.encodeWithSelector(JBSucker.JBSucker_NotPeer.selector, bytes32(uint256(uint160(spoofedRouter)))));
+        vm.expectRevert(
+            abi.encodeWithSelector(JBSucker.JBSucker_NotPeer.selector, bytes32(uint256(uint160(spoofedRouter))))
+        );
         sucker.fromRemote(fakeRoot);
     }
 
@@ -200,7 +213,9 @@ contract SuckerAttacks is Test {
         });
 
         vm.prank(wrongSender);
-        vm.expectRevert(abi.encodeWithSelector(JBSucker.JBSucker_NotPeer.selector, bytes32(uint256(uint160(wrongSender)))));
+        vm.expectRevert(
+            abi.encodeWithSelector(JBSucker.JBSucker_NotPeer.selector, bytes32(uint256(uint160(wrongSender))))
+        );
         sucker.fromRemote(root);
     }
 
@@ -221,7 +236,9 @@ contract SuckerAttacks is Test {
 
         // Other sucker calling fromRemote should be rejected
         vm.prank(address(otherSucker));
-        vm.expectRevert(abi.encodeWithSelector(JBSucker.JBSucker_NotPeer.selector, bytes32(uint256(uint160(address(otherSucker))))));
+        vm.expectRevert(
+            abi.encodeWithSelector(JBSucker.JBSucker_NotPeer.selector, bytes32(uint256(uint160(address(otherSucker)))))
+        );
         sucker.fromRemote(root);
     }
 
@@ -313,7 +330,12 @@ contract SuckerAttacks is Test {
         bytes32[32] memory proof;
         JBClaim memory claimData = JBClaim({
             token: token,
-            leaf: JBLeaf({index: 0, beneficiary: bytes32(uint256(uint160(address(120)))), projectTokenCount: 5 ether, terminalTokenAmount: 5 ether}),
+            leaf: JBLeaf({
+                index: 0,
+                beneficiary: bytes32(uint256(uint160(address(120)))),
+                projectTokenCount: 5 ether,
+                terminalTokenAmount: 5 ether
+            }),
             proof: proof
         });
 
@@ -467,9 +489,7 @@ contract SuckerAttacks is Test {
 
         // Insert several items and verify root changes each time
         for (uint256 i = 0; i < 10; i++) {
-            sucker.test_insertIntoTree(
-                (i + 1) * 1 ether, token, (i + 1) * 0.5 ether, bytes32(uint256(1000 + i))
-            );
+            sucker.test_insertIntoTree((i + 1) * 1 ether, token, (i + 1) * 0.5 ether, bytes32(uint256(1000 + i)));
 
             bytes32 newRoot = sucker.test_getOutboxRoot(token);
             assertTrue(newRoot != prevRoot, "Root should change after each insertion");

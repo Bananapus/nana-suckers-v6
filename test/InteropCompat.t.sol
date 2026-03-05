@@ -28,9 +28,18 @@ contract InteropTestSucker is JBSucker {
         IJBTokens tokens,
         JBAddToBalanceMode addToBalanceMode,
         address forwarder
-    ) JBSucker(directory, permissions, tokens, addToBalanceMode, forwarder) {}
+    )
+        JBSucker(directory, permissions, tokens, addToBalanceMode, forwarder)
+    {}
 
-    function _sendRootOverAMB(uint256, uint256, address, uint256, JBRemoteToken memory, JBMessageRoot memory)
+    function _sendRootOverAMB(
+        uint256,
+        uint256,
+        address,
+        uint256,
+        JBRemoteToken memory,
+        JBMessageRoot memory
+    )
         internal
         override
     {}
@@ -45,7 +54,11 @@ contract InteropTestSucker is JBSucker {
 
     // --- Exposed internals ---
 
-    function exposed_buildTreeHash(uint256 projectTokenCount, uint256 terminalTokenAmount, bytes32 beneficiary)
+    function exposed_buildTreeHash(
+        uint256 projectTokenCount,
+        uint256 terminalTokenAmount,
+        bytes32 beneficiary
+    )
         external
         pure
         returns (bytes32)
@@ -66,7 +79,9 @@ contract InteropTestSucker is JBSucker {
         address token,
         uint256 terminalTokenAmount,
         bytes32 beneficiary
-    ) external {
+    )
+        external
+    {
         _insertIntoTree(projectTokenCount, token, terminalTokenAmount, beneficiary);
     }
 
@@ -97,7 +112,9 @@ contract InteropTestSucker is JBSucker {
         bytes32 beneficiary,
         uint256 index,
         bytes32[32] calldata leaves
-    ) external {
+    )
+        external
+    {
         _validateBranchRoot(expectedRoot, projectTokenCount, terminalTokenAmount, beneficiary, index, leaves);
     }
 }
@@ -141,7 +158,11 @@ contract InteropCompat is Test {
     ///      [64..96] = beneficiary as bytes32
     ///      Then keccak256(buffer).
     ///      EVM's abi.encode(uint256, uint256, bytes32) produces the exact same layout.
-    function _svmBuildTreeHash(uint256 projectTokenCount, uint256 terminalTokenAmount, bytes32 beneficiary)
+    function _svmBuildTreeHash(
+        uint256 projectTokenCount,
+        uint256 terminalTokenAmount,
+        bytes32 beneficiary
+    )
         internal
         pure
         returns (bytes32)
@@ -498,8 +519,7 @@ contract InteropCompat is Test {
 
     function testFuzz_uint128_validHashMatch(uint128 projectTokens, uint128 terminalTokens) public view {
         bytes32 beneficiary = bytes32(uint256(uint160(address(0xBEEF))));
-        bytes32 evmHash =
-            sucker.exposed_buildTreeHash(uint256(projectTokens), uint256(terminalTokens), beneficiary);
+        bytes32 evmHash = sucker.exposed_buildTreeHash(uint256(projectTokens), uint256(terminalTokens), beneficiary);
         bytes32 svmHash = _svmBuildTreeHash(uint256(projectTokens), uint256(terminalTokens), beneficiary);
         assertEq(evmHash, svmHash, "Fuzz u128 hash mismatch");
     }
@@ -553,27 +573,19 @@ contract InteropCompat is Test {
         // Spot-check several Z_HASHES against the SVM constants (from lib.rs).
         // Z_1
         assertEq(
-            MerkleLib.Z_1,
-            hex"ad3228b676f7d3cd4284a5443f17f1962b36e491b30a40b2405849e597ba5fb5",
-            "Z_1 SVM mismatch"
+            MerkleLib.Z_1, hex"ad3228b676f7d3cd4284a5443f17f1962b36e491b30a40b2405849e597ba5fb5", "Z_1 SVM mismatch"
         );
         // Z_8
         assertEq(
-            MerkleLib.Z_8,
-            hex"9867cc5f7f196b93bae1e27e6320742445d290f2263827498b54fec539f756af",
-            "Z_8 SVM mismatch"
+            MerkleLib.Z_8, hex"9867cc5f7f196b93bae1e27e6320742445d290f2263827498b54fec539f756af", "Z_8 SVM mismatch"
         );
         // Z_16
         assertEq(
-            MerkleLib.Z_16,
-            hex"2733e50f526ec2fa19a22b31e8ed50f23cd1fdf94c9154ed3a7609a2f1ff981f",
-            "Z_16 SVM mismatch"
+            MerkleLib.Z_16, hex"2733e50f526ec2fa19a22b31e8ed50f23cd1fdf94c9154ed3a7609a2f1ff981f", "Z_16 SVM mismatch"
         );
         // Z_32
         assertEq(
-            MerkleLib.Z_32,
-            hex"27ae5ba08d7291c96c8cbddcc148bf48a6d68c7974b94356f53754ef6171d757",
-            "Z_32 SVM mismatch"
+            MerkleLib.Z_32, hex"27ae5ba08d7291c96c8cbddcc148bf48a6d68c7974b94356f53754ef6171d757", "Z_32 SVM mismatch"
         );
     }
 

@@ -172,12 +172,10 @@ contract JBArbitrumSucker is JBSucker, IJBArbitrumSucker {
 
             // Convert bytes32 types to address at the Arbitrum bridge API boundary.
             // slither-disable-next-line calls-loop,unused-return
-            IArbL2GatewayRouter(address(GATEWAYROUTER)).outboundTransfer({
-                l1Token: _toAddress(remoteToken.addr),
-                to: _toAddress(peer()),
-                amount: amount,
-                data: bytes("")
-            });
+            IArbL2GatewayRouter(address(GATEWAYROUTER))
+                .outboundTransfer({
+                    l1Token: _toAddress(remoteToken.addr), to: _toAddress(peer()), amount: amount, data: bytes("")
+                });
         } else {
             // Otherwise, the token is the native token, and the amount will be sent as `msg.value`.
             nativeValue = amount;

@@ -33,7 +33,9 @@ contract CCIPSuckerHarness is JBCCIPSucker {
         IJBPermissions permissions,
         JBAddToBalanceMode addToBalanceMode,
         address trusted_forwarder
-    ) JBCCIPSucker(deployer, directory, tokens, permissions, addToBalanceMode, trusted_forwarder) {}
+    )
+        JBCCIPSucker(deployer, directory, tokens, permissions, addToBalanceMode, trusted_forwarder)
+    {}
 
     /// @notice Directly insert a leaf into the outbox tree for testing.
     function test_insertIntoTree(
@@ -41,7 +43,9 @@ contract CCIPSuckerHarness is JBCCIPSucker {
         address token,
         uint256 terminalTokenAmount,
         bytes32 beneficiary
-    ) external {
+    )
+        external
+    {
         _insertIntoTree(projectTokenCount, token, terminalTokenAmount, beneficiary);
     }
 
@@ -92,7 +96,9 @@ contract CCIPRefundTest is Test {
     function setUp() public {
         // Mock the deployer interface for the constructor.
         address mockDeployer = address(0x5001);
-        vm.mockCall(mockDeployer, abi.encodeCall(IJBCCIPSuckerDeployer.ccipRemoteChainId, ()), abi.encode(REMOTE_CHAIN_ID));
+        vm.mockCall(
+            mockDeployer, abi.encodeCall(IJBCCIPSuckerDeployer.ccipRemoteChainId, ()), abi.encode(REMOTE_CHAIN_ID)
+        );
         vm.mockCall(
             mockDeployer,
             abi.encodeCall(IJBCCIPSuckerDeployer.ccipRemoteChainSelector, ()),
@@ -125,17 +131,11 @@ contract CCIPRefundTest is Test {
     /// @notice Set up CCIP router mocks for a successful bridge operation.
     function _mockCCIPSuccess(uint256 fee) internal {
         // Mock getFee to return the specified fee.
-        vm.mockCall(
-            MOCK_ROUTER,
-            abi.encodeWithSelector(IRouterClient.getFee.selector),
-            abi.encode(fee)
-        );
+        vm.mockCall(MOCK_ROUTER, abi.encodeWithSelector(IRouterClient.getFee.selector), abi.encode(fee));
 
         // Mock ccipSend to succeed (return a messageId).
         vm.mockCall(
-            MOCK_ROUTER,
-            abi.encodeWithSelector(IRouterClient.ccipSend.selector),
-            abi.encode(bytes32(uint256(0xabcdef)))
+            MOCK_ROUTER, abi.encodeWithSelector(IRouterClient.ccipSend.selector), abi.encode(bytes32(uint256(0xabcdef)))
         );
     }
 
@@ -208,11 +208,7 @@ contract CCIPRefundTest is Test {
 
         // Caller should have received the refund (0.05 ether back from the 0.1 sent).
         uint256 expectedRefund = transportPayment - bridgeFee;
-        assertEq(
-            address(caller).balance,
-            callerBalanceBefore + expectedRefund,
-            "Caller should receive refund"
-        );
+        assertEq(address(caller).balance, callerBalanceBefore + expectedRefund, "Caller should receive refund");
     }
 
     /// @notice When transportPayment == fees exactly, no refund attempt is made (zero refund skip).

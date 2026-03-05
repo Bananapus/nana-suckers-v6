@@ -56,7 +56,8 @@ contract SuckerEmergencyTest is Test {
         vm.mockCall(
             CONTROLLER,
             abi.encodeCall(
-                IJBController.mintTokensOf, (projectId, claim.leaf.projectTokenCount, address(uint160(uint256(claim.leaf.beneficiary))), "", false)
+                IJBController.mintTokensOf,
+                (projectId, claim.leaf.projectTokenCount, address(uint160(uint256(claim.leaf.beneficiary))), "", false)
             ),
             abi.encode(claim.leaf.projectTokenCount)
         );
@@ -77,13 +78,7 @@ contract SuckerEmergencyTest is Test {
     }
 
     /// @notice Ensures that if a sucker is send disabled and a claim is valid that a user can withdraw their deposit.
-    function testEmergencyExitWhenSendingDisabled(
-        bool sendDisabled,
-        bool isValidClaim,
-        JBClaim memory claim
-    )
-        external
-    {
+    function testEmergencyExitWhenSendingDisabled(bool sendDisabled, bool isValidClaim, JBClaim memory claim) external {
         uint256 projectId = 1;
         TestSucker sucker = _createTestSucker(projectId, "");
 
@@ -109,7 +104,8 @@ contract SuckerEmergencyTest is Test {
         vm.mockCall(
             CONTROLLER,
             abi.encodeCall(
-                IJBController.mintTokensOf, (projectId, claim.leaf.projectTokenCount, address(uint160(uint256(claim.leaf.beneficiary))), "", false)
+                IJBController.mintTokensOf,
+                (projectId, claim.leaf.projectTokenCount, address(uint160(uint256(claim.leaf.beneficiary))), "", false)
             ),
             abi.encode(claim.leaf.projectTokenCount)
         );
@@ -161,7 +157,8 @@ contract SuckerEmergencyTest is Test {
         vm.mockCall(
             CONTROLLER,
             abi.encodeCall(
-                IJBController.mintTokensOf, (projectId, claim.leaf.projectTokenCount, address(uint160(uint256(claim.leaf.beneficiary))), "", false)
+                IJBController.mintTokensOf,
+                (projectId, claim.leaf.projectTokenCount, address(uint160(uint256(claim.leaf.beneficiary))), "", false)
             ),
             abi.encode(claim.leaf.projectTokenCount)
         );
@@ -189,7 +186,8 @@ contract SuckerEmergencyTest is Test {
         uint40 maxSafe = type(uint40).max - 3 * messagingDelay;
         currentTime = uint40(bound(currentTime, 0, maxSafe));
         deprecateAt = uint40(bound(deprecateAt, currentTime + messagingDelay + 1, maxSafe + messagingDelay));
-        changeDeprecationTo = uint40(bound(changeDeprecationTo, deprecateAt + messagingDelay + 1, maxSafe + 2 * messagingDelay));
+        changeDeprecationTo =
+            uint40(bound(changeDeprecationTo, deprecateAt + messagingDelay + 1, maxSafe + 2 * messagingDelay));
 
         // The time that we have to change the deprecation.
         uint40 bufferTime;

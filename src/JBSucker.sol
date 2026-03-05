@@ -310,9 +310,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
 
         // If the token being mapped is the native token, the `remoteToken` must also be the native token.
         // The native token can also be mapped to the 0 address, which is used to disable native token bridging.
-        if (
-            isNative && map.remoteToken != _toBytes32(JBConstants.NATIVE_TOKEN) && map.remoteToken != bytes32(0)
-        ) {
+        if (isNative && map.remoteToken != _toBytes32(JBConstants.NATIVE_TOKEN) && map.remoteToken != bytes32(0)) {
             revert JBSucker_InvalidNativeRemoteAddress(map.remoteToken);
         }
 
@@ -456,19 +454,12 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
             inbox.nonce = root.remoteRoot.nonce;
             inbox.root = root.remoteRoot.root;
             emit NewInboxTreeRoot({
-                token: localToken,
-                nonce: root.remoteRoot.nonce,
-                root: root.remoteRoot.root,
-                caller: _msgSender()
+                token: localToken, nonce: root.remoteRoot.nonce, root: root.remoteRoot.root, caller: _msgSender()
             });
         } else {
             // L-10: Emit an event when a root is rejected due to a stale (non-increasing) nonce.
             // This aids off-chain monitoring in detecting out-of-order or duplicate deliveries.
-            emit StaleRootRejected({
-                token: localToken,
-                receivedNonce: root.remoteRoot.nonce,
-                currentNonce: inbox.nonce
-            });
+            emit StaleRootRejected({token: localToken, receivedNonce: root.remoteRoot.nonce, currentNonce: inbox.nonce});
         }
     }
 
@@ -575,10 +566,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         // Cash out the tokens.
         // slither-disable-next-line reentrancy-events,reentrancy-benign
         uint256 terminalTokenAmount = _pullBackingAssets({
-            projectToken: projectToken,
-            count: projectTokenCount,
-            token: token,
-            minTokensReclaimed: minTokensReclaimed
+            projectToken: projectToken, count: projectTokenCount, token: token, minTokensReclaimed: minTokensReclaimed
         });
 
         // Insert the item into the outbox tree for the terminal `token`.
@@ -720,12 +708,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
 
             // slither-disable-next-line calls-loop
             terminal.addToBalanceOf({
-                projectId: _projectId,
-                token: token,
-                amount: amount,
-                shouldReturnHeldFees: false,
-                memo: "",
-                metadata: ""
+                projectId: _projectId, token: token, amount: amount, shouldReturnHeldFees: false, memo: "", metadata: ""
             });
 
             // Sanity check: make sure we transfer the full amount.
@@ -735,12 +718,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
             // If the token is the native token, use `msg.value`.
             // slither-disable-next-line arbitrary-send-eth,calls-loop
             terminal.addToBalanceOf{value: amount}({
-                projectId: _projectId,
-                token: token,
-                amount: amount,
-                shouldReturnHeldFees: false,
-                memo: "",
-                metadata: ""
+                projectId: _projectId, token: token, amount: amount, shouldReturnHeldFees: false, memo: "", metadata: ""
             });
         }
     }
@@ -770,13 +748,14 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
 
         // Mint the project tokens for the beneficiary.
         // slither-disable-next-line calls-loop,unused-return
-        IJBController(address(DIRECTORY.controllerOf(_projectId))).mintTokensOf({
-            projectId: _projectId,
-            tokenCount: projectTokenAmount,
-            beneficiary: beneficiaryAddress,
-            memo: "",
-            useReservedPercent: false
-        });
+        IJBController(address(DIRECTORY.controllerOf(_projectId)))
+            .mintTokensOf({
+                projectId: _projectId,
+                tokenCount: projectTokenAmount,
+                beneficiary: beneficiaryAddress,
+                memo: "",
+                useReservedPercent: false
+            });
     }
 
     /// @notice Inserts a new leaf into the outbox merkle tree for the specified `token`.
@@ -798,9 +777,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         if (projectTokenCount > type(uint128).max) revert JBSucker_AmountExceedsUint128(projectTokenCount);
         // Build a hash based on the token amounts and the beneficiary.
         bytes32 hashed = _buildTreeHash({
-            projectTokenCount: projectTokenCount,
-            terminalTokenAmount: terminalTokenAmount,
-            beneficiary: beneficiary
+            projectTokenCount: projectTokenCount, terminalTokenAmount: terminalTokenAmount, beneficiary: beneficiary
         });
 
         // Get the outbox in storage.
@@ -867,8 +844,8 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         // It should not be possible to cause any issues even without this check
         // a bridge *should* never accept such a request. This is mostly a sanity check.
         if (
-            currentMapping.addr != bytes32(0) && currentMapping.addr != map.remoteToken
-                && map.remoteToken != bytes32(0) && _outboxOf[token].tree.count != 0
+            currentMapping.addr != bytes32(0) && currentMapping.addr != map.remoteToken && map.remoteToken != bytes32(0)
+                && _outboxOf[token].tree.count != 0
         ) {
             revert JBSucker_TokenAlreadyMapped(token, currentMapping.addr);
         }
@@ -1150,9 +1127,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         // Calculate the root based on the leaf, the branch, and the index.
         bytes32 root = MerkleLib.branchRoot({
             _item: _buildTreeHash({
-                projectTokenCount: projectTokenCount,
-                terminalTokenAmount: terminalTokenAmount,
-                beneficiary: beneficiary
+                projectTokenCount: projectTokenCount, terminalTokenAmount: terminalTokenAmount, beneficiary: beneficiary
             }),
             _branch: leaves,
             _index: index

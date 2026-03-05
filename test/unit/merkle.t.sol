@@ -25,7 +25,8 @@ contract MerkleUnitTest is JBSucker, Test {
             JBAddToBalanceMode.MANUAL,
             address(0)
         )
-    // self.initialize(.NATIVE_TOKEN, JBConstants.NATIVE_TOKEN, JBConstants.NATIVE_TOKEN)
+        // self.initialize(.NATIVE_TOKEN, JBConstants.NATIVE_TOKEN, JBConstants.NATIVE_TOKEN)
+
     {
         // initialize({peer: address(this), projectId: 1});
     }
@@ -98,13 +99,19 @@ contract MerkleUnitTest is JBSucker, Test {
         );
 
         // Attempt to validate proof.
-        JBSucker(this).claim(
-            JBClaim({
-                token: JBConstants.NATIVE_TOKEN,
-                leaf: JBLeaf({index: 2, beneficiary: bytes32(uint256(uint160(address(120)))), projectTokenCount: 5 ether, terminalTokenAmount: 5 ether}),
-                proof: __proof
-            })
-        );
+        JBSucker(this)
+            .claim(
+                JBClaim({
+                    token: JBConstants.NATIVE_TOKEN,
+                    leaf: JBLeaf({
+                        index: 2,
+                        beneficiary: bytes32(uint256(uint160(address(120)))),
+                        projectTokenCount: 5 ether,
+                        terminalTokenAmount: 5 ether
+                    }),
+                    proof: __proof
+                })
+            );
     }
 
     function test_validate_only_once() public {
@@ -126,23 +133,35 @@ contract MerkleUnitTest is JBSucker, Test {
         );
 
         // Attempt to validate proof.
-        JBSucker(this).claim(
-            JBClaim({
-                token: JBConstants.NATIVE_TOKEN,
-                leaf: JBLeaf({index: 2, beneficiary: bytes32(uint256(uint160(address(120)))), projectTokenCount: 5 ether, terminalTokenAmount: 5 ether}),
-                proof: __proof
-            })
-        );
+        JBSucker(this)
+            .claim(
+                JBClaim({
+                    token: JBConstants.NATIVE_TOKEN,
+                    leaf: JBLeaf({
+                        index: 2,
+                        beneficiary: bytes32(uint256(uint160(address(120)))),
+                        projectTokenCount: 5 ether,
+                        terminalTokenAmount: 5 ether
+                    }),
+                    proof: __proof
+                })
+            );
 
         // Attempt to do it again.
         vm.expectRevert();
-        JBSucker(this).claim(
-            JBClaim({
-                token: JBConstants.NATIVE_TOKEN,
-                leaf: JBLeaf({index: 2, beneficiary: bytes32(uint256(uint160(address(120)))), projectTokenCount: 5 ether, terminalTokenAmount: 5 ether}),
-                proof: __proof
-            })
-        );
+        JBSucker(this)
+            .claim(
+                JBClaim({
+                    token: JBConstants.NATIVE_TOKEN,
+                    leaf: JBLeaf({
+                        index: 2,
+                        beneficiary: bytes32(uint256(uint160(address(120)))),
+                        projectTokenCount: 5 ether,
+                        terminalTokenAmount: 5 ether
+                    }),
+                    proof: __proof
+                })
+            );
     }
 
     function _isRemotePeer(address) internal view virtual override returns (bool valid) {
