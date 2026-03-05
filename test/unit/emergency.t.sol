@@ -5,7 +5,7 @@ import "forge-std/Test.sol";
 
 import "../../src/JBSucker.sol";
 import {LibClone} from "solady/src/utils/LibClone.sol";
-import /* {*} from */ "@bananapus/core-v5/test/helpers/TestBaseWorkflow.sol";
+import /* {*} from */ "@bananapus/core-v6/test/helpers/TestBaseWorkflow.sol";
 
 contract SuckerEmergencyTest is Test {
     using stdStorage for StdStorage;

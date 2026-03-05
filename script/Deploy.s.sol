@@ -5,7 +5,7 @@ import "../src/deployers/JBOptimismSuckerDeployer.sol";
 import "../src/deployers/JBBaseSuckerDeployer.sol";
 import "../src/deployers/JBArbitrumSuckerDeployer.sol";
 import "../src/deployers/JBCCIPSuckerDeployer.sol";
-import "@bananapus/core-v5/script/helpers/CoreDeploymentLib.sol";
+import "@bananapus/core-v6/script/helpers/CoreDeploymentLib.sol";
 
 import {Sphinx} from "@sphinx-labs/contracts/SphinxPlugin.sol";
 import {Script} from "forge-std/Script.sol";
@@ -45,7 +45,7 @@ contract DeployScript is Script, Sphinx {
         // Get the deployment addresses for the nana CORE for this chain.
         // We want to do this outside of the `sphinx` modifier.
         core = CoreDeploymentLib.getDeployment(
-            vm.envOr("NANA_CORE_DEPLOYMENT_PATH", string("node_modules/@bananapus/core-v5/deployments/"))
+            vm.envOr("NANA_CORE_DEPLOYMENT_PATH", string("node_modules/@bananapus/core-v6/deployments/"))
         );
 
         // We use the same trusted forwarder as the core deployment.

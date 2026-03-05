@@ -2,10 +2,10 @@
 pragma solidity ^0.8.13;
 
 import "forge-std/Test.sol";
-import /* {*} from */ "@bananapus/core-v5/test/helpers/TestBaseWorkflow.sol";
+import /* {*} from */ "@bananapus/core-v6/test/helpers/TestBaseWorkflow.sol";
 import "@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol";
 
-import {IJBController} from "@bananapus/core-v5/src/interfaces/IJBController.sol";
+import {IJBController} from "@bananapus/core-v6/src/interfaces/IJBController.sol";
 import {IJBSucker} from "../../src/interfaces/IJBSucker.sol";
 import {IJBSuckerDeployer} from "../../src/interfaces/IJBSuckerDeployer.sol";
 

@@ -3,11 +3,11 @@ pragma solidity ^0.8.13;
 
 import "forge-std/Test.sol";
 
-import {IJBController} from "@bananapus/core-v5/src/interfaces/IJBController.sol";
-import {IJBDirectory} from "@bananapus/core-v5/src/interfaces/IJBDirectory.sol";
-import {IJBPermissions} from "@bananapus/core-v5/src/interfaces/IJBPermissions.sol";
-import {IJBTokens} from "@bananapus/core-v5/src/interfaces/IJBTokens.sol";
-import {JBConstants} from "@bananapus/core-v5/src/libraries/JBConstants.sol";
+import {IJBController} from "@bananapus/core-v6/src/interfaces/IJBController.sol";
+import {IJBDirectory} from "@bananapus/core-v6/src/interfaces/IJBDirectory.sol";
+import {IJBPermissions} from "@bananapus/core-v6/src/interfaces/IJBPermissions.sol";
+import {IJBTokens} from "@bananapus/core-v6/src/interfaces/IJBTokens.sol";
+import {JBConstants} from "@bananapus/core-v6/src/libraries/JBConstants.sol";
 import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import {LibClone} from "solady/src/utils/LibClone.sol";
 
