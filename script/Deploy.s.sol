@@ -32,13 +32,19 @@ contract DeployScript is Script, Sphinx {
     bytes32 ARB_OP_SALT = "_SUCKER_ARB_OP_";
     bytes32 OP_BASE_SALT = "_SUCKER_OP_BASE_";
 
+    bytes32 TEMPO_SALT = "_SUCKER_ETH_TEMPO_";
+    bytes32 TEMPO_OP_SALT = "_SUCKER_OP_TEMPO_";
+    bytes32 TEMPO_BASE_SALT = "_SUCKER_BASE_TEMPO";
+    bytes32 TEMPO_ARB_SALT = "_SUCKER_ARB_TEMPO_";
+
     bytes32 REGISTRY_SALT = "REGISTRY";
 
     function configureSphinx() public override {
         // TODO: Update to contain JB Emergency Developers
         sphinxConfig.projectName = "nana-suckers-v5";
         sphinxConfig.mainnets = ["ethereum", "optimism", "base", "arbitrum"];
-        sphinxConfig.testnets = ["ethereum_sepolia", "optimism_sepolia", "base_sepolia", "arbitrum_sepolia"];
+        sphinxConfig.testnets =
+            ["ethereum_sepolia", "optimism_sepolia", "base_sepolia", "arbitrum_sepolia", "tempo_testnet"];
     }
 
     function run() public {
@@ -371,6 +377,11 @@ contract DeployScript is Script, Sphinx {
             PRE_APPROVED_DEPLOYERS.push(
                 address(_deployCCIPSuckerFor(ARB_SALT, block.chainid == 1 ? CCIPHelper.ARB_ID : CCIPHelper.ARB_SEP_ID))
             );
+
+            // Tempo (testnet only for now)
+            if (block.chainid == 11_155_111) {
+                PRE_APPROVED_DEPLOYERS.push(address(_deployCCIPSuckerFor(TEMPO_SALT, CCIPHelper.TEMPO_TEST_ID)));
+            }
         }
 
         // Check if we should do the L2 portion.
@@ -399,6 +410,11 @@ contract DeployScript is Script, Sphinx {
                 )
             );
 
+            // ARB -> TEMPO (testnet only).
+            if (block.chainid == 421_614) {
+                PRE_APPROVED_DEPLOYERS.push(address(_deployCCIPSuckerFor(TEMPO_ARB_SALT, CCIPHelper.TEMPO_TEST_ID)));
+            }
+
             // OP & OP Sepolia.
         } else if (block.chainid == 10 || block.chainid == 11_155_420) {
             // L1.
@@ -421,6 +437,11 @@ contract DeployScript is Script, Sphinx {
                     )
                 )
             );
+
+            // OP -> TEMPO (testnet only).
+            if (block.chainid == 11_155_420) {
+                PRE_APPROVED_DEPLOYERS.push(address(_deployCCIPSuckerFor(TEMPO_OP_SALT, CCIPHelper.TEMPO_TEST_ID)));
+            }
 
             // BASE & BASE Sepolia.
         } else if (block.chainid == 8453 || block.chainid == 84_532) {
@@ -446,6 +467,27 @@ contract DeployScript is Script, Sphinx {
                     )
                 )
             );
+
+            // BASE -> TEMPO (testnet only).
+            if (block.chainid == 84_532) {
+                PRE_APPROVED_DEPLOYERS.push(
+                    address(_deployCCIPSuckerFor(TEMPO_BASE_SALT, CCIPHelper.TEMPO_TEST_ID))
+                );
+            }
+
+            // Tempo testnet.
+        } else if (block.chainid == 42_429) {
+            // TEMPO -> ETH.
+            PRE_APPROVED_DEPLOYERS.push(address(_deployCCIPSuckerFor(TEMPO_SALT, CCIPHelper.ETH_SEP_ID)));
+
+            // TEMPO -> OP.
+            PRE_APPROVED_DEPLOYERS.push(address(_deployCCIPSuckerFor(TEMPO_OP_SALT, CCIPHelper.OP_SEP_ID)));
+
+            // TEMPO -> BASE.
+            PRE_APPROVED_DEPLOYERS.push(address(_deployCCIPSuckerFor(TEMPO_BASE_SALT, CCIPHelper.BASE_SEP_ID)));
+
+            // TEMPO -> ARB.
+            PRE_APPROVED_DEPLOYERS.push(address(_deployCCIPSuckerFor(TEMPO_ARB_SALT, CCIPHelper.ARB_SEP_ID)));
         }
     }
 
