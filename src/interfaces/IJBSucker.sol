@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import {IJBController} from "@bananapus/core-v5/src/interfaces/IJBController.sol";
-import {IJBDirectory} from "@bananapus/core-v5/src/interfaces/IJBDirectory.sol";
-import {IJBTokens} from "@bananapus/core-v5/src/interfaces/IJBTokens.sol";
+import {IJBController} from "@bananapus/core-v6/src/interfaces/IJBController.sol";
+import {IJBDirectory} from "@bananapus/core-v6/src/interfaces/IJBDirectory.sol";
+import {IJBTokens} from "@bananapus/core-v6/src/interfaces/IJBTokens.sol";
 import {IERC165} from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
 
 import {JBAddToBalanceMode} from "../enums/JBAddToBalanceMode.sol";
