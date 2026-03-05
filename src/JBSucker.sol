@@ -187,7 +187,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     /// @param token The local terminal token to get the amount to add to balance for.
     function amountToAddToBalanceOf(address token) public view override returns (uint256) {
         // Get the amount that is in this sucker to be bridged.
-        return _balanceOf(token, address(this)) - _outboxOf[token].balance;
+        return _balanceOf({token: token, addr: address(this)}) - _outboxOf[token].balance;
     }
 
     /// @notice The inbox merkle tree root for a given token.
@@ -928,7 +928,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         }
 
         // Cash out the tokens.
-        uint256 balanceBefore = _balanceOf(token, address(this));
+        uint256 balanceBefore = _balanceOf({token: token, addr: address(this)});
         reclaimedAmount = terminal.cashOutTokensOf({
             holder: address(this),
             projectId: _projectId,
@@ -991,7 +991,14 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         });
 
         // Execute the chain/sucker specific logic for transferring the assets and communicating the root.
-        _sendRootOverAMB(transportPayment, index, token, amount, remoteToken, message);
+        _sendRootOverAMB({
+            transportPayment: transportPayment,
+            index: index,
+            token: token,
+            amount: amount,
+            remoteToken: remoteToken,
+            message: message
+        });
     }
 
     /// @notice Performs the logic to send a message to the peer over the AMB.
@@ -1050,9 +1057,14 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
 
         // Calculate the root based on the leaf, the branch, and the index.
         // Compare to the current root, Revert if they do not match.
-        _validateBranchRoot(
-            _inboxOf[terminalToken].root, projectTokenCount, terminalTokenAmount, beneficiary, index, leaves
-        );
+        _validateBranchRoot({
+            expectedRoot: _inboxOf[terminalToken].root,
+            projectTokenCount: projectTokenCount,
+            terminalTokenAmount: terminalTokenAmount,
+            beneficiary: beneficiary,
+            index: index,
+            leaves: leaves
+        });
     }
 
     /// @notice Validates a leaf as being in the outbox merkle tree and not being send over the amb, and registers the
@@ -1129,9 +1141,14 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
 
         // Calculate the root based on the leaf, the branch, and the index.
         // Compare to the current root, Revert if they do not match.
-        _validateBranchRoot(
-            _outboxOf[terminalToken].tree.root(), projectTokenCount, terminalTokenAmount, beneficiary, index, leaves
-        );
+        _validateBranchRoot({
+            expectedRoot: _outboxOf[terminalToken].tree.root(),
+            projectTokenCount: projectTokenCount,
+            terminalTokenAmount: terminalTokenAmount,
+            beneficiary: beneficiary,
+            index: index,
+            leaves: leaves
+        });
     }
 
     /// @notice Validates a branch root against the expected root.

@@ -143,9 +143,15 @@ contract JBArbitrumSucker is JBSucker, IJBArbitrumSucker {
         // Depending on which layer we are on, send the call to the other layer.
         // slither-disable-start out-of-order-retryable
         if (LAYER == JBLayer.L1) {
-            _toL2(token, transportPayment, amount, data, remoteToken);
+            _toL2({
+                token: token,
+                transportPayment: transportPayment,
+                amount: amount,
+                data: data,
+                remoteToken: remoteToken
+            });
         } else {
-            _toL1(token, amount, data, remoteToken);
+            _toL1({token: token, amount: amount, data: data, remoteToken: remoteToken});
         }
         // slither-disable-end out-of-order-retryable
     }
@@ -187,7 +193,7 @@ contract JBArbitrumSucker is JBSucker, IJBArbitrumSucker {
         // Address `100` is the ArbSys precompile address.
         // Convert bytes32 peer to address at the Arbitrum API boundary.
         // slither-disable-next-line calls-loop,unused-return
-        ArbSys(address(100)).sendTxToL1{value: nativeValue}(_toAddress(peer()), data);
+        ArbSys(address(100)).sendTxToL1{value: nativeValue}({destination: _toAddress(peer()), data: data});
     }
 
     /// @notice Bridge the `token` and data to the remote L2 chain.
@@ -274,7 +280,13 @@ contract JBArbitrumSucker is JBSucker, IJBArbitrumSucker {
 
         // Convert bytes32 peer to address at the Arbitrum inbox API boundary.
         // slither-disable-next-line calls-loop,unused-return
-        _createRetryableTicket(callTransportCost, nativeValue, maxSubmissionCost, maxFeePerGas, data);
+        _createRetryableTicket({
+            callTransportCost: callTransportCost,
+            nativeValue: nativeValue,
+            maxSubmissionCost: maxSubmissionCost,
+            maxFeePerGas: maxFeePerGas,
+            data: data
+        });
         // slither-disable-end out-of-order-retryable
     }
 
