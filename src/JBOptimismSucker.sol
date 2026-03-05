@@ -134,8 +134,10 @@ contract JBOptimismSucker is JBSucker, IJBOptimismSucker {
         // Send the message to the peer with the reclaimed ETH.
         // Convert bytes32 peer to address at the OP Messenger API boundary.
         // slither-disable-next-line arbitrary-send-eth,reentrancy-events,calls-loop
-        OPMESSENGER.sendMessage{value: nativeValue}(
-            _toAddress(peer()), abi.encodeCall(JBSucker.fromRemote, (message)), MESSENGER_BASE_GAS_LIMIT
-        );
+        OPMESSENGER.sendMessage{value: nativeValue}({
+            target: _toAddress(peer()),
+            message: abi.encodeCall(JBSucker.fromRemote, (message)),
+            gasLimit: MESSENGER_BASE_GAS_LIMIT
+        });
     }
 }
