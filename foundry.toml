@@ -1,31 +1,22 @@
 [profile.default]
 solc = '0.8.23'
 evm_version = 'paris'
-src = "src"
-out = "out"
-libs = ["lib", "node_modules"]
-extra_output = ['storageLayout']
-optimizer_runs = 3000
-fs_permissions = [{ access = "read-write", path = "../"}]
-
-[rpc_endpoints]
-ethereum ="${RPC_ETHEREUM_MAINNET}"
-optimism = "${RPC_OPTIMISM_MAINNET}"
-polygon = "${RPC_POLYGON_MUMBAI}"
-arbitrum = "${RPC_ARBITRUM_MAINNET}"
-base = "${RPC_BASE_MAINNET}"
-arbitrum_sepolia = "${RPC_ARBITRUM_SEPOLIA}"
-ethereum_sepolia ="${RPC_ETHEREUM_SEPOLIA}"
-optimism_sepolia = "${RPC_OPTIMISM_SEPOLIA}"
-polygon_mumbai = "${RPC_POLYGON_MUMBAI}"
-base_sepolia = "${RPC_BASE_SEPOLIA}"
+optimizer_runs = 2000
+libs = ["node_modules", "lib"]
+fs_permissions = [{ access = "read-write", path = "./"}]
 
 [profile.ci_sizes]
 optimizer_runs = 200
+
+[fuzz]
+runs = 4096
+
+[invariant]
+runs = 1024
+depth = 100
+fail_on_revert = false
 
 [fmt]
 number_underscore = "thousands"
 multiline_func_header = "all"
 wrap_comments = true
-
-# See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options

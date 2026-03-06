@@ -10,7 +10,7 @@ pragma solidity 0.8.23;
 library MerkleLib {
     // ========== Custom Errors ===========
 
-    error MerkleLib__insert_treeIsFull();
+    error MerkleLib_InsertTreeIsFull();
 
     // ============ Constants =============
 
@@ -82,7 +82,7 @@ library MerkleLib {
     function insert(Tree memory tree, bytes32 node) internal pure returns (Tree memory) {
         // Update tree.count to increase the current count by 1 since we'll be including a new node.
         uint256 size = ++tree.count;
-        if (size > MAX_LEAVES) revert MerkleLib__insert_treeIsFull();
+        if (size > MAX_LEAVES) revert MerkleLib_InsertTreeIsFull();
 
         // Loop starting at 0, ending when we've finished inserting the node (i.e. hashing it) into
         // the active branch. Each loop we cut size in half, hashing the inserted node up the active
@@ -105,7 +105,7 @@ library MerkleLib {
         }
         // As the loop should always end prematurely with the `return` statement, this code should
         // be unreachable. We revert here just to be safe.
-        revert MerkleLib__insert_treeIsFull();
+        revert MerkleLib_InsertTreeIsFull();
     }
 
     // ========= Read Methods =========

@@ -1,10 +1,10 @@
 {
-  "name": "@bananapus/suckers-v5",
-  "version": "0.0.2",
+  "name": "@bananapus/suckers-v6",
+  "version": "0.0.1",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Bananapus/nana-suckers-v5"
+    "url": "git+https://github.com/Bananapus/nana-suckers-v6"
   },
   "engines": {
     "node": ">=20.0.0"
@@ -14,13 +14,13 @@
     "coverage": "forge coverage --match-path \"./src/*.sol\" --report lcov --report summary",
     "deploy:mainnets": "source ./.env && npx sphinx propose ./script/Deploy.s.sol --networks mainnets",
     "deploy:testnets": "source ./.env && npx sphinx propose ./script/Deploy.s.sol --networks testnets",
-    "artifacts": "source ./.env && npx sphinx artifacts --org-id 'ea165b21-7cdc-4d7b-be59-ecdd4c26bee4' --project-name 'nana-suckers-v5'",
+    "artifacts": "source ./.env && npx sphinx artifacts --org-id 'ea165b21-7cdc-4d7b-be59-ecdd4c26bee4' --project-name 'nana-suckers-v6'",
     "analyze": "slither . --config-file slither-ci.config.json"
   },
   "dependencies": {
     "@arbitrum/nitro-contracts": "github:OffchainLabs/nitro-contracts",
-    "@bananapus/core-v5": "^0.0.3",
-    "@bananapus/permission-ids-v5": "^0.0.2",
+    "@bananapus/core-v6": "^0.0.1",
+    "@bananapus/permission-ids-v6": "^0.0.1",
     "@chainlink/contracts-ccip": "^1.5.0",
     "@chainlink/local": "github:smartcontractkit/chainlink-local",
     "@openzeppelin/contracts": "^5.2.0",

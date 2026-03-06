@@ -1,14 +1,14 @@
-// SPDX-License-Identifier: UNLICENSED
-pragma solidity ^0.8.23;
+// SPDX-License-Identifier: MIT
+pragma solidity 0.8.23;
 
-import {JBPermissioned} from "@bananapus/core-v5/src/abstract/JBPermissioned.sol";
-import {IJBDirectory} from "@bananapus/core-v5/src/interfaces/IJBDirectory.sol";
-import {IJBController} from "@bananapus/core-v5/src/interfaces/IJBController.sol";
-import {IJBPermissions} from "@bananapus/core-v5/src/interfaces/IJBPermissions.sol";
-import {IJBProjects} from "@bananapus/core-v5/src/interfaces/IJBProjects.sol";
-import {JBRuleset} from "@bananapus/core-v5/src/structs/JBRuleset.sol";
-import {JBRulesetMetadata} from "@bananapus/core-v5/src/structs/JBRulesetMetadata.sol";
-import {JBPermissionIds} from "@bananapus/permission-ids-v5/src/JBPermissionIds.sol";
+import {JBPermissioned} from "@bananapus/core-v6/src/abstract/JBPermissioned.sol";
+import {IJBDirectory} from "@bananapus/core-v6/src/interfaces/IJBDirectory.sol";
+import {IJBController} from "@bananapus/core-v6/src/interfaces/IJBController.sol";
+import {IJBPermissions} from "@bananapus/core-v6/src/interfaces/IJBPermissions.sol";
+import {IJBProjects} from "@bananapus/core-v6/src/interfaces/IJBProjects.sol";
+import {JBRuleset} from "@bananapus/core-v6/src/structs/JBRuleset.sol";
+import {JBRulesetMetadata} from "@bananapus/core-v6/src/structs/JBRulesetMetadata.sol";
+import {JBPermissionIds} from "@bananapus/permission-ids-v6/src/JBPermissionIds.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {EnumerableMap} from "@openzeppelin/contracts/utils/structs/EnumerableMap.sol";
 import {ERC2771Context} from "@openzeppelin/contracts/metatx/ERC2771Context.sol";
@@ -29,7 +29,6 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
     //*********************************************************************//
 
     error JBSuckerRegistry_InvalidDeployer(IJBSuckerDeployer deployer);
-    error JBSuckerRegistry_RulesetDoesNotAllowAddingSucker(uint256 projectId);
     error JBSuckerRegistry_SuckerDoesNotBelongToProject(uint256 projectId, address sucker);
     error JBSuckerRegistry_SuckerIsNotDeprecated(address sucker, JBSuckerState suckerState);
 
@@ -76,9 +75,9 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
         IJBDirectory directory,
         IJBPermissions permissions,
         address initialOwner,
-        address trusted_forwarder
+        address trustedForwarder
     )
-        ERC2771Context(trusted_forwarder)
+        ERC2771Context(trustedForwarder)
         JBPermissioned(permissions)
         Ownable(initialOwner)
     {
@@ -193,9 +192,7 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
         returns (address[] memory suckers)
     {
         _requirePermissionFrom({
-            account: PROJECTS.ownerOf(projectId),
-            projectId: projectId,
-            permissionId: JBPermissionIds.DEPLOY_SUCKERS
+            account: PROJECTS.ownerOf(projectId), projectId: projectId, permissionId: JBPermissionIds.DEPLOY_SUCKERS
         });
 
         // Create an array to store the suckers as they are deployed.
@@ -228,10 +225,7 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
             // slither-disable-next-line reentrancy-events,calls-loop
             sucker.mapTokens(configuration.mappings);
             emit SuckerDeployedFor({
-                projectId: projectId,
-                sucker: address(sucker),
-                configuration: configuration,
-                caller: _msgSender()
+                projectId: projectId, sucker: address(sucker), configuration: configuration, caller: _msgSender()
             });
         }
     }

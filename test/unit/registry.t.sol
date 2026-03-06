@@ -3,16 +3,16 @@ pragma solidity ^0.8.13;
 
 import "forge-std/Test.sol";
 
-import {IJBController} from "@bananapus/core-v5/src/interfaces/IJBController.sol";
+import {IJBController} from "@bananapus/core-v6/src/interfaces/IJBController.sol";
 import "../../src/JBOptimismSucker.sol";
 import "../../src/deployers/JBOptimismSuckerDeployer.sol";
 
 import {JBLeaf} from "../../src/structs/JBLeaf.sol";
 import {JBClaim} from "../../src/structs/JBClaim.sol";
 
-import {JBProjects} from "@bananapus/core-v5/src/JBProjects.sol";
-import {JBDirectory} from "@bananapus/core-v5/src/JBDirectory.sol";
-import {JBPermissions} from "@bananapus/core-v5/src/JBPermissions.sol";
+import {JBProjects} from "@bananapus/core-v6/src/JBProjects.sol";
+import {JBDirectory} from "@bananapus/core-v6/src/JBDirectory.sol";
+import {JBPermissions} from "@bananapus/core-v6/src/JBPermissions.sol";
 
 import {JBSuckerRegistry} from "./../../src/JBSuckerRegistry.sol";
 

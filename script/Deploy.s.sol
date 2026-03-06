@@ -5,7 +5,7 @@ import "../src/deployers/JBOptimismSuckerDeployer.sol";
 import "../src/deployers/JBBaseSuckerDeployer.sol";
 import "../src/deployers/JBArbitrumSuckerDeployer.sol";
 import "../src/deployers/JBCCIPSuckerDeployer.sol";
-import "@bananapus/core-v5/script/helpers/CoreDeploymentLib.sol";
+import "@bananapus/core-v6/script/helpers/CoreDeploymentLib.sol";
 
 import {Sphinx} from "@sphinx-labs/contracts/SphinxPlugin.sol";
 import {Script} from "forge-std/Script.sol";
@@ -24,15 +24,15 @@ contract DeployScript is Script, Sphinx {
     address TRUSTED_FORWARDER;
 
     /// @notice the nonces that are used to deploy the contracts.
-    bytes32 OP_SALT = "_SUCKER_ETH_OP_";
-    bytes32 BASE_SALT = "_SUCKER_ETH_BASE_";
-    bytes32 ARB_SALT = "_SUCKER_ETH_ARB_";
+    bytes32 OP_SALT = "_SUCKER_ETH_OP_V6_";
+    bytes32 BASE_SALT = "_SUCKER_ETH_BASE_V6_";
+    bytes32 ARB_SALT = "_SUCKER_ETH_ARB_V6_";
 
-    bytes32 ARB_BASE_SALT = "_SUCKER_ARB_BASE_";
-    bytes32 ARB_OP_SALT = "_SUCKER_ARB_OP_";
-    bytes32 OP_BASE_SALT = "_SUCKER_OP_BASE_";
+    bytes32 ARB_BASE_SALT = "_SUCKER_ARB_BASE_V6_";
+    bytes32 ARB_OP_SALT = "_SUCKER_ARB_OP_V6_";
+    bytes32 OP_BASE_SALT = "_SUCKER_OP_BASE_V6_";
 
-    bytes32 REGISTRY_SALT = "REGISTRY";
+    bytes32 REGISTRY_SALT = "REGISTRYV6";
 
     function configureSphinx() public override {
         // TODO: Update to contain JB Emergency Developers
@@ -45,7 +45,7 @@ contract DeployScript is Script, Sphinx {
         // Get the deployment addresses for the nana CORE for this chain.
         // We want to do this outside of the `sphinx` modifier.
         core = CoreDeploymentLib.getDeployment(
-            vm.envOr("NANA_CORE_DEPLOYMENT_PATH", string("node_modules/@bananapus/core-v5/deployments/"))
+            vm.envOr("NANA_CORE_DEPLOYMENT_PATH", string("node_modules/@bananapus/core-v6/deployments/"))
         );
 
         // We use the same trusted forwarder as the core deployment.
@@ -64,19 +64,17 @@ contract DeployScript is Script, Sphinx {
 
         // If the registry is already deployed we don't have to deploy it
         // (and we can't add more pre_approved deployers etc.)
-        if (
-            !_isDeployed(
+        if (!_isDeployed(
                 REGISTRY_SALT,
                 type(JBSuckerRegistry).creationCode,
                 abi.encode(core.directory, core.permissions, safeAddress(), TRUSTED_FORWARDER)
-            )
-        ) {
+            )) {
             // Deploy the registry and pre-aprove the deployers we just deployed.
             JBSuckerRegistry _registry = new JBSuckerRegistry{salt: REGISTRY_SALT}({
                 directory: core.directory,
                 permissions: core.permissions,
                 initialOwner: safeAddress(),
-                trusted_forwarder: TRUSTED_FORWARDER
+                trustedForwarder: TRUSTED_FORWARDER
             });
 
             // Before transferring ownership to JBDAO we approve the deployers.
@@ -102,13 +100,11 @@ contract DeployScript is Script, Sphinx {
     function _optimismSucker() internal {
         // Check if this sucker is already deployed on this chain,
         // if that is the case we don't need to do anything else for this chain.
-        if (
-            _isDeployed(
+        if (_isDeployed(
                 OP_SALT,
                 type(JBOptimismSuckerDeployer).creationCode,
                 abi.encode(core.directory, core.permissions, core.tokens, safeAddress(), TRUSTED_FORWARDER)
-            )
-        ) return;
+            )) return;
 
         // Check if we should do the L1 portion.
         // ETH Mainnet and ETH Sepolia.
@@ -118,7 +114,7 @@ contract DeployScript is Script, Sphinx {
                 permissions: core.permissions,
                 tokens: core.tokens,
                 configurator: safeAddress(),
-                trusted_forwarder: TRUSTED_FORWARDER
+                trustedForwarder: TRUSTED_FORWARDER
             });
 
             _opDeployer.setChainSpecificConstants(
@@ -141,7 +137,7 @@ contract DeployScript is Script, Sphinx {
                 permissions: core.permissions,
                 tokens: core.tokens,
                 addToBalanceMode: JBAddToBalanceMode.ON_CLAIM,
-                trusted_forwarder: TRUSTED_FORWARDER
+                trustedForwarder: TRUSTED_FORWARDER
             });
 
             // Configure the deployer to use the singleton instance.
@@ -158,7 +154,7 @@ contract DeployScript is Script, Sphinx {
                 permissions: core.permissions,
                 tokens: core.tokens,
                 configurator: safeAddress(),
-                trusted_forwarder: TRUSTED_FORWARDER
+                trustedForwarder: TRUSTED_FORWARDER
             });
 
             _opDeployer.setChainSpecificConstants(
@@ -173,7 +169,7 @@ contract DeployScript is Script, Sphinx {
                 permissions: core.permissions,
                 tokens: core.tokens,
                 addToBalanceMode: JBAddToBalanceMode.ON_CLAIM,
-                trusted_forwarder: TRUSTED_FORWARDER
+                trustedForwarder: TRUSTED_FORWARDER
             });
 
             // Configure the deployer to use the singleton instance.
@@ -187,13 +183,11 @@ contract DeployScript is Script, Sphinx {
     function _baseSucker() internal {
         // Check if this sucker is already deployed on this chain,
         // if that is the case we don't need to do anything else for this chain.
-        if (
-            _isDeployed(
+        if (_isDeployed(
                 BASE_SALT,
                 type(JBBaseSuckerDeployer).creationCode,
                 abi.encode(core.directory, core.permissions, core.tokens, safeAddress(), TRUSTED_FORWARDER)
-            )
-        ) return;
+            )) return;
 
         // Check if we should do the L1 portion.
         // ETH Mainnet and ETH Sepolia.
@@ -203,7 +197,7 @@ contract DeployScript is Script, Sphinx {
                 permissions: core.permissions,
                 tokens: core.tokens,
                 configurator: safeAddress(),
-                trusted_forwarder: TRUSTED_FORWARDER
+                trustedForwarder: TRUSTED_FORWARDER
             });
 
             _baseDeployer.setChainSpecificConstants(
@@ -226,7 +220,7 @@ contract DeployScript is Script, Sphinx {
                 permissions: core.permissions,
                 tokens: core.tokens,
                 addToBalanceMode: JBAddToBalanceMode.ON_CLAIM,
-                trusted_forwarder: TRUSTED_FORWARDER
+                trustedForwarder: TRUSTED_FORWARDER
             });
 
             // Configure the deployer to use the singleton instance.
@@ -243,7 +237,7 @@ contract DeployScript is Script, Sphinx {
                 permissions: core.permissions,
                 tokens: core.tokens,
                 configurator: safeAddress(),
-                trusted_forwarder: TRUSTED_FORWARDER
+                trustedForwarder: TRUSTED_FORWARDER
             });
 
             _baseDeployer.setChainSpecificConstants(
@@ -258,7 +252,7 @@ contract DeployScript is Script, Sphinx {
                 permissions: core.permissions,
                 tokens: core.tokens,
                 addToBalanceMode: JBAddToBalanceMode.ON_CLAIM,
-                trusted_forwarder: TRUSTED_FORWARDER
+                trustedForwarder: TRUSTED_FORWARDER
             });
 
             // Configure the deployer to use the singleton instance.
@@ -273,13 +267,11 @@ contract DeployScript is Script, Sphinx {
     function _arbitrumSucker() internal {
         // Check if this sucker is already deployed on this chain,
         // if that is the case we don't need to do anything else for this chain.
-        if (
-            _isDeployed(
+        if (_isDeployed(
                 ARB_SALT,
                 type(JBArbitrumSuckerDeployer).creationCode,
                 abi.encode(core.directory, core.permissions, core.tokens, safeAddress(), TRUSTED_FORWARDER)
-            )
-        ) return;
+            )) return;
 
         // Check if we should do the L1 portion.
         // ETH Mainnet and ETH Sepolia.
@@ -289,7 +281,7 @@ contract DeployScript is Script, Sphinx {
                 permissions: core.permissions,
                 tokens: core.tokens,
                 configurator: safeAddress(),
-                trusted_forwarder: TRUSTED_FORWARDER
+                trustedForwarder: TRUSTED_FORWARDER
             });
 
             _arbDeployer.setChainSpecificConstants({
@@ -307,7 +299,7 @@ contract DeployScript is Script, Sphinx {
                 permissions: core.permissions,
                 tokens: core.tokens,
                 addToBalanceMode: JBAddToBalanceMode.ON_CLAIM,
-                trusted_forwarder: TRUSTED_FORWARDER
+                trustedForwarder: TRUSTED_FORWARDER
             });
 
             // Configure the deployer to use the singleton instance.
@@ -324,7 +316,7 @@ contract DeployScript is Script, Sphinx {
                 permissions: core.permissions,
                 tokens: core.tokens,
                 configurator: safeAddress(),
-                trusted_forwarder: TRUSTED_FORWARDER
+                trustedForwarder: TRUSTED_FORWARDER
             });
 
             _arbDeployer.setChainSpecificConstants({
@@ -342,7 +334,7 @@ contract DeployScript is Script, Sphinx {
                 permissions: core.permissions,
                 tokens: core.tokens,
                 addToBalanceMode: JBAddToBalanceMode.ON_CLAIM,
-                trusted_forwarder: TRUSTED_FORWARDER
+                trustedForwarder: TRUSTED_FORWARDER
             });
 
             // Configure the deployer to use the singleton instance.
@@ -449,10 +441,7 @@ contract DeployScript is Script, Sphinx {
         }
     }
 
-    function _deployCCIPSuckerFor(
-        bytes32 salt,
-        uint256 remoteChainId
-    )
+    function _deployCCIPSuckerFor(bytes32 salt, uint256 remoteChainId)
         internal
         returns (JBCCIPSuckerDeployer deployer)
     {
@@ -477,7 +466,7 @@ contract DeployScript is Script, Sphinx {
         IJBPermissions permissions,
         IJBTokens tokens,
         address configurator,
-        address trusted_forwarder,
+        address trustedForwarder,
         uint256 remoteChainId,
         uint64 remoteChainSelector,
         ICCIPRouter router
@@ -485,7 +474,7 @@ contract DeployScript is Script, Sphinx {
         internal
         returns (JBCCIPSuckerDeployer deployer)
     {
-        deployer = new JBCCIPSuckerDeployer{salt: salt}(directory, permissions, tokens, configurator, trusted_forwarder);
+        deployer = new JBCCIPSuckerDeployer{salt: salt}(directory, permissions, tokens, configurator, trustedForwarder);
 
         deployer.setChainSpecificConstants(remoteChainId, remoteChainSelector, router);
 
@@ -496,22 +485,14 @@ contract DeployScript is Script, Sphinx {
             tokens: tokens,
             permissions: permissions,
             addToBalanceMode: JBAddToBalanceMode.ON_CLAIM,
-            trusted_forwarder: trusted_forwarder
+            trustedForwarder: trustedForwarder
         });
 
         // Configure the singleton.
         deployer.configureSingleton(singleton);
     }
 
-    function _isDeployed(
-        bytes32 salt,
-        bytes memory creationCode,
-        bytes memory arguments
-    )
-        internal
-        view
-        returns (bool)
-    {
+    function _isDeployed(bytes32 salt, bytes memory creationCode, bytes memory arguments) internal view returns (bool) {
         address _deployedTo = vm.computeCreate2Address({
             salt: salt,
             initCodeHash: keccak256(abi.encodePacked(creationCode, arguments)),

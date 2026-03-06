@@ -11,7 +11,7 @@ import {IJBSuckerDeployer} from "./../interfaces/IJBSuckerDeployer.sol";
 import {IOPMessenger} from "../interfaces/IOPMessenger.sol";
 import {IOPStandardBridge} from "../interfaces/IOPStandardBridge.sol";
 
-/// @notice An `IJBSuckerDeployerFeeless` implementation to deploy `JBOptimismSucker` contracts.
+/// @notice An `IJBSuckerDeployer` implementation to deploy `JBOptimismSucker` contracts.
 contract JBOptimismSuckerDeployer is JBSuckerDeployer, IJBOpSuckerDeployer {
     //*********************************************************************//
     // ---------------------- public stored properties ------------------- //
@@ -36,9 +36,9 @@ contract JBOptimismSuckerDeployer is JBSuckerDeployer, IJBOpSuckerDeployer {
         IJBPermissions permissions,
         IJBTokens tokens,
         address configurator,
-        address trusted_forwarder
+        address trustedForwarder
     )
-        JBSuckerDeployer(directory, permissions, tokens, configurator, trusted_forwarder)
+        JBSuckerDeployer(directory, permissions, tokens, configurator, trustedForwarder)
     {}
 
     //*********************************************************************//
@@ -47,17 +47,19 @@ contract JBOptimismSuckerDeployer is JBSuckerDeployer, IJBOpSuckerDeployer {
 
     /// @notice Check if the layer specific configuration is set or not. Used as a sanity check.
     function _layerSpecificConfigurationIsSet() internal view override returns (bool) {
-        return address(opMessenger) != address(0) || address(opBridge) != address(0);
+        // Use && (not ||) so the post-set check in setChainSpecificConstants rejects partial configurations
+        // where only one of messenger/bridge is provided. Both are required for the sucker to function.
+        return address(opMessenger) != address(0) && address(opBridge) != address(0);
     }
 
     //*********************************************************************//
     // --------------------- external transactions ----------------------- //
     //*********************************************************************//
 
-    /// @notice handles some layer specific configuration that can't be done in the constructor otherwise deployment
+    /// @notice Handles some layer specific configuration that can't be done in the constructor otherwise deployment
     /// addresses would change.
-    /// @notice messenger the OPMesssenger on this layer.
-    /// @notice bridge the OPStandardBridge on this layer.
+    /// @param messenger The OPMessenger on this layer.
+    /// @param bridge The OPStandardBridge on this layer.
     function setChainSpecificConstants(IOPMessenger messenger, IOPStandardBridge bridge) external {
         if (_layerSpecificConfigurationIsSet()) {
             revert JBSuckerDeployer_AlreadyConfigured();

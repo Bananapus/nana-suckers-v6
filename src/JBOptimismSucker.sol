@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.23;
 
-import {IJBDirectory} from "@bananapus/core-v5/src/interfaces/IJBDirectory.sol";
-import {IJBPermissions} from "@bananapus/core-v5/src/interfaces/IJBPermissions.sol";
-import {IJBTokens} from "@bananapus/core-v5/src/interfaces/IJBTokens.sol";
-import {JBConstants} from "@bananapus/core-v5/src/libraries/JBConstants.sol";
+import {IJBDirectory} from "@bananapus/core-v6/src/interfaces/IJBDirectory.sol";
+import {IJBPermissions} from "@bananapus/core-v6/src/interfaces/IJBPermissions.sol";
+import {IJBTokens} from "@bananapus/core-v6/src/interfaces/IJBTokens.sol";
+import {JBConstants} from "@bananapus/core-v6/src/libraries/JBConstants.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {BitMaps} from "@openzeppelin/contracts/utils/structs/BitMaps.sol";
@@ -52,9 +52,9 @@ contract JBOptimismSucker is JBSucker, IJBOptimismSucker {
         IJBPermissions permissions,
         IJBTokens tokens,
         JBAddToBalanceMode addToBalanceMode,
-        address trusted_forwarder
+        address trustedForwarder
     )
-        JBSucker(directory, permissions, tokens, addToBalanceMode, trusted_forwarder)
+        JBSucker(directory, permissions, tokens, addToBalanceMode, trustedForwarder)
     {
         // Fetch the messenger and bridge by doing a callback to the deployer contract.
         OPBRIDGE = JBOptimismSuckerDeployer(deployer).opBridge();
@@ -83,7 +83,7 @@ contract JBOptimismSucker is JBSucker, IJBOptimismSucker {
     /// @notice Checks if the `sender` (`_msgSender()`) is a valid representative of the remote peer.
     /// @param sender The message's sender.
     function _isRemotePeer(address sender) internal override returns (bool valid) {
-        return sender == address(OPMESSENGER) && OPMESSENGER.xDomainMessageSender() == peer();
+        return sender == address(OPMESSENGER) && _toBytes32(OPMESSENGER.xDomainMessageSender()) == peer();
     }
 
     /// @notice Use the `OPMESSENGER` to send the outbox tree for the `token` and the corresponding funds to the peer
@@ -112,16 +112,16 @@ contract JBOptimismSucker is JBSucker, IJBOptimismSucker {
         // If the token is an ERC20, bridge it to the peer.
         // If the amount is `0` then we do not need to bridge any ERC20.
         if (token != JBConstants.NATIVE_TOKEN && amount != 0) {
-            // Approve the tokens bing bridged.
+            // Approve the tokens being bridged.
             // slither-disable-next-line reentrancy-events
             SafeERC20.forceApprove({token: IERC20(token), spender: address(OPBRIDGE), value: amount});
 
-            // Bridge the tokens to the peer sucker.
-            // slither-disable-next-line reentrency-events,calls-loop
+            // Bridge the tokens to the peer sucker. Convert bytes32 types to address at the OP Bridge API boundary.
+            // slither-disable-next-line reentrancy-events,calls-loop
             OPBRIDGE.bridgeERC20To({
                 localToken: token,
-                remoteToken: remoteToken.addr,
-                to: peer(),
+                remoteToken: _toAddress(remoteToken.addr),
+                to: _toAddress(peer()),
                 amount: amount,
                 minGasLimit: remoteToken.minGas,
                 extraData: bytes("")
@@ -132,9 +132,12 @@ contract JBOptimismSucker is JBSucker, IJBOptimismSucker {
         }
 
         // Send the message to the peer with the reclaimed ETH.
-        // slither-disable-next-line arbitrary-send-eth,reentrency-events,calls-loop
-        OPMESSENGER.sendMessage{value: nativeValue}(
-            peer(), abi.encodeCall(JBSucker.fromRemote, (message)), MESSENGER_BASE_GAS_LIMIT
-        );
+        // Convert bytes32 peer to address at the OP Messenger API boundary.
+        // slither-disable-next-line arbitrary-send-eth,reentrancy-events,calls-loop
+        OPMESSENGER.sendMessage{value: nativeValue}({
+            target: _toAddress(peer()),
+            message: abi.encodeCall(JBSucker.fromRemote, (message)),
+            gasLimit: MESSENGER_BASE_GAS_LIMIT
+        });
     }
 }

@@ -10,7 +10,7 @@ import {IArbGatewayRouter} from "../interfaces/IArbGatewayRouter.sol";
 import {ARBAddresses} from "../libraries/ARBAddresses.sol";
 import {ARBChains} from "../libraries/ARBChains.sol";
 
-/// @notice An `IJBSuckerDeployerFeeless` implementation to deploy `JBOptimismSucker` contracts.
+/// @notice An `IJBSuckerDeployer` implementation to deploy `JBArbitrumSucker` contracts.
 contract JBArbitrumSuckerDeployer is JBSuckerDeployer, IJBArbitrumSuckerDeployer {
     //*********************************************************************//
     // ---------------------- public stored properties ------------------- //
@@ -38,9 +38,9 @@ contract JBArbitrumSuckerDeployer is JBSuckerDeployer, IJBArbitrumSuckerDeployer
         IJBPermissions permissions,
         IJBTokens tokens,
         address configurator,
-        address trusted_forwarder
+        address trustedForwarder
     )
-        JBSuckerDeployer(directory, permissions, tokens, configurator, trusted_forwarder)
+        JBSuckerDeployer(directory, permissions, tokens, configurator, trustedForwarder)
     {}
 
     //*********************************************************************//
@@ -49,18 +49,20 @@ contract JBArbitrumSuckerDeployer is JBSuckerDeployer, IJBArbitrumSuckerDeployer
 
     /// @notice Check if the layer specific configuration is set or not. Used as a sanity check.
     function _layerSpecificConfigurationIsSet() internal view override returns (bool) {
-        return uint256(arbLayer) != uint256(0) || address(arbInbox) != address(0)
-            || address(arbGatewayRouter) != address(0);
+        // We don't check arbLayer here because JBLayer.L1 == 0 which is the default/unset value.
+        // Since all fields are set atomically in setChainSpecificConstants, checking inbox + gateway is sufficient.
+        return address(arbInbox) != address(0) && address(arbGatewayRouter) != address(0);
     }
 
     //*********************************************************************//
     // --------------------- external transactions ----------------------- //
     //*********************************************************************//
 
-    /// @notice handles some layer specific configuration that can't be done in the constructor otherwise deployment
+    /// @notice Handles some layer specific configuration that can't be done in the constructor otherwise deployment
     /// addresses would change.
-    /// @notice messenger the OPMesssenger on this layer.
-    /// @notice bridge the OPStandardBridge on this layer.
+    /// @param layer The Arbitrum layer (L1 or L2).
+    /// @param inbox The Arbitrum inbox on this layer.
+    /// @param gatewayRouter The Arbitrum gateway router on this layer.
     function setChainSpecificConstants(JBLayer layer, IInbox inbox, IArbGatewayRouter gatewayRouter) external {
         if (_layerSpecificConfigurationIsSet()) {
             revert JBSuckerDeployer_AlreadyConfigured();

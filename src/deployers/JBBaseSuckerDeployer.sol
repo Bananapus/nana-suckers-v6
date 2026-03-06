@@ -19,8 +19,8 @@ contract JBBaseSuckerDeployer is JBOptimismSuckerDeployer {
         IJBPermissions permissions,
         IJBTokens tokens,
         address configurator,
-        address trusted_forwarder
+        address trustedForwarder
     )
-        JBOptimismSuckerDeployer(directory, permissions, tokens, configurator, trusted_forwarder)
+        JBOptimismSuckerDeployer(directory, permissions, tokens, configurator, trustedForwarder)
     {}
 }

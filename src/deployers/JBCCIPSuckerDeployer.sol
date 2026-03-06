@@ -42,9 +42,9 @@ contract JBCCIPSuckerDeployer is JBSuckerDeployer, IJBCCIPSuckerDeployer {
         IJBPermissions permissions,
         IJBTokens tokens,
         address configurator,
-        address trusted_forwarder
+        address trustedForwarder
     )
-        JBSuckerDeployer(directory, permissions, tokens, configurator, trusted_forwarder)
+        JBSuckerDeployer(directory, permissions, tokens, configurator, trustedForwarder)
     {}
 
     //*********************************************************************//
@@ -65,13 +65,7 @@ contract JBCCIPSuckerDeployer is JBSuckerDeployer, IJBCCIPSuckerDeployer {
     /// @param remoteChainId The remote chain id.
     /// @param remoteChainSelector The CCIP remote chain selector.
     /// @param router The CCIP router for this chain.
-    function setChainSpecificConstants(
-        uint256 remoteChainId,
-        uint64 remoteChainSelector,
-        ICCIPRouter router
-    )
-        external
-    {
+    function setChainSpecificConstants(uint256 remoteChainId, uint64 remoteChainSelector, ICCIPRouter router) external {
         if (_layerSpecificConfigurationIsSet()) {
             revert JBSuckerDeployer_AlreadyConfigured();
         }
