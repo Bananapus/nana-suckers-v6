@@ -144,11 +144,7 @@ contract JBArbitrumSucker is JBSucker, IJBArbitrumSucker {
         // slither-disable-start out-of-order-retryable
         if (LAYER == JBLayer.L1) {
             _toL2({
-                token: token,
-                transportPayment: transportPayment,
-                amount: amount,
-                data: data,
-                remoteToken: remoteToken
+                token: token, transportPayment: transportPayment, amount: amount, data: data, remoteToken: remoteToken
             });
         } else {
             _toL1({token: token, amount: amount, data: data, remoteToken: remoteToken});
@@ -225,6 +221,7 @@ contract JBArbitrumSucker is JBSucker, IJBArbitrumSucker {
         // If the amount is `0` then we do not need to bridge any ERC20.
         if (token != JBConstants.NATIVE_TOKEN && amount != 0) {
             // Calculate the cost of the ERC-20 transfer. (96 is the length of the abi encoded `data`)
+            // slither-disable-next-line calls-loop
             uint256 maxSubmissionCostERC20 =
                 ARBINBOX.calculateRetryableSubmissionFee({dataLength: 96, baseFee: maxFeePerGas});
 
@@ -299,6 +296,7 @@ contract JBArbitrumSucker is JBSucker, IJBArbitrumSucker {
         internal
     {
         address peerAddress = _toAddress(peer());
+        // slither-disable-next-line unused-return,calls-loop
         ARBINBOX.unsafeCreateRetryableTicket{value: callTransportCost + nativeValue}({
             to: peerAddress,
             l2CallValue: nativeValue,
