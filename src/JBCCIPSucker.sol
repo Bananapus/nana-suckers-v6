@@ -142,11 +142,11 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
             revert JBSucker_NotPeer(_toBytes32(origin));
         }
 
-        // Note (M-28): We intentionally do NOT validate root.amount against destTokenAmounts[0].amount here.
+        // We intentionally do NOT validate root.amount against destTokenAmounts[0].amount here.
         // CCIP fees are paid separately (via feeToken), so delivered amounts should always match what was sent.
         // If we reverted on a mismatch, the tokens already transferred by CCIP would be locked in the router
         // with no recovery path — a concrete fund-loss risk that outweighs the theoretical defense-in-depth
-        // benefit against a CCIP-level failure or peer compromise. See AUDIT_FINDINGS.md M-28.
+        // benefit against a CCIP-level failure or peer compromise.
 
         // We either send no tokens or a single token.
         if (any2EvmMessage.destTokenAmounts.length == 1) {
@@ -271,7 +271,6 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
         // stuck dust from a fee overpayment is far less harmful than bricking the entire bridge
         // operation. The event provides observability so it doesn't go unnoticed.
         //
-        // See AUDIT_FINDINGS.md M-2 for the full analysis.
         uint256 refundAmount = transportPayment - fees;
         if (refundAmount != 0) {
             // slither-disable-next-line calls-loop,msg-value-loop,reentrancy-events

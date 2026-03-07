@@ -77,7 +77,7 @@ contract PayableCaller {
 }
 
 /// @title CCIPRefundTest
-/// @notice Tests for M-2 fix: CCIP refund failure emits event instead of reverting.
+/// @notice Tests that CCIP refund failure emits event instead of reverting.
 contract CCIPRefundTest is Test {
     address constant DIRECTORY = address(0x1001);
     address constant PERMISSIONS = address(0x1002);
@@ -157,7 +157,7 @@ contract CCIPRefundTest is Test {
     }
 
     // =========================================================================
-    // M-2: Non-payable caller — refund failure emits event, does NOT revert
+    // Non-payable caller — refund failure emits event, does NOT revert
     // =========================================================================
 
     /// @notice When refund fails (non-payable caller), toRemote should succeed and emit TransportPaymentRefundFailed.
@@ -177,7 +177,7 @@ contract CCIPRefundTest is Test {
         vm.deal(address(caller), transportPayment);
 
         // The non-payable caller can't receive the refund.
-        // M-2 fix: this should emit TransportPaymentRefundFailed instead of reverting.
+        // This should emit TransportPaymentRefundFailed instead of reverting.
         vm.expectEmit(true, false, false, true, address(sucker));
         emit JBCCIPSucker.TransportPaymentRefundFailed(address(caller), expectedRefund);
 

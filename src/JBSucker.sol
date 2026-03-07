@@ -457,7 +457,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
                 token: localToken, nonce: root.remoteRoot.nonce, root: root.remoteRoot.root, caller: _msgSender()
             });
         } else {
-            // L-10: Emit an event when a root is rejected due to a stale (non-increasing) nonce.
+            // Emit an event when a root is rejected due to a stale (non-increasing) nonce.
             // This aids off-chain monitoring in detecting out-of-order or duplicate deliveries.
             emit StaleRootRejected({token: localToken, receivedNonce: root.remoteRoot.nonce, currentNonce: inbox.nonce});
         }
@@ -851,7 +851,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
             revert JBSucker_TokenAlreadyMapped(token, currentMapping.addr);
         }
 
-        // Note (L-21): No inbox guard needed here. Token remapping only affects the outbound (sending) path —
+        // No inbox guard needed here. Token remapping only affects the outbound (sending) path —
         // it changes where tokens get bridged TO. Existing inbox claims are resolved against the inbox merkle
         // tree keyed by the local token address. Changing the remote token doesn't invalidate those claims
         // since the tokens have already arrived and the merkle proofs remain valid.

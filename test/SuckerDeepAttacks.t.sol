@@ -1404,7 +1404,7 @@ contract SuckerDeepAttacks is Test {
     }
 
     // =========================================================================
-    // L-10: StaleRootRejected event emission
+    // StaleRootRejected event emission
     // =========================================================================
 
     /// @notice fromRemote with stale nonce should emit StaleRootRejected event.
