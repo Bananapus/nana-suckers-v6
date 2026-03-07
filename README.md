@@ -1,4 +1,4 @@
-# nana-suckers-v6
+# Juicebox Suckers
 
 Cross-chain bridging for Juicebox V6 projects. Suckers let users cash out project tokens on one chain, move the backing funds across a bridge, and mint the same number of project tokens on another chain -- all via merkle-tree-based claims and chain-specific bridges.
 
