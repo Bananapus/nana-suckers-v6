@@ -1,4 +1,4 @@
-# nana-suckers-v6
+# Juicebox Suckers
 
 ## Purpose
 
