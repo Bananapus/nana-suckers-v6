@@ -1,6 +1,6 @@
-# nana-suckers-v5
+# nana-suckers-v6
 
-Cross-chain bridging for Juicebox V5 projects. Suckers let users burn project tokens on one chain and receive the same amount on another, moving the backing funds across via merkle-tree-based claims and chain-specific bridges.
+Cross-chain bridging for Juicebox V6 projects. Suckers let users burn project tokens on one chain and receive the same amount on another, moving the backing funds across via merkle-tree-based claims and chain-specific bridges.
 
 <details>
   <summary>Table of Contents</summary>
@@ -24,7 +24,7 @@ Cross-chain bridging for Juicebox V5 projects. Suckers let users burn project to
   </ol>
 </details>
 
-_If you're having trouble understanding this contract, take a look at the [core protocol contracts](https://github.com/Bananapus/nana-core-v5) and the [documentation](https://docs.juicebox.money/) first. If you have questions, reach out on [Discord](https://discord.com/invite/ErQYmth4dS)._
+_If you're having trouble understanding this contract, take a look at the [core protocol contracts](https://github.com/Bananapus/nana-core-v6) and the [documentation](https://docs.juicebox.money/) first. If you have questions, reach out on [Discord](https://discord.com/invite/ErQYmth4dS)._
 
 ## What are Suckers?
 
@@ -327,7 +327,7 @@ Users can do this manually, but it's a hassle. The [`bananapus-sucker-relayer`](
 ## Repository Layout
 
 ```
-nana-suckers-v5/
+nana-suckers-v6/
 ├── script/
 │   ├── Deploy.s.sol - Deployment script.
 │   └── helpers/
@@ -361,20 +361,20 @@ nana-suckers-v5/
 For projects using `npm` to manage dependencies (recommended):
 
 ```bash
-npm install @bananapus/suckers-v5
+npm install @bananapus/suckers-v6
 ```
 
 For projects using `forge` to manage dependencies:
 
 ```bash
-forge install Bananapus/nana-suckers-v5
+forge install Bananapus/nana-suckers-v6
 ```
 
-If you're using `forge`, add `@bananapus/suckers-v5/=lib/nana-suckers-v5/` to `remappings.txt`. You'll also need to install `nana-suckers-v5`'s dependencies and add similar remappings for them.
+If you're using `forge`, add `@bananapus/suckers-v6/=lib/nana-suckers-v6/` to `remappings.txt`. You'll also need to install `nana-suckers-v6`'s dependencies and add similar remappings for them.
 
 ### Develop
 
-`nana-suckers-v5` uses [npm](https://www.npmjs.com/) (version >=20.0.0) for package management and the [Foundry](https://github.com/foundry-rs/foundry) development toolchain for builds, tests, and deployments. To get set up, [install Node.js](https://nodejs.org/en/download) and install [Foundry](https://github.com/foundry-rs/foundry):
+`nana-suckers-v6` uses [npm](https://www.npmjs.com/) (version >=20.0.0) for package management and the [Foundry](https://github.com/foundry-rs/foundry) development toolchain for builds, tests, and deployments. To get set up, [install Node.js](https://nodejs.org/en/download) and install [Foundry](https://github.com/foundry-rs/foundry):
 
 ```bash
 curl -L https://foundry.paradigm.xyz | sh
