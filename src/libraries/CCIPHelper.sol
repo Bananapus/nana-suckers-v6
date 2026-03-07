@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.23;
+pragma solidity 0.8.26;
 
 /// @notice CCIP chain-specific constants used across Juicebox sucker contracts.
 library CCIPHelper {
