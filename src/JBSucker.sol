@@ -491,6 +491,15 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
             // slither-disable-next-line msg-value-loop
             _mapToken({map: maps[i], transportPaymentValue: numberToDisable > 0 ? msg.value / numberToDisable : 0});
         }
+
+        // Refund any remainder from integer division so dust wei isn't stuck in the contract.
+        if (numberToDisable > 0) {
+            uint256 remainder = msg.value % numberToDisable;
+            if (remainder > 0) {
+                (bool success,) = _msgSender().call{value: remainder}("");
+                require(success, "JBSucker: dust refund failed");
+            }
+        }
     }
 
     /// @notice Enables the emergency hatch for a list of tokens, allowing users to exit on the chain they deposited on.
