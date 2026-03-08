@@ -34,17 +34,19 @@ contract L47_MapTokensDustTest is Test {
         vm.label(TOKENS, "MOCK_TOKENS");
         vm.label(CONTROLLER, "MOCK_CONTROLLER");
         vm.label(PROJECT, "MOCK_PROJECT");
+
+        // Mock DIRECTORY.PROJECTS() and ownerOf for all tests.
+        vm.mockCall(DIRECTORY, abi.encodeCall(IJBDirectory.PROJECTS, ()), abi.encode(PROJECT));
+        vm.mockCall(PROJECT, abi.encodeCall(IERC721.ownerOf, (projectId)), abi.encode(address(this)));
+
+        // Allow any caller to pass the MAP_SUCKER_TOKEN permission check.
+        vm.mockCall(PERMISSIONS, abi.encodeWithSelector(IJBPermissions.hasPermission.selector), abi.encode(true));
     }
 
     /// @notice When mapTokens disables multiple tokens and msg.value is not evenly divisible,
     ///         the remainder (dust) must be refunded to the caller.
     function test_mapTokensDustRefunded() external {
         L47TestSucker sucker = _createTestSucker(projectId, "");
-
-        // Mock the Directory.
-        vm.mockCall(DIRECTORY, abi.encodeCall(IJBDirectory.PROJECTS, ()), abi.encode(PROJECT));
-        // Mock the owner of the project.
-        vm.mockCall(PROJECT, abi.encodeCall(IERC721.ownerOf, (projectId)), abi.encode(address(this)));
 
         // Set up two tokens that are currently mapped and have unsent outbox entries,
         // so disabling them (remoteToken=0) triggers _sendRoot which needs transport payment.
@@ -99,9 +101,6 @@ contract L47_MapTokensDustTest is Test {
     function test_mapTokensNoDustWhenEvenlyDivisible() external {
         L47TestSucker sucker = _createTestSucker(projectId, "");
 
-        vm.mockCall(DIRECTORY, abi.encodeCall(IJBDirectory.PROJECTS, ()), abi.encode(PROJECT));
-        vm.mockCall(PROJECT, abi.encodeCall(IERC721.ownerOf, (projectId)), abi.encode(address(this)));
-
         sucker.test_setRemoteToken(
             tokenA,
             JBRemoteToken({enabled: true, emergencyHatch: false, minGas: 200_000, addr: remoteA, minBridgeAmount: 0})
@@ -143,9 +142,6 @@ contract L47_MapTokensDustTest is Test {
         uint256 expectedRemainder = msgValue % numberToDisable;
 
         L47TestSucker sucker = _createTestSucker(projectId, "fuzz");
-
-        vm.mockCall(DIRECTORY, abi.encodeCall(IJBDirectory.PROJECTS, ()), abi.encode(PROJECT));
-        vm.mockCall(PROJECT, abi.encodeCall(IERC721.ownerOf, (projectId)), abi.encode(address(this)));
 
         sucker.test_setRemoteToken(
             tokenA,
