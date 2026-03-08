@@ -42,7 +42,8 @@ contract DeployScript is Script, Sphinx {
         // TODO: Update to contain JB Emergency Developers
         sphinxConfig.projectName = "nana-suckers-v5";
         sphinxConfig.mainnets = ["ethereum", "optimism", "base", "arbitrum", "celo"];
-        sphinxConfig.testnets = ["ethereum_sepolia", "optimism_sepolia", "base_sepolia", "arbitrum_sepolia", "celo_sepolia"];
+        sphinxConfig.testnets =
+            ["ethereum_sepolia", "optimism_sepolia", "base_sepolia", "arbitrum_sepolia", "celo_sepolia"];
     }
 
     function run() public {
@@ -68,13 +69,11 @@ contract DeployScript is Script, Sphinx {
 
         // If the registry is already deployed we don't have to deploy it
         // (and we can't add more pre_approved deployers etc.)
-        if (
-            !_isDeployed(
+        if (!_isDeployed(
                 REGISTRY_SALT,
                 type(JBSuckerRegistry).creationCode,
                 abi.encode(core.directory, core.permissions, safeAddress(), TRUSTED_FORWARDER)
-            )
-        ) {
+            )) {
             // Deploy the registry and pre-aprove the deployers we just deployed.
             JBSuckerRegistry _registry = new JBSuckerRegistry{salt: REGISTRY_SALT}({
                 directory: core.directory,
@@ -106,13 +105,11 @@ contract DeployScript is Script, Sphinx {
     function _optimismSucker() internal {
         // Check if this sucker is already deployed on this chain,
         // if that is the case we don't need to do anything else for this chain.
-        if (
-            _isDeployed(
+        if (_isDeployed(
                 OP_SALT,
                 type(JBOptimismSuckerDeployer).creationCode,
                 abi.encode(core.directory, core.permissions, core.tokens, safeAddress(), TRUSTED_FORWARDER)
-            )
-        ) return;
+            )) return;
 
         // Check if we should do the L1 portion.
         // ETH Mainnet and ETH Sepolia.
@@ -191,13 +188,11 @@ contract DeployScript is Script, Sphinx {
     function _baseSucker() internal {
         // Check if this sucker is already deployed on this chain,
         // if that is the case we don't need to do anything else for this chain.
-        if (
-            _isDeployed(
+        if (_isDeployed(
                 BASE_SALT,
                 type(JBBaseSuckerDeployer).creationCode,
                 abi.encode(core.directory, core.permissions, core.tokens, safeAddress(), TRUSTED_FORWARDER)
-            )
-        ) return;
+            )) return;
 
         // Check if we should do the L1 portion.
         // ETH Mainnet and ETH Sepolia.
@@ -277,13 +272,11 @@ contract DeployScript is Script, Sphinx {
     function _arbitrumSucker() internal {
         // Check if this sucker is already deployed on this chain,
         // if that is the case we don't need to do anything else for this chain.
-        if (
-            _isDeployed(
+        if (_isDeployed(
                 ARB_SALT,
                 type(JBArbitrumSuckerDeployer).creationCode,
                 abi.encode(core.directory, core.permissions, core.tokens, safeAddress(), TRUSTED_FORWARDER)
-            )
-        ) return;
+            )) return;
 
         // Check if we should do the L1 portion.
         // ETH Mainnet and ETH Sepolia.
@@ -487,10 +480,7 @@ contract DeployScript is Script, Sphinx {
         }
     }
 
-    function _deployCCIPSuckerFor(
-        bytes32 salt,
-        uint256 remoteChainId
-    )
+    function _deployCCIPSuckerFor(bytes32 salt, uint256 remoteChainId)
         internal
         returns (JBCCIPSuckerDeployer deployer)
     {
@@ -541,15 +531,7 @@ contract DeployScript is Script, Sphinx {
         deployer.configureSingleton(singleton);
     }
 
-    function _isDeployed(
-        bytes32 salt,
-        bytes memory creationCode,
-        bytes memory arguments
-    )
-        internal
-        view
-        returns (bool)
-    {
+    function _isDeployed(bytes32 salt, bytes memory creationCode, bytes memory arguments) internal view returns (bool) {
         address _deployedTo = vm.computeCreate2Address({
             salt: salt,
             initCodeHash: keccak256(abi.encodePacked(creationCode, arguments)),

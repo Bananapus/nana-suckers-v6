@@ -101,22 +101,21 @@ contract DeployerTests is Test, TestBaseWorkflow, IERC721Receiver {
         JBAccountingContext[] memory _tokensToAccept = new JBAccountingContext[](1);
 
         _tokensToAccept[0] = JBAccountingContext({
-            token: JBConstants.NATIVE_TOKEN,
-            decimals: 18,
-            currency: uint32(uint160(JBConstants.NATIVE_TOKEN))
+            token: JBConstants.NATIVE_TOKEN, decimals: 18, currency: uint32(uint160(JBConstants.NATIVE_TOKEN))
         });
 
         _terminalConfigurations[0] =
             JBTerminalConfig({terminal: jbMultiTerminal(), accountingContextsToAccept: _tokensToAccept});
 
         // Create a first project to collect fees.
-        projectId = jbController().launchProjectFor({
-            owner: address(this),
-            projectUri: "whatever",
-            rulesetConfigurations: _rulesetConfigurations,
-            terminalConfigurations: _terminalConfigurations, // Set terminals to receive fees.
-            memo: ""
-        });
+        projectId = jbController()
+            .launchProjectFor({
+                owner: address(this),
+                projectUri: "whatever",
+                rulesetConfigurations: _rulesetConfigurations,
+                terminalConfigurations: _terminalConfigurations, // Set terminals to receive fees.
+                memo: ""
+            });
 
         // Setup an erc20 for the project
         jbController().deployERC20For(1, "SuckerToken", "SOOK", bytes32(0));
@@ -178,9 +177,7 @@ contract DeployerTests is Test, TestBaseWorkflow, IERC721Receiver {
 
         deployer = CCIPDeployer;
         CCIPDeployer.setChainSpecificConstants({
-            remoteChainId: _remoteChainId,
-            remoteChainSelector: _remoteChainSelector,
-            router: _ccipRouter
+            remoteChainId: _remoteChainId, remoteChainSelector: _remoteChainSelector, router: _ccipRouter
         });
 
         // Deploy the singleton.
@@ -342,27 +339,25 @@ contract DeployerTests is Test, TestBaseWorkflow, IERC721Receiver {
         uint8[] memory permissions = new uint8[](1);
         permissions[0] = JBPermissionIds.MAP_SUCKER_TOKEN;
 
-        jbPermissions().setPermissionsFor(
-            address(this),
-            JBPermissionsData({operator: beneficiary, projectId: uint56(_projectId), permissionIds: permissions})
-        );
+        jbPermissions()
+            .setPermissionsFor(
+                address(this),
+                JBPermissionsData({operator: beneficiary, projectId: uint56(_projectId), permissionIds: permissions})
+            );
     }
 
     function _allowDeploying(uint256 _projectId, address beneficiary) internal {
         uint8[] memory permissions = new uint8[](1);
         permissions[0] = JBPermissionIds.DEPLOY_SUCKERS;
 
-        jbPermissions().setPermissionsFor(
-            address(this),
-            JBPermissionsData({operator: beneficiary, projectId: uint56(_projectId), permissionIds: permissions})
-        );
+        jbPermissions()
+            .setPermissionsFor(
+                address(this),
+                JBPermissionsData({operator: beneficiary, projectId: uint56(_projectId), permissionIds: permissions})
+            );
     }
 
-    function _deployDirectly(
-        IJBSuckerDeployer deployer,
-        uint256 _projectId,
-        bytes32 salt
-    )
+    function _deployDirectly(IJBSuckerDeployer deployer, uint256 _projectId, bytes32 salt)
         internal
         returns (IJBSucker)
     {

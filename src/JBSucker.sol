@@ -412,10 +412,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
             inbox.nonce = root.remoteRoot.nonce;
             inbox.root = root.remoteRoot.root;
             emit NewInboxTreeRoot({
-                token: root.token,
-                nonce: root.remoteRoot.nonce,
-                root: root.remoteRoot.root,
-                caller: _msgSender()
+                token: root.token, nonce: root.remoteRoot.nonce, root: root.remoteRoot.root, caller: _msgSender()
             });
         }
     }
@@ -521,10 +518,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         // Cash out the tokens.
         // slither-disable-next-line reentrancy-events,reentrancy-benign
         uint256 terminalTokenAmount = _pullBackingAssets({
-            projectToken: projectToken,
-            count: projectTokenCount,
-            token: token,
-            minTokensReclaimed: minTokensReclaimed
+            projectToken: projectToken, count: projectTokenCount, token: token, minTokensReclaimed: minTokensReclaimed
         });
 
         // Insert the item into the outbox tree for the terminal `token`.
@@ -658,12 +652,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
 
             // slither-disable-next-line calls-loop
             terminal.addToBalanceOf({
-                projectId: _projectId,
-                token: token,
-                amount: amount,
-                shouldReturnHeldFees: false,
-                memo: "",
-                metadata: ""
+                projectId: _projectId, token: token, amount: amount, shouldReturnHeldFees: false, memo: "", metadata: ""
             });
 
             // Sanity check: make sure we transfer the full amount.
@@ -673,12 +662,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
             // If the token is the native token, use `msg.value`.
             // slither-disable-next-line arbitrary-send-eth,calls-loop
             terminal.addToBalanceOf{value: amount}({
-                projectId: _projectId,
-                token: token,
-                amount: amount,
-                shouldReturnHeldFees: false,
-                memo: "",
-                metadata: ""
+                projectId: _projectId, token: token, amount: amount, shouldReturnHeldFees: false, memo: "", metadata: ""
             });
         }
     }
@@ -705,13 +689,14 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
 
         // Mint the project tokens for the beneficiary.
         // slither-disable-next-line calls-loop,unused-return
-        IJBController(address(DIRECTORY.controllerOf(_projectId))).mintTokensOf({
-            projectId: _projectId,
-            tokenCount: projectTokenAmount,
-            beneficiary: beneficiary,
-            memo: "",
-            useReservedPercent: false
-        });
+        IJBController(address(DIRECTORY.controllerOf(_projectId)))
+            .mintTokensOf({
+                projectId: _projectId,
+                tokenCount: projectTokenAmount,
+                beneficiary: beneficiary,
+                memo: "",
+                useReservedPercent: false
+            });
     }
 
     /// @notice Inserts a new leaf into the outbox merkle tree for the specified `token`.
@@ -729,9 +714,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     {
         // Build a hash based on the token amounts and the beneficiary.
         bytes32 hashed = _buildTreeHash({
-            projectTokenCount: projectTokenCount,
-            terminalTokenAmount: terminalTokenAmount,
-            beneficiary: beneficiary
+            projectTokenCount: projectTokenCount, terminalTokenAmount: terminalTokenAmount, beneficiary: beneficiary
         });
 
         // Get the outbox in storage.
@@ -903,9 +886,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
 
         // Build the message to be send.
         JBMessageRoot memory message = JBMessageRoot({
-            token: remoteToken.addr,
-            amount: amount,
-            remoteRoot: JBInboxTreeRoot({nonce: nonce, root: root})
+            token: remoteToken.addr, amount: amount, remoteRoot: JBInboxTreeRoot({nonce: nonce, root: root})
         });
 
         // Execute the chain/sucker specific logic for transferring the assets and communicating the root.
@@ -1052,9 +1033,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         // Calculate the root based on the leaf, the branch, and the index.
         bytes32 root = MerkleLib.branchRoot({
             _item: _buildTreeHash({
-                projectTokenCount: projectTokenCount,
-                terminalTokenAmount: terminalTokenAmount,
-                beneficiary: beneficiary
+                projectTokenCount: projectTokenCount, terminalTokenAmount: terminalTokenAmount, beneficiary: beneficiary
             }),
             _branch: leaves,
             _index: index

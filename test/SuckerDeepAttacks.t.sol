@@ -40,7 +40,9 @@ contract DeepAttackSucker is JBSucker {
         IJBTokens tokens,
         JBAddToBalanceMode addToBalanceMode,
         address forwarder
-    ) JBSucker(directory, permissions, tokens, addToBalanceMode, forwarder) {}
+    )
+        JBSucker(directory, permissions, tokens, addToBalanceMode, forwarder)
+    {}
 
     function _sendRootOverAMB(
         uint256,
@@ -49,7 +51,10 @@ contract DeepAttackSucker is JBSucker {
         uint256 amount,
         JBRemoteToken memory,
         JBMessageRoot memory
-    ) internal override {
+    )
+        internal
+        override
+    {
         lastAMBAmount = amount;
         if (shouldRevertAMB) {
             sendRootOverAMBReverted = true;
@@ -72,7 +77,11 @@ contract DeepAttackSucker is JBSucker {
         address beneficiary,
         uint256 index,
         bytes32[_TREE_DEPTH] calldata leaves
-    ) internal virtual override {
+    )
+        internal
+        virtual
+        override
+    {
         if (!nextCheckShouldPass) {
             super._validateBranchRoot(expectedRoot, projectTokenCount, terminalTokenAmount, beneficiary, index, leaves);
         }
@@ -102,7 +111,9 @@ contract DeepAttackSucker is JBSucker {
         address token,
         uint256 terminalTokenAmount,
         address beneficiary
-    ) external {
+    )
+        external
+    {
         _insertIntoTree(projectTokenCount, token, terminalTokenAmount, beneficiary);
     }
 
@@ -223,11 +234,7 @@ contract SuckerDeepAttacks is Test {
         sucker.test_setRemoteToken(
             token,
             JBRemoteToken({
-                enabled: true,
-                emergencyHatch: false,
-                minGas: 200_000,
-                addr: makeAddr("remoteToken"),
-                minBridgeAmount: 0
+                enabled: true, emergencyHatch: false, minGas: 200_000, addr: makeAddr("remoteToken"), minBridgeAmount: 0
             })
         );
     }
@@ -243,9 +250,7 @@ contract SuckerDeepAttacks is Test {
 
         // Try to deliver a root with nonce=5 (same as current).
         JBMessageRoot memory root = JBMessageRoot({
-            token: TOKEN,
-            amount: 1 ether,
-            remoteRoot: JBInboxTreeRoot({nonce: 5, root: bytes32(uint256(0xbeef))})
+            token: TOKEN, amount: 1 ether, remoteRoot: JBInboxTreeRoot({nonce: 5, root: bytes32(uint256(0xbeef))})
         });
 
         vm.prank(address(sucker)); // peer = address(this) for clones
@@ -261,9 +266,7 @@ contract SuckerDeepAttacks is Test {
         sucker.test_setInboxRoot(TOKEN, 10, bytes32(uint256(0xdead)));
 
         JBMessageRoot memory root = JBMessageRoot({
-            token: TOKEN,
-            amount: 1 ether,
-            remoteRoot: JBInboxTreeRoot({nonce: 3, root: bytes32(uint256(0xbeef))})
+            token: TOKEN, amount: 1 ether, remoteRoot: JBInboxTreeRoot({nonce: 3, root: bytes32(uint256(0xbeef))})
         });
 
         vm.prank(address(sucker));
@@ -278,9 +281,7 @@ contract SuckerDeepAttacks is Test {
         sucker.test_setInboxRoot(TOKEN, 1, bytes32(uint256(0xaaa)));
 
         JBMessageRoot memory root = JBMessageRoot({
-            token: TOKEN,
-            amount: 1 ether,
-            remoteRoot: JBInboxTreeRoot({nonce: 5, root: bytes32(uint256(0xbbb))})
+            token: TOKEN, amount: 1 ether, remoteRoot: JBInboxTreeRoot({nonce: 5, root: bytes32(uint256(0xbbb))})
         });
 
         vm.prank(address(sucker));
@@ -299,9 +300,7 @@ contract SuckerDeepAttacks is Test {
         sucker.test_setInboxRoot(TOKEN, 1, bytes32(uint256(0xaaaa)));
 
         JBMessageRoot memory root = JBMessageRoot({
-            token: TOKEN,
-            amount: 1 ether,
-            remoteRoot: JBInboxTreeRoot({nonce: 2, root: bytes32(uint256(0xbbbb))})
+            token: TOKEN, amount: 1 ether, remoteRoot: JBInboxTreeRoot({nonce: 2, root: bytes32(uint256(0xbbbb))})
         });
 
         // Should NOT revert (native tokens would be lost), but should NOT update.
@@ -325,9 +324,7 @@ contract SuckerDeepAttacks is Test {
         assertEq(uint256(sucker.state()), uint256(JBSuckerState.SENDING_DISABLED), "Should be SENDING_DISABLED");
 
         JBMessageRoot memory root = JBMessageRoot({
-            token: TOKEN,
-            amount: 1 ether,
-            remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(0xabc))})
+            token: TOKEN, amount: 1 ether, remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(0xabc))})
         });
 
         vm.prank(address(sucker));
@@ -412,10 +409,7 @@ contract SuckerDeepAttacks is Test {
         JBClaim memory claimData = JBClaim({
             token: tokenB, // targeting token B's inbox
             leaf: JBLeaf({
-                index: 0,
-                beneficiary: address(0xAAA),
-                projectTokenCount: 10 ether,
-                terminalTokenAmount: 5 ether
+                index: 0, beneficiary: address(0xAAA), projectTokenCount: 10 ether, terminalTokenAmount: 5 ether
             }),
             proof: proof
         });
@@ -450,10 +444,7 @@ contract SuckerDeepAttacks is Test {
         JBClaim memory claimData = JBClaim({
             token: TOKEN,
             leaf: JBLeaf({
-                index: 0,
-                beneficiary: address(this),
-                projectTokenCount: 10 ether,
-                terminalTokenAmount: 5 ether
+                index: 0, beneficiary: address(this), projectTokenCount: 10 ether, terminalTokenAmount: 5 ether
             }),
             proof: proof
         });
@@ -483,7 +474,9 @@ contract SuckerDeepAttacks is Test {
         // Enable emergency hatch.
         sucker.test_setRemoteToken(
             TOKEN,
-            JBRemoteToken({enabled: false, emergencyHatch: true, minGas: 0, addr: makeAddr("remote"), minBridgeAmount: 0})
+            JBRemoteToken({
+                enabled: false, emergencyHatch: true, minGas: 0, addr: makeAddr("remote"), minBridgeAmount: 0
+            })
         );
 
         // Index 0 was part of the sent root → should revert (could be double-spent on remote).
@@ -492,10 +485,7 @@ contract SuckerDeepAttacks is Test {
         JBClaim memory claimData = JBClaim({
             token: TOKEN,
             leaf: JBLeaf({
-                index: 0,
-                beneficiary: address(this),
-                projectTokenCount: 1 ether,
-                terminalTokenAmount: 1 ether
+                index: 0, beneficiary: address(this), projectTokenCount: 1 ether, terminalTokenAmount: 1 ether
             }),
             proof: proof
         });
@@ -528,7 +518,9 @@ contract SuckerDeepAttacks is Test {
         // Enable emergency hatch.
         sucker.test_setRemoteToken(
             TOKEN,
-            JBRemoteToken({enabled: false, emergencyHatch: true, minGas: 0, addr: makeAddr("remote"), minBridgeAmount: 0})
+            JBRemoteToken({
+                enabled: false, emergencyHatch: true, minGas: 0, addr: makeAddr("remote"), minBridgeAmount: 0
+            })
         );
 
         _mockMint(address(this), 3 ether);
@@ -539,10 +531,7 @@ contract SuckerDeepAttacks is Test {
         JBClaim memory claimData = JBClaim({
             token: TOKEN,
             leaf: JBLeaf({
-                index: 2,
-                beneficiary: address(this),
-                projectTokenCount: 3 ether,
-                terminalTokenAmount: 3 ether
+                index: 2, beneficiary: address(this), projectTokenCount: 3 ether, terminalTokenAmount: 3 ether
             }),
             proof: proof
         });
@@ -561,7 +550,9 @@ contract SuckerDeepAttacks is Test {
 
         sucker.test_setRemoteToken(
             TOKEN,
-            JBRemoteToken({enabled: false, emergencyHatch: true, minGas: 0, addr: makeAddr("remote"), minBridgeAmount: 0})
+            JBRemoteToken({
+                enabled: false, emergencyHatch: true, minGas: 0, addr: makeAddr("remote"), minBridgeAmount: 0
+            })
         );
 
         _mockMint(address(this), 5 ether);
@@ -571,10 +562,7 @@ contract SuckerDeepAttacks is Test {
         JBClaim memory claimData = JBClaim({
             token: TOKEN,
             leaf: JBLeaf({
-                index: 0,
-                beneficiary: address(this),
-                projectTokenCount: 5 ether,
-                terminalTokenAmount: 5 ether
+                index: 0, beneficiary: address(this), projectTokenCount: 5 ether, terminalTokenAmount: 5 ether
             }),
             proof: proof
         });
@@ -601,10 +589,7 @@ contract SuckerDeepAttacks is Test {
         JBClaim memory claimData = JBClaim({
             token: TOKEN,
             leaf: JBLeaf({
-                index: 0,
-                beneficiary: address(this),
-                projectTokenCount: 5 ether,
-                terminalTokenAmount: 5 ether
+                index: 0, beneficiary: address(this), projectTokenCount: 5 ether, terminalTokenAmount: 5 ether
             }),
             proof: proof
         });
@@ -623,7 +608,9 @@ contract SuckerDeepAttacks is Test {
 
         sucker.test_setRemoteToken(
             TOKEN,
-            JBRemoteToken({enabled: false, emergencyHatch: true, minGas: 0, addr: makeAddr("remote"), minBridgeAmount: 0})
+            JBRemoteToken({
+                enabled: false, emergencyHatch: true, minGas: 0, addr: makeAddr("remote"), minBridgeAmount: 0
+            })
         );
 
         sucker.test_setNextMerkleCheckToBe(true);
@@ -631,10 +618,7 @@ contract SuckerDeepAttacks is Test {
         JBClaim memory claimData = JBClaim({
             token: TOKEN,
             leaf: JBLeaf({
-                index: 0,
-                beneficiary: address(this),
-                projectTokenCount: 10 ether,
-                terminalTokenAmount: 10 ether
+                index: 0, beneficiary: address(this), projectTokenCount: 10 ether, terminalTokenAmount: 10 ether
             }),
             proof: proof
         });
@@ -736,9 +720,7 @@ contract SuckerDeepAttacks is Test {
 
         // Try to remap to a different remote token.
         vm.expectRevert(abi.encodeWithSelector(JBSucker.JBSucker_TokenAlreadyMapped.selector, token, remoteA));
-        sucker.mapToken(
-            JBTokenMapping({localToken: token, minGas: 200_000, remoteToken: remoteB, minBridgeAmount: 0})
-        );
+        sucker.mapToken(JBTokenMapping({localToken: token, minGas: 200_000, remoteToken: remoteB, minBridgeAmount: 0}));
     }
 
     /// @notice Mapping after emergency hatch enabled → should revert.
@@ -751,11 +733,7 @@ contract SuckerDeepAttacks is Test {
         sucker.test_setRemoteToken(
             token,
             JBRemoteToken({
-                enabled: false,
-                emergencyHatch: true,
-                minGas: 200_000,
-                addr: makeAddr("remote"),
-                minBridgeAmount: 0
+                enabled: false, emergencyHatch: true, minGas: 200_000, addr: makeAddr("remote"), minBridgeAmount: 0
             })
         );
 
@@ -776,10 +754,7 @@ contract SuckerDeepAttacks is Test {
         vm.expectRevert();
         sucker.mapToken(
             JBTokenMapping({
-                localToken: makeAddr("token"),
-                minGas: 200_000,
-                remoteToken: makeAddr("remote"),
-                minBridgeAmount: 0
+                localToken: makeAddr("token"), minGas: 200_000, remoteToken: makeAddr("remote"), minBridgeAmount: 0
             })
         );
     }
@@ -793,10 +768,7 @@ contract SuckerDeepAttacks is Test {
         );
         sucker.mapToken(
             JBTokenMapping({
-                localToken: JBConstants.NATIVE_TOKEN,
-                minGas: 0,
-                remoteToken: makeAddr("nonNative"),
-                minBridgeAmount: 0
+                localToken: JBConstants.NATIVE_TOKEN, minGas: 0, remoteToken: makeAddr("nonNative"), minBridgeAmount: 0
             })
         );
     }
@@ -884,7 +856,9 @@ contract SuckerDeepAttacks is Test {
     function test_toRemote_emergencyHatch_reverts() public {
         sucker.test_setRemoteToken(
             TOKEN,
-            JBRemoteToken({enabled: false, emergencyHatch: true, minGas: 0, addr: makeAddr("remote"), minBridgeAmount: 0})
+            JBRemoteToken({
+                enabled: false, emergencyHatch: true, minGas: 0, addr: makeAddr("remote"), minBridgeAmount: 0
+            })
         );
 
         vm.expectRevert(abi.encodeWithSelector(JBSucker.JBSucker_TokenHasInvalidEmergencyHatchState.selector, TOKEN));
@@ -1042,12 +1016,7 @@ contract SuckerDeepAttacks is Test {
         bytes32[] memory roots = new bytes32[](20);
 
         for (uint256 i = 0; i < 20; i++) {
-            sucker.test_insertIntoTree(
-                (i + 1) * 1 ether,
-                TOKEN,
-                (i + 1) * 0.5 ether,
-                address(uint160(1000 + i))
-            );
+            sucker.test_insertIntoTree((i + 1) * 1 ether, TOKEN, (i + 1) * 0.5 ether, address(uint160(1000 + i)));
             roots[i] = sucker.test_getOutboxRoot(TOKEN);
         }
 
@@ -1084,10 +1053,7 @@ contract SuckerDeepAttacks is Test {
         JBClaim memory claimData = JBClaim({
             token: TOKEN,
             leaf: JBLeaf({
-                index: 0,
-                beneficiary: address(this),
-                projectTokenCount: 10 ether,
-                terminalTokenAmount: 5 ether
+                index: 0, beneficiary: address(this), projectTokenCount: 10 ether, terminalTokenAmount: 5 ether
             }),
             proof: proof
         });
@@ -1150,10 +1116,7 @@ contract SuckerDeepAttacks is Test {
         JBClaim memory claimData = JBClaim({
             token: TOKEN,
             leaf: JBLeaf({
-                index: 0,
-                beneficiary: address(this),
-                projectTokenCount: 5 ether,
-                terminalTokenAmount: 5 ether
+                index: 0, beneficiary: address(this), projectTokenCount: 5 ether, terminalTokenAmount: 5 ether
             }),
             proof: proof
         });
@@ -1184,10 +1147,7 @@ contract SuckerDeepAttacks is Test {
         JBClaim memory claimData = JBClaim({
             token: TOKEN,
             leaf: JBLeaf({
-                index: 0,
-                beneficiary: address(this),
-                projectTokenCount: 5 ether,
-                terminalTokenAmount: 5 ether
+                index: 0, beneficiary: address(this), projectTokenCount: 5 ether, terminalTokenAmount: 5 ether
             }),
             proof: proof
         });
@@ -1238,10 +1198,7 @@ contract SuckerDeepAttacks is Test {
         JBClaim memory dupClaim = JBClaim({
             token: TOKEN,
             leaf: JBLeaf({
-                index: 2,
-                beneficiary: address(uint160(102)),
-                projectTokenCount: 3 ether,
-                terminalTokenAmount: 1.5 ether
+                index: 2, beneficiary: address(uint160(102)), projectTokenCount: 3 ether, terminalTokenAmount: 1.5 ether
             }),
             proof: dupProof
         });
@@ -1280,11 +1237,7 @@ contract SuckerDeepAttacks is Test {
         sucker.test_setRemoteToken(
             TOKEN,
             JBRemoteToken({
-                enabled: true,
-                emergencyHatch: false,
-                minGas: 200_000,
-                addr: makeAddr("remote"),
-                minBridgeAmount: 0
+                enabled: true, emergencyHatch: false, minGas: 200_000, addr: makeAddr("remote"), minBridgeAmount: 0
             })
         );
 

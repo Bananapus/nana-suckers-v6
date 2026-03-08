@@ -169,12 +169,8 @@ contract JBArbitrumSucker is JBSucker, IJBArbitrumSucker {
             SafeERC20.forceApprove({token: IERC20(token), spender: GATEWAYROUTER.getGateway(token), value: amount});
 
             // slither-disable-next-line calls-loop,unused-return
-            IArbL2GatewayRouter(address(GATEWAYROUTER)).outboundTransfer({
-                l1Token: remoteToken.addr,
-                to: peer(),
-                amount: amount,
-                data: bytes("")
-            });
+            IArbL2GatewayRouter(address(GATEWAYROUTER))
+                .outboundTransfer({l1Token: remoteToken.addr, to: peer(), amount: amount, data: bytes("")});
         } else {
             // Otherwise, the token is the native token, and the amount will be sent as `msg.value`.
             nativeValue = amount;

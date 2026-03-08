@@ -77,9 +77,8 @@ library SuckerDeploymentLib {
         }
 
         if (_isCelo) {
-            deployment.celoDeployer = IJBSuckerDeployer(
-                _getDeploymentAddress(path, "nana-suckers-v5", network_name, "JBCCIPSuckerDeployer")
-            );
+            deployment.celoDeployer =
+                IJBSuckerDeployer(_getDeploymentAddress(path, "nana-suckers-v5", network_name, "JBCCIPSuckerDeployer"));
         }
     }
 

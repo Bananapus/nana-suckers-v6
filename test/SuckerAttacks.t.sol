@@ -36,7 +36,9 @@ contract AttackTestSucker is JBSucker {
         IJBTokens tokens,
         JBAddToBalanceMode addToBalanceMode,
         address forwarder
-    ) JBSucker(directory, permissions, tokens, addToBalanceMode, forwarder) {}
+    )
+        JBSucker(directory, permissions, tokens, addToBalanceMode, forwarder)
+    {}
 
     function _sendRootOverAMB(
         uint256,
@@ -45,7 +47,10 @@ contract AttackTestSucker is JBSucker {
         uint256,
         JBRemoteToken memory,
         JBMessageRoot memory
-    ) internal override {}
+    )
+        internal
+        override
+    {}
 
     function _isRemotePeer(address sender) internal view override returns (bool) {
         return sender == peer();
@@ -62,7 +67,11 @@ contract AttackTestSucker is JBSucker {
         address beneficiary,
         uint256 index,
         bytes32[_TREE_DEPTH] calldata leaves
-    ) internal virtual override {
+    )
+        internal
+        virtual
+        override
+    {
         if (!nextCheckShouldPass) {
             super._validateBranchRoot(expectedRoot, projectTokenCount, terminalTokenAmount, beneficiary, index, leaves);
         }
@@ -87,7 +96,9 @@ contract AttackTestSucker is JBSucker {
         address token,
         uint256 terminalTokenAmount,
         address beneficiary
-    ) external {
+    )
+        external
+    {
         _insertIntoTree(projectTokenCount, token, terminalTokenAmount, beneficiary);
     }
 
@@ -235,9 +246,7 @@ contract SuckerAttacks is Test {
         // This is the expected behavior — only the peer can submit roots
         if (peerAddr == address(0)) {
             JBMessageRoot memory root = JBMessageRoot({
-                token: JBConstants.NATIVE_TOKEN,
-                amount: 0,
-                remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(0)})
+                token: JBConstants.NATIVE_TOKEN, amount: 0, remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(0)})
             });
 
             vm.expectRevert();
@@ -309,7 +318,9 @@ contract SuckerAttacks is Test {
         bytes32[32] memory proof;
         JBClaim memory claimData = JBClaim({
             token: token,
-            leaf: JBLeaf({index: 0, beneficiary: address(120), projectTokenCount: 5 ether, terminalTokenAmount: 5 ether}),
+            leaf: JBLeaf({
+                index: 0, beneficiary: address(120), projectTokenCount: 5 ether, terminalTokenAmount: 5 ether
+            }),
             proof: proof
         });
 
@@ -435,10 +446,7 @@ contract SuckerAttacks is Test {
         JBClaim memory claim = JBClaim({
             token: token,
             leaf: JBLeaf({
-                index: 0,
-                beneficiary: address(this),
-                projectTokenCount: 1 ether,
-                terminalTokenAmount: 1 ether
+                index: 0, beneficiary: address(this), projectTokenCount: 1 ether, terminalTokenAmount: 1 ether
             }),
             proof: proof
         });
@@ -463,9 +471,7 @@ contract SuckerAttacks is Test {
 
         // Insert several items and verify root changes each time
         for (uint256 i = 0; i < 10; i++) {
-            sucker.test_insertIntoTree(
-                (i + 1) * 1 ether, token, (i + 1) * 0.5 ether, address(uint160(1000 + i))
-            );
+            sucker.test_insertIntoTree((i + 1) * 1 ether, token, (i + 1) * 0.5 ether, address(uint160(1000 + i)));
 
             bytes32 newRoot = sucker.test_getOutboxRoot(token);
             assertTrue(newRoot != prevRoot, "Root should change after each insertion");
