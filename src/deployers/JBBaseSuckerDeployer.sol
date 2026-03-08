@@ -1,10 +1,13 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
-import "./JBOptimismSuckerDeployer.sol";
-import "../JBBaseSucker.sol";
+import {IJBDirectory} from "@bananapus/core-v6/src/interfaces/IJBDirectory.sol";
+import {IJBPermissions} from "@bananapus/core-v6/src/interfaces/IJBPermissions.sol";
+import {IJBTokens} from "@bananapus/core-v6/src/interfaces/IJBTokens.sol";
 
-// Exact same as JBOptimismSuckerDeployer, we do this so we get a seperate artifact for Base.
+import {JBOptimismSuckerDeployer} from "./JBOptimismSuckerDeployer.sol";
+
+/// @notice An `IJBSuckerDeployer` implementation to deploy `JBBaseSucker` contracts (same as OP, separate artifact).
 contract JBBaseSuckerDeployer is JBOptimismSuckerDeployer {
     //*********************************************************************//
     // ---------------------------- constructor -------------------------- //

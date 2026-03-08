@@ -3,15 +3,38 @@ pragma solidity ^0.8.0;
 
 import {IJBDirectory} from "@bananapus/core-v6/src/interfaces/IJBDirectory.sol";
 import {IJBProjects} from "@bananapus/core-v6/src/interfaces/IJBProjects.sol";
+
 import {JBSuckerDeployerConfig} from "../structs/JBSuckerDeployerConfig.sol";
 import {JBSuckersPair} from "../structs/JBSuckersPair.sol";
 
 /// @notice The interface for the sucker registry, which tracks deployed suckers and manages deployer allowlists.
 interface IJBSuckerRegistry {
-    event SuckerDeployedFor(uint256 projectId, address sucker, JBSuckerDeployerConfig configuration, address caller);
+    // Events
+
+    /// @notice Emitted when a sucker deployer is added to the allowlist.
+    /// @param deployer The address of the deployer that was allowed.
+    /// @param caller The address that allowed the deployer.
     event SuckerDeployerAllowed(address deployer, address caller);
+
+    /// @notice Emitted when a sucker deployer is removed from the allowlist.
+    /// @param deployer The address of the deployer that was removed.
+    /// @param caller The address that removed the deployer.
     event SuckerDeployerRemoved(address deployer, address caller);
+
+    /// @notice Emitted when a sucker is deployed for a project.
+    /// @param projectId The ID of the project the sucker was deployed for.
+    /// @param sucker The address of the deployed sucker.
+    /// @param configuration The deployer configuration used.
+    /// @param caller The address that triggered the deployment.
+    event SuckerDeployedFor(uint256 projectId, address sucker, JBSuckerDeployerConfig configuration, address caller);
+
+    /// @notice Emitted when a deprecated sucker is removed from a project.
+    /// @param projectId The ID of the project.
+    /// @param sucker The address of the deprecated sucker.
+    /// @param caller The address that removed the sucker.
     event SuckerDeprecated(uint256 projectId, address sucker, address caller);
+
+    // View functions
 
     /// @notice The Juicebox directory.
     /// @return The directory contract.
@@ -42,6 +65,8 @@ interface IJBSuckerRegistry {
     /// @param projectId The ID of the project.
     /// @return The addresses of the suckers.
     function suckersOf(uint256 projectId) external view returns (address[] memory);
+
+    // State-changing functions
 
     /// @notice Add a sucker deployer to the allowlist.
     /// @param deployer The address of the deployer to allow.

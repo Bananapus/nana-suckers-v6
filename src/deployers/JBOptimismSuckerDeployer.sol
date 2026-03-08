@@ -1,15 +1,14 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
-import "./JBSuckerDeployer.sol";
-import "../interfaces/IJBArbitrumSuckerDeployer.sol";
+import {IJBDirectory} from "@bananapus/core-v6/src/interfaces/IJBDirectory.sol";
+import {IJBPermissions} from "@bananapus/core-v6/src/interfaces/IJBPermissions.sol";
+import {IJBTokens} from "@bananapus/core-v6/src/interfaces/IJBTokens.sol";
 
-import {JBOptimismSucker} from "../JBOptimismSucker.sol";
-import {JBAddToBalanceMode} from "../enums/JBAddToBalanceMode.sol";
-import {IJBOpSuckerDeployer} from "./../interfaces/IJBOpSuckerDeployer.sol";
-import {IJBSuckerDeployer} from "./../interfaces/IJBSuckerDeployer.sol";
+import {IJBOpSuckerDeployer} from "../interfaces/IJBOpSuckerDeployer.sol";
 import {IOPMessenger} from "../interfaces/IOPMessenger.sol";
 import {IOPStandardBridge} from "../interfaces/IOPStandardBridge.sol";
+import {JBSuckerDeployer} from "./JBSuckerDeployer.sol";
 
 /// @notice An `IJBSuckerDeployer` implementation to deploy `JBOptimismSucker` contracts.
 contract JBOptimismSuckerDeployer is JBSuckerDeployer, IJBOpSuckerDeployer {
@@ -17,11 +16,11 @@ contract JBOptimismSuckerDeployer is JBSuckerDeployer, IJBOpSuckerDeployer {
     // ---------------------- public stored properties ------------------- //
     //*********************************************************************//
 
-    /// @notice The messenger used to send messages between the local and remote sucker.
-    IOPMessenger public override opMessenger;
-
     /// @notice The bridge used to bridge tokens between the local and remote chain.
     IOPStandardBridge public override opBridge;
+
+    /// @notice The messenger used to send messages between the local and remote sucker.
+    IOPMessenger public override opMessenger;
 
     //*********************************************************************//
     // ---------------------------- constructor -------------------------- //

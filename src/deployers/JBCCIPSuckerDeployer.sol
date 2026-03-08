@@ -1,26 +1,27 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
-import "./JBSuckerDeployer.sol";
-import "../interfaces/IJBArbitrumSuckerDeployer.sol";
+import {IJBDirectory} from "@bananapus/core-v6/src/interfaces/IJBDirectory.sol";
+import {IJBPermissions} from "@bananapus/core-v6/src/interfaces/IJBPermissions.sol";
+import {IJBTokens} from "@bananapus/core-v6/src/interfaces/IJBTokens.sol";
 
-import {JBCCIPSucker} from "../JBCCIPSucker.sol";
-import {JBAddToBalanceMode} from "../enums/JBAddToBalanceMode.sol";
-import {IJBSucker} from "./../interfaces/IJBSucker.sol";
-import {IJBSuckerDeployer} from "./../interfaces/IJBSuckerDeployer.sol";
-import {IJBCCIPSuckerDeployer} from "./../interfaces/IJBCCIPSuckerDeployer.sol";
-import {ICCIPRouter} from "src/interfaces/ICCIPRouter.sol";
-import {CCIPHelper} from "src/libraries/CCIPHelper.sol";
+import {ICCIPRouter} from "../interfaces/ICCIPRouter.sol";
+import {IJBCCIPSuckerDeployer} from "../interfaces/IJBCCIPSuckerDeployer.sol";
+import {JBSuckerDeployer} from "./JBSuckerDeployer.sol";
 
-/// @notice An `IJBSuckerDeployer` implementation to deploy contracts.
+/// @notice An `IJBSuckerDeployer` implementation to deploy `JBCCIPSucker` contracts.
 contract JBCCIPSuckerDeployer is JBSuckerDeployer, IJBCCIPSuckerDeployer {
+    //*********************************************************************//
+    // --------------------------- custom errors ------------------------- //
+    //*********************************************************************//
+
     error JBCCIPSuckerDeployer_InvalidCCIPRouter(address router);
 
     //*********************************************************************//
     // ---------------------- public stored properties ------------------- //
     //*********************************************************************//
 
-    /// @notice Store the remote chain id
+    /// @notice Store the remote chain id.
     uint256 public ccipRemoteChainId;
 
     /// @notice The remote chain selector target of all sucker deployed by this contract.

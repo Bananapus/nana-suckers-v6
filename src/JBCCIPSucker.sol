@@ -1,14 +1,12 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
-import {IAny2EVMMessageReceiver} from "@chainlink/contracts-ccip/src/v0.8/ccip/interfaces/IAny2EVMMessageReceiver.sol";
-import {Client} from "@chainlink/contracts-ccip/src/v0.8/ccip/libraries/Client.sol";
 import {IJBDirectory} from "@bananapus/core-v6/src/interfaces/IJBDirectory.sol";
 import {IJBPermissions} from "@bananapus/core-v6/src/interfaces/IJBPermissions.sol";
-import {IJBPrices} from "@bananapus/core-v6/src/interfaces/IJBPrices.sol";
-import {IJBRulesets} from "@bananapus/core-v6/src/interfaces/IJBRulesets.sol";
 import {IJBTokens} from "@bananapus/core-v6/src/interfaces/IJBTokens.sol";
 import {JBConstants} from "@bananapus/core-v6/src/libraries/JBConstants.sol";
+import {IAny2EVMMessageReceiver} from "@chainlink/contracts-ccip/src/v0.8/ccip/interfaces/IAny2EVMMessageReceiver.sol";
+import {Client} from "@chainlink/contracts-ccip/src/v0.8/ccip/libraries/Client.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {BitMaps} from "@openzeppelin/contracts/utils/structs/BitMaps.sol";
@@ -18,8 +16,6 @@ import {JBCCIPSuckerDeployer} from "./deployers/JBCCIPSuckerDeployer.sol";
 import {JBAddToBalanceMode} from "./enums/JBAddToBalanceMode.sol";
 import {ICCIPRouter, IWrappedNativeToken} from "./interfaces/ICCIPRouter.sol";
 import {IJBCCIPSuckerDeployer} from "./interfaces/IJBCCIPSuckerDeployer.sol";
-import {CCIPHelper} from "./libraries/CCIPHelper.sol";
-import {JBInboxTreeRoot} from "./structs/JBInboxTreeRoot.sol";
 import {JBMessageRoot} from "./structs/JBMessageRoot.sol";
 import {JBRemoteToken} from "./structs/JBRemoteToken.sol";
 import {JBTokenMapping} from "./structs/JBTokenMapping.sol";
@@ -179,7 +175,7 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
     }
 
     //*********************************************************************//
-    // --------------------- internal transactions ----------------------- //
+    // ------------------------ internal views --------------------------- //
     //*********************************************************************//
 
     /// @notice Unused in this context.
@@ -187,6 +183,10 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
         // NOTICE: We do not check if its the `peer` here, as this contract is supposed to be the caller *NOT* the peer.
         return sender == address(this);
     }
+
+    //*********************************************************************//
+    // --------------------- internal transactions ----------------------- //
+    //*********************************************************************//
 
     /// @notice Uses CCIP to send the root and assets over the bridge to the peer.
     /// @param transportPayment the amount of `msg.value` that is going to get paid for sending this message.

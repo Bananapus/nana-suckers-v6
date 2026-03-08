@@ -1,16 +1,29 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
-import "../src/deployers/JBOptimismSuckerDeployer.sol";
-import "../src/deployers/JBBaseSuckerDeployer.sol";
-import "../src/deployers/JBArbitrumSuckerDeployer.sol";
-import "../src/deployers/JBCCIPSuckerDeployer.sol";
+import {IInbox} from "@arbitrum/nitro-contracts/src/bridge/IInbox.sol";
+import {IJBDirectory} from "@bananapus/core-v6/src/interfaces/IJBDirectory.sol";
+import {IJBPermissions} from "@bananapus/core-v6/src/interfaces/IJBPermissions.sol";
+import {IJBTokens} from "@bananapus/core-v6/src/interfaces/IJBTokens.sol";
 import "@bananapus/core-v6/script/helpers/CoreDeploymentLib.sol";
-
 import {Sphinx} from "@sphinx-labs/contracts/SphinxPlugin.sol";
 import {Script} from "forge-std/Script.sol";
-import {JBSuckerRegistry} from "./../src/JBSuckerRegistry.sol";
-import {ICCIPRouter} from "./../src/interfaces/ICCIPRouter.sol";
+
+import {JBArbitrumSucker} from "../src/JBArbitrumSucker.sol";
+import {JBBaseSucker} from "../src/JBBaseSucker.sol";
+import {JBCCIPSucker} from "../src/JBCCIPSucker.sol";
+import {JBOptimismSucker} from "../src/JBOptimismSucker.sol";
+import {JBSuckerRegistry} from "../src/JBSuckerRegistry.sol";
+import {JBArbitrumSuckerDeployer} from "../src/deployers/JBArbitrumSuckerDeployer.sol";
+import {JBBaseSuckerDeployer} from "../src/deployers/JBBaseSuckerDeployer.sol";
+import {JBCCIPSuckerDeployer} from "../src/deployers/JBCCIPSuckerDeployer.sol";
+import {JBOptimismSuckerDeployer} from "../src/deployers/JBOptimismSuckerDeployer.sol";
+import {JBAddToBalanceMode} from "../src/enums/JBAddToBalanceMode.sol";
+import {JBLayer} from "../src/enums/JBLayer.sol";
+import {IArbGatewayRouter} from "../src/interfaces/IArbGatewayRouter.sol";
+import {ICCIPRouter} from "../src/interfaces/ICCIPRouter.sol";
+import {IOPMessenger} from "../src/interfaces/IOPMessenger.sol";
+import {IOPStandardBridge} from "../src/interfaces/IOPStandardBridge.sol";
 import {ARBAddresses} from "../src/libraries/ARBAddresses.sol";
 import {ARBChains} from "../src/libraries/ARBChains.sol";
 import {CCIPHelper} from "../src/libraries/CCIPHelper.sol";
