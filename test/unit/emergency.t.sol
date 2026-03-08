@@ -77,13 +77,7 @@ contract SuckerEmergencyTest is Test {
     }
 
     /// @notice Ensures that if a sucker is send disabled and a claim is valid that a user can withdraw their deposit.
-    function testEmergencyExitWhenSendingDisabled(
-        bool sendDisabled,
-        bool isValidClaim,
-        JBClaim memory claim
-    )
-        external
-    {
+    function testEmergencyExitWhenSendingDisabled(bool sendDisabled, bool isValidClaim, JBClaim memory claim) external {
         uint256 projectId = 1;
         TestSucker sucker = _createTestSucker(projectId, "");
 

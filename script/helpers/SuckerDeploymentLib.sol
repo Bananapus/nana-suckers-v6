@@ -77,9 +77,8 @@ library SuckerDeploymentLib {
         }
 
         if (_isTempo || _isMainnet) {
-            deployment.tempoDeployer = IJBSuckerDeployer(
-                _getDeploymentAddress(path, "nana-suckers-v5", network_name, "JBCCIPSuckerDeployer")
-            );
+            deployment.tempoDeployer =
+                IJBSuckerDeployer(_getDeploymentAddress(path, "nana-suckers-v5", network_name, "JBCCIPSuckerDeployer"));
         }
     }
 

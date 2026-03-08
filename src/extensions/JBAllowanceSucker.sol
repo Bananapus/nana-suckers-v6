@@ -46,9 +46,8 @@ abstract contract JBAllowanceSucker is JBSucker {
         uint256 _projectId = projectId();
 
         // Burn the project tokens.
-        IJBController(address(DIRECTORY.controllerOf(_projectId))).burnTokensOf(
-            address(this), _projectId, count, string("")
-        );
+        IJBController(address(DIRECTORY.controllerOf(_projectId)))
+            .burnTokensOf(address(this), _projectId, count, string(""));
 
         // Get the primary terminal of the project for the token.
         IJBCashOutTerminal terminal = IJBCashOutTerminal(address(DIRECTORY.primaryTerminalOf(_projectId, token)));
@@ -73,14 +72,15 @@ abstract contract JBAllowanceSucker is JBSucker {
 
         // Get the balance before we cash out.
         uint256 balanceBefore = _balanceOf(token, address(this));
-        receivedAmount = IJBSuckerDeployerFeeless(deployer).useAllowanceFeeless({
-            projectId: _projectId,
-            terminal: IJBPayoutTerminal(address(terminal)),
-            token: token,
-            currency: accountingContext[0].currency,
-            amount: backingAssets,
-            minTokensReclaimed: minTokensReclaimed
-        });
+        receivedAmount = IJBSuckerDeployerFeeless(deployer)
+            .useAllowanceFeeless({
+                projectId: _projectId,
+                terminal: IJBPayoutTerminal(address(terminal)),
+                token: token,
+                currency: accountingContext[0].currency,
+                amount: backingAssets,
+                minTokensReclaimed: minTokensReclaimed
+            });
 
         // Sanity check to make sure we actually received the reported amount.
         // Prevents a malicious terminal from reporting a higher amount than it actually sent.

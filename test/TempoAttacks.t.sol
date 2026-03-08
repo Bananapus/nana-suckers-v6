@@ -34,7 +34,9 @@ contract AttackTempoSucker is JBSucker {
         IJBTokens tokens,
         JBAddToBalanceMode addToBalanceMode,
         address forwarder
-    ) JBSucker(directory, permissions, tokens, addToBalanceMode, forwarder) {}
+    )
+        JBSucker(directory, permissions, tokens, addToBalanceMode, forwarder)
+    {}
 
     function _sendRootOverAMB(
         uint256,
@@ -43,7 +45,10 @@ contract AttackTempoSucker is JBSucker {
         uint256,
         JBRemoteToken memory,
         JBMessageRoot memory
-    ) internal override {}
+    )
+        internal
+        override
+    {}
 
     function _isRemotePeer(address sender) internal view override returns (bool) {
         return sender == peer();
@@ -60,7 +65,11 @@ contract AttackTempoSucker is JBSucker {
         address beneficiary,
         uint256 index,
         bytes32[_TREE_DEPTH] calldata leaves
-    ) internal virtual override {
+    )
+        internal
+        virtual
+        override
+    {
         if (!nextCheckShouldPass) {
             super._validateBranchRoot(expectedRoot, projectTokenCount, terminalTokenAmount, beneficiary, index, leaves);
         }
@@ -84,7 +93,9 @@ contract AttackTempoSucker is JBSucker {
         address token,
         uint256 terminalTokenAmount,
         address beneficiary
-    ) external {
+    )
+        external
+    {
         _insertIntoTree(projectTokenCount, token, terminalTokenAmount, beneficiary);
     }
 
@@ -146,7 +157,11 @@ contract TempoAttacks is Test {
 
     function _createTestSucker(uint256 projectId, bytes32 salt) internal returns (AttackTempoSucker) {
         AttackTempoSucker singleton = new AttackTempoSucker(
-            IJBDirectory(DIRECTORY), IJBPermissions(PERMISSIONS), IJBTokens(TOKENS), JBAddToBalanceMode.MANUAL, FORWARDER
+            IJBDirectory(DIRECTORY),
+            IJBPermissions(PERMISSIONS),
+            IJBTokens(TOKENS),
+            JBAddToBalanceMode.MANUAL,
+            FORWARDER
         );
 
         AttackTempoSucker clone =
@@ -219,7 +234,9 @@ contract TempoAttacks is Test {
         sucker.test_setNextMerkleCheckToBe(true);
         JBClaim memory wethClaim = JBClaim({
             token: wethToken,
-            leaf: JBLeaf({index: 0, beneficiary: address(120), projectTokenCount: 5 ether, terminalTokenAmount: 5 ether}),
+            leaf: JBLeaf({
+                index: 0, beneficiary: address(120), projectTokenCount: 5 ether, terminalTokenAmount: 5 ether
+            }),
             proof: proof
         });
         sucker.claim(wethClaim);
@@ -228,7 +245,9 @@ contract TempoAttacks is Test {
         sucker.test_setNextMerkleCheckToBe(true);
         JBClaim memory nativeClaim = JBClaim({
             token: nativeToken,
-            leaf: JBLeaf({index: 0, beneficiary: address(120), projectTokenCount: 5 ether, terminalTokenAmount: 5 ether}),
+            leaf: JBLeaf({
+                index: 0, beneficiary: address(120), projectTokenCount: 5 ether, terminalTokenAmount: 5 ether
+            }),
             proof: proof
         });
         sucker.claim(nativeClaim);
@@ -272,11 +291,7 @@ contract TempoAttacks is Test {
         sucker.test_setRemoteToken(
             token,
             JBRemoteToken({
-                enabled: true,
-                emergencyHatch: false,
-                minGas: 200_000,
-                addr: maliciousRemote,
-                minBridgeAmount: 0
+                enabled: true, emergencyHatch: false, minGas: 200_000, addr: maliciousRemote, minBridgeAmount: 0
             })
         );
 
@@ -424,9 +439,7 @@ contract TempoAttacks is Test {
 
         uint256 prevCount = 0;
         for (uint256 i = 0; i < 20; i++) {
-            sucker.test_insertIntoTree(
-                (i + 1) * 1 ether, token, (i + 1) * 0.5 ether, address(uint160(1000 + i))
-            );
+            sucker.test_insertIntoTree((i + 1) * 1 ether, token, (i + 1) * 0.5 ether, address(uint160(1000 + i)));
 
             uint256 newCount = sucker.test_getOutboxCount(token);
             assertTrue(newCount > prevCount, "Count must strictly increase");

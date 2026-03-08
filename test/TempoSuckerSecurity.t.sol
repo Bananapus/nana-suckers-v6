@@ -36,7 +36,9 @@ contract TempoTestSucker is JBSucker {
         IJBTokens tokens,
         JBAddToBalanceMode addToBalanceMode,
         address forwarder
-    ) JBSucker(directory, permissions, tokens, addToBalanceMode, forwarder) {}
+    )
+        JBSucker(directory, permissions, tokens, addToBalanceMode, forwarder)
+    {}
 
     function _sendRootOverAMB(
         uint256,
@@ -45,7 +47,10 @@ contract TempoTestSucker is JBSucker {
         uint256,
         JBRemoteToken memory,
         JBMessageRoot memory
-    ) internal override {}
+    )
+        internal
+        override
+    {}
 
     function _isRemotePeer(address sender) internal view override returns (bool) {
         return sender == peer();
@@ -62,7 +67,11 @@ contract TempoTestSucker is JBSucker {
         address beneficiary,
         uint256 index,
         bytes32[_TREE_DEPTH] calldata leaves
-    ) internal virtual override {
+    )
+        internal
+        virtual
+        override
+    {
         if (!nextCheckShouldPass) {
             super._validateBranchRoot(expectedRoot, projectTokenCount, terminalTokenAmount, beneficiary, index, leaves);
         }
@@ -87,7 +96,9 @@ contract TempoTestSucker is JBSucker {
         address token,
         uint256 terminalTokenAmount,
         address beneficiary
-    ) external {
+    )
+        external
+    {
         _insertIntoTree(projectTokenCount, token, terminalTokenAmount, beneficiary);
     }
 
@@ -153,11 +164,14 @@ contract TempoSuckerSecurity is Test {
 
     function _createTestSucker(uint256 projectId, bytes32 salt) internal returns (TempoTestSucker) {
         TempoTestSucker singleton = new TempoTestSucker(
-            IJBDirectory(DIRECTORY), IJBPermissions(PERMISSIONS), IJBTokens(TOKENS), JBAddToBalanceMode.MANUAL, FORWARDER
+            IJBDirectory(DIRECTORY),
+            IJBPermissions(PERMISSIONS),
+            IJBTokens(TOKENS),
+            JBAddToBalanceMode.MANUAL,
+            FORWARDER
         );
 
-        TempoTestSucker clone =
-            TempoTestSucker(payable(address(LibClone.cloneDeterministic(address(singleton), salt))));
+        TempoTestSucker clone = TempoTestSucker(payable(address(LibClone.cloneDeterministic(address(singleton), salt))));
         clone.initialize(projectId);
         return clone;
     }
@@ -250,7 +264,9 @@ contract TempoSuckerSecurity is Test {
         bytes32[32] memory proof;
         JBClaim memory claimData = JBClaim({
             token: token,
-            leaf: JBLeaf({index: 0, beneficiary: address(120), projectTokenCount: 5 ether, terminalTokenAmount: 5 ether}),
+            leaf: JBLeaf({
+                index: 0, beneficiary: address(120), projectTokenCount: 5 ether, terminalTokenAmount: 5 ether
+            }),
             proof: proof
         });
         tempoSucker.claim(claimData);
@@ -276,9 +292,7 @@ contract TempoSuckerSecurity is Test {
         // Verify they are independently tracked
         assertEq(tempoSucker.test_getInboxRoot(WTEMP), bytes32(uint256(0x111)), "WTEMP inbox should be independent");
         assertEq(
-            tempoSucker.test_getInboxRoot(WETH_ON_TEMPO),
-            bytes32(uint256(0x222)),
-            "WETH inbox should be independent"
+            tempoSucker.test_getInboxRoot(WETH_ON_TEMPO), bytes32(uint256(0x222)), "WETH inbox should be independent"
         );
 
         // Setting one should not affect the other
@@ -305,9 +319,7 @@ contract TempoSuckerSecurity is Test {
 
         // Simulate: root arrives on Tempo as WETH_ON_TEMPO (the remote token addr)
         JBMessageRoot memory toTempoMsg = JBMessageRoot({
-            token: WETH_ON_TEMPO,
-            amount: 5 ether,
-            remoteRoot: JBInboxTreeRoot({nonce: 1, root: ethOutboxRoot})
+            token: WETH_ON_TEMPO, amount: 5 ether, remoteRoot: JBInboxTreeRoot({nonce: 1, root: ethOutboxRoot})
         });
 
         vm.prank(address(tempoSucker));
@@ -333,9 +345,7 @@ contract TempoSuckerSecurity is Test {
         assertEq(ethSucker.test_getInboxNonce(JBConstants.NATIVE_TOKEN), 1, "ETH inbox nonce should be 1");
 
         // Verify: Both sides have correct inbox roots from the round-trip
-        assertEq(
-            tempoSucker.test_getInboxRoot(WETH_ON_TEMPO), ethOutboxRoot, "Tempo inbox should hold ETH outbox root"
-        );
+        assertEq(tempoSucker.test_getInboxRoot(WETH_ON_TEMPO), ethOutboxRoot, "Tempo inbox should hold ETH outbox root");
         assertEq(
             ethSucker.test_getInboxRoot(JBConstants.NATIVE_TOKEN),
             tempoOutboxRoot,
@@ -404,11 +414,7 @@ contract TempoSuckerSecurity is Test {
         assertEq(CCIPHelper.TEMPO_TEST_ID, 42_429, "Tempo testnet chain ID should be 42429");
 
         // Verify selector
-        assertEq(
-            CCIPHelper.TEMPO_TEST_SEL,
-            3_963_528_237_232_804_922,
-            "Tempo testnet CCIP selector should match"
-        );
+        assertEq(CCIPHelper.TEMPO_TEST_SEL, 3_963_528_237_232_804_922, "Tempo testnet CCIP selector should match");
 
         // Verify router
         assertEq(
@@ -419,9 +425,7 @@ contract TempoSuckerSecurity is Test {
 
         // Verify WTEMP address
         assertEq(
-            CCIPHelper.TEMPO_TEST_WETH,
-            0xe875EB5437E55B74D18f6C090a5A14e4804dB2d9,
-            "Tempo testnet WTEMP should match"
+            CCIPHelper.TEMPO_TEST_WETH, 0xe875EB5437E55B74D18f6C090a5A14e4804dB2d9, "Tempo testnet WTEMP should match"
         );
 
         // Verify lookup functions
@@ -441,7 +445,13 @@ contract TempoSuckerSecurity is Test {
         // Set up a remote mapping: WETH_ON_TEMPO → NATIVE_TOKEN on ETH
         tempoSucker.test_setRemoteToken(
             token,
-            JBRemoteToken({enabled: true, emergencyHatch: false, minGas: 200_000, addr: JBConstants.NATIVE_TOKEN, minBridgeAmount: 0})
+            JBRemoteToken({
+                enabled: true,
+                emergencyHatch: false,
+                minGas: 200_000,
+                addr: JBConstants.NATIVE_TOKEN,
+                minBridgeAmount: 0
+            })
         );
 
         // Insert leaf and set inbox root
@@ -470,10 +480,7 @@ contract TempoSuckerSecurity is Test {
         JBClaim memory claim = JBClaim({
             token: token,
             leaf: JBLeaf({
-                index: 0,
-                beneficiary: address(this),
-                projectTokenCount: 1 ether,
-                terminalTokenAmount: 1 ether
+                index: 0, beneficiary: address(this), projectTokenCount: 1 ether, terminalTokenAmount: 1 ether
             }),
             proof: proof
         });

@@ -146,15 +146,11 @@ contract CCIPSuckerForkedTests is TestBaseWorkflow, JBTest {
             JBAccountingContext[] memory _tokensToAccept = new JBAccountingContext[](2);
 
             _tokensToAccept[0] = JBAccountingContext({
-                token: JBConstants.NATIVE_TOKEN,
-                decimals: 18,
-                currency: uint32(uint160(JBConstants.NATIVE_TOKEN))
+                token: JBConstants.NATIVE_TOKEN, decimals: 18, currency: uint32(uint160(JBConstants.NATIVE_TOKEN))
             });
 
             _tokensToAccept[1] = JBAccountingContext({
-                token: address(ccipBnM),
-                decimals: 18,
-                currency: uint32(uint160(address(ccipBnM)))
+                token: address(ccipBnM), decimals: 18, currency: uint32(uint160(address(ccipBnM)))
             });
 
             _terminalConfigurations[0] =
@@ -163,29 +159,31 @@ contract CCIPSuckerForkedTests is TestBaseWorkflow, JBTest {
             vm.expectCall(address(ccipBnM), abi.encodeWithSelector(IERC20Metadata.decimals.selector));
 
             // Create a first project to collect fees.
-            jbController().launchProjectFor({
-                owner: multisig(),
-                projectUri: "whatever",
-                rulesetConfigurations: _rulesetConfigurations,
-                terminalConfigurations: _terminalConfigurations, // Set terminals to receive fees.
-                memo: ""
-            });
+            jbController()
+                .launchProjectFor({
+                    owner: multisig(),
+                    projectUri: "whatever",
+                    rulesetConfigurations: _rulesetConfigurations,
+                    terminalConfigurations: _terminalConfigurations, // Set terminals to receive fees.
+                    memo: ""
+                });
 
             // Setup an erc20 for the project
             projectOneToken = jbController().deployERC20For(1, "SuckerToken", "SOOK", bytes32(0));
 
             // Add a price-feed to reconcile pays and cash outs with our test token
             MockPriceFeed _priceFeedNativeTest = new MockPriceFeed(100 * 10 ** 18, 18); // 2000 test token == 1 native
-                // token
+            // token
             vm.label(address(_priceFeedNativeTest), "Mock Price Feed Native-ccipBnM");
 
             vm.startPrank(address(jbController()));
-            IJBPrices(jbPrices()).addPriceFeedFor({
-                projectId: 1,
-                pricingCurrency: uint32(uint160(address(ccipBnM))),
-                unitCurrency: uint32(uint160(JBConstants.NATIVE_TOKEN)),
-                feed: IJBPriceFeed(_priceFeedNativeTest)
-            });
+            IJBPrices(jbPrices())
+                .addPriceFeedFor({
+                    projectId: 1,
+                    pricingCurrency: uint32(uint160(address(ccipBnM))),
+                    unitCurrency: uint32(uint160(JBConstants.NATIVE_TOKEN)),
+                    feed: IJBPriceFeed(_priceFeedNativeTest)
+                });
         }
     }
 
@@ -219,15 +217,11 @@ contract CCIPSuckerForkedTests is TestBaseWorkflow, JBTest {
             JBAccountingContext[] memory _tokensToAccept = new JBAccountingContext[](2);
 
             _tokensToAccept[0] = JBAccountingContext({
-                token: JBConstants.NATIVE_TOKEN,
-                decimals: 18,
-                currency: uint32(uint160(JBConstants.NATIVE_TOKEN))
+                token: JBConstants.NATIVE_TOKEN, decimals: 18, currency: uint32(uint160(JBConstants.NATIVE_TOKEN))
             });
 
             _tokensToAccept[1] = JBAccountingContext({
-                token: address(ccipBnMArbSepolia),
-                decimals: 18,
-                currency: uint32(uint160(address(ccipBnMArbSepolia)))
+                token: address(ccipBnMArbSepolia), decimals: 18, currency: uint32(uint160(address(ccipBnMArbSepolia)))
             });
 
             _terminalConfigurations[0] =
@@ -236,13 +230,14 @@ contract CCIPSuckerForkedTests is TestBaseWorkflow, JBTest {
             vm.expectCall(address(ccipBnMArbSepolia), abi.encodeWithSelector(IERC20Metadata.decimals.selector));
 
             // Create a first project to collect fees.
-            jbController().launchProjectFor({
-                owner: multisig(),
-                projectUri: "whatever",
-                rulesetConfigurations: _rulesetConfigurations,
-                terminalConfigurations: _terminalConfigurations, // Set terminals to receive fees.
-                memo: ""
-            });
+            jbController()
+                .launchProjectFor({
+                    owner: multisig(),
+                    projectUri: "whatever",
+                    rulesetConfigurations: _rulesetConfigurations,
+                    terminalConfigurations: _terminalConfigurations, // Set terminals to receive fees.
+                    memo: ""
+                });
         }
     }
 
@@ -449,10 +444,7 @@ contract CCIPSuckerForkedTests is TestBaseWorkflow, JBTest {
 
         // Map the token
         JBTokenMapping memory map = JBTokenMapping({
-            localToken: address(ccipBnM),
-            minGas: 200_000,
-            remoteToken: address(ccipBnMArbSepolia),
-            minBridgeAmount: 1
+            localToken: address(ccipBnM), minGas: 200_000, remoteToken: address(ccipBnMArbSepolia), minBridgeAmount: 1
         });
 
         vm.prank(multisig());

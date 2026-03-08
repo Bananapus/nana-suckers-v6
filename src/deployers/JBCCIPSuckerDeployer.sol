@@ -65,13 +65,7 @@ contract JBCCIPSuckerDeployer is JBSuckerDeployer, IJBCCIPSuckerDeployer {
     /// @param remoteChainId The remote chain id.
     /// @param remoteChainSelector The CCIP remote chain selector.
     /// @param router The CCIP router for this chain.
-    function setChainSpecificConstants(
-        uint256 remoteChainId,
-        uint64 remoteChainSelector,
-        ICCIPRouter router
-    )
-        external
-    {
+    function setChainSpecificConstants(uint256 remoteChainId, uint64 remoteChainSelector, ICCIPRouter router) external {
         if (_layerSpecificConfigurationIsSet()) {
             revert JBSuckerDeployer_AlreadyConfigured();
         }
