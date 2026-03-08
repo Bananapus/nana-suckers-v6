@@ -181,9 +181,7 @@ contract L47_MapTokensDustTest is Test {
         uint256 callerBalanceAfter = caller.balance;
 
         assertEq(
-            callerBalanceAfter,
-            callerBalanceBefore - msgValue + expectedRemainder,
-            "Dust remainder not refunded (fuzz)"
+            callerBalanceAfter, callerBalanceBefore - msgValue + expectedRemainder, "Dust remainder not refunded (fuzz)"
         );
     }
 
@@ -197,8 +195,7 @@ contract L47_MapTokensDustTest is Test {
         );
         vm.label(address(singleton), "SUCKER_SINGLETON");
 
-        L47TestSucker sucker =
-            L47TestSucker(payable(address(LibClone.cloneDeterministic(address(singleton), salt))));
+        L47TestSucker sucker = L47TestSucker(payable(address(LibClone.cloneDeterministic(address(singleton), salt))));
         vm.label(address(sucker), "SUCKER");
         sucker.initialize(_projectId);
 
@@ -246,5 +243,4 @@ contract L47TestSucker is JBSucker {
     function test_setOutboxTreeCount(address token, uint256 count) external {
         _outboxOf[token].tree.count = count;
     }
-
 }
