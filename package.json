@@ -19,8 +19,8 @@
   },
   "dependencies": {
     "@arbitrum/nitro-contracts": "github:OffchainLabs/nitro-contracts",
-    "@bananapus/core-v6": "^0.0.5",
-    "@bananapus/permission-ids-v6": "^0.0.3",
+    "@bananapus/core-v6": "^0.0.9",
+    "@bananapus/permission-ids-v6": "^0.0.4",
     "@chainlink/contracts-ccip": "^1.5.0",
     "@chainlink/local": "github:smartcontractkit/chainlink-local",
     "@openzeppelin/contracts": "^5.2.0",
@@ -28,6 +28,6 @@
     "solady": "^0.1.8"
   },
   "devDependencies": {
-    "@sphinx-labs/plugins": "^0.33.1"
+    "@sphinx-labs/plugins": "^0.33.2"
   }
 }
