@@ -7,6 +7,7 @@ import "@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol";
 
 import {IJBController} from "@bananapus/core-v6/src/interfaces/IJBController.sol";
 import "../../src/JBSucker.sol";
+import {IJBSuckerDeployer} from "../../src/interfaces/IJBSuckerDeployer.sol";
 
 import "../../src/deployers/JBOptimismSuckerDeployer.sol";
 import {JBOptimismSucker} from "../../src/JBOptimismSucker.sol";
