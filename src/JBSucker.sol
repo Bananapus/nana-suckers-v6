@@ -497,7 +497,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
             uint256 remainder = msg.value % numberToDisable;
             if (remainder > 0) {
                 // Best-effort refund — don't revert if caller can't accept ETH.
-                // slither-disable-next-line low-level-calls
+                // slither-disable-next-line low-level-calls,unchecked-lowlevel
                 _msgSender().call{value: remainder}("");
             }
         }
