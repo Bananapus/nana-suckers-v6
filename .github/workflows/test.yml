@@ -21,7 +21,7 @@ jobs:
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
       - name: Run tests
-        run: forge test --fail-fast --summary --detailed --skip "*/script/**" --skip invariants
+        run: forge test --fail-fast --summary --detailed --skip "*/script/**"
         env:
           RPC_ETHEREUM_SEPOLIA: ${{ secrets.RPC_ETHEREUM_SEPOLIA }}
           RPC_ARBITRUM_SEPOLIA: ${{ secrets.RPC_ARBITRUM_SEPOLIA }}
