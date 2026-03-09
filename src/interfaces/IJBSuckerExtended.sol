@@ -19,7 +19,11 @@ interface IJBSuckerExtended is IJBSucker {
     /// @param projectTokenCount The number of project tokens minted.
     /// @param caller The address that performed the emergency exit.
     event EmergencyExit(
-        address indexed beneficiary, address indexed token, uint256 terminalTokenAmount, uint256 projectTokenCount, address caller
+        address indexed beneficiary,
+        address indexed token,
+        uint256 terminalTokenAmount,
+        uint256 projectTokenCount,
+        address caller
     );
 
     /// @notice Emitted when the emergency hatch is opened for one or more tokens.

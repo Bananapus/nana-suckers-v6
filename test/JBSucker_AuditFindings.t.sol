@@ -254,9 +254,7 @@ contract JBSucker_AuditFindingsTest is Test {
         // Mock the mint call.
         vm.mockCall(
             CONTROLLER,
-            abi.encodeCall(
-                IJBController.mintTokensOf, (PROJECT_ID, projectTokenCount, beneficiaryAddr, "", false)
-            ),
+            abi.encodeCall(IJBController.mintTokensOf, (PROJECT_ID, projectTokenCount, beneficiaryAddr, "", false)),
             abi.encode(projectTokenCount)
         );
 
@@ -321,9 +319,7 @@ contract JBSucker_AuditFindingsTest is Test {
         // Mock the token mint so it would succeed if we got that far.
         vm.mockCall(
             CONTROLLER,
-            abi.encodeCall(
-                IJBController.mintTokensOf, (PROJECT_ID, projectTokenCount, beneficiaryAddr, "", false)
-            ),
+            abi.encodeCall(IJBController.mintTokensOf, (PROJECT_ID, projectTokenCount, beneficiaryAddr, "", false)),
             abi.encode(projectTokenCount)
         );
 
