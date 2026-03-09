@@ -699,7 +699,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     /// @notice Adds funds to the projects balance.
     /// @param token The terminal token to add to the project's balance.
     /// @param amount The amount of terminal tokens to add to the project's balance.
-    function _addToBalance(address token, uint256 amount) internal {
+    function _addToBalance(address token, uint256 amount) internal virtual {
         // Make sure that the current `amountToAddToBalance` is greater than or equal to the amount being added.
         uint256 addableAmount = amountToAddToBalanceOf(token);
         if (amount > addableAmount) {
