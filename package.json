@@ -19,8 +19,8 @@
   },
   "dependencies": {
     "@arbitrum/nitro-contracts": "github:OffchainLabs/nitro-contracts",
-    "@bananapus/core-v6": "^0.0.9",
-    "@bananapus/permission-ids-v6": "^0.0.4",
+    "@bananapus/core-v6": "^0.0.10",
+    "@bananapus/permission-ids-v6": "^0.0.5",
     "@chainlink/contracts-ccip": "^1.5.0",
     "@chainlink/local": "github:smartcontractkit/chainlink-local",
     "@openzeppelin/contracts": "^5.2.0",
