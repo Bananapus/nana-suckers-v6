@@ -25,5 +25,9 @@ jobs:
         env:
           RPC_ETHEREUM_SEPOLIA: ${{ secrets.RPC_ETHEREUM_SEPOLIA }}
           RPC_ARBITRUM_SEPOLIA: ${{ secrets.RPC_ARBITRUM_SEPOLIA }}
+          RPC_ETHEREUM_MAINNET: ${{ secrets.RPC_ETHEREUM_MAINNET }}
+          RPC_ARBITRUM_MAINNET: ${{ secrets.RPC_ARBITRUM_MAINNET }}
+          RPC_OPTIMISM_MAINNET: ${{ secrets.RPC_OPTIMISM_MAINNET }}
+          RPC_BASE_MAINNET: ${{ secrets.RPC_BASE_MAINNET }}
       - name: Check contract sizes
         run: FOUNDRY_PROFILE=ci_sizes forge build --sizes --skip "*/test/**" --skip "*/script/**" --skip SphinxUtils
