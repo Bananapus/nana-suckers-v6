@@ -38,6 +38,7 @@ _If you're having trouble understanding this contract, take a look at the [core 
 | [`JBCCIPSucker`](src/JBCCIPSucker.sol) | Any CCIP-connected chains | Uses [Chainlink CCIP](https://docs.chain.link/ccip) (`ccipSend`/`ccipReceive`). Handles native token wrapping/unwrapping for chains with different native assets. Supports Ethereum, Optimism, Base, Arbitrum, Polygon, Avalanche, BNB Chain, and their testnets. |
 | [`JBOptimismSucker`](src/JBOptimismSucker.sol) | Ethereum and Optimism | Uses the [OP Standard Bridge](https://docs.optimism.io/builders/app-developers/bridging/standard-bridge) and the [OP Messenger](https://docs.optimism.io/builders/app-developers/bridging/messaging). |
 | [`JBBaseSucker`](src/JBBaseSucker.sol) | Ethereum and Base | A thin wrapper around `JBOptimismSucker` with Base chain IDs. |
+| [`JBCeloSucker`](src/JBCeloSucker.sol) | Ethereum and Celo | Extends `JBOptimismSucker` for Celo, an OP Stack chain with a custom gas token (CELO, not ETH). Wraps native ETH to WETH before bridging as ERC-20 via the OP Standard Bridge, and unwraps WETH back to native ETH on the receiving end. Allows `NATIVE_TOKEN` to map to ERC-20 addresses. |
 | [`JBArbitrumSucker`](src/JBArbitrumSucker.sol) | Ethereum and Arbitrum | Uses the [Arbitrum Inbox](https://docs.arbitrum.io/build-decentralized-apps/cross-chain-messaging) and the [Arbitrum Gateway](https://docs.arbitrum.io/build-decentralized-apps/token-bridging/bridge-tokens-programmatically/get-started). Handles L1<->L2 retryable tickets and address aliasing. |
 
 Suckers use two [merkle trees](https://en.wikipedia.org/wiki/Merkle_tree) to track project token claims associated with each terminal token they support:
@@ -86,12 +87,14 @@ graph TD;
 | [`JBCCIPSucker`](src/JBCCIPSucker.sol) | Extends `JBSucker`. Bridges via Chainlink CCIP (`ccipSend`/`ccipReceive`). Supports any CCIP-connected chain pair. Wraps native ETH to WETH before bridging (CCIP only transports ERC-20s) and unwraps on the receiving end. Can map `NATIVE_TOKEN` to ERC-20 addresses on the remote chain (unlike OP/Arbitrum suckers). |
 | [`JBOptimismSucker`](src/JBOptimismSucker.sol) | Extends `JBSucker`. Bridges via OP Standard Bridge + OP Messenger. No `msg.value` required for transport. |
 | [`JBBaseSucker`](src/JBBaseSucker.sol) | Thin wrapper around `JBOptimismSucker` with Base chain IDs (Ethereum 1 <-> Base 8453, Sepolia 11155111 <-> Base Sepolia 84532). |
+| [`JBCeloSucker`](src/JBCeloSucker.sol) | Extends `JBOptimismSucker` for Celo (OP Stack, custom gas token CELO). Wraps native ETH → WETH before bridging as ERC-20. Unwraps received WETH → native ETH via `_addToBalance` override. Removes `NATIVE_TOKEN → NATIVE_TOKEN` restriction. Sends messenger messages with `nativeValue = 0` (Celo's native token is CELO, not ETH). |
 | [`JBArbitrumSucker`](src/JBArbitrumSucker.sol) | Extends `JBSucker`. Bridges via Arbitrum Inbox + Gateway Router. Uses `unsafeCreateRetryableTicket` for L1->L2 (to avoid address aliasing of refund address) and `ArbSys.sendTxToL1` for L2->L1. Requires `msg.value` for L1->L2 transport payment. |
 | [`JBSuckerRegistry`](src/JBSuckerRegistry.sol) | Tracks all suckers per project. Manages deployer allowlist (owner-only). Entry point for `deploySuckersFor`. Can remove deprecated suckers via `removeDeprecatedSucker`. |
 | [`JBSuckerDeployer`](src/JBSuckerDeployer.sol) | Abstract base deployer. Clones a singleton sucker via `LibClone.cloneDeterministic` and initializes it. Two-phase setup: `setChainSpecificConstants` then `configureSingleton`. |
 | [`JBCCIPSuckerDeployer`](src/deployers/JBCCIPSuckerDeployer.sol) | Deployer for `JBCCIPSucker`. Stores CCIP router, remote chain ID, and CCIP chain selector. |
 | [`JBOptimismSuckerDeployer`](src/deployers/JBOptimismSuckerDeployer.sol) | Deployer for `JBOptimismSucker`. Stores OP Messenger and OP Bridge addresses. |
 | [`JBBaseSuckerDeployer`](src/deployers/JBBaseSuckerDeployer.sol) | Thin wrapper around `JBOptimismSuckerDeployer` for Base. |
+| [`JBCeloSuckerDeployer`](src/deployers/JBCeloSuckerDeployer.sol) | Deployer for `JBCeloSucker`. Extends `JBOptimismSuckerDeployer` with `wrappedNative` (`IWrappedNativeToken`) storage for the local chain's WETH address. |
 | [`JBArbitrumSuckerDeployer`](src/deployers/JBArbitrumSuckerDeployer.sol) | Deployer for `JBArbitrumSucker`. Stores Arbitrum Inbox, Gateway Router, and layer (`JBLayer.L1` or `JBLayer.L2`). |
 | [`MerkleLib`](src/utils/MerkleLib.sol) | Incremental merkle tree (depth 32, max ~4 billion leaves, modeled on eth2 deposit contract). Used for outbox/inbox trees. Gas-optimized with inline assembly for `root()` and `branchRoot()`. |
 | [`CCIPHelper`](src/libraries/CCIPHelper.sol) | CCIP router addresses, chain selectors, and WETH addresses per chain. Covers Ethereum, Optimism, Arbitrum, Base, Polygon, Avalanche, and BNB Chain (mainnet and testnets). |
@@ -232,7 +235,7 @@ Token mappings define which local terminal token corresponds to which remote ter
 - **`remoteToken` is `bytes32`**, not `address` -- this supports cross-VM compatibility (e.g., Solana program addresses). For EVM addresses, left-pad with zeros: `bytes32(uint256(uint160(address)))`.
 - **Immutable once used.** After an outbox tree has entries for a token, the mapping cannot be changed to a different remote token. It can only be disabled (by setting `remoteToken` to `bytes32(0)`), which triggers a final root flush to settle outstanding claims. A disabled mapping can be re-enabled back to the same remote token.
 - **Minimum gas enforcement.** ERC-20 mappings must specify `minGas >= MESSENGER_ERC20_MIN_GAS_LIMIT` (200,000). Native token mappings on the base `JBSucker` do not require minimum gas, but `JBCCIPSucker` requires it for all tokens (because CCIP wraps native to WETH, an ERC-20 transfer).
-- **Native token rules.** On `JBSucker` (OP/Arb), `NATIVE_TOKEN` can only map to `NATIVE_TOKEN` or `bytes32(0)`. `JBCCIPSucker` overrides this to allow `NATIVE_TOKEN` mapping to any remote address (for chains where ETH is an ERC-20).
+- **Native token rules.** On `JBSucker` (OP/Arb), `NATIVE_TOKEN` can only map to `NATIVE_TOKEN` or `bytes32(0)`. `JBCCIPSucker` and `JBCeloSucker` override this to allow `NATIVE_TOKEN` mapping to any remote address (for chains where ETH is an ERC-20).
 - **`minBridgeAmount`** prevents spam by requiring a minimum outbox balance before `toRemote` can be called.
 
 ```solidity
@@ -393,6 +396,7 @@ nana-suckers-v6/
 │   ├── JBCCIPSucker.sol - Chainlink CCIP bridge implementation.
 │   ├── JBOptimismSucker.sol - OP Stack bridge implementation.
 │   ├── JBBaseSucker.sol - Base-specific wrapper around JBOptimismSucker.
+│   ├── JBCeloSucker.sol - Celo-specific wrapper around JBOptimismSucker (custom gas token).
 │   ├── JBArbitrumSucker.sol - Arbitrum bridge implementation.
 │   ├── JBSuckerRegistry.sol - Registry tracking suckers per project.
 │   ├── deployers/ - Deployers for each kind of sucker.
