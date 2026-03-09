@@ -207,6 +207,10 @@ contract SuckerHandler is Test {
 
         sucker.toRemote(TOKEN);
 
+        // The mock _sendRootOverAMB is a no-op, but in production the bridge consumes the ETH.
+        // Reduce the contract balance to simulate the bridge transfer.
+        vm.deal(address(sucker), address(sucker).balance - outboxBalance);
+
         outboxBalanceCleared += outboxBalance;
         lastNonce = sucker.test_getOutboxNonce(TOKEN);
         lastTreeCount = sucker.test_getOutboxCount(TOKEN);
