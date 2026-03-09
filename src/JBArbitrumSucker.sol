@@ -187,6 +187,21 @@ contract JBArbitrumSucker is JBSucker, IJBArbitrumSucker {
     }
 
     /// @notice Bridge the `token` and data to the remote L2 chain.
+    /// @dev IMPORTANT — Arbitrum non-atomic bridging limitation:
+    /// For ERC-20 transfers, this function creates two independent retryable tickets: one for the token bridge
+    /// (via the gateway router, line ~245) and one for the `fromRemote` merkle root message (via the inbox,
+    /// line ~274). These tickets are redeemed independently on L2, with no guaranteed ordering.
+    ///
+    /// In MANUAL `ADD_TO_BALANCE_MODE`, if the message ticket is redeemed before the token ticket, `claim()` will
+    /// mint project tokens for the beneficiary even though the backing terminal tokens have not yet arrived in the
+    /// sucker contract. This creates a window where project tokens exist without terminal backing.
+    ///
+    /// In ON_CLAIM mode, `_handleClaim` calls `_addToBalance` which checks `amountToAddToBalanceOf` (derived from
+    /// the contract's actual token balance minus outbox balance). If the tokens have not arrived yet, this check
+    /// will revert with `JBSucker_InsufficientBalance`, preventing unbacked token minting.
+    ///
+    /// Recommendation: Use `JBAddToBalanceMode.ON_CLAIM` for Arbitrum suckers to ensure atomic claim + balance
+    /// settlement and avoid the non-atomic bridging window.
     /// @param token The token to bridge.
     /// @param amount The amount of tokens to bridge.
     /// @param data The calldata to send to the remote chain. This calls `JBSucker.fromRemote` on the remote peer.

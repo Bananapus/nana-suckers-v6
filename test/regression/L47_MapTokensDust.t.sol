@@ -8,7 +8,7 @@ import {LibClone} from "solady/src/utils/LibClone.sol";
 import {MerkleLib} from "../../src/utils/MerkleLib.sol";
 import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 
-/// @notice Regression test for L-47: mapTokens msg.value dust from integer division.
+/// @notice mapTokens msg.value dust from integer division.
 /// When `msg.value / numberToDisable` has a remainder, the dust wei must be refunded to the caller.
 contract L47_MapTokensDustTest is Test {
     address constant DIRECTORY = address(600);
