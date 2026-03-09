@@ -187,7 +187,7 @@ contract JBArbitrumSucker is JBSucker, IJBArbitrumSucker {
     }
 
     /// @notice Bridge the `token` and data to the remote L2 chain.
-    /// @dev IMPORTANT — Arbitrum non-atomic bridging limitation (M-4):
+    /// @dev IMPORTANT — Arbitrum non-atomic bridging limitation:
     /// For ERC-20 transfers, this function creates two independent retryable tickets: one for the token bridge
     /// (via the gateway router, line ~245) and one for the `fromRemote` merkle root message (via the inbox,
     /// line ~274). These tickets are redeemed independently on L2, with no guaranteed ordering.

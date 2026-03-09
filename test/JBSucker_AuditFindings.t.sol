@@ -30,7 +30,7 @@ contract AuditFindingsSucker is JBSucker {
 
     bool nextCheckShouldPass;
 
-    /// @notice Whether _sendRootOverAMB was called (for verifying L-5 fix).
+    /// @notice Whether _sendRootOverAMB was called (for verifying empty-tree fix).
     bool public sendRootOverAMBCalled;
 
     constructor(
@@ -120,7 +120,7 @@ contract AuditFindingsSucker is JBSucker {
 }
 
 /// @title JBSucker_AuditFindingsTest
-/// @notice Regression tests for audit findings M-4, L-4, L-5, and L-6.
+/// @notice Regression tests for non-atomic bridging, empty-tree underflow, and emergency exit events.
 contract JBSucker_AuditFindingsTest is Test {
     address constant DIRECTORY = address(600);
     address constant PERMISSIONS = address(800);
@@ -162,7 +162,7 @@ contract JBSucker_AuditFindingsTest is Test {
     }
 
     // =========================================================================
-    // L-5: `_sendRoot` underflow revert on empty tree with minBridgeAmount=0
+    // `_sendRoot` underflow revert on empty tree with minBridgeAmount=0
     // =========================================================================
 
     /// @notice Verifies that `toRemote()` does not revert when the outbox tree is empty and `minBridgeAmount` is 0.
@@ -227,7 +227,7 @@ contract JBSucker_AuditFindingsTest is Test {
     }
 
     // =========================================================================
-    // L-6: `exitThroughEmergencyHatch` does not emit event
+    // `exitThroughEmergencyHatch` does not emit event
     // =========================================================================
 
     /// @notice Verifies that `exitThroughEmergencyHatch()` emits the `EmergencyExit` event.
@@ -289,13 +289,13 @@ contract JBSucker_AuditFindingsTest is Test {
     }
 
     // =========================================================================
-    // M-4: Arbitrum non-atomic token+message bridging
+    // Arbitrum non-atomic token+message bridging
     // Documents that ON_CLAIM mode protects against claiming without backing.
     // =========================================================================
 
     /// @notice Demonstrates that ON_CLAIM mode correctly reverts when the sucker does not hold enough
     /// terminal tokens to cover the claim. This is the protection against the Arbitrum non-atomicity
-    /// issue (M-4): if the message ticket is redeemed before the token ticket arrives, `_addToBalance`
+    /// issue: if the message ticket is redeemed before the token ticket arrives, `_addToBalance`
     /// in `_handleClaim` will revert because `amountToAddToBalanceOf` checks the actual token balance.
     ///
     /// @dev Arbitrum non-atomicity background: `JBArbitrumSucker._toL2()` creates two independent
