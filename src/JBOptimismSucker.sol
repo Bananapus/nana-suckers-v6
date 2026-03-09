@@ -97,6 +97,7 @@ contract JBOptimismSucker is JBSucker, IJBOptimismSucker {
         JBMessageRoot memory message
     )
         internal
+        virtual
         override
     {
         uint256 nativeValue;

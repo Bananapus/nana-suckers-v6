@@ -5,22 +5,21 @@ import {IJBDirectory} from "@bananapus/core-v6/src/interfaces/IJBDirectory.sol";
 import {IJBPermissions} from "@bananapus/core-v6/src/interfaces/IJBPermissions.sol";
 import {IJBTokens} from "@bananapus/core-v6/src/interfaces/IJBTokens.sol";
 
-import {IJBOpSuckerDeployer} from "../interfaces/IJBOpSuckerDeployer.sol";
+import {IJBCeloSuckerDeployer} from "../interfaces/IJBCeloSuckerDeployer.sol";
 import {IOPMessenger} from "../interfaces/IOPMessenger.sol";
 import {IOPStandardBridge} from "../interfaces/IOPStandardBridge.sol";
-import {JBSuckerDeployer} from "./JBSuckerDeployer.sol";
+import {IWrappedNativeToken} from "../interfaces/IWrappedNativeToken.sol";
+import {JBOptimismSuckerDeployer} from "./JBOptimismSuckerDeployer.sol";
 
-/// @notice An `IJBSuckerDeployer` implementation to deploy `JBOptimismSucker` contracts.
-contract JBOptimismSuckerDeployer is JBSuckerDeployer, IJBOpSuckerDeployer {
+/// @notice An `IJBSuckerDeployer` implementation to deploy `JBCeloSucker` contracts.
+/// @dev Extends the OP deployer with a `wrappedNative` address for chains where ETH is an ERC-20.
+contract JBCeloSuckerDeployer is JBOptimismSuckerDeployer, IJBCeloSuckerDeployer {
     //*********************************************************************//
     // ---------------------- public stored properties ------------------- //
     //*********************************************************************//
 
-    /// @notice The bridge used to bridge tokens between the local and remote chain.
-    IOPStandardBridge public override opBridge;
-
-    /// @notice The messenger used to send messages between the local and remote sucker.
-    IOPMessenger public override opMessenger;
+    /// @notice The wrapped native token (WETH) on the local chain.
+    IWrappedNativeToken public override wrappedNative;
 
     //*********************************************************************//
     // ---------------------------- constructor -------------------------- //
@@ -37,7 +36,7 @@ contract JBOptimismSuckerDeployer is JBSuckerDeployer, IJBOpSuckerDeployer {
         address configurator,
         address trustedForwarder
     )
-        JBSuckerDeployer(directory, permissions, tokens, configurator, trustedForwarder)
+        JBOptimismSuckerDeployer(directory, permissions, tokens, configurator, trustedForwarder)
     {}
 
     //*********************************************************************//
@@ -45,21 +44,26 @@ contract JBOptimismSuckerDeployer is JBSuckerDeployer, IJBOpSuckerDeployer {
     //*********************************************************************//
 
     /// @notice Check if the layer specific configuration is set or not. Used as a sanity check.
-    function _layerSpecificConfigurationIsSet() internal view virtual override returns (bool) {
-        // Use && (not ||) so the post-set check in setChainSpecificConstants rejects partial configurations
-        // where only one of messenger/bridge is provided. Both are required for the sucker to function.
-        return address(opMessenger) != address(0) && address(opBridge) != address(0);
+    function _layerSpecificConfigurationIsSet() internal view override returns (bool) {
+        return address(opMessenger) != address(0) && address(opBridge) != address(0)
+            && address(wrappedNative) != address(0);
     }
 
     //*********************************************************************//
     // --------------------- external transactions ----------------------- //
     //*********************************************************************//
 
-    /// @notice Handles some layer specific configuration that can't be done in the constructor otherwise deployment
-    /// addresses would change.
+    /// @notice Handles layer specific configuration including the wrapped native token.
     /// @param messenger The OPMessenger on this layer.
     /// @param bridge The OPStandardBridge on this layer.
-    function setChainSpecificConstants(IOPMessenger messenger, IOPStandardBridge bridge) external {
+    /// @param _wrappedNative The wrapped native token (WETH) on this layer.
+    function setChainSpecificConstants(
+        IOPMessenger messenger,
+        IOPStandardBridge bridge,
+        IWrappedNativeToken _wrappedNative
+    )
+        external
+    {
         if (_layerSpecificConfigurationIsSet()) {
             revert JBSuckerDeployer_AlreadyConfigured();
         }
@@ -69,9 +73,9 @@ contract JBOptimismSuckerDeployer is JBSuckerDeployer, IJBOpSuckerDeployer {
         }
 
         // Configure these layer specific properties.
-        // This is done in a separate call to make the deployment code chain agnostic.
         opMessenger = messenger;
         opBridge = bridge;
+        wrappedNative = _wrappedNative;
 
         // Make sure the layer specific configuration is properly configured.
         if (!_layerSpecificConfigurationIsSet()) {
