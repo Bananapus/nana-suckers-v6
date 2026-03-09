@@ -6,6 +6,7 @@ import "forge-std/Test.sol";
 import {IJBController} from "@bananapus/core-v6/src/interfaces/IJBController.sol";
 import "../../src/JBSucker.sol";
 import "../../src/deployers/JBOptimismSuckerDeployer.sol";
+import {JBOptimismSucker} from "../../src/JBOptimismSucker.sol";
 
 import {JBLeaf} from "../../src/structs/JBLeaf.sol";
 import {JBClaim} from "../../src/structs/JBClaim.sol";

@@ -1,8 +1,15 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
-import "./JBOptimismSucker.sol";
+import {IJBDirectory} from "@bananapus/core-v6/src/interfaces/IJBDirectory.sol";
+import {IJBPermissions} from "@bananapus/core-v6/src/interfaces/IJBPermissions.sol";
+import {IJBTokens} from "@bananapus/core-v6/src/interfaces/IJBTokens.sol";
 
+import {JBOptimismSucker} from "./JBOptimismSucker.sol";
+import {JBOptimismSuckerDeployer} from "./deployers/JBOptimismSuckerDeployer.sol";
+import {JBAddToBalanceMode} from "./enums/JBAddToBalanceMode.sol";
+
+/// @notice A `JBSucker` implementation to suck tokens between two chains connected by a Base (OP Stack) bridge.
 contract JBBaseSucker is JBOptimismSucker {
     //*********************************************************************//
     // ---------------------------- constructor -------------------------- //

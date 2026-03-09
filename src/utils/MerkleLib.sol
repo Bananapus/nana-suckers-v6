@@ -8,11 +8,15 @@ pragma solidity 0.8.26;
  *
  */
 library MerkleLib {
-    // ========== Custom Errors ===========
+    //*********************************************************************//
+    // --------------------------- custom errors ------------------------- //
+    //*********************************************************************//
 
     error MerkleLib_InsertTreeIsFull();
 
-    // ============ Constants =============
+    //*********************************************************************//
+    // ------------------------- internal constants ----------------------- //
+    //*********************************************************************//
 
     uint256 internal constant TREE_DEPTH = 32;
     uint256 internal constant MAX_LEAVES = 2 ** TREE_DEPTH - 1;
@@ -57,7 +61,9 @@ library MerkleLib {
     bytes32 internal constant Z_31 = hex"8448818bb4ae4562849e949e17ac16e0be16688e156b5cf15e098c627c0056a9";
     bytes32 internal constant Z_32 = hex"27ae5ba08d7291c96c8cbddcc148bf48a6d68c7974b94356f53754ef6171d757";
 
-    // ============= Structs ==============
+    //*********************************************************************//
+    // ------------------------------ structs ---------------------------- //
+    //*********************************************************************//
 
     /**
      * @notice Struct representing incremental merkle tree. Contains current
@@ -69,7 +75,9 @@ library MerkleLib {
         uint256 count;
     }
 
-    // ========= Write Methods =========
+    //*********************************************************************//
+    // ---------------------- internal transactions ---------------------- //
+    //*********************************************************************//
 
     /**
      * @notice Inserts a given node (leaf) into merkle tree. Operates on an in-memory tree and
@@ -108,7 +116,9 @@ library MerkleLib {
         revert MerkleLib_InsertTreeIsFull();
     }
 
-    // ========= Read Methods =========
+    //*********************************************************************//
+    // ------------------------ internal views --------------------------- //
+    //*********************************************************************//
 
     /**
      * @notice Calculates and returns tree's current root.

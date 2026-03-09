@@ -11,14 +11,11 @@ import {BitMaps} from "@openzeppelin/contracts/utils/structs/BitMaps.sol";
 
 import {JBSucker} from "./JBSucker.sol";
 import {JBOptimismSuckerDeployer} from "./deployers/JBOptimismSuckerDeployer.sol";
+import {JBAddToBalanceMode} from "./enums/JBAddToBalanceMode.sol";
 import {IJBOptimismSucker} from "./interfaces/IJBOptimismSucker.sol";
-import {IJBSuckerDeployer} from "./interfaces/IJBSuckerDeployer.sol";
 import {IOPMessenger} from "./interfaces/IOPMessenger.sol";
 import {IOPStandardBridge} from "./interfaces/IOPStandardBridge.sol";
-import {JBAddToBalanceMode} from "./enums/JBAddToBalanceMode.sol";
-import {JBInboxTreeRoot} from "./structs/JBInboxTreeRoot.sol";
 import {JBMessageRoot} from "./structs/JBMessageRoot.sol";
-import {JBOutboxTree} from "./structs/JBOutboxTree.sol";
 import {JBRemoteToken} from "./structs/JBRemoteToken.sol";
 import {MerkleLib} from "./utils/MerkleLib.sol";
 

@@ -5,8 +5,19 @@ import {IJBSucker, JBClaim} from "./IJBSucker.sol";
 
 /// @notice Contains the IJBSucker interface and extends it with additional functions and events.
 interface IJBSuckerExtended is IJBSucker {
-    event EmergencyHatchOpened(address[] tokens, address caller);
+    // Events
+
+    /// @notice Emitted when the deprecation timestamp is updated.
+    /// @param timestamp The new deprecation timestamp.
+    /// @param caller The address that updated the timestamp.
     event DeprecationTimeUpdated(uint40 timestamp, address caller);
+
+    /// @notice Emitted when the emergency hatch is opened for one or more tokens.
+    /// @param tokens The tokens for which the emergency hatch was opened.
+    /// @param caller The address that opened the emergency hatch.
+    event EmergencyHatchOpened(address[] tokens, address caller);
+
+    // State-changing functions
 
     /// @notice Open the emergency hatch for the specified tokens, allowing direct claims without bridging.
     /// @param tokens The tokens to enable the emergency hatch for.

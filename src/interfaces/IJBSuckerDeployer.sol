@@ -8,29 +8,26 @@ import {IJBSucker} from "./IJBSucker.sol";
 
 /// @notice The interface for deploying sucker contracts.
 interface IJBSuckerDeployer {
-    error JBSuckerDeployer_AlreadyConfigured();
-    error JBSuckerDeployer_DeployerIsNotConfigured();
-    error JBSuckerDeployer_InvalidLayerSpecificConfiguration();
-    error JBSuckerDeployer_LayerSpecificNotConfigured();
-    error JBSuckerDeployer_Unauthorized(address caller, address expected);
-    error JBSuckerDeployer_ZeroConfiguratorAddress();
+    // View functions
 
     /// @notice The Juicebox directory.
     /// @return The directory contract.
     function DIRECTORY() external view returns (IJBDirectory);
 
-    /// @notice The token registry.
-    /// @return The tokens contract.
-    function TOKENS() external view returns (IJBTokens);
-
     /// @notice The address authorized to set layer-specific configuration.
     /// @return The configurator address.
     function LAYER_SPECIFIC_CONFIGURATOR() external view returns (address);
+
+    /// @notice The token registry.
+    /// @return The tokens contract.
+    function TOKENS() external view returns (IJBTokens);
 
     /// @notice Whether the given address is a sucker deployed by this deployer.
     /// @param sucker The address to check.
     /// @return Whether the address is a deployed sucker.
     function isSucker(address sucker) external view returns (bool);
+
+    // State-changing functions
 
     /// @notice Deploy a new sucker for the given project.
     /// @param localProjectId The project's ID on the local chain.

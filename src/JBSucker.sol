@@ -11,18 +11,18 @@ import {IJBTerminal} from "@bananapus/core-v6/src/interfaces/IJBTerminal.sol";
 import {IJBTokens} from "@bananapus/core-v6/src/interfaces/IJBTokens.sol";
 import {JBConstants} from "@bananapus/core-v6/src/libraries/JBConstants.sol";
 import {JBPermissionIds} from "@bananapus/permission-ids-v6/src/JBPermissionIds.sol";
+import {ERC2771Context} from "@openzeppelin/contracts/metatx/ERC2771Context.sol";
+import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import {BitMaps} from "@openzeppelin/contracts/utils/structs/BitMaps.sol";
-import {ERC165, IERC165} from "@openzeppelin/contracts/utils/introspection/ERC165.sol";
-import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
-import {ERC2771Context} from "@openzeppelin/contracts/metatx/ERC2771Context.sol";
 import {Context} from "@openzeppelin/contracts/utils/Context.sol";
+import {ERC165, IERC165} from "@openzeppelin/contracts/utils/introspection/ERC165.sol";
+import {BitMaps} from "@openzeppelin/contracts/utils/structs/BitMaps.sol";
 
 import {JBAddToBalanceMode} from "./enums/JBAddToBalanceMode.sol";
+import {JBSuckerState} from "./enums/JBSuckerState.sol";
 import {IJBSucker} from "./interfaces/IJBSucker.sol";
 import {IJBSuckerExtended} from "./interfaces/IJBSuckerExtended.sol";
-import {IJBSuckerDeployer} from "./interfaces/IJBSuckerDeployer.sol";
 import {JBClaim} from "./structs/JBClaim.sol";
 import {JBInboxTreeRoot} from "./structs/JBInboxTreeRoot.sol";
 import {JBMessageRoot} from "./structs/JBMessageRoot.sol";
@@ -30,7 +30,6 @@ import {JBOutboxTree} from "./structs/JBOutboxTree.sol";
 import {JBRemoteToken} from "./structs/JBRemoteToken.sol";
 import {JBTokenMapping} from "./structs/JBTokenMapping.sol";
 import {MerkleLib} from "./utils/MerkleLib.sol";
-import {JBSuckerState} from "./enums/JBSuckerState.sol";
 
 /// @notice An abstract contract for bridging a Juicebox project's tokens and the corresponding funds to and from a
 /// remote chain.
@@ -52,27 +51,27 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     // --------------------------- custom errors ------------------------- //
     //*********************************************************************//
 
+    error JBSucker_AmountExceedsUint128(uint256 amount);
     error JBSucker_BelowMinGas(uint256 minGas, uint256 minGasLimit);
+    error JBSucker_Deprecated();
+    error JBSucker_DeprecationTimestampTooSoon(uint256 givenTime, uint256 minimumTime);
+    error JBSucker_ExpectedMsgValue();
     error JBSucker_InsufficientBalance(uint256 amount, uint256 balance);
-    error JBSucker_InvalidNativeRemoteAddress(bytes32 remoteToken);
+    error JBSucker_InsufficientMsgValue(uint256 received, uint256 expected);
     error JBSucker_InvalidMessageVersion(uint8 received, uint8 expected);
+    error JBSucker_InvalidNativeRemoteAddress(bytes32 remoteToken);
     error JBSucker_InvalidProof(bytes32 root, bytes32 inboxRoot);
     error JBSucker_LeafAlreadyExecuted(address token, uint256 index);
     error JBSucker_ManualNotAllowed(JBAddToBalanceMode mode);
-    error JBSucker_DeprecationTimestampTooSoon(uint256 givenTime, uint256 minimumTime);
     error JBSucker_NoTerminalForToken(uint256 projectId, address token);
     error JBSucker_NotPeer(bytes32 caller);
     error JBSucker_QueueInsufficientSize(uint256 amount, uint256 minimumAmount);
-    error JBSucker_TokenNotMapped(address token);
-    error JBSucker_TokenHasInvalidEmergencyHatchState(address token);
     error JBSucker_TokenAlreadyMapped(address localToken, bytes32 mappedTo);
-    error JBSucker_AmountExceedsUint128(uint256 amount);
+    error JBSucker_TokenHasInvalidEmergencyHatchState(address token);
+    error JBSucker_TokenNotMapped(address token);
     error JBSucker_UnexpectedMsgValue(uint256 value);
-    error JBSucker_ExpectedMsgValue();
-    error JBSucker_InsufficientMsgValue(uint256 received, uint256 expected);
     error JBSucker_ZeroBeneficiary();
     error JBSucker_ZeroERC20Token();
-    error JBSucker_Deprecated();
 
     //*********************************************************************//
     // ------------------------- public constants ------------------------ //

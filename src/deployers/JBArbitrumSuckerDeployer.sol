@@ -1,14 +1,15 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
-import "./JBSuckerDeployer.sol";
-import "../interfaces/IJBArbitrumSuckerDeployer.sol";
+import {IInbox} from "@arbitrum/nitro-contracts/src/bridge/IInbox.sol";
+import {IJBDirectory} from "@bananapus/core-v6/src/interfaces/IJBDirectory.sol";
+import {IJBPermissions} from "@bananapus/core-v6/src/interfaces/IJBPermissions.sol";
+import {IJBTokens} from "@bananapus/core-v6/src/interfaces/IJBTokens.sol";
 
-import {JBArbitrumSucker} from "../JBArbitrumSucker.sol";
 import {JBLayer} from "../enums/JBLayer.sol";
 import {IArbGatewayRouter} from "../interfaces/IArbGatewayRouter.sol";
-import {ARBAddresses} from "../libraries/ARBAddresses.sol";
-import {ARBChains} from "../libraries/ARBChains.sol";
+import {IJBArbitrumSuckerDeployer} from "../interfaces/IJBArbitrumSuckerDeployer.sol";
+import {JBSuckerDeployer} from "./JBSuckerDeployer.sol";
 
 /// @notice An `IJBSuckerDeployer` implementation to deploy `JBArbitrumSucker` contracts.
 contract JBArbitrumSuckerDeployer is JBSuckerDeployer, IJBArbitrumSuckerDeployer {
@@ -16,14 +17,14 @@ contract JBArbitrumSuckerDeployer is JBSuckerDeployer, IJBArbitrumSuckerDeployer
     // ---------------------- public stored properties ------------------- //
     //*********************************************************************//
 
-    /// @notice The layer that this contract is on.
-    JBLayer public arbLayer;
+    /// @notice The gateway router for the specific chain.
+    IArbGatewayRouter public override arbGatewayRouter;
 
     /// @notice The inbox used to send messages between the local and remote sucker.
     IInbox public override arbInbox;
 
-    /// @notice The gateway router for the specific chain
-    IArbGatewayRouter public override arbGatewayRouter;
+    /// @notice The layer that this contract is on.
+    JBLayer public arbLayer;
 
     //*********************************************************************//
     // ---------------------------- constructor -------------------------- //

@@ -1,20 +1,31 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
+import {JBPermissioned} from "@bananapus/core-v6/src/abstract/JBPermissioned.sol";
 import {IJBDirectory} from "@bananapus/core-v6/src/interfaces/IJBDirectory.sol";
 import {IJBPermissions} from "@bananapus/core-v6/src/interfaces/IJBPermissions.sol";
 import {IJBTokens} from "@bananapus/core-v6/src/interfaces/IJBTokens.sol";
-import {IJBSuckerDeployer} from "./../interfaces/IJBSuckerDeployer.sol";
-import {IJBSucker} from "./../interfaces/IJBSucker.sol";
-
-import {JBPermissioned} from "@bananapus/core-v6/src/abstract/JBPermissioned.sol";
-import {LibClone} from "solady/src/utils/LibClone.sol";
-import {JBSucker} from "../JBSucker.sol";
 import {ERC2771Context} from "@openzeppelin/contracts/metatx/ERC2771Context.sol";
 import {Context} from "@openzeppelin/contracts/utils/Context.sol";
+import {LibClone} from "solady/src/utils/LibClone.sol";
+
+import {JBSucker} from "../JBSucker.sol";
+import {IJBSucker} from "../interfaces/IJBSucker.sol";
+import {IJBSuckerDeployer} from "../interfaces/IJBSuckerDeployer.sol";
 
 /// @notice A base implementation for deploying suckers.
 abstract contract JBSuckerDeployer is ERC2771Context, JBPermissioned, IJBSuckerDeployer {
+    //*********************************************************************//
+    // --------------------------- custom errors ------------------------- //
+    //*********************************************************************//
+
+    error JBSuckerDeployer_AlreadyConfigured();
+    error JBSuckerDeployer_DeployerIsNotConfigured();
+    error JBSuckerDeployer_InvalidLayerSpecificConfiguration();
+    error JBSuckerDeployer_LayerSpecificNotConfigured();
+    error JBSuckerDeployer_Unauthorized(address caller, address expected);
+    error JBSuckerDeployer_ZeroConfiguratorAddress();
+
     //*********************************************************************//
     // --------------- public immutable stored properties ---------------- //
     //*********************************************************************//
@@ -73,10 +84,9 @@ abstract contract JBSuckerDeployer is ERC2771Context, JBPermissioned, IJBSuckerD
     /// @notice Check if the layer specific configuration is set or not. Used as a sanity check.
     function _layerSpecificConfigurationIsSet() internal view virtual returns (bool);
 
-    /// @notice The message's sender. Preferred to use over `msg.sender`.
-    /// @return sender The address which sent this call.
-    function _msgSender() internal view override(ERC2771Context, Context) returns (address sender) {
-        return ERC2771Context._msgSender();
+    /// @dev ERC-2771 specifies the context as being a single address (20 bytes).
+    function _contextSuffixLength() internal view virtual override(ERC2771Context, Context) returns (uint256) {
+        return ERC2771Context._contextSuffixLength();
     }
 
     /// @notice The calldata. Preferred to use over `msg.data`.
@@ -85,9 +95,10 @@ abstract contract JBSuckerDeployer is ERC2771Context, JBPermissioned, IJBSuckerD
         return ERC2771Context._msgData();
     }
 
-    /// @dev ERC-2771 specifies the context as being a single address (20 bytes).
-    function _contextSuffixLength() internal view virtual override(ERC2771Context, Context) returns (uint256) {
-        return ERC2771Context._contextSuffixLength();
+    /// @notice The message's sender. Preferred to use over `msg.sender`.
+    /// @return sender The address which sent this call.
+    function _msgSender() internal view override(ERC2771Context, Context) returns (address sender) {
+        return ERC2771Context._msgSender();
     }
 
     //*********************************************************************//

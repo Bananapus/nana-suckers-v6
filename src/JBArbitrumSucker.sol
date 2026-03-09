@@ -22,12 +22,8 @@ import {IArbGatewayRouter} from "./interfaces/IArbGatewayRouter.sol";
 import {IArbL1GatewayRouter} from "./interfaces/IArbL1GatewayRouter.sol";
 import {IArbL2GatewayRouter} from "./interfaces/IArbL2GatewayRouter.sol";
 import {IJBArbitrumSucker} from "./interfaces/IJBArbitrumSucker.sol";
-import {IJBSuckerDeployer} from "./interfaces/IJBSuckerDeployer.sol";
-import {ARBAddresses} from "./libraries/ARBAddresses.sol";
 import {ARBChains} from "./libraries/ARBChains.sol";
-import {JBInboxTreeRoot} from "./structs/JBInboxTreeRoot.sol";
 import {JBMessageRoot} from "./structs/JBMessageRoot.sol";
-import {JBOutboxTree} from "./structs/JBOutboxTree.sol";
 import {JBRemoteToken} from "./structs/JBRemoteToken.sol";
 import {MerkleLib} from "./utils/MerkleLib.sol";
 

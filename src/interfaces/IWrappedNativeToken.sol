@@ -1,13 +1,15 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
-/// @title Interface for a wrappned native token
+/// @notice Interface for a wrapped native token.
 interface IWrappedNativeToken is IERC20 {
-    /// @notice Deposit ether to get wrapped ether
+    // State-changing functions
+
+    /// @notice Deposit ether to get wrapped ether.
     function deposit() external payable;
 
-    /// @notice Withdraw wrapped ether to get ether
+    /// @notice Withdraw wrapped ether to get ether.
     function withdraw(uint256) external;
 }
