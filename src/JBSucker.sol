@@ -422,12 +422,11 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     /// @dev This can only be called by the messenger contract on the local chain, with a message from the remote peer.
     /// @dev Nonce ordering: This function accepts any nonce strictly greater than the current inbox nonce, rather than
     /// requiring sequential (nonce == inbox.nonce + 1) processing. This is intentional because some bridges (e.g.,
-    /// Chainlink CCIP) do not guarantee in-order message delivery. As a result, if nonces arrive out of order
-    /// (e.g., nonce 3 before nonce 2), the earlier nonce's root will be silently skipped. This means the claims
-    /// in the skipped root's merkle tree become permanently unclaimable on this chain. The sender would need to
-    /// use the emergency exit on the source chain to recover funds from skipped roots. This trade-off is accepted
-    /// because enforcing sequential nonces could permanently block a token's inbox if a single message is delayed
-    /// or lost by the bridge.
+    /// Chainlink CCIP) do not guarantee in-order message delivery. If nonces arrive out of order, the inbox root is
+    /// set to the latest nonce's root. Claims from earlier nonces remain provable against the latest root (the merkle
+    /// tree is append-only), but users will need regenerated proofs computed against the current root. This trade-off
+    /// is accepted because enforcing sequential nonces could permanently block a token's inbox if a single message is
+    /// delayed or lost by the bridge.
     /// @param root The merkle root, token, and amount being received.
     function fromRemote(JBMessageRoot calldata root) external payable {
         // Make sure that the message came from our peer.
@@ -625,6 +624,14 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
 
         // Decrease the outstanding balance for this token.
         _outboxOf[claimData.token].balance -= claimData.leaf.terminalTokenAmount;
+
+        emit EmergencyExit({
+            beneficiary: _toAddress(claimData.leaf.beneficiary),
+            token: claimData.token,
+            terminalTokenAmount: claimData.leaf.terminalTokenAmount,
+            projectTokenCount: claimData.leaf.projectTokenCount,
+            caller: _msgSender()
+        });
 
         // Give the user their project tokens, send the project its funds.
         _handleClaim({
@@ -951,6 +958,11 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         // Get the outbox in storage.
         JBOutboxTree storage outbox = _outboxOf[token];
 
+        // If the outbox tree is empty (no `prepare()` calls have been made), there is nothing to send.
+        // This prevents an arithmetic underflow when computing `count - 1` below.
+        uint256 count = outbox.tree.count;
+        if (count == 0) return;
+
         // Get the amount to send and then clear it from the outbox tree.
         uint256 amount = outbox.balance;
         delete outbox.balance;
@@ -959,7 +971,6 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         uint64 nonce = ++outbox.nonce;
         bytes32 root = outbox.tree.root();
 
-        uint256 count = outbox.tree.count;
         // Update the numberOfClaimsSent to the current count of the tree.
         // This is used as in the fallback to allow users to withdraw locally if the bridge is reverting.
         outbox.numberOfClaimsSent = count;
