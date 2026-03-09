@@ -384,6 +384,14 @@ jobs:
         uses: foundry-rs/foundry-toolchain@v1
       - name: Run tests
         run: forge test --fail-fast --summary --detailed --skip "*/script/**"
+        env:
+          RPC_ETHEREUM_MAINNET: ${{ secrets.RPC_ETHEREUM_MAINNET }}
+          RPC_OPTIMISM_MAINNET: ${{ secrets.RPC_OPTIMISM_MAINNET }}
+          RPC_ARBITRUM_MAINNET: ${{ secrets.RPC_ARBITRUM_MAINNET }}
+          RPC_BASE_MAINNET: ${{ secrets.RPC_BASE_MAINNET }}
+          RPC_CELO_MAINNET: ${{ secrets.RPC_CELO_MAINNET }}
+          RPC_ETHEREUM_SEPOLIA: ${{ secrets.RPC_ETHEREUM_SEPOLIA }}
+          RPC_ARBITRUM_SEPOLIA: ${{ secrets.RPC_ARBITRUM_SEPOLIA }}
       - name: Check contract sizes
         run: FOUNDRY_PROFILE=ci_sizes forge build --sizes --skip "*/test/**" --skip "*/script/**" --skip SphinxUtils
 ```
@@ -447,6 +455,21 @@ Run `forge fmt` before committing. The `[fmt]` config in `foundry.toml` enforces
 - Wrapped comments at reasonable width
 
 CI checks formatting via `forge fmt --check`.
+
+### CI Secrets
+
+| Secret | Purpose |
+|--------|--------|
+| `NPM_TOKEN` | npm publish access (used by `publish.yml`) |
+| `RPC_ETHEREUM_MAINNET` | Ethereum mainnet RPC URL for fork tests (used by `test.yml`) |
+| `RPC_OPTIMISM_MAINNET` | Optimism mainnet RPC URL for fork tests (used by `test.yml`) |
+| `RPC_ARBITRUM_MAINNET` | Arbitrum mainnet RPC URL for fork tests (used by `test.yml`) |
+| `RPC_BASE_MAINNET` | Base mainnet RPC URL for fork tests (used by `test.yml`) |
+| `RPC_CELO_MAINNET` | Celo mainnet RPC URL for fork tests (used by `test.yml`) |
+| `RPC_ETHEREUM_SEPOLIA` | Ethereum Sepolia RPC URL for fork tests (used by `test.yml`) |
+| `RPC_ARBITRUM_SEPOLIA` | Arbitrum Sepolia RPC URL for fork tests (used by `test.yml`) |
+
+Fork tests require their respective RPC secrets — they fail if missing.
 
 ### Branching
 
