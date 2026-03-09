@@ -21,6 +21,9 @@ jobs:
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
       - name: Run tests
-        run: forge test --fail-fast --summary --detailed --skip "*/script/**" --skip invariants --skip "*Fork*"
+        run: forge test --fail-fast --summary --detailed --skip "*/script/**" --skip invariants
+        env:
+          RPC_ETHEREUM_SEPOLIA: ${{ secrets.RPC_ETHEREUM_SEPOLIA }}
+          RPC_ARBITRUM_SEPOLIA: ${{ secrets.RPC_ARBITRUM_SEPOLIA }}
       - name: Check contract sizes
         run: FOUNDRY_PROFILE=ci_sizes forge build --sizes --skip "*/test/**" --skip "*/script/**" --skip SphinxUtils
