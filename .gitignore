@@ -17,3 +17,4 @@ docs/
 node_modules/
 
 publish.sh
+.claude/
