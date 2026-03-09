@@ -329,7 +329,7 @@ Standard config across all repos:
 ```toml
 [profile.default]
 solc = '0.8.26'
-evm_version = 'paris'
+evm_version = 'cancun'
 optimizer_runs = 200
 libs = ["node_modules", "lib"]
 fs_permissions = [{ access = "read-write", path = "./"}]
