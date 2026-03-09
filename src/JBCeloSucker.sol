@@ -100,7 +100,9 @@ contract JBCeloSucker is JBOptimismSucker {
                 WRAPPED_NATIVE.deposit{value: amount}();
 
                 // Approve the bridge to spend the WETH.
-                SafeERC20.forceApprove({token: IERC20(address(WRAPPED_NATIVE)), spender: address(OPBRIDGE), value: amount});
+                SafeERC20.forceApprove({
+                    token: IERC20(address(WRAPPED_NATIVE)), spender: address(OPBRIDGE), value: amount
+                });
 
                 // Bridge WETH as ERC-20.
                 // slither-disable-next-line reentrancy-events,calls-loop

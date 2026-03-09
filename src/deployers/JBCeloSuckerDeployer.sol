@@ -45,8 +45,9 @@ contract JBCeloSuckerDeployer is JBOptimismSuckerDeployer, IJBCeloSuckerDeployer
 
     /// @notice Check if the layer specific configuration is set or not. Used as a sanity check.
     function _layerSpecificConfigurationIsSet() internal view override returns (bool) {
-        return address(opMessenger) != address(0) && address(opBridge) != address(0)
-            && address(wrappedNative) != address(0);
+        return
+            address(opMessenger) != address(0) && address(opBridge) != address(0)
+                && address(wrappedNative) != address(0);
     }
 
     //*********************************************************************//

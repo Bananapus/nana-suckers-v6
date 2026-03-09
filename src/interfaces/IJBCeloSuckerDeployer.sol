@@ -20,5 +20,6 @@ interface IJBCeloSuckerDeployer is IJBOpSuckerDeployer {
         IOPMessenger messenger,
         IOPStandardBridge bridge,
         IWrappedNativeToken wrappedNative
-    ) external;
+    )
+        external;
 }
