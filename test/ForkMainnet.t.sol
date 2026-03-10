@@ -24,7 +24,7 @@ import {CCIPHelper} from "../src/libraries/CCIPHelper.sol";
 ///
 /// CCIPLocalSimulatorFork only ships with testnet entries, so we register mainnet network details
 /// via `setNetworkDetails` before running the tests.
-abstract contract CCIPSuckerMainnetForkTestBase is TestBaseWorkflow, JBTest {
+abstract contract CCIPSuckerMainnetForkTestBase is TestBaseWorkflow {
     CCIPLocalSimulatorFork ccipLocalSimulatorFork;
     JBRulesetMetadata _metadata;
 
@@ -39,8 +39,8 @@ abstract contract CCIPSuckerMainnetForkTestBase is TestBaseWorkflow, JBTest {
     // ── Chain-specific overrides
     // ──────────────────────────────────────────
 
-    function _l1RpcUrl() internal view virtual returns (string memory);
-    function _l2RpcUrl() internal view virtual returns (string memory);
+    function _l1RpcUrl() internal pure virtual returns (string memory);
+    function _l2RpcUrl() internal pure virtual returns (string memory);
     function _l1ChainId() internal pure virtual returns (uint256);
     function _l2ChainId() internal pure virtual returns (uint256);
 
@@ -74,18 +74,9 @@ abstract contract CCIPSuckerMainnetForkTestBase is TestBaseWorkflow, JBTest {
     // ─────────────────────────────────────────────────────────────
 
     function setUp() public override {
-        string memory l1Rpc = _l1RpcUrl();
-        string memory l2Rpc = _l2RpcUrl();
-
-        // Skip if RPC URLs are not available.
-        if (bytes(l1Rpc).length == 0 || bytes(l2Rpc).length == 0) {
-            vm.skip(true);
-            return;
-        }
-
         // ── L1
         // ────────────────────────────────────────────────────────────
-        l1Fork = vm.createSelectFork(l1Rpc);
+        l1Fork = vm.createSelectFork(_l1RpcUrl());
 
         ccipLocalSimulatorFork = new CCIPLocalSimulatorFork();
         vm.makePersistent(address(ccipLocalSimulatorFork));
@@ -159,7 +150,7 @@ abstract contract CCIPSuckerMainnetForkTestBase is TestBaseWorkflow, JBTest {
 
         // ── L2
         // ────────────────────────────────────────────────────────────
-        l2Fork = vm.createSelectFork(l2Rpc);
+        l2Fork = vm.createSelectFork(_l2RpcUrl());
 
         // Deploy full JB infrastructure on L2.
         super.setUp();
@@ -323,12 +314,12 @@ abstract contract CCIPSuckerMainnetForkTestBase is TestBaseWorkflow, JBTest {
 
 /// @notice Ethereum mainnet → Arbitrum mainnet.
 contract EthArbMainnetForkTest is CCIPSuckerMainnetForkTestBase {
-    function _l1RpcUrl() internal view override returns (string memory) {
-        return vm.envOr("RPC_ETHEREUM_MAINNET", string(""));
+    function _l1RpcUrl() internal pure override returns (string memory) {
+        return "ethereum";
     }
 
-    function _l2RpcUrl() internal view override returns (string memory) {
-        return vm.envOr("RPC_ARBITRUM_MAINNET", string(""));
+    function _l2RpcUrl() internal pure override returns (string memory) {
+        return "arbitrum";
     }
 
     function _l1ChainId() internal pure override returns (uint256) {
@@ -342,12 +333,12 @@ contract EthArbMainnetForkTest is CCIPSuckerMainnetForkTestBase {
 
 /// @notice Ethereum mainnet → Optimism mainnet.
 contract EthOpMainnetForkTest is CCIPSuckerMainnetForkTestBase {
-    function _l1RpcUrl() internal view override returns (string memory) {
-        return vm.envOr("RPC_ETHEREUM_MAINNET", string(""));
+    function _l1RpcUrl() internal pure override returns (string memory) {
+        return "ethereum";
     }
 
-    function _l2RpcUrl() internal view override returns (string memory) {
-        return vm.envOr("RPC_OPTIMISM_MAINNET", string(""));
+    function _l2RpcUrl() internal pure override returns (string memory) {
+        return "optimism";
     }
 
     function _l1ChainId() internal pure override returns (uint256) {
@@ -361,12 +352,12 @@ contract EthOpMainnetForkTest is CCIPSuckerMainnetForkTestBase {
 
 /// @notice Ethereum mainnet → Base mainnet.
 contract EthBaseMainnetForkTest is CCIPSuckerMainnetForkTestBase {
-    function _l1RpcUrl() internal view override returns (string memory) {
-        return vm.envOr("RPC_ETHEREUM_MAINNET", string(""));
+    function _l1RpcUrl() internal pure override returns (string memory) {
+        return "ethereum";
     }
 
-    function _l2RpcUrl() internal view override returns (string memory) {
-        return vm.envOr("RPC_BASE_MAINNET", string(""));
+    function _l2RpcUrl() internal pure override returns (string memory) {
+        return "base";
     }
 
     function _l1ChainId() internal pure override returns (uint256) {
@@ -380,12 +371,12 @@ contract EthBaseMainnetForkTest is CCIPSuckerMainnetForkTestBase {
 
 /// @notice Arbitrum mainnet → Optimism mainnet.
 contract ArbOpMainnetForkTest is CCIPSuckerMainnetForkTestBase {
-    function _l1RpcUrl() internal view override returns (string memory) {
-        return vm.envOr("RPC_ARBITRUM_MAINNET", string(""));
+    function _l1RpcUrl() internal pure override returns (string memory) {
+        return "arbitrum";
     }
 
-    function _l2RpcUrl() internal view override returns (string memory) {
-        return vm.envOr("RPC_OPTIMISM_MAINNET", string(""));
+    function _l2RpcUrl() internal pure override returns (string memory) {
+        return "optimism";
     }
 
     function _l1ChainId() internal pure override returns (uint256) {
@@ -399,12 +390,12 @@ contract ArbOpMainnetForkTest is CCIPSuckerMainnetForkTestBase {
 
 /// @notice Arbitrum mainnet → Base mainnet.
 contract ArbBaseMainnetForkTest is CCIPSuckerMainnetForkTestBase {
-    function _l1RpcUrl() internal view override returns (string memory) {
-        return vm.envOr("RPC_ARBITRUM_MAINNET", string(""));
+    function _l1RpcUrl() internal pure override returns (string memory) {
+        return "arbitrum";
     }
 
-    function _l2RpcUrl() internal view override returns (string memory) {
-        return vm.envOr("RPC_BASE_MAINNET", string(""));
+    function _l2RpcUrl() internal pure override returns (string memory) {
+        return "base";
     }
 
     function _l1ChainId() internal pure override returns (uint256) {
@@ -418,12 +409,12 @@ contract ArbBaseMainnetForkTest is CCIPSuckerMainnetForkTestBase {
 
 /// @notice Optimism mainnet → Base mainnet.
 contract OpBaseMainnetForkTest is CCIPSuckerMainnetForkTestBase {
-    function _l1RpcUrl() internal view override returns (string memory) {
-        return vm.envOr("RPC_OPTIMISM_MAINNET", string(""));
+    function _l1RpcUrl() internal pure override returns (string memory) {
+        return "optimism";
     }
 
-    function _l2RpcUrl() internal view override returns (string memory) {
-        return vm.envOr("RPC_BASE_MAINNET", string(""));
+    function _l2RpcUrl() internal pure override returns (string memory) {
+        return "base";
     }
 
     function _l1ChainId() internal pure override returns (uint256) {

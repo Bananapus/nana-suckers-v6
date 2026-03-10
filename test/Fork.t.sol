@@ -39,7 +39,7 @@ import {JBLeaf} from "../src/structs/JBClaim.sol";
 import {MerkleLib} from "../src/utils/MerkleLib.sol";
 import {CCIPHelper} from "../src/libraries/CCIPHelper.sol";
 
-contract CCIPSuckerForkedTests is TestBaseWorkflow, JBTest {
+contract CCIPSuckerForkedTests is TestBaseWorkflow {
     // CCIP Local Simulator Contracts
     CCIPLocalSimulatorFork ccipLocalSimulatorFork;
     BurnMintERC677Helper ccipBnM;
@@ -61,10 +61,9 @@ contract CCIPSuckerForkedTests is TestBaseWorkflow, JBTest {
     uint64 arbSepoliaChainSelector = 3_478_487_238_524_512_106;
     uint64 ethSepoliaChainSelector = 16_015_286_601_757_825_753;
 
-    // RPCs
-    string ETHEREUM_SEPOLIA_RPC_URL = vm.envOr("RPC_ETHEREUM_SEPOLIA", string("https://1rpc.io/sepolia"));
-    string ARBITRUM_SEPOLIA_RPC_URL =
-        vm.envOr("RPC_ARBITRUM_SEPOLIA", string("https://arbitrum-sepolia.gateway.tenderly.co"));
+    // RPCs — named endpoints from foundry.toml [rpc_endpoints].
+    string ETHEREUM_SEPOLIA_RPC_URL = "ethereum_sepolia";
+    string ARBITRUM_SEPOLIA_RPC_URL = "arbitrum_sepolia";
 
     //*********************************************************************//
     // ---------------------------- Setup parts -------------------------- //
