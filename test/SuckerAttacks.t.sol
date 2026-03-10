@@ -353,7 +353,8 @@ contract SuckerAttacks is Test {
     /// @notice Claim with token X proof after mapToken changes X→Y mapping.
     function test_claim_afterTokenRemap() public {
         address tokenX = makeAddr("tokenX");
-        address tokenY = makeAddr("tokenY");
+        // tokenY is intentionally unused — the test verifies that tokenX's
+        // inbox root persists after remapping to a different remote token.
 
         // Set up a remote token mapping for tokenX
         sucker.test_setRemoteToken(
