@@ -21,6 +21,9 @@ jobs:
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
       - name: Run slither
+        # continue-on-error due to slither bug: AssertionError in IR generation for JBCeloSucker._sendRoot
+        # (slither 0.11.x crashes on struct construction in _sendRoot). Re-enable once slither fixes this.
+        continue-on-error: true
         uses: crytic/slither-action@v0.4.0
         with:
             slither-config: slither-ci.config.json

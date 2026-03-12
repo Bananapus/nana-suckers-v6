@@ -191,7 +191,8 @@ contract MapTokensDustTest is Test {
         );
         vm.label(address(singleton), "SUCKER_SINGLETON");
 
-        MapTokensDustSucker sucker = MapTokensDustSucker(payable(address(LibClone.cloneDeterministic(address(singleton), salt))));
+        MapTokensDustSucker sucker =
+            MapTokensDustSucker(payable(address(LibClone.cloneDeterministic(address(singleton), salt))));
         vm.label(address(sucker), "SUCKER");
         sucker.initialize(_projectId);
 
