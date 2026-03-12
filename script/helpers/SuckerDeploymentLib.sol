@@ -3,6 +3,8 @@ pragma solidity 0.8.26;
 
 import {stdJson} from "forge-std/Script.sol";
 import {Vm} from "forge-std/Vm.sol";
+import {SphinxConstants, NetworkInfo} from "@sphinx-labs/contracts/contracts/foundry/SphinxConstants.sol";
+
 import {IJBSuckerRegistry} from "./../../src/interfaces/IJBSuckerRegistry.sol";
 import {IJBSuckerDeployer} from "./../../src/interfaces/IJBSuckerDeployer.sol";
 
@@ -19,20 +21,22 @@ library SuckerDeploymentLib {
     address internal constant VM_ADDRESS = address(uint160(uint256(keccak256("hevm cheat code"))));
     Vm internal constant vm = Vm(VM_ADDRESS);
 
-    function getDeployment(string memory path) internal view returns (SuckerDeployment memory deployment) {
-        return getDeployment(path, _getNetworkName(block.chainid));
-    }
+    function getDeployment(string memory path) internal returns (SuckerDeployment memory deployment) {
+        // get chainId for which we need to get the deployment.
+        uint256 chainId = block.chainid;
 
-    function _getNetworkName(uint256 chainId) internal pure returns (string memory) {
-        if (chainId == 1) return "ethereum";
-        if (chainId == 10) return "optimism";
-        if (chainId == 8453) return "base";
-        if (chainId == 42161) return "arbitrum";
-        if (chainId == 11155111) return "sepolia";
-        if (chainId == 11155420) return "optimism_sepolia";
-        if (chainId == 84532) return "base_sepolia";
-        if (chainId == 421614) return "arbitrum_sepolia";
-        revert("Unsupported chain ID");
+        // Deploy to get the constants.
+        // TODO: get constants without deploy.
+        SphinxConstants sphinxConstants = new SphinxConstants();
+        NetworkInfo[] memory networks = sphinxConstants.getNetworkInfoArray();
+
+        for (uint256 _i; _i < networks.length; _i++) {
+            if (networks[_i].chainId == chainId) {
+                return getDeployment(path, networks[_i].name);
+            }
+        }
+
+        revert("ChainID is not (currently) supported by Sphinx.");
     }
 
     function getDeployment(
