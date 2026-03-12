@@ -27,7 +27,7 @@ import {JBCeloSucker} from "../src/JBCeloSucker.sol";
 /// Two directions are tested:
 ///   - test_nativeToWeth: Send native ETH from Ethereum → Celo (maps NATIVE_TOKEN → Celo WETH).
 ///   - test_wethToNative: Send WETH ERC-20 from Celo → Ethereum (maps Celo WETH → NATIVE_TOKEN).
-contract ForkCeloTest is TestBaseWorkflow, JBTest {
+contract ForkCeloTest is TestBaseWorkflow {
     JBRulesetMetadata _metadata;
 
     // ── L1 (Ethereum) side
@@ -59,15 +59,6 @@ contract ForkCeloTest is TestBaseWorkflow, JBTest {
     // ─────────────────────────────────────────────────────────
 
     function setUp() public override {
-        string memory l1Rpc = vm.envOr("RPC_ETHEREUM_MAINNET", string(""));
-        string memory l2Rpc = vm.envOr("RPC_CELO_MAINNET", string(""));
-
-        // Skip if RPC URLs are not available.
-        if (bytes(l1Rpc).length == 0 || bytes(l2Rpc).length == 0) {
-            vm.skip(true);
-            return;
-        }
-
         _metadata = JBRulesetMetadata({
             reservedPercent: JBConstants.MAX_RESERVED_PERCENT / 2,
             cashOutTaxRate: 0,
@@ -92,7 +83,7 @@ contract ForkCeloTest is TestBaseWorkflow, JBTest {
 
         // ── L1 (Ethereum)
         // ────────────────────────────────────────────────────────────
-        l1Fork = vm.createSelectFork(l1Rpc);
+        l1Fork = vm.createSelectFork("ethereum");
 
         // Deploy full JB infrastructure on L1.
         super.setUp();
@@ -135,7 +126,7 @@ contract ForkCeloTest is TestBaseWorkflow, JBTest {
 
         // ── L2 (Celo)
         // ────────────────────────────────────────────────────────────
-        l2Fork = vm.createSelectFork(l2Rpc);
+        l2Fork = vm.createSelectFork("celo");
 
         // Deploy full JB infrastructure on Celo.
         super.setUp();

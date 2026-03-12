@@ -3,7 +3,7 @@ pragma solidity 0.8.26;
 
 import {stdJson} from "forge-std/Script.sol";
 import {Vm} from "forge-std/Vm.sol";
-import {SphinxConstants, NetworkInfo} from "@sphinx-labs/contracts/SphinxConstants.sol";
+import {SphinxConstants, NetworkInfo} from "@sphinx-labs/contracts/contracts/foundry/SphinxConstants.sol";
 
 import {IJBSuckerRegistry} from "./../../src/interfaces/IJBSuckerRegistry.sol";
 import {IJBSuckerDeployer} from "./../../src/interfaces/IJBSuckerDeployer.sol";

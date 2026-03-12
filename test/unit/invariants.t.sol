@@ -42,14 +42,20 @@ contract InvariantSucker is JBSucker {
     function _sendRootOverAMB(
         uint256,
         uint256,
-        address,
-        uint256,
+        address token,
+        uint256 amount,
         JBRemoteToken memory,
         JBMessageRoot memory
     )
         internal
         override
-    {}
+    {
+        // Simulate the bridge actually consuming the ETH (native token only).
+        if (token == JBConstants.NATIVE_TOKEN && amount > 0) {
+            (bool success,) = payable(address(0xdead)).call{value: amount}("");
+            require(success, "bridge sim: ETH transfer failed");
+        }
+    }
 
     function _isRemotePeer(address sender) internal view override returns (bool) {
         return sender == _toAddress(peer());
@@ -178,15 +184,15 @@ contract SuckerHandler is Test {
         sucker = _sucker;
     }
 
-    /// @notice Insert a leaf into the outbox tree. Deals ETH first to maintain balance >= outbox.
     function insertIntoTree(uint256 amount, uint256 tokens, address beneficiary) external {
         // Bound to avoid uint128 overflow in sucker.
         amount = bound(amount, 1, 100 ether);
         tokens = bound(tokens, 1, 100 ether);
         if (beneficiary == address(0)) beneficiary = address(0xBEEF);
 
-        // Deal ETH to cover the outbox balance increase.
-        vm.deal(address(sucker), address(sucker).balance + amount);
+        // Send ETH to the sucker to cover the outbox balance increase.
+        (bool ok,) = payable(address(sucker)).call{value: amount}("");
+        require(ok, "ETH transfer to sucker failed");
 
         sucker.test_insertIntoTree(tokens, TOKEN, amount, bytes32(uint256(uint160(beneficiary))));
 
@@ -205,11 +211,8 @@ contract SuckerHandler is Test {
         uint256 outboxBalance = sucker.test_getOutboxBalance(TOKEN);
         if (outboxBalance == 0) return;
 
+        // toRemote clears the outbox balance and _sendRootOverAMB sends the ETH to 0xdead.
         sucker.toRemote(TOKEN);
-
-        // The mock _sendRootOverAMB is a no-op, but in production the bridge consumes the ETH.
-        // Reduce the contract balance to simulate the bridge transfer.
-        vm.deal(address(sucker), address(sucker).balance - outboxBalance);
 
         outboxBalanceCleared += outboxBalance;
         lastNonce = sucker.test_getOutboxNonce(TOKEN);
@@ -295,7 +298,10 @@ contract SuckerHandler is Test {
     /// @notice Send ETH directly to the sucker (inflates balance).
     function directTransfer(uint256 amount) external {
         amount = bound(amount, 0, 10 ether);
-        vm.deal(address(sucker), address(sucker).balance + amount);
+        if (amount > 0) {
+            (bool ok,) = payable(address(sucker)).call{value: amount}("");
+            require(ok, "ETH transfer to sucker failed");
+        }
     }
 
     function _mockMint(address beneficiary, uint256 amount) internal {
@@ -379,6 +385,7 @@ contract SuckerInvariantsTest is Test {
 
         // Create handler and target it for invariant testing.
         handler = new SuckerHandler(sucker);
+        vm.deal(address(handler), 100_000 ether);
 
         targetContract(address(handler));
     }

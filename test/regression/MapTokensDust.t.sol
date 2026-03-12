@@ -10,7 +10,7 @@ import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 
 /// @notice mapTokens msg.value dust from integer division.
 /// When `msg.value / numberToDisable` has a remainder, the dust wei must be refunded to the caller.
-contract L47_MapTokensDustTest is Test {
+contract MapTokensDustTest is Test {
     address constant DIRECTORY = address(600);
     address constant PERMISSIONS = address(800);
     address constant TOKENS = address(700);
@@ -46,7 +46,7 @@ contract L47_MapTokensDustTest is Test {
     /// @notice When mapTokens disables multiple tokens and msg.value is not evenly divisible,
     ///         the remainder (dust) must be refunded to the caller.
     function test_mapTokensDustRefunded() external {
-        L47TestSucker sucker = _createTestSucker(projectId, "");
+        MapTokensDustSucker sucker = _createTestSucker(projectId, "");
 
         // Set up two tokens that are currently mapped and have unsent outbox entries,
         // so disabling them (remoteToken=0) triggers _sendRoot which needs transport payment.
@@ -99,7 +99,7 @@ contract L47_MapTokensDustTest is Test {
 
     /// @notice When msg.value is evenly divisible, no refund is needed and nothing reverts.
     function test_mapTokensNoDustWhenEvenlyDivisible() external {
-        L47TestSucker sucker = _createTestSucker(projectId, "");
+        MapTokensDustSucker sucker = _createTestSucker(projectId, "");
 
         sucker.test_setRemoteToken(
             tokenA,
@@ -141,7 +141,7 @@ contract L47_MapTokensDustTest is Test {
         uint256 numberToDisable = 3;
         uint256 expectedRemainder = msgValue % numberToDisable;
 
-        L47TestSucker sucker = _createTestSucker(projectId, "fuzz");
+        MapTokensDustSucker sucker = _createTestSucker(projectId, "fuzz");
 
         sucker.test_setRemoteToken(
             tokenA,
@@ -181,8 +181,8 @@ contract L47_MapTokensDustTest is Test {
         );
     }
 
-    function _createTestSucker(uint256 _projectId, bytes32 salt) internal returns (L47TestSucker) {
-        L47TestSucker singleton = new L47TestSucker(
+    function _createTestSucker(uint256 _projectId, bytes32 salt) internal returns (MapTokensDustSucker) {
+        MapTokensDustSucker singleton = new MapTokensDustSucker(
             IJBDirectory(DIRECTORY),
             IJBPermissions(PERMISSIONS),
             IJBTokens(TOKENS),
@@ -191,7 +191,8 @@ contract L47_MapTokensDustTest is Test {
         );
         vm.label(address(singleton), "SUCKER_SINGLETON");
 
-        L47TestSucker sucker = L47TestSucker(payable(address(LibClone.cloneDeterministic(address(singleton), salt))));
+        MapTokensDustSucker sucker =
+            MapTokensDustSucker(payable(address(LibClone.cloneDeterministic(address(singleton), salt))));
         vm.label(address(sucker), "SUCKER");
         sucker.initialize(_projectId);
 
@@ -199,7 +200,7 @@ contract L47_MapTokensDustTest is Test {
     }
 }
 
-contract L47TestSucker is JBSucker {
+contract MapTokensDustSucker is JBSucker {
     constructor(
         IJBDirectory directory,
         IJBPermissions permissions,

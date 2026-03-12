@@ -561,7 +561,7 @@ contract InteropCompat is Test {
         assertEq(MerkleLib.Z_32, z, "Z_32 (empty tree root) mismatch");
     }
 
-    function test_zHash_emptyTreeRootMatchesMerkleLib() public {
+    function test_zHash_emptyTreeRootMatchesMerkleLib() public view {
         // An empty tree's root() should return Z_32.
         // We can test this by reading the root of a tree with 0 insertions.
         address token = address(0x9999);

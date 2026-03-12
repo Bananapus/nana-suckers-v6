@@ -23,8 +23,8 @@ import {JBRemoteToken} from "../src/structs/JBRemoteToken.sol";
 import {IJBSuckerExtended} from "../src/interfaces/IJBSuckerExtended.sol";
 import {MerkleLib} from "../src/utils/MerkleLib.sol";
 
-/// @notice Test harness sucker that exposes internals for audit finding regression tests.
-contract AuditFindingsSucker is JBSucker {
+/// @notice Test harness sucker that exposes internals for regression tests.
+contract RegressionSucker is JBSucker {
     using MerkleLib for MerkleLib.Tree;
     using BitMaps for BitMaps.BitMap;
 
@@ -119,9 +119,9 @@ contract AuditFindingsSucker is JBSucker {
     }
 }
 
-/// @title JBSucker_AuditFindingsTest
+/// @title SuckerRegressionsTest
 /// @notice Regression tests for non-atomic bridging, empty-tree underflow, and emergency exit events.
-contract JBSucker_AuditFindingsTest is Test {
+contract SuckerRegressionsTest is Test {
     address constant DIRECTORY = address(600);
     address constant PERMISSIONS = address(800);
     address constant TOKENS = address(700);
@@ -133,8 +133,8 @@ contract JBSucker_AuditFindingsTest is Test {
     uint256 constant PROJECT_ID = 1;
     address constant TOKEN = address(0x000000000000000000000000000000000000EEEe);
 
-    AuditFindingsSucker suckerManual;
-    AuditFindingsSucker suckerOnClaim;
+    RegressionSucker suckerManual;
+    RegressionSucker suckerOnClaim;
 
     function setUp() public {
         vm.warp(100 days);
@@ -347,13 +347,13 @@ contract JBSucker_AuditFindingsTest is Test {
     // Helpers
     // =========================================================================
 
-    function _createSucker(JBAddToBalanceMode mode, bytes32 salt) internal returns (AuditFindingsSucker) {
-        AuditFindingsSucker singleton = new AuditFindingsSucker(
+    function _createSucker(JBAddToBalanceMode mode, bytes32 salt) internal returns (RegressionSucker) {
+        RegressionSucker singleton = new RegressionSucker(
             IJBDirectory(DIRECTORY), IJBPermissions(PERMISSIONS), IJBTokens(TOKENS), mode, FORWARDER
         );
 
-        AuditFindingsSucker sucker =
-            AuditFindingsSucker(payable(address(LibClone.cloneDeterministic(address(singleton), salt))));
+        RegressionSucker sucker =
+            RegressionSucker(payable(address(LibClone.cloneDeterministic(address(singleton), salt))));
         sucker.initialize(PROJECT_ID);
 
         return sucker;
