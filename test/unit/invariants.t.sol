@@ -477,5 +477,4 @@ contract SuckerInvariantsTest is Test {
             "outbox.balance must equal totalInserted - totalEmergencyExited - outboxBalanceCleared"
         );
     }
-
 }
