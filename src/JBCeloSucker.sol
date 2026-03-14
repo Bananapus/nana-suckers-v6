@@ -79,7 +79,7 @@ contract JBCeloSucker is JBOptimismSucker {
     /// @param remoteToken Information about the remote token being bridged to.
     function _sendRootOverAMB(
         uint256 transportPayment,
-        uint256 index,
+        uint256,
         address token,
         uint256 amount,
         JBRemoteToken memory remoteToken,
