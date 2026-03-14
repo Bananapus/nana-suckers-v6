@@ -230,7 +230,7 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
             tokenAmounts[0] = Client.EVMTokenAmount({token: token, amount: amount});
 
             // approve the Router to spend tokens on contract's behalf. It will spend the amount of the given token
-            SafeERC20.forceApprove(IERC20(token), address(CCIP_ROUTER), amount);
+            SafeERC20.forceApprove({token: IERC20(token), spender: address(CCIP_ROUTER), value: amount});
         }
 
         // Create an EVM2AnyMessage struct in memory with necessary information for sending a cross-chain message

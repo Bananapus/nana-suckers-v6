@@ -190,7 +190,7 @@ contract JBCeloSucker is JBOptimismSucker {
                 metadata: ""
             });
         } else {
-            super._addToBalance(token, amount);
+            super._addToBalance({token: token, amount: amount});
         }
     }
 }

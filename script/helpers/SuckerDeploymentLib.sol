@@ -32,7 +32,7 @@ library SuckerDeploymentLib {
 
         for (uint256 _i; _i < networks.length; _i++) {
             if (networks[_i].chainId == chainId) {
-                return getDeployment(path, networks[_i].name);
+                return getDeployment({path: path, networkName: networks[_i].name});
             }
         }
 
@@ -41,17 +41,20 @@ library SuckerDeploymentLib {
 
     function getDeployment(
         string memory path,
-        string memory network_name
+        string memory networkName
     )
         internal
         view
         returns (SuckerDeployment memory deployment)
     {
         // Is deployed on all (supported) chains.
-        deployment.registry =
-            IJBSuckerRegistry(_getDeploymentAddress(path, "nana-suckers-v5", network_name, "JBSuckerRegistry"));
+        deployment.registry = IJBSuckerRegistry(
+            _getDeploymentAddress({
+                path: path, projectName: "nana-suckers-v5", networkName: networkName, contractName: "JBSuckerRegistry"
+            })
+        );
 
-        bytes32 _network = keccak256(abi.encodePacked(network_name));
+        bytes32 _network = keccak256(abi.encodePacked(networkName));
         bool _isMainnet = _network == keccak256("ethereum") || _network == keccak256("sepolia");
         bool _isOP = _network == keccak256("optimism") || _network == keccak256("optimism_sepolia");
         bool _isBase = _network == keccak256("base") || _network == keccak256("base_sepolia");
@@ -59,18 +62,34 @@ library SuckerDeploymentLib {
 
         if (_isMainnet || _isOP) {
             deployment.optimismDeployer = IJBSuckerDeployer(
-                _getDeploymentAddress(path, "nana-suckers-v5", network_name, "JBOptimismSuckerDeployer")
+                _getDeploymentAddress({
+                    path: path,
+                    projectName: "nana-suckers-v5",
+                    networkName: networkName,
+                    contractName: "JBOptimismSuckerDeployer"
+                })
             );
         }
 
         if (_isMainnet || _isBase) {
-            deployment.baseDeployer =
-                IJBSuckerDeployer(_getDeploymentAddress(path, "nana-suckers-v5", network_name, "JBBaseSuckerDeployer"));
+            deployment.baseDeployer = IJBSuckerDeployer(
+                _getDeploymentAddress({
+                    path: path,
+                    projectName: "nana-suckers-v5",
+                    networkName: networkName,
+                    contractName: "JBBaseSuckerDeployer"
+                })
+            );
         }
 
         if (_isMainnet || _isArb) {
             deployment.arbitrumDeployer = IJBSuckerDeployer(
-                _getDeploymentAddress(path, "nana-suckers-v5", network_name, "JBArbitrumSuckerDeployer")
+                _getDeploymentAddress({
+                    path: path,
+                    projectName: "nana-suckers-v5",
+                    networkName: networkName,
+                    contractName: "JBArbitrumSuckerDeployer"
+                })
             );
         }
     }
@@ -82,8 +101,8 @@ library SuckerDeploymentLib {
     /// @return The address of the contract.
     function _getDeploymentAddress(
         string memory path,
-        string memory project_name,
-        string memory network_name,
+        string memory projectName,
+        string memory networkName,
         string memory contractName
     )
         internal
@@ -91,7 +110,7 @@ library SuckerDeploymentLib {
         returns (address)
     {
         string memory deploymentJson =
-            vm.readFile(string.concat(path, project_name, "/", network_name, "/", contractName, ".json"));
-        return stdJson.readAddress(deploymentJson, ".address");
+            vm.readFile(string.concat(path, projectName, "/", networkName, "/", contractName, ".json"));
+        return stdJson.readAddress({json: deploymentJson, key: ".address"});
     }
 }
