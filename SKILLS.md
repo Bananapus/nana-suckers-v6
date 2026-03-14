@@ -155,7 +155,7 @@ JBTokenMapping({
 })
 ```
 
-See also: `SECURITY.md` in this repo.
+See also: `RISKS.md` in this repo.
 
 ## Deprecation Lifecycle
 
