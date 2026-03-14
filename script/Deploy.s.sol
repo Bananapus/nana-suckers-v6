@@ -77,11 +77,11 @@ contract DeployScript is Script, Sphinx {
 
         // If the registry is already deployed we don't have to deploy it
         // (and we can't add more pre_approved deployers etc.)
-        if (!_isDeployed(
-                REGISTRY_SALT,
-                type(JBSuckerRegistry).creationCode,
-                abi.encode(core.directory, core.permissions, safeAddress(), TRUSTED_FORWARDER)
-            )) {
+        if (!_isDeployed({
+                salt: REGISTRY_SALT,
+                creationCode: type(JBSuckerRegistry).creationCode,
+                arguments: abi.encode(core.directory, core.permissions, safeAddress(), TRUSTED_FORWARDER)
+            })) {
             // Deploy the registry and pre-aprove the deployers we just deployed.
             JBSuckerRegistry _registry = new JBSuckerRegistry{salt: REGISTRY_SALT}({
                 directory: core.directory,
@@ -113,11 +113,11 @@ contract DeployScript is Script, Sphinx {
     function _optimismSucker() internal {
         // Check if this sucker is already deployed on this chain,
         // if that is the case we don't need to do anything else for this chain.
-        if (_isDeployed(
-                OP_SALT,
-                type(JBOptimismSuckerDeployer).creationCode,
-                abi.encode(core.directory, core.permissions, core.tokens, safeAddress(), TRUSTED_FORWARDER)
-            )) return;
+        if (_isDeployed({
+                salt: OP_SALT,
+                creationCode: type(JBOptimismSuckerDeployer).creationCode,
+                arguments: abi.encode(core.directory, core.permissions, core.tokens, safeAddress(), TRUSTED_FORWARDER)
+            })) return;
 
         // Check if we should do the L1 portion.
         // ETH Mainnet and ETH Sepolia.
@@ -130,18 +130,18 @@ contract DeployScript is Script, Sphinx {
                 trustedForwarder: TRUSTED_FORWARDER
             });
 
-            _opDeployer.setChainSpecificConstants(
-                IOPMessenger(
+            _opDeployer.setChainSpecificConstants({
+                messenger: IOPMessenger(
                     block.chainid == 1
                         ? address(0x25ace71c97B33Cc4729CF772ae268934F7ab5fA1)
                         : address(0x58Cc85b8D04EA49cC6DBd3CbFFd00B4B8D6cb3ef)
                 ),
-                IOPStandardBridge(
+                bridge: IOPStandardBridge(
                     block.chainid == 1
                         ? address(0x99C9fc46f92E8a1c0deC1b1747d010903E884bE1)
                         : address(0xFBb0621E0B23b5478B630BD55a5f21f67730B0F1)
                 )
-            );
+            });
 
             // Deploy the singleton instance.
             JBOptimismSucker _singleton = new JBOptimismSucker{salt: OP_SALT}({
@@ -170,10 +170,10 @@ contract DeployScript is Script, Sphinx {
                 trustedForwarder: TRUSTED_FORWARDER
             });
 
-            _opDeployer.setChainSpecificConstants(
-                IOPMessenger(0x4200000000000000000000000000000000000007),
-                IOPStandardBridge(0x4200000000000000000000000000000000000010)
-            );
+            _opDeployer.setChainSpecificConstants({
+                messenger: IOPMessenger(0x4200000000000000000000000000000000000007),
+                bridge: IOPStandardBridge(0x4200000000000000000000000000000000000010)
+            });
 
             // Deploy the singleton instance.
             JBOptimismSucker _singleton = new JBOptimismSucker{salt: OP_SALT}({
@@ -196,11 +196,11 @@ contract DeployScript is Script, Sphinx {
     function _baseSucker() internal {
         // Check if this sucker is already deployed on this chain,
         // if that is the case we don't need to do anything else for this chain.
-        if (_isDeployed(
-                BASE_SALT,
-                type(JBBaseSuckerDeployer).creationCode,
-                abi.encode(core.directory, core.permissions, core.tokens, safeAddress(), TRUSTED_FORWARDER)
-            )) return;
+        if (_isDeployed({
+                salt: BASE_SALT,
+                creationCode: type(JBBaseSuckerDeployer).creationCode,
+                arguments: abi.encode(core.directory, core.permissions, core.tokens, safeAddress(), TRUSTED_FORWARDER)
+            })) return;
 
         // Check if we should do the L1 portion.
         // ETH Mainnet and ETH Sepolia.
@@ -213,18 +213,18 @@ contract DeployScript is Script, Sphinx {
                 trustedForwarder: TRUSTED_FORWARDER
             });
 
-            _baseDeployer.setChainSpecificConstants(
-                IOPMessenger(
+            _baseDeployer.setChainSpecificConstants({
+                messenger: IOPMessenger(
                     block.chainid == 1
                         ? address(0x866E82a600A1414e583f7F13623F1aC5d58b0Afa)
                         : address(0xC34855F4De64F1840e5686e64278da901e261f20)
                 ),
-                IOPStandardBridge(
+                bridge: IOPStandardBridge(
                     block.chainid == 1
                         ? address(0x3154Cf16ccdb4C6d922629664174b904d80F2C35)
                         : address(0xfd0Bf71F60660E2f608ed56e1659C450eB113120)
                 )
-            );
+            });
 
             // Deploy the singleton instance.
             JBBaseSucker _singleton = new JBBaseSucker{salt: BASE_SALT}({
@@ -253,10 +253,10 @@ contract DeployScript is Script, Sphinx {
                 trustedForwarder: TRUSTED_FORWARDER
             });
 
-            _baseDeployer.setChainSpecificConstants(
-                IOPMessenger(0x4200000000000000000000000000000000000007),
-                IOPStandardBridge(0x4200000000000000000000000000000000000010)
-            );
+            _baseDeployer.setChainSpecificConstants({
+                messenger: IOPMessenger(0x4200000000000000000000000000000000000007),
+                bridge: IOPStandardBridge(0x4200000000000000000000000000000000000010)
+            });
 
             // Deploy the singleton instance.
             JBBaseSucker _singleton = new JBBaseSucker{salt: BASE_SALT}({
@@ -280,11 +280,11 @@ contract DeployScript is Script, Sphinx {
     function _arbitrumSucker() internal {
         // Check if this sucker is already deployed on this chain,
         // if that is the case we don't need to do anything else for this chain.
-        if (_isDeployed(
-                ARB_SALT,
-                type(JBArbitrumSuckerDeployer).creationCode,
-                abi.encode(core.directory, core.permissions, core.tokens, safeAddress(), TRUSTED_FORWARDER)
-            )) return;
+        if (_isDeployed({
+                salt: ARB_SALT,
+                creationCode: type(JBArbitrumSuckerDeployer).creationCode,
+                arguments: abi.encode(core.directory, core.permissions, core.tokens, safeAddress(), TRUSTED_FORWARDER)
+            })) return;
 
         // Check if we should do the L1 portion.
         // ETH Mainnet and ETH Sepolia.
@@ -362,19 +362,29 @@ contract DeployScript is Script, Sphinx {
         if (block.chainid == 1 || block.chainid == 11_155_111) {
             // Optimsim
             PRE_APPROVED_DEPLOYERS.push(
-                address(_deployCCIPSuckerFor(OP_SALT, block.chainid == 1 ? CCIPHelper.OP_ID : CCIPHelper.OP_SEP_ID))
+                address(
+                    _deployCCIPSuckerFor({
+                        salt: OP_SALT, remoteChainId: block.chainid == 1 ? CCIPHelper.OP_ID : CCIPHelper.OP_SEP_ID
+                    })
+                )
             );
 
             // Base
             PRE_APPROVED_DEPLOYERS.push(
                 address(
-                    _deployCCIPSuckerFor(BASE_SALT, block.chainid == 1 ? CCIPHelper.BASE_ID : CCIPHelper.BASE_SEP_ID)
+                    _deployCCIPSuckerFor({
+                        salt: BASE_SALT, remoteChainId: block.chainid == 1 ? CCIPHelper.BASE_ID : CCIPHelper.BASE_SEP_ID
+                    })
                 )
             );
 
             // Arbitrum
             PRE_APPROVED_DEPLOYERS.push(
-                address(_deployCCIPSuckerFor(ARB_SALT, block.chainid == 1 ? CCIPHelper.ARB_ID : CCIPHelper.ARB_SEP_ID))
+                address(
+                    _deployCCIPSuckerFor({
+                        salt: ARB_SALT, remoteChainId: block.chainid == 1 ? CCIPHelper.ARB_ID : CCIPHelper.ARB_SEP_ID
+                    })
+                )
             );
         }
 
@@ -384,23 +394,30 @@ contract DeployScript is Script, Sphinx {
             // L1.
             PRE_APPROVED_DEPLOYERS.push(
                 address(
-                    _deployCCIPSuckerFor(ARB_SALT, block.chainid == 42_161 ? CCIPHelper.ETH_ID : CCIPHelper.ETH_SEP_ID)
+                    _deployCCIPSuckerFor({
+                        salt: ARB_SALT,
+                        remoteChainId: block.chainid == 42_161 ? CCIPHelper.ETH_ID : CCIPHelper.ETH_SEP_ID
+                    })
                 )
             );
 
             // ARB -> OP.
             PRE_APPROVED_DEPLOYERS.push(
                 address(
-                    _deployCCIPSuckerFor(ARB_OP_SALT, block.chainid == 42_161 ? CCIPHelper.OP_ID : CCIPHelper.OP_SEP_ID)
+                    _deployCCIPSuckerFor({
+                        salt: ARB_OP_SALT,
+                        remoteChainId: block.chainid == 42_161 ? CCIPHelper.OP_ID : CCIPHelper.OP_SEP_ID
+                    })
                 )
             );
 
             // ARB -> BASE.
             PRE_APPROVED_DEPLOYERS.push(
                 address(
-                    _deployCCIPSuckerFor(
-                        ARB_BASE_SALT, block.chainid == 42_161 ? CCIPHelper.BASE_ID : CCIPHelper.BASE_SEP_ID
-                    )
+                    _deployCCIPSuckerFor({
+                        salt: ARB_BASE_SALT,
+                        remoteChainId: block.chainid == 42_161 ? CCIPHelper.BASE_ID : CCIPHelper.BASE_SEP_ID
+                    })
                 )
             );
 
@@ -408,22 +425,30 @@ contract DeployScript is Script, Sphinx {
         } else if (block.chainid == 10 || block.chainid == 11_155_420) {
             // L1.
             PRE_APPROVED_DEPLOYERS.push(
-                address(_deployCCIPSuckerFor(OP_SALT, block.chainid == 10 ? CCIPHelper.ETH_ID : CCIPHelper.ETH_SEP_ID))
+                address(
+                    _deployCCIPSuckerFor({
+                        salt: OP_SALT, remoteChainId: block.chainid == 10 ? CCIPHelper.ETH_ID : CCIPHelper.ETH_SEP_ID
+                    })
+                )
             );
 
             // OP -> ARB.
             PRE_APPROVED_DEPLOYERS.push(
                 address(
-                    _deployCCIPSuckerFor(ARB_OP_SALT, block.chainid == 10 ? CCIPHelper.ARB_ID : CCIPHelper.ARB_SEP_ID)
+                    _deployCCIPSuckerFor({
+                        salt: ARB_OP_SALT,
+                        remoteChainId: block.chainid == 10 ? CCIPHelper.ARB_ID : CCIPHelper.ARB_SEP_ID
+                    })
                 )
             );
 
             // OP -> BASE.
             PRE_APPROVED_DEPLOYERS.push(
                 address(
-                    _deployCCIPSuckerFor(
-                        OP_BASE_SALT, block.chainid == 10 ? CCIPHelper.BASE_ID : CCIPHelper.BASE_SEP_ID
-                    )
+                    _deployCCIPSuckerFor({
+                        salt: OP_BASE_SALT,
+                        remoteChainId: block.chainid == 10 ? CCIPHelper.BASE_ID : CCIPHelper.BASE_SEP_ID
+                    })
                 )
             );
 
@@ -432,23 +457,30 @@ contract DeployScript is Script, Sphinx {
             // L1.
             PRE_APPROVED_DEPLOYERS.push(
                 address(
-                    _deployCCIPSuckerFor(BASE_SALT, block.chainid == 8453 ? CCIPHelper.ETH_ID : CCIPHelper.ETH_SEP_ID)
+                    _deployCCIPSuckerFor({
+                        salt: BASE_SALT,
+                        remoteChainId: block.chainid == 8453 ? CCIPHelper.ETH_ID : CCIPHelper.ETH_SEP_ID
+                    })
                 )
             );
 
             // BASE -> OP.
             PRE_APPROVED_DEPLOYERS.push(
                 address(
-                    _deployCCIPSuckerFor(OP_BASE_SALT, block.chainid == 8453 ? CCIPHelper.OP_ID : CCIPHelper.OP_SEP_ID)
+                    _deployCCIPSuckerFor({
+                        salt: OP_BASE_SALT,
+                        remoteChainId: block.chainid == 8453 ? CCIPHelper.OP_ID : CCIPHelper.OP_SEP_ID
+                    })
                 )
             );
 
             // BASE -> ARB.
             PRE_APPROVED_DEPLOYERS.push(
                 address(
-                    _deployCCIPSuckerFor(
-                        ARB_BASE_SALT, block.chainid == 8453 ? CCIPHelper.ARB_ID : CCIPHelper.ARB_SEP_ID
-                    )
+                    _deployCCIPSuckerFor({
+                        salt: ARB_BASE_SALT,
+                        remoteChainId: block.chainid == 8453 ? CCIPHelper.ARB_ID : CCIPHelper.ARB_SEP_ID
+                    })
                 )
             );
         }
@@ -458,19 +490,19 @@ contract DeployScript is Script, Sphinx {
         internal
         returns (JBCCIPSuckerDeployer deployer)
     {
-        return _deployCCIPSuckerWith(
-            salt,
-            core.directory,
-            core.permissions,
-            core.tokens,
-            safeAddress(),
-            TRUSTED_FORWARDER,
-            remoteChainId,
+        return _deployCCIPSuckerWith({
+            salt: salt,
+            directory: core.directory,
+            permissions: core.permissions,
+            tokens: core.tokens,
+            configurator: safeAddress(),
+            trustedForwarder: TRUSTED_FORWARDER,
+            remoteChainId: remoteChainId,
             // Get the selector of the other side.
-            CCIPHelper.selectorOfChain(remoteChainId),
+            remoteChainSelector: CCIPHelper.selectorOfChain(remoteChainId),
             // Get the router for this side.
-            ICCIPRouter(CCIPHelper.routerOfChain(block.chainid))
-        );
+            router: ICCIPRouter(CCIPHelper.routerOfChain(block.chainid))
+        });
     }
 
     function _deployCCIPSuckerWith(
@@ -487,9 +519,17 @@ contract DeployScript is Script, Sphinx {
         internal
         returns (JBCCIPSuckerDeployer deployer)
     {
-        deployer = new JBCCIPSuckerDeployer{salt: salt}(directory, permissions, tokens, configurator, trustedForwarder);
+        deployer = new JBCCIPSuckerDeployer{salt: salt}({
+            directory: directory,
+            permissions: permissions,
+            tokens: tokens,
+            configurator: configurator,
+            trustedForwarder: trustedForwarder
+        });
 
-        deployer.setChainSpecificConstants(remoteChainId, remoteChainSelector, router);
+        deployer.setChainSpecificConstants({
+            remoteChainId: remoteChainId, remoteChainSelector: remoteChainSelector, router: router
+        });
 
         // Deploy the singleton instance.
         JBCCIPSucker singleton = new JBCCIPSucker{salt: salt}({
