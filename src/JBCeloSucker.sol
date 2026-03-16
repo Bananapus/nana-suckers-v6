@@ -70,6 +70,47 @@ contract JBCeloSucker is JBOptimismSucker {
     // --------------------- internal transactions ----------------------- //
     //*********************************************************************//
 
+    /// @notice Unwraps WETH → native ETH before adding to the project's balance.
+    /// @dev When tokens are bridged from Celo → L1 via the OP bridge, L1 WETH (ERC-20) is released to the sucker.
+    /// But the L1 project's terminal accepts native ETH (NATIVE_TOKEN), not WETH. This override unwraps the WETH
+    /// and adds native ETH to the project's balance.
+    /// @param token The terminal token to add to the project's balance.
+    /// @param amount The amount of terminal tokens to add to the project's balance.
+    function _addToBalance(address token, uint256 amount) internal override {
+        if (token == address(WRAPPED_NATIVE)) {
+            // Check addable amount against WETH balance before unwrapping.
+            uint256 addableAmount = amountToAddToBalanceOf(token);
+            if (amount > addableAmount) {
+                revert JBSucker_InsufficientBalance(amount, addableAmount);
+            }
+
+            uint256 _projectId = projectId();
+
+            // Unwrap WETH → native ETH.
+            WRAPPED_NATIVE.withdraw(amount);
+
+            // Get the project's primary terminal for native token.
+            IJBTerminal terminal = DIRECTORY.primaryTerminalOf({projectId: _projectId, token: JBConstants.NATIVE_TOKEN});
+
+            if (address(terminal) == address(0)) {
+                revert JBSucker_NoTerminalForToken(_projectId, JBConstants.NATIVE_TOKEN);
+            }
+
+            // Add native ETH to the project's balance.
+            // slither-disable-next-line arbitrary-send-eth
+            terminal.addToBalanceOf{value: amount}({
+                projectId: _projectId,
+                token: JBConstants.NATIVE_TOKEN,
+                amount: amount,
+                shouldReturnHeldFees: false,
+                memo: "",
+                metadata: ""
+            });
+        } else {
+            super._addToBalance({token: token, amount: amount});
+        }
+    }
+
     /// @notice Use the `OPMESSENGER` to send the outbox tree for the `token` and the corresponding funds to the peer
     /// over the `OPBRIDGE`.
     /// @dev For Celo, native ETH is wrapped to WETH and bridged as ERC-20. The messenger message is sent with
@@ -150,47 +191,6 @@ contract JBCeloSucker is JBOptimismSucker {
         // (wrapping native ETH to WETH), all tokens need sufficient gas for an ERC-20 transfer.
         if (map.minGas < MESSENGER_ERC20_MIN_GAS_LIMIT) {
             revert JBSucker_BelowMinGas(map.minGas, MESSENGER_ERC20_MIN_GAS_LIMIT);
-        }
-    }
-
-    /// @notice Unwraps WETH → native ETH before adding to the project's balance.
-    /// @dev When tokens are bridged from Celo → L1 via the OP bridge, L1 WETH (ERC-20) is released to the sucker.
-    /// But the L1 project's terminal accepts native ETH (NATIVE_TOKEN), not WETH. This override unwraps the WETH
-    /// and adds native ETH to the project's balance.
-    /// @param token The terminal token to add to the project's balance.
-    /// @param amount The amount of terminal tokens to add to the project's balance.
-    function _addToBalance(address token, uint256 amount) internal override {
-        if (token == address(WRAPPED_NATIVE)) {
-            // Check addable amount against WETH balance before unwrapping.
-            uint256 addableAmount = amountToAddToBalanceOf(token);
-            if (amount > addableAmount) {
-                revert JBSucker_InsufficientBalance(amount, addableAmount);
-            }
-
-            uint256 _projectId = projectId();
-
-            // Unwrap WETH → native ETH.
-            WRAPPED_NATIVE.withdraw(amount);
-
-            // Get the project's primary terminal for native token.
-            IJBTerminal terminal = DIRECTORY.primaryTerminalOf({projectId: _projectId, token: JBConstants.NATIVE_TOKEN});
-
-            if (address(terminal) == address(0)) {
-                revert JBSucker_NoTerminalForToken(_projectId, JBConstants.NATIVE_TOKEN);
-            }
-
-            // Add native ETH to the project's balance.
-            // slither-disable-next-line arbitrary-send-eth
-            terminal.addToBalanceOf{value: amount}({
-                projectId: _projectId,
-                token: JBConstants.NATIVE_TOKEN,
-                amount: amount,
-                shouldReturnHeldFees: false,
-                memo: "",
-                metadata: ""
-            });
-        } else {
-            super._addToBalance({token: token, amount: amount});
         }
     }
 }
