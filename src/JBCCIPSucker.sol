@@ -138,6 +138,10 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
             revert JBSucker_NotPeer(_toBytes32(origin));
         }
 
+        // By design, CCIP guarantees token delivery matches the sent amount. Validating the
+        // delivered amount against the message would add gas cost for a check that the bridge itself enforces.
+        // If CCIP's guarantee fails, the bridge itself is compromised.
+        //
         // We intentionally do NOT validate root.amount against destTokenAmounts[0].amount here.
         // CCIP fees are paid separately (via feeToken), so delivered amounts should always match what was sent.
         // If we reverted on a mismatch, the tokens already transferred by CCIP would be locked in the router
