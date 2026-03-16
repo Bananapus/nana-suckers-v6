@@ -1,0 +1,371 @@
+# nana-suckers-v6 Changelog (v5 -> v6)
+
+This document describes all changes between `nana-suckers` (v5, Solidity 0.8.23) and `nana-suckers-v6` (v6, Solidity 0.8.26).
+
+---
+
+## 1. Breaking Changes
+
+### 1.1 Cross-VM Address Representation (`address` -> `bytes32`)
+
+The most pervasive breaking change in v6 is the systematic replacement of `address` types with `bytes32` for all cross-chain identifiers. This prepares the sucker architecture for non-EVM chains (e.g., Solana/SVM) where addresses are 32 bytes. Two new internal helpers (`_toAddress` and `_toBytes32`) convert between the two representations at EVM bridge API boundaries.
+
+#### IJBSucker
+
+| Change | v5 | v6 |
+|--------|----|----|
+| `peer()` return type | `returns (address)` | `returns (bytes32)` |
+| `prepare()` beneficiary param | `address beneficiary` | `bytes32 beneficiary` |
+| `Claimed` event `beneficiary` | `address beneficiary` | `bytes32 beneficiary` |
+| `InsertToOutboxTree` event `beneficiary` | `address indexed beneficiary` | `bytes32 indexed beneficiary` |
+
+All callers of `peer()` and `prepare()` must update to use `bytes32`. For EVM-to-EVM usage, addresses are left-padded to 32 bytes via `_toBytes32(address)`.
+
+### 1.2 Struct Field Type Changes
+
+| Struct | Field | v5 Type | v6 Type |
+|--------|-------|---------|---------|
+| `JBLeaf` | `beneficiary` | `address` | `bytes32` |
+| `JBMessageRoot` | `token` | `address` | `bytes32` |
+| `JBMessageRoot` | (new field) `version` | N/A | `uint8` (inserted as first field) |
+| `JBRemoteToken` | `addr` | `address` | `bytes32` |
+| `JBSuckersPair` | `remote` | `address` | `bytes32` |
+| `JBTokenMapping` | `remoteToken` | `address` | `bytes32` |
+
+These are ABI-breaking changes. All off-chain infrastructure (indexers, relayers, frontends) must update to use `bytes32` for these fields.
+
+### 1.3 Message Versioning (New Field in `JBMessageRoot`)
+
+`JBMessageRoot` gained a `version` field (`uint8`). The v6 `fromRemote()` function validates `root.version == MESSAGE_VERSION` (which is `1`) and reverts with `JBSucker_InvalidMessageVersion` if it does not match. This means v5 messages (which have no version field) are incompatible with v6 suckers.
+
+### 1.4 `setDeprecation` Permission Change
+
+| Change | v5 | v6 |
+|--------|----|----|
+| `setDeprecation` required permission | `JBPermissionIds.SUCKER_SAFETY` | `JBPermissionIds.SET_SUCKER_DEPRECATION` |
+
+`enableEmergencyHatchFor` continues to use `JBPermissionIds.SUCKER_SAFETY` in both versions.
+
+### 1.5 Removed Interfaces
+
+| File | Notes |
+|------|-------|
+| `IJBSuckerDeployerFeeless.sol` | Removed entirely. The feeless allowance sucker pattern was removed. |
+
+### 1.6 Removed Contracts
+
+| File | Notes |
+|------|-------|
+| `extensions/JBAllowanceSucker.sol` | Abstract contract for feeless cash outs via `useAllowanceFeeless`. Removed along with `IJBSuckerDeployerFeeless`. |
+
+### 1.7 IJBSuckerDeployer Errors Moved
+
+In v5, deployer errors were declared in `IJBSuckerDeployer` (the interface). In v6, they are declared in `JBSuckerDeployer` (the abstract contract). The errors themselves are identical:
+- `JBSuckerDeployer_AlreadyConfigured()`
+- `JBSuckerDeployer_DeployerIsNotConfigured()`
+- `JBSuckerDeployer_InvalidLayerSpecificConfiguration()`
+- `JBSuckerDeployer_LayerSpecificNotConfigured()`
+- `JBSuckerDeployer_Unauthorized(address caller, address expected)`
+- `JBSuckerDeployer_ZeroConfiguratorAddress()`
+
+### 1.8 IJBSuckerRegistry `deploySuckersFor` Parameter Change
+
+| Change | v5 | v6 |
+|--------|----|----|
+| `deploySuckersFor` configurations param | `JBSuckerDeployerConfig[] memory configurations` | `JBSuckerDeployerConfig[] calldata configurations` |
+
+Changed from `memory` to `calldata` for gas efficiency.
+
+---
+
+## 2. New Features
+
+### 2.1 New Contracts
+
+| Contract | Description |
+|----------|-------------|
+| `JBCeloSucker` | OP Stack sucker for Celo, which uses CELO as its native gas token (not ETH). Wraps native ETH to WETH before bridging as ERC-20. Overrides `_sendRootOverAMB` to always bridge as ERC-20 and never attach ETH as `msg.value` on the messenger. Overrides `_addToBalance` to unwrap WETH back to native ETH. Overrides `_validateTokenMapping` to allow `NATIVE_TOKEN` to map to any remote token. Supports chain IDs: Ethereum (1) <-> Celo (42220). |
+| `JBCeloSuckerDeployer` | Deployer for `JBCeloSucker`. Extends `JBOptimismSuckerDeployer` with a `wrappedNative` address. Has its own `setChainSpecificConstants` that accepts an additional `IWrappedNativeToken` parameter. |
+
+### 2.2 New Interfaces
+
+| Interface | Description |
+|-----------|-------------|
+| `IJBCeloSuckerDeployer` | Interface for the Celo sucker deployer. Extends `IJBOpSuckerDeployer` with `wrappedNative()` view and `setChainSpecificConstants(IOPMessenger, IOPStandardBridge, IWrappedNativeToken)`. |
+
+### 2.3 New Events
+
+| Contract | Event | Description |
+|----------|-------|-------------|
+| `IJBSucker` | `StaleRootRejected(address indexed token, uint64 receivedNonce, uint64 currentNonce)` | Emitted when a received inbox root is rejected because its nonce is stale (not greater than the current nonce). Aids off-chain monitoring of out-of-order or duplicate message deliveries. |
+| `IJBSuckerExtended` | `EmergencyExit(address indexed beneficiary, address indexed token, uint256 terminalTokenAmount, uint256 projectTokenCount, address caller)` | Emitted when a beneficiary exits through the emergency hatch. v5 had no event for emergency exits. |
+| `JBCCIPSucker` | `TransportPaymentRefundFailed(address indexed recipient, uint256 amount)` | Emitted when a CCIP transport payment refund fails after a successful `ccipSend`. Replaces the v5 `JBCCIPSucker_FailedToRefundFee` revert to avoid reverting after the bridge message is committed. |
+
+### 2.4 New Errors
+
+| Contract | Error | Description |
+|----------|-------|-------------|
+| `JBSucker` | `JBSucker_AmountExceedsUint128(uint256 amount)` | Thrown when `terminalTokenAmount` or `projectTokenCount` exceeds `uint128` in `_insertIntoTree`. Guards against overflow for SVM/Solana compatibility. |
+| `JBSucker` | `JBSucker_InvalidMessageVersion(uint8 received, uint8 expected)` | Thrown in `fromRemote` when the message version does not match `MESSAGE_VERSION`. Prevents processing incompatible messages. |
+| `CCIPHelper` | `CCIPHelper_UnsupportedChain(uint256 chainId)` | Replaces bare `revert("Unsupported chain")` strings with a typed error. |
+
+### 2.5 New Constants
+
+| Contract | Constant | Description |
+|----------|----------|-------------|
+| `JBSucker` | `uint8 public constant MESSAGE_VERSION = 1` | The message format version. Used to reject incompatible messages from remote chains. |
+
+### 2.6 New Internal Helpers
+
+| Contract | Function | Description |
+|----------|----------|-------------|
+| `JBSucker` | `_toAddress(bytes32) -> address` | Converts a `bytes32` remote address to a local EVM address (lower 20 bytes). |
+| `JBSucker` | `_toBytes32(address) -> bytes32` | Converts an EVM address to a `bytes32` remote address (left-padded with zeros). |
+| `JBArbitrumSucker` | `_createRetryableTicket(...)` | Helper to create the retryable ticket, extracted from `_toL2` to avoid stack-too-deep errors. |
+
+---
+
+## 3. Event Changes
+
+### 3.1 New Events
+
+See section 2.3 above.
+
+### 3.2 Modified Events
+
+| Contract | Event | Change |
+|----------|-------|--------|
+| `IJBSucker` | `Claimed` | `beneficiary` field changed from `address` to `bytes32`. |
+| `IJBSucker` | `InsertToOutboxTree` | `beneficiary` indexed field changed from `address indexed` to `bytes32 indexed`. |
+
+### 3.3 Unchanged Events
+
+`NewInboxTreeRoot`, `RootToRemote`, `EmergencyHatchOpened`, `DeprecationTimeUpdated`, `SuckerDeployedFor`, `SuckerDeployerAllowed`, `SuckerDeployerRemoved`, `SuckerDeprecated`, and `CCIPConstantsSet` are identical between v5 and v6.
+
+### 3.4 All Interfaces Gained NatSpec
+
+Every interface file in v6 has comprehensive NatSpec documentation added to all functions, events, errors, and return values. This is a documentation-only change that does not affect the ABI.
+
+---
+
+## 4. Error Changes
+
+### 4.1 New Errors
+
+See section 2.4 above.
+
+### 4.2 Modified Error Parameters (Type Changes)
+
+| Contract | v5 | v6 |
+|----------|----|----|
+| `JBSucker` | `JBSucker_NotPeer(address caller)` | `JBSucker_NotPeer(bytes32 caller)` |
+| `JBSucker` | `JBSucker_InvalidNativeRemoteAddress(address remoteToken)` | `JBSucker_InvalidNativeRemoteAddress(bytes32 remoteToken)` |
+| `JBSucker` | `JBSucker_TokenAlreadyMapped(address localToken, address mappedTo)` | `JBSucker_TokenAlreadyMapped(address localToken, bytes32 mappedTo)` |
+
+### 4.3 Removed Errors
+
+| Contract | Error | Notes |
+|----------|-------|-------|
+| `JBArbitrumSucker` | `JBArbitrumSucker_ChainNotSupported(uint256 chainId)` | Error was declared but never used in v5. Removed. |
+| `JBCCIPSucker` | `JBCCIPSucker_FailedToRefundFee()` | Replaced by `TransportPaymentRefundFailed` event. Refund failure no longer reverts. |
+| `JBSuckerRegistry` | `JBSuckerRegistry_RulesetDoesNotAllowAddingSucker(uint256 projectId)` | Removed entirely (was declared but unused in v5). |
+
+### 4.4 Moved Errors (Interface -> Contract)
+
+| v5 Location | v6 Location | Errors |
+|-------------|-------------|--------|
+| `IJBSuckerDeployer` (interface) | `JBSuckerDeployer` (abstract contract) | `JBSuckerDeployer_AlreadyConfigured`, `JBSuckerDeployer_DeployerIsNotConfigured`, `JBSuckerDeployer_InvalidLayerSpecificConfiguration`, `JBSuckerDeployer_LayerSpecificNotConfigured`, `JBSuckerDeployer_Unauthorized`, `JBSuckerDeployer_ZeroConfiguratorAddress` |
+
+### 4.5 Library Error Improvements
+
+| Library | v5 | v6 |
+|---------|----|----|
+| `CCIPHelper` | `revert("Unsupported chain")` (bare string revert) | `revert CCIPHelper_UnsupportedChain(chainId)` (typed error with chain ID) |
+
+---
+
+## 5. Struct Changes
+
+### 5.1 Modified Structs
+
+| Struct | Field | v5 Type | v6 Type | Notes |
+|--------|-------|---------|---------|-------|
+| `JBLeaf` | `beneficiary` | `address` | `bytes32` | Cross-VM compatibility |
+| `JBMessageRoot` | `token` | `address` | `bytes32` | Cross-VM compatibility |
+| `JBMessageRoot` | `version` | _(not present)_ | `uint8` | New field for message versioning (first field) |
+| `JBRemoteToken` | `addr` | `address` | `bytes32` | Cross-VM compatibility |
+| `JBSuckersPair` | `remote` | `address` | `bytes32` | Cross-VM compatibility |
+| `JBTokenMapping` | `remoteToken` | `address` | `bytes32` | Cross-VM compatibility |
+
+### 5.2 Unchanged Structs
+
+| Struct | Notes |
+|--------|-------|
+| `JBClaim` | Identical (but contains `JBLeaf`, which changed) |
+| `JBInboxTreeRoot` | Identical |
+| `JBOutboxTree` | Identical |
+| `JBSuckerDeployerConfig` | Identical (but contains `JBTokenMapping`, which changed) |
+
+---
+
+## 6. Enum Changes
+
+`JBAddToBalanceMode`, `JBLayer`, and `JBSuckerState` are **identical** between v5 and v6.
+
+---
+
+## 7. Implementation Changes (Non-Interface)
+
+### 7.1 JBSucker
+
+| Change | Description |
+|--------|-------------|
+| **Message versioning** | `fromRemote()` now validates `root.version == MESSAGE_VERSION` and reverts with `JBSucker_InvalidMessageVersion` on mismatch. v5 had no version check. |
+| **Stale root event** | `fromRemote()` emits `StaleRootRejected` in the else branch when a root is rejected due to a stale nonce. v5 silently ignored stale roots. |
+| **Token field in `fromRemote`** | `fromRemote()` now converts `root.token` (bytes32) to a local address via `_toAddress()` for inbox lookup, since `JBMessageRoot.token` changed from `address` to `bytes32`. |
+| **uint128 overflow guard** | `_insertIntoTree()` now checks that `terminalTokenAmount` and `projectTokenCount` do not exceed `uint128`, reverting with `JBSucker_AmountExceedsUint128`. Guards against overflow when bridging to SVM/Solana. |
+| **Empty outbox guard** | `_sendRoot()` now returns early (no-op) if `outbox.tree.count == 0`, preventing an arithmetic underflow when computing `count - 1`. v5 did not have this guard. |
+| **Emergency exit event** | `exitThroughEmergencyHatch()` now emits the `EmergencyExit` event. v5 had no event for emergency exits. |
+| **`setDeprecation` permission** | Changed from `JBPermissionIds.SUCKER_SAFETY` to `JBPermissionIds.SET_SUCKER_DEPRECATION`. |
+| **`_addToBalance` visibility** | Changed from `internal` to `internal virtual`, allowing subclasses (e.g., `JBCeloSucker`) to override. |
+| **`peer()` return type** | Changed from `address` to `bytes32`. Default implementation returns `_toBytes32(address(this))`. |
+| **`isMapped()` comparison** | Changed from `_remoteTokenFor[token].addr != address(0)` to `_remoteTokenFor[token].addr != bytes32(0)`. |
+| **Private variable naming** | `localProjectId` renamed to `_localProjectId` (leading underscore convention). |
+| **`mapTokens` dust refund** | `mapTokens()` now refunds the remainder from integer division of `msg.value` when disabling multiple tokens, preventing dust ETH from being stuck in the contract. |
+| **`_handleClaim` beneficiary conversion** | Converts `bytes32` beneficiary to `address` via `_toAddress()` before minting project tokens. |
+| **`_sendRoot` message construction** | Now includes `version: MESSAGE_VERSION` in the `JBMessageRoot` struct. |
+| **Named arguments** | Function calls throughout use named argument syntax (`{key: value}`) for improved readability. |
+
+### 7.2 JBOptimismSucker
+
+| Change | Description |
+|--------|-------------|
+| **`_isRemotePeer` comparison** | v5: `OPMESSENGER.xDomainMessageSender() == peer()` (address comparison). v6: `_toBytes32(OPMESSENGER.xDomainMessageSender()) == peer()` (bytes32 comparison). |
+| **Bridge API calls** | `OPBRIDGE.bridgeERC20To` and `OPMESSENGER.sendMessage` now convert `bytes32` types to `address` at the OP Bridge API boundary via `_toAddress()`. |
+| **`_sendRootOverAMB` visibility** | Changed from `internal override` to `internal virtual override`, allowing `JBCeloSucker` to override. |
+
+### 7.3 JBArbitrumSucker
+
+| Change | Description |
+|--------|-------------|
+| **`_isRemotePeer` comparison** | v5: compared directly with `peer()` (address). v6: converts `peer()` to address via `_toAddress()` before comparison with bridge contracts. |
+| **Bridge API calls** | `IArbL2GatewayRouter.outboundTransfer`, `ArbSys.sendTxToL1`, and `IArbL1GatewayRouter.outboundTransferCustomRefund` now convert `bytes32` types to `address` via `_toAddress()`. |
+| **Stack-too-deep refactor** | `_toL2` extracted `_createRetryableTicket` helper to avoid stack-too-deep. v5 inlined the `ARBINBOX.unsafeCreateRetryableTicket` call. |
+| **Removed error** | `JBArbitrumSucker_ChainNotSupported` removed (was unused in v5). |
+
+### 7.4 JBCCIPSucker
+
+| Change | Description |
+|--------|-------------|
+| **Refund failure handling** | v5: reverted with `JBCCIPSucker_FailedToRefundFee()` on refund failure. v6: emits `TransportPaymentRefundFailed` event instead. This prevents reverting after `ccipSend` has already committed the bridge message, which would cause the transaction to roll back while the CCIP message is in-flight, potentially causing token loss. |
+| **`ccipReceive` peer check** | v5: `revert JBSucker_NotPeer(_msgSender())` / `revert JBSucker_NotPeer(origin)`. v6: wraps in `_toBytes32()` to match the new `bytes32` error parameter. |
+| **`ccipReceive` token comparison** | v5: `root.token == JBConstants.NATIVE_TOKEN`. v6: `root.token == _toBytes32(JBConstants.NATIVE_TOKEN)`, since `root.token` is now `bytes32`. |
+| **CCIP message receiver** | v5: `abi.encode(peer())` (address). v6: `abi.encode(_toAddress(peer()))` (converts bytes32 back to address for CCIP EVM compatibility). |
+| **`_validateTokenMapping`** | v6 enforces `minGas >= MESSENGER_ERC20_MIN_GAS_LIMIT` for ALL tokens (including native), since CCIP wraps native tokens to WETH. v5 exempted native tokens from the minGas check. |
+| **Removed `CCIPHelper` import** | v6 no longer imports `CCIPHelper` in `JBCCIPSucker`. |
+
+### 7.5 JBSuckerRegistry
+
+| Change | Description |
+|--------|-------------|
+| **License** | Changed from `UNLICENSED` to `MIT`. |
+| **Removed imports** | `IJBController`, `JBRuleset`, `JBRulesetMetadata` no longer imported. The v5 ruleset-based sucker restriction was removed. |
+| **Removed error** | `JBSuckerRegistry_RulesetDoesNotAllowAddingSucker` removed. |
+| **`suckerPairsOf`** | `sucker.peer()` now returns `bytes32`, directly assigned to `JBSuckersPair.remote` (which also changed to `bytes32`). |
+
+### 7.6 JBSuckerDeployer
+
+| Change | Description |
+|--------|-------------|
+| **Errors moved** | All deployer errors moved from `IJBSuckerDeployer` (interface) to `JBSuckerDeployer` (abstract contract). The interface is now error-free. |
+| **Constructor parameter naming** | `trusted_forwarder` renamed to `trustedForwarder` (camelCase convention). |
+
+### 7.7 JBOptimismSuckerDeployer
+
+| Change | Description |
+|--------|-------------|
+| **`_layerSpecificConfigurationIsSet` operator** | v5: `address(opMessenger) != address(0) \|\| address(opBridge) != address(0)` (OR -- accepts partial config). v6: `address(opMessenger) != address(0) && address(opBridge) != address(0)` (AND -- rejects partial config). This ensures both messenger and bridge must be set, preventing misconfiguration. |
+| **`_layerSpecificConfigurationIsSet` visibility** | Changed from `internal view override` to `internal view virtual override`, allowing `JBCeloSuckerDeployer` to override. |
+
+### 7.8 CCIPHelper Library
+
+| Change | Description |
+|--------|-------------|
+| **Typed error** | Bare `revert("Unsupported chain")` strings replaced with `revert CCIPHelper_UnsupportedChain(chainId)` in `routerOfChain`, `selectorOfChain`, and `wethOfChain`. |
+
+### 7.9 Solidity Version
+
+All contracts upgraded from `pragma solidity 0.8.23` to `pragma solidity 0.8.26`.
+
+### 7.10 Named Arguments
+
+Throughout the codebase, function calls were updated to use named argument syntax (e.g., `foo({bar: 1, baz: 2})`) for improved readability.
+
+---
+
+## 8. Migration Table
+
+### Interfaces
+
+| v5 | v6 | Notes |
+|----|----|-------|
+| `IJBSucker` | `IJBSucker` | `peer()` returns `bytes32`. `prepare()` takes `bytes32 beneficiary`. `Claimed`/`InsertToOutboxTree` events use `bytes32`. New `StaleRootRejected` event. NatSpec added. |
+| `IJBSuckerExtended` | `IJBSuckerExtended` | New `EmergencyExit` event. NatSpec added. |
+| `IJBSuckerRegistry` | `IJBSuckerRegistry` | `deploySuckersFor` configurations changed to `calldata`. NatSpec added. |
+| `IJBSuckerDeployer` | `IJBSuckerDeployer` | All errors removed from interface (moved to contract). NatSpec added. |
+| `IJBSuckerDeployerFeeless` | (removed) | Feeless allowance sucker pattern removed. No replacement. |
+| `IJBArbitrumSucker` | `IJBArbitrumSucker` | NatSpec added. No functional changes. |
+| `IJBArbitrumSuckerDeployer` | `IJBArbitrumSuckerDeployer` | NatSpec added. No functional changes. |
+| `IJBOptimismSucker` | `IJBOptimismSucker` | NatSpec added. No functional changes. |
+| `IJBOpSuckerDeployer` | `IJBOpSuckerDeployer` | NatSpec added. No functional changes. |
+| `IJBCCIPSuckerDeployer` | `IJBCCIPSuckerDeployer` | NatSpec added. No functional changes. |
+| N/A | `IJBCeloSuckerDeployer` | New. Extends `IJBOpSuckerDeployer` with `wrappedNative()` and extended `setChainSpecificConstants`. |
+| All other interfaces | Same name | NatSpec documentation added. No functional changes. |
+
+### Contracts
+
+| v5 | v6 | Notes |
+|----|----|-------|
+| `JBSucker` | `JBSucker` | `address` -> `bytes32` throughout, message versioning, uint128 guard, empty outbox guard, stale root event, emergency exit event, `setDeprecation` permission change, `mapTokens` dust refund, virtual `_addToBalance`. |
+| `JBOptimismSucker` | `JBOptimismSucker` | `_sendRootOverAMB` made `virtual`. Bridge calls use `_toAddress()`/`_toBytes32()`. |
+| `JBBaseSucker` | `JBBaseSucker` | Explicit imports instead of wildcard. No functional changes. |
+| `JBArbitrumSucker` | `JBArbitrumSucker` | Bridge calls use `_toAddress()`. `_createRetryableTicket` helper extracted. Removed unused `ChainNotSupported` error. |
+| `JBCCIPSucker` | `JBCCIPSucker` | Refund failure emits event instead of reverting. `_validateTokenMapping` enforces minGas for native tokens. Bridge calls use `_toAddress()`/`_toBytes32()`. Removed `CCIPHelper` import. |
+| N/A | `JBCeloSucker` | New. OP Stack sucker for Celo (custom gas token). Wraps ETH to WETH for bridging, unwraps on receipt. |
+| `JBSuckerRegistry` | `JBSuckerRegistry` | Removed ruleset check and related imports/error. License changed to MIT. |
+| `JBSuckerDeployer` | `JBSuckerDeployer` | Errors moved from interface to contract. Constructor param naming convention updated. |
+| `JBOptimismSuckerDeployer` | `JBOptimismSuckerDeployer` | `_layerSpecificConfigurationIsSet` uses `&&` instead of `\|\|`. Made `virtual`. |
+| N/A | `JBCeloSuckerDeployer` | New. Extends OP deployer with wrapped native token support. |
+| `extensions/JBAllowanceSucker` | (removed) | Feeless allowance sucker pattern removed. |
+| All deployers | Same name | Solidity version, named arguments, NatSpec. |
+
+### Structs
+
+| v5 | v6 | Notes |
+|----|----|-------|
+| `JBLeaf` | `JBLeaf` | `beneficiary`: `address` -> `bytes32` |
+| `JBMessageRoot` | `JBMessageRoot` | `token`: `address` -> `bytes32`. New `version` field (`uint8`). |
+| `JBRemoteToken` | `JBRemoteToken` | `addr`: `address` -> `bytes32` |
+| `JBSuckersPair` | `JBSuckersPair` | `remote`: `address` -> `bytes32` |
+| `JBTokenMapping` | `JBTokenMapping` | `remoteToken`: `address` -> `bytes32` |
+| `JBClaim` | `JBClaim` | Unchanged (contains changed `JBLeaf`) |
+| `JBInboxTreeRoot` | `JBInboxTreeRoot` | Identical |
+| `JBOutboxTree` | `JBOutboxTree` | Identical |
+| `JBSuckerDeployerConfig` | `JBSuckerDeployerConfig` | Unchanged (contains changed `JBTokenMapping`) |
+
+### Enums
+
+| v5 | v6 | Notes |
+|----|----|-------|
+| `JBAddToBalanceMode` | `JBAddToBalanceMode` | Identical |
+| `JBLayer` | `JBLayer` | Identical |
+| `JBSuckerState` | `JBSuckerState` | Identical |
+
+### Libraries
+
+| v5 | v6 | Notes |
+|----|----|-------|
+| `ARBAddresses` | `ARBAddresses` | Identical |
+| `ARBChains` | `ARBChains` | Identical |
+| `CCIPHelper` | `CCIPHelper` | Bare `revert("Unsupported chain")` replaced with typed `CCIPHelper_UnsupportedChain` error. |
+| `MerkleLib` | `MerkleLib` | Identical |
