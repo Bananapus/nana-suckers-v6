@@ -81,13 +81,13 @@ abstract contract JBSuckerDeployer is ERC2771Context, JBPermissioned, IJBSuckerD
     // ------------------------ internal views --------------------------- //
     //*********************************************************************//
 
-    /// @notice Check if the layer specific configuration is set or not. Used as a sanity check.
-    function _layerSpecificConfigurationIsSet() internal view virtual returns (bool);
-
     /// @dev ERC-2771 specifies the context as being a single address (20 bytes).
     function _contextSuffixLength() internal view virtual override(ERC2771Context, Context) returns (uint256) {
         return ERC2771Context._contextSuffixLength();
     }
+
+    /// @notice Check if the layer specific configuration is set or not. Used as a sanity check.
+    function _layerSpecificConfigurationIsSet() internal view virtual returns (bool);
 
     /// @notice The calldata. Preferred to use over `msg.data`.
     /// @return calldata The `msg.data` of this call.

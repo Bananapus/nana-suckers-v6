@@ -115,6 +115,30 @@ contract JBArbitrumSucker is JBSucker, IJBArbitrumSucker {
     // --------------------- internal transactions ----------------------- //
     //*********************************************************************//
 
+    /// @notice Helper to create the retryable ticket, avoiding stack-too-deep.
+    function _createRetryableTicket(
+        uint256 callTransportCost,
+        uint256 nativeValue,
+        uint256 maxSubmissionCost,
+        uint256 maxFeePerGas,
+        bytes memory data
+    )
+        internal
+    {
+        address peerAddress = _toAddress(peer());
+        // slither-disable-next-line unused-return,calls-loop
+        ARBINBOX.unsafeCreateRetryableTicket{value: callTransportCost + nativeValue}({
+            to: peerAddress,
+            l2CallValue: nativeValue,
+            maxSubmissionCost: maxSubmissionCost,
+            excessFeeRefundAddress: _msgSender(),
+            callValueRefundAddress: peerAddress,
+            gasLimit: MESSENGER_BASE_GAS_LIMIT,
+            maxFeePerGas: maxFeePerGas,
+            data: data
+        });
+    }
+
     /// @notice Uses the L1/L2 gateway to send the root and assets over the bridge to the peer.
     /// @param transportPayment the amount of `msg.value` that is going to get paid for sending this message.
     /// @param token The token to bridge the outbox tree for.
@@ -294,29 +318,5 @@ contract JBArbitrumSucker is JBSucker, IJBArbitrumSucker {
             data: data
         });
         // slither-disable-end out-of-order-retryable
-    }
-
-    /// @notice Helper to create the retryable ticket, avoiding stack-too-deep.
-    function _createRetryableTicket(
-        uint256 callTransportCost,
-        uint256 nativeValue,
-        uint256 maxSubmissionCost,
-        uint256 maxFeePerGas,
-        bytes memory data
-    )
-        internal
-    {
-        address peerAddress = _toAddress(peer());
-        // slither-disable-next-line unused-return,calls-loop
-        ARBINBOX.unsafeCreateRetryableTicket{value: callTransportCost + nativeValue}({
-            to: peerAddress,
-            l2CallValue: nativeValue,
-            maxSubmissionCost: maxSubmissionCost,
-            excessFeeRefundAddress: _msgSender(),
-            callValueRefundAddress: peerAddress,
-            gasLimit: MESSENGER_BASE_GAS_LIMIT,
-            maxFeePerGas: maxFeePerGas,
-            data: data
-        });
     }
 }
