@@ -449,10 +449,9 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         // Get the inbox in storage.
         JBInboxTreeRoot storage inbox = _inboxOf[localToken];
 
-        // Nonce gaps in received messages are expected when messages are processed out of order or
-        // retried. The sucker processes each root independently — skipped nonces don't cause data loss, they just
-        // mean
-        // some messages arrived before others.
+        // Nonce gaps in received messages are expected when messages are processed out of order or retried. The
+        // sucker processes each root independently — skipped nonces don't cause data loss, they just mean some
+        // messages arrived before others.
         //
         // If the received tree's nonce is greater than the current inbox tree's nonce, update the inbox tree.
         // We can't revert because this could be a native token transfer. If we reverted, we would lose the native
