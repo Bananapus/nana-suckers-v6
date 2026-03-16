@@ -18,7 +18,7 @@
     "analyze": "slither . --config-file slither-ci.config.json"
   },
   "dependencies": {
-    "@arbitrum/nitro-contracts": "github:OffchainLabs/nitro-contracts",
+    "@arbitrum/nitro-contracts": "^1.2.1",
     "@bananapus/core-v6": "^0.0.16",
     "@bananapus/permission-ids-v6": "^0.0.9",
     "@chainlink/contracts-ccip": "^1.5.0",

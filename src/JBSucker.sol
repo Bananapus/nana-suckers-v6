@@ -439,12 +439,20 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
             revert JBSucker_InvalidMessageVersion(root.version, MESSAGE_VERSION);
         }
 
+        // By design, this function accepts roots for unmapped tokens. Claims against those roots will
+        // fail at the token mapping lookup. Rejecting at receive time would permanently lose bridged tokens. Accepting
+        // allows future token mapping to enable claims.
+        //
         // Convert the remote token bytes32 to a local address for inbox lookup.
         address localToken = _toAddress(root.token);
 
         // Get the inbox in storage.
         JBInboxTreeRoot storage inbox = _inboxOf[localToken];
 
+        // Nonce gaps in received messages are expected when messages are processed out of order or retried. The
+        // sucker processes each root independently — skipped nonces don't cause data loss, they just mean some
+        // messages arrived before others.
+        //
         // If the received tree's nonce is greater than the current inbox tree's nonce, update the inbox tree.
         // We can't revert because this could be a native token transfer. If we reverted, we would lose the native
         // tokens.
@@ -764,6 +772,11 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         // Cast the bytes32 beneficiary to an EVM address for the local mint.
         address beneficiaryAddress = _toAddress(beneficiary);
 
+        // Known limitation: if the destination chain's controller is misconfigured or the project
+        // doesn't exist, this call will revert, permanently blocking claims. This is a deployment/configuration
+        // concern, not a contract bug. Projects must ensure controller and project exist on all destination chains
+        // before enabling suckers.
+        //
         // Mint the project tokens for the beneficiary.
         // slither-disable-next-line calls-loop,unused-return
         IJBController(address(DIRECTORY.controllerOf(_projectId)))
@@ -965,6 +978,9 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         if (count == 0) return;
 
         // Get the amount to send and then clear it from the outbox tree.
+        // By design, `amountToAddToBalanceOf` is transiently inflated after this deletion because the
+        // contract's token balance has not yet been transferred to the bridge. The value is corrected when the bridge
+        // message is received on the destination chain. This is inherent to the two-phase bridge model.
         uint256 amount = outbox.balance;
         delete outbox.balance;
 
