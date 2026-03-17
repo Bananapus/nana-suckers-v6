@@ -121,10 +121,13 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
     // --------------------- external transactions ----------------------- //
     //*********************************************************************//
 
-    /// @notice The entrypoint for the CCIP router to call. This function should
-    /// never revert, all errors should be handled internally in this contract.
+    /// @notice The entrypoint for the CCIP router to call.
     /// @param any2EvmMessage The message to process.
     /// @dev Extremely important to ensure only router calls this.
+    /// @dev The CCIP NatSpec convention states that `ccipReceive` should not revert. We intentionally deviate:
+    /// reverting on invalid sender/peer data is correct here because accepting and silently discarding a
+    /// malformed message would lose the bridged tokens with no recovery path. A revert keeps tokens in the
+    /// CCIP router where they can be retried or recovered.
     function ccipReceive(Client.Any2EVMMessage calldata any2EvmMessage) external override {
         // only calls from the set router are accepted.
         if (_msgSender() != address(CCIP_ROUTER)) revert JBSucker_NotPeer(_toBytes32(_msgSender()));

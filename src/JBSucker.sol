@@ -506,6 +506,10 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         // If the received tree's nonce is greater than the current inbox tree's nonce, update the inbox tree.
         // We can't revert because this could be a native token transfer. If we reverted, we would lose the native
         // tokens.
+        //
+        // Deprecated suckers reject new roots to prevent double-spend: once deprecated, the project owner may have
+        // enabled the emergency hatch for local withdrawals. Accepting a new root after that could allow claiming
+        // on both chains. The emergency hatch provides recovery for any tokens stuck in this state.
         if (root.remoteRoot.nonce > inbox.nonce && state() != JBSuckerState.DEPRECATED) {
             inbox.nonce = root.remoteRoot.nonce;
             inbox.root = root.remoteRoot.root;
@@ -543,6 +547,9 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         uint256 numberToDisable;
 
         // Loop over the number of mappings and increase numberToDisable to correctly set transportPaymentValue.
+        // Note: if all mappings are enable-only (no disables), `numberToDisable` stays 0 and `transportPaymentValue`
+        // is set to 0 for each call. Any ETH sent with the transaction is not used or refunded — callers should
+        // not send ETH when only enabling mappings (no root flush is needed).
         for (uint256 h; h < maps.length; h++) {
             JBOutboxTree storage _outbox = _outboxOf[maps[h].localToken];
             if (maps[h].remoteToken == bytes32(0) && _outbox.numberOfClaimsSent != _outbox.tree.count) {
@@ -887,7 +894,10 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         // since the tokens have already arrived and the merkle proofs remain valid.
 
         // If the remote token is being set to the 0 address (which disables bridging), send any remaining outbox funds
-        // to the remote chain.
+        // to the remote chain. Once disabled, the token enters SENDING_DISABLED state — no new outbox entries can be
+        // created and the mapping cannot be changed to a different remote token. If tokens are stuck in this state
+        // (e.g., the bridge is non-functional), the project owner can call `enableEmergencyHatchFor` to allow
+        // local withdrawals via `exitThroughEmergencyHatch`.
         if (map.remoteToken == bytes32(0) && _outboxOf[token].numberOfClaimsSent != _outboxOf[token].tree.count) {
             _sendRoot({transportPayment: transportPaymentValue, token: token, remoteToken: currentMapping});
         }
@@ -986,8 +996,9 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
 
         // Get the amount to send and then clear it from the outbox tree.
         // By design, `amountToAddToBalanceOf` is transiently inflated after this deletion because the
-        // contract's token balance has not yet been transferred to the bridge. The value is corrected when the bridge
-        // message is received on the destination chain. This is inherent to the two-phase bridge model.
+        // contract's token balance has not yet been transferred to the bridge. This inflation is scoped
+        // within this transaction — `_sendRootOverAMB` (called below) transfers the tokens to the bridge
+        // before the tx completes, settling the balance. This is inherent to the two-phase bridge model.
         uint256 amount = outbox.balance;
         delete outbox.balance;
 
