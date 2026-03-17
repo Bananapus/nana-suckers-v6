@@ -331,8 +331,7 @@ contract DeployerTests is Test, TestBaseWorkflow, IERC721Receiver {
     function testArbDeployerL2WithZeroInbox(IArbGatewayRouter _gatewayRouter) public {
         vm.assume(_gatewayRouter != IArbGatewayRouter(address(0)));
 
-        IJBSuckerDeployer deployer =
-            _setupArbitrumDeployer(JBLayer.L2, IInbox(address(0)), _gatewayRouter);
+        IJBSuckerDeployer deployer = _setupArbitrumDeployer(JBLayer.L2, IInbox(address(0)), _gatewayRouter);
         IJBSucker sucker = _deployDirectly(deployer, projectId, bytes32(0));
         _assertValidSucker(sucker, projectId);
         _assertArbSucker(deployer, sucker);
