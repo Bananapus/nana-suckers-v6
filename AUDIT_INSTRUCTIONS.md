@@ -92,7 +92,7 @@ Arbitrum implementation. Uses `IInbox` for retryable tickets and `IArbGatewayRou
   - **L1 side**: Checks `sender == ARBINBOX.bridge() && IOutbox(bridge.activeOutbox()).l2ToL1Sender() == peer()`.
   - **L2 side**: Checks `sender == AddressAliasHelper.applyL1ToL2Alias(peer())`.
 - `_sendRootOverAMB(...)`:
-  - **L1 -> L2**: Creates two independent retryable tickets (one for ERC-20 bridge, one for merkle root message). Non-atomic: tickets are redeemed independently on L2 with no guaranteed ordering.
+  - **L1 -> L2**: Creates two independent retryable tickets (one for ERC-20 bridge, one for merkle root message). Non-atomic: tickets are redeemed independently on L2 with no guaranteed ordering. Constructor enforces `ON_CLAIM` mode to prevent unbacked minting (reverts with `JBArbitrumSucker_ManualModeUnsafe` if `MANUAL` is passed).
   - **L2 -> L1**: Uses `ArbSys.sendTxToL1()` for message, `IArbL2GatewayRouter.outboundTransfer()` for tokens.
 - Transport payment required from L1 (covers retryable ticket gas).
 
@@ -256,7 +256,7 @@ To claim, a user provides:
 | 4 | **Emergency exit safety** | `numberOfClaimsSent` determines which leaves are safe to emergency-exit. Verify: it's updated only in `_sendRoot()`, accurately tracks what was sent, and the `>= index` comparison is correct (count vs 0-based index). |
 | 5 | **Deprecation lifecycle** | State transitions are timestamp-based. Verify: `_maxMessagingDelay()` provides enough time for in-flight messages, `SENDING_DISABLED` blocks `prepare()` and `toRemote()` but allows `claim()` and `fromRemote()`, `DEPRECATED` blocks `fromRemote()` new roots. |
 | 6 | **Token mapping immutability** | Verify: once `_outboxOf[token].tree.count != 0`, remapping to a different remote token reverts. Disabling triggers root flush. Re-enabling back to the same address works. |
-| 7 | **Arbitrum non-atomic bridging** | L1->L2 creates two independent retryable tickets. Verify: in MANUAL mode, message arriving before tokens creates a window for unbacked minting. In ON_CLAIM mode, `_addToBalance()` checks `amountToAddToBalanceOf()` which depends on actual token balance. |
+| 7 | **Arbitrum non-atomic bridging** | L1->L2 creates two independent retryable tickets. Constructor enforces `ON_CLAIM` mode (reverts `JBArbitrumSucker_ManualModeUnsafe` on `MANUAL`). Verify: `_addToBalance()` checks `amountToAddToBalanceOf()` which depends on actual token balance, preventing unbacked minting when message arrives before tokens. |
 | 8 | **CCIP-specific: ccipReceive** | Must never revert after CCIP delivers tokens. Verify: WETH unwrap safety, `this.fromRemote()` self-call pattern, transport payment refund (best-effort, stuck ETH accepted). |
 | 9 | **Reentrancy surfaces** | `_pullBackingAssets()` calls `terminal.cashOutTokensOf()` which triggers hooks. `_handleClaim()` calls `terminal.addToBalanceOf()` and `controller.mintTokensOf()`. No ReentrancyGuard. Verify: state is updated before external calls, bitmap prevents re-entry exploits. |
 
