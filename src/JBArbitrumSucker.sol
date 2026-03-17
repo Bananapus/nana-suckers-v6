@@ -36,6 +36,7 @@ contract JBArbitrumSucker is JBSucker, IJBArbitrumSucker {
     // --------------------------- custom errors ------------------------- //
     //*********************************************************************//
 
+    error JBArbitrumSucker_ManualModeUnsafe();
     error JBArbitrumSucker_NotEnoughGas(uint256 payment, uint256 cost);
 
     //*********************************************************************//
@@ -69,6 +70,12 @@ contract JBArbitrumSucker is JBSucker, IJBArbitrumSucker {
     )
         JBSucker(directory, permissions, tokens, addToBalanceMode, trustedForwarder)
     {
+        // Enforce ON_CLAIM mode for Arbitrum — MANUAL mode is unsafe due to non-atomic L1→L2 bridging.
+        // See _toL2() NatSpec for details on the retryable ticket ordering problem.
+        if (addToBalanceMode == JBAddToBalanceMode.MANUAL) {
+            revert JBArbitrumSucker_ManualModeUnsafe();
+        }
+
         GATEWAYROUTER = JBArbitrumSuckerDeployer(deployer).arbGatewayRouter();
         ARBINBOX = JBArbitrumSuckerDeployer(deployer).arbInbox();
         LAYER = JBArbitrumSuckerDeployer(deployer).arbLayer();

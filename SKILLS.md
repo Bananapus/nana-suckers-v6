@@ -73,7 +73,7 @@ Cross-chain token and fund bridging for Juicebox V6 projects, using merkle trees
 | `JBTokenMapping` | `localToken` (address), `minGas` (uint32), `remoteToken` (bytes32), `minBridgeAmount` (uint256) | Input for `mapToken`/`mapTokens` |
 | `JBSuckerDeployerConfig` | `deployer` (`IJBSuckerDeployer`), `mappings` (`JBTokenMapping[]`) | Input for `deploySuckersFor` |
 | `JBSuckersPair` | `local` (address), `remote` (bytes32), `remoteChainId` (uint256) | Return type for `suckerPairsOf` |
-| `JBAddToBalanceMode` | `MANUAL` (0), `ON_CLAIM` (1) | Controls when received terminal tokens are added to project balance |
+| `JBAddToBalanceMode` | `MANUAL` (0), `ON_CLAIM` (1) | Controls when received terminal tokens are added to project balance. `JBArbitrumSucker` enforces `ON_CLAIM` (reverts on `MANUAL` due to non-atomic retryable ticket ordering). |
 | `JBSuckerState` | `ENABLED` (0), `DEPRECATION_PENDING` (1), `SENDING_DISABLED` (2), `DEPRECATED` (3) | Deprecation lifecycle states |
 | `JBLayer` | `L1` (0), `L2` (1) | Arbitrum sucker layer identification |
 

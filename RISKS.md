@@ -25,9 +25,7 @@ Forward-looking risk catalog for the JBSucker cross-chain bridging system.
 
 ## 3. Cross-Chain Atomicity
 
-- **Arbitrum non-atomic token+message delivery.** `_toL2` creates two independent retryable tickets: one for the ERC-20 bridge transfer and one for the `fromRemote` merkle root message. These are redeemed independently on L2 with no ordering guarantee.
-  - In `MANUAL` mode: if the message ticket is redeemed first, `claim()` mints project tokens before backing terminal tokens arrive. The project temporarily has unbacked tokens.
-  - In `ON_CLAIM` mode: `_addToBalance` checks actual contract balance, reverting if tokens have not arrived. This is the recommended mitigation.
+- **Arbitrum non-atomic token+message delivery.** `_toL2` creates two independent retryable tickets: one for the ERC-20 bridge transfer and one for the `fromRemote` merkle root message. These are redeemed independently on L2 with no ordering guarantee. `MANUAL` mode is blocked at construction (`JBArbitrumSucker_ManualModeUnsafe`) because message-before-tokens would allow unbacked minting. `ON_CLAIM` mode is enforced: `_addToBalance` checks actual contract balance, reverting if tokens have not arrived.
 - **CCIP: no guaranteed delivery order.** CCIP does not guarantee in-order delivery. The contract handles this by accepting any nonce > current, but concurrent `toRemote` calls for the same token could result in a later root arriving first, skipping an intermediate root.
 - **OP Stack: generally ordered** but the L1-to-L2 message must be relayed by an off-chain actor. A delayed or dropped relay permanently blocks claims until someone retries the relay.
 - **Message loss.** If an AMB silently fails (accepts the message on L1 but never delivers to L2), `numberOfClaimsSent` is incremented but the remote peer never receives the root. Those leaves are blocked from both remote claim and local emergency exit (conservative: locked, not double-spent). Recovery requires enabling the emergency hatch.
