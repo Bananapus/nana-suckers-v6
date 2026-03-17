@@ -224,7 +224,7 @@ contract DeployerTests is Test, TestBaseWorkflow, IERC721Receiver {
             directory: jbDirectory(),
             permissions: jbPermissions(),
             tokens: jbTokens(),
-            addToBalanceMode: JBAddToBalanceMode.MANUAL,
+            addToBalanceMode: JBAddToBalanceMode.ON_CLAIM,
             trustedForwarder: address(0)
         });
 
