@@ -304,8 +304,9 @@ contract DeployerTests is Test, TestBaseWorkflow, IERC721Receiver {
     }
 
     function testArbDeployer(bool _layer, IInbox _inbox, IArbGatewayRouter _gatewayRouter) public {
-        // All of these must be set for a valid configuration.
-        vm.assume(_inbox != IInbox(address(0)) && _gatewayRouter != IArbGatewayRouter(address(0)));
+        // Gateway router always required; inbox required on L1 only.
+        vm.assume(_gatewayRouter != IArbGatewayRouter(address(0)));
+        if (_layer) vm.assume(_inbox != IInbox(address(0)));
 
         IJBSuckerDeployer deployer = _setupArbitrumDeployer(_layer ? JBLayer.L1 : JBLayer.L2, _inbox, _gatewayRouter);
         IJBSucker sucker = _deployDirectly(deployer, projectId, bytes32(0));
@@ -314,8 +315,9 @@ contract DeployerTests is Test, TestBaseWorkflow, IERC721Receiver {
     }
 
     function testArbDeployerThroughRegistry(bool _layer, IInbox _inbox, IArbGatewayRouter _gatewayRouter) public {
-        // All of these must be set for a valid configuration.
-        vm.assume(_inbox != IInbox(address(0)) && _gatewayRouter != IArbGatewayRouter(address(0)));
+        // Gateway router always required; inbox required on L1 only.
+        vm.assume(_gatewayRouter != IArbGatewayRouter(address(0)));
+        if (_layer) vm.assume(_inbox != IInbox(address(0)));
 
         _allowMapping(projectId, address(registry));
         IJBSuckerDeployer deployer =
@@ -323,6 +325,47 @@ contract DeployerTests is Test, TestBaseWorkflow, IERC721Receiver {
         IJBSucker sucker = _deployThroughRegistry(deployer, projectId, bytes32(0));
         _assertRegistered(_assertValidSucker(sucker, projectId));
         _assertArbSucker(deployer, sucker);
+    }
+
+    /// @notice L2 deployment with inbox=address(0) should succeed — inbox is only needed on L1.
+    function testArbDeployerL2WithZeroInbox(IArbGatewayRouter _gatewayRouter) public {
+        vm.assume(_gatewayRouter != IArbGatewayRouter(address(0)));
+
+        IJBSuckerDeployer deployer =
+            _setupArbitrumDeployer(JBLayer.L2, IInbox(address(0)), _gatewayRouter);
+        IJBSucker sucker = _deployDirectly(deployer, projectId, bytes32(0));
+        _assertValidSucker(sucker, projectId);
+        _assertArbSucker(deployer, sucker);
+    }
+
+    /// @notice L1 deployment must revert when inbox is address(0).
+    function testArbDeployerL1RevertsWithZeroInbox(IArbGatewayRouter _gatewayRouter) public {
+        vm.assume(_gatewayRouter != IArbGatewayRouter(address(0)));
+
+        JBArbitrumSuckerDeployer ARBDeployer = new JBArbitrumSuckerDeployer({
+            directory: jbDirectory(),
+            permissions: jbPermissions(),
+            tokens: jbTokens(),
+            configurator: address(this),
+            trustedForwarder: address(0)
+        });
+
+        vm.expectRevert(JBSuckerDeployer.JBSuckerDeployer_InvalidLayerSpecificConfiguration.selector);
+        ARBDeployer.setChainSpecificConstants(JBLayer.L1, IInbox(address(0)), _gatewayRouter);
+    }
+
+    /// @notice L2 deployment must revert when gateway router is address(0).
+    function testArbDeployerL2RevertsWithZeroGateway() public {
+        JBArbitrumSuckerDeployer ARBDeployer = new JBArbitrumSuckerDeployer({
+            directory: jbDirectory(),
+            permissions: jbPermissions(),
+            tokens: jbTokens(),
+            configurator: address(this),
+            trustedForwarder: address(0)
+        });
+
+        vm.expectRevert(JBSuckerDeployer.JBSuckerDeployer_InvalidLayerSpecificConfiguration.selector);
+        ARBDeployer.setChainSpecificConstants(JBLayer.L2, IInbox(address(0)), IArbGatewayRouter(address(0)));
     }
 
     //*********************************************************************//
