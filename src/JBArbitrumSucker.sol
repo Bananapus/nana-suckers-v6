@@ -36,8 +36,8 @@ contract JBArbitrumSucker is JBSucker, IJBArbitrumSucker {
     // --------------------------- custom errors ------------------------- //
     //*********************************************************************//
 
-    error JBArbitrumSucker_NotEnoughGas(uint256 payment, uint256 cost);
     error JBArbitrumSucker_ManualModeUnsafe();
+    error JBArbitrumSucker_NotEnoughGas(uint256 payment, uint256 cost);
 
     //*********************************************************************//
     // --------------- public immutable stored properties ---------------- //
