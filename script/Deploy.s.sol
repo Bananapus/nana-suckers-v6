@@ -82,12 +82,16 @@ contract DeployScript is Script, Sphinx {
         });
 
         if (!registryAlreadyDeployed) {
-            REGISTRY = IJBSuckerRegistry(address(new JBSuckerRegistry{salt: REGISTRY_SALT}({
-                directory: core.directory,
-                permissions: core.permissions,
-                initialOwner: safeAddress(),
-                trustedForwarder: TRUSTED_FORWARDER
-            })));
+            REGISTRY = IJBSuckerRegistry(
+                address(
+                    new JBSuckerRegistry{salt: REGISTRY_SALT}({
+                        directory: core.directory,
+                        permissions: core.permissions,
+                        initialOwner: safeAddress(),
+                        trustedForwarder: TRUSTED_FORWARDER
+                    })
+                )
+            );
         } else {
             // Compute the existing registry address.
             REGISTRY = IJBSuckerRegistry(

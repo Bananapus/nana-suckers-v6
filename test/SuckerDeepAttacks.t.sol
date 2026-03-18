@@ -234,7 +234,11 @@ contract SuckerDeepAttacks is Test {
         vm.mockCall(MOCK_REGISTRY, abi.encodeCall(IJBSuckerRegistry.toRemoteFee, ()), abi.encode(fee));
 
         DeepAttackSucker singleton = new DeepAttackSucker(
-            IJBDirectory(DIRECTORY), IJBPermissions(PERMISSIONS), IJBTokens(TOKENS), IJBSuckerRegistry(MOCK_REGISTRY), FORWARDER
+            IJBDirectory(DIRECTORY),
+            IJBPermissions(PERMISSIONS),
+            IJBTokens(TOKENS),
+            IJBSuckerRegistry(MOCK_REGISTRY),
+            FORWARDER
         );
 
         DeepAttackSucker clone =
