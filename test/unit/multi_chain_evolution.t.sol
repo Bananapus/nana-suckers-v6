@@ -228,10 +228,7 @@ contract MultiChainEvolutionTest is Test, TestBaseWorkflow, IERC721Receiver {
 
         _opSucker.mapToken(
             JBTokenMapping({
-                localToken: localUSDC,
-                minGas: 200_000,
-                remoteToken: bytes32(uint256(uint160(opUSDC))),
-                toRemoteFee: 1e6
+                localToken: localUSDC, minGas: 200_000, remoteToken: bytes32(uint256(uint160(opUSDC))), toRemoteFee: 1e6
             })
         );
 

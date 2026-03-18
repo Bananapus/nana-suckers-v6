@@ -1528,9 +1528,7 @@ contract SuckerDeepAttacks is Test {
         );
 
         // Map to bytes32(0) to disable.
-        sucker.mapToken(
-            JBTokenMapping({localToken: token, minGas: 200_000, remoteToken: bytes32(0), toRemoteFee: 0})
-        );
+        sucker.mapToken(JBTokenMapping({localToken: token, minGas: 200_000, remoteToken: bytes32(0), toRemoteFee: 0}));
 
         JBRemoteToken memory mapping_ = sucker.test_getRemoteToken(token);
         assertFalse(mapping_.enabled, "Should be disabled");
