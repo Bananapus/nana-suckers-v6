@@ -10,7 +10,7 @@ import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import {LibClone} from "solady/src/utils/LibClone.sol";
 
 import "../src/JBSucker.sol";
-import {JBAddToBalanceMode} from "../src/enums/JBAddToBalanceMode.sol";
+
 import {JBInboxTreeRoot} from "../src/structs/JBInboxTreeRoot.sol";
 import {JBMessageRoot} from "../src/structs/JBMessageRoot.sol";
 import {JBRemoteToken} from "../src/structs/JBRemoteToken.sol";
@@ -26,10 +26,9 @@ contract InteropTestSucker is JBSucker {
         IJBDirectory directory,
         IJBPermissions permissions,
         IJBTokens tokens,
-        JBAddToBalanceMode addToBalanceMode,
         address forwarder
     )
-        JBSucker(directory, permissions, tokens, addToBalanceMode, forwarder)
+        JBSucker(directory, permissions, tokens, forwarder)
     {}
 
     function _sendRootOverAMB(
@@ -135,13 +134,8 @@ contract InteropCompat is Test {
     InteropTestSucker sucker;
 
     function setUp() public {
-        InteropTestSucker singleton = new InteropTestSucker(
-            IJBDirectory(DIRECTORY),
-            IJBPermissions(PERMISSIONS),
-            IJBTokens(TOKENS),
-            JBAddToBalanceMode.MANUAL,
-            FORWARDER
-        );
+        InteropTestSucker singleton =
+            new InteropTestSucker(IJBDirectory(DIRECTORY), IJBPermissions(PERMISSIONS), IJBTokens(TOKENS), FORWARDER);
 
         sucker = InteropTestSucker(payable(address(LibClone.cloneDeterministic(address(singleton), "interop"))));
         sucker.initialize(1);

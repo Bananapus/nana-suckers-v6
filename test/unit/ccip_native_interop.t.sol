@@ -15,7 +15,7 @@ import {LibClone} from "solady/src/utils/LibClone.sol";
 import "../../src/JBCCIPSucker.sol";
 import "../../src/JBSucker.sol";
 import {JBCCIPSuckerDeployer} from "../../src/deployers/JBCCIPSuckerDeployer.sol";
-import {JBAddToBalanceMode} from "../../src/enums/JBAddToBalanceMode.sol";
+
 import {ICCIPRouter, IWrappedNativeToken} from "../../src/interfaces/ICCIPRouter.sol";
 import {JBInboxTreeRoot} from "../../src/structs/JBInboxTreeRoot.sol";
 import {JBMessageRoot} from "../../src/structs/JBMessageRoot.sol";
@@ -75,7 +75,7 @@ contract CCIPTestSucker is JBCCIPSucker {
         IJBTokens tokens,
         IJBPermissions permissions
     )
-        JBCCIPSucker(deployer, directory, tokens, permissions, JBAddToBalanceMode.MANUAL, address(0))
+        JBCCIPSucker(deployer, directory, tokens, permissions, address(0))
     {}
 
     function exposed_validateTokenMapping(JBTokenMapping calldata map) external pure {
@@ -130,7 +130,7 @@ contract BaseTestSucker is JBSucker {
         IJBPermissions permissions,
         IJBTokens tokens
     )
-        JBSucker(directory, permissions, tokens, JBAddToBalanceMode.MANUAL, address(0))
+        JBSucker(directory, permissions, tokens, address(0))
     {}
 
     function exposed_validateTokenMapping(JBTokenMapping calldata map) external pure {

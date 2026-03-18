@@ -25,7 +25,7 @@ import {JBOutboxTree} from "../src/structs/JBOutboxTree.sol";
 import {JBInboxTreeRoot} from "../src/structs/JBInboxTreeRoot.sol";
 import {JBMessageRoot} from "../src/structs/JBMessageRoot.sol";
 import {JBClaim} from "../src/structs/JBClaim.sol";
-import {JBAddToBalanceMode} from "../src/enums/JBAddToBalanceMode.sol";
+
 import {MerkleLib} from "../src/utils/MerkleLib.sol";
 
 import "forge-std/Test.sol";
@@ -47,7 +47,6 @@ contract CCIPSuckerForkedTests is TestBaseWorkflow {
 
     // Re-used parameters for project/ruleset/sucker setups
     JBRulesetMetadata _metadata;
-    JBAddToBalanceMode atbMode = JBAddToBalanceMode.ON_CLAIM;
 
     // Sucker and token
     JBCCIPSuckerDeployer suckerDeployer;
@@ -271,7 +270,6 @@ contract CCIPSuckerForkedTests is TestBaseWorkflow {
             directory: jbDirectory(),
             permissions: jbPermissions(),
             tokens: jbTokens(),
-            addToBalanceMode: JBAddToBalanceMode.MANUAL,
             trustedForwarder: address(0)
         });
         vm.stopPrank();
@@ -331,7 +329,6 @@ contract CCIPSuckerForkedTests is TestBaseWorkflow {
             directory: jbDirectory(),
             permissions: jbPermissions(),
             tokens: jbTokens(),
-            addToBalanceMode: JBAddToBalanceMode.MANUAL,
             trustedForwarder: address(0)
         });
         vm.stopPrank();

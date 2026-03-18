@@ -154,7 +154,7 @@ A beneficiary claims their bridged tokens on the destination chain.
    - Compares to `_inboxOf[ETH].root` -- reverts with `InvalidProof` if mismatch.
 
 7. `_handleClaim()`:
-   - If `ADD_TO_BALANCE_MODE == ON_CLAIM` and `terminalTokenAmount > 0`:
+   - If `terminalTokenAmount > 0`:
      - Calls `_addToBalance(ETH, 0.5 ETH)` which forwards to `terminal.addToBalanceOf{value: 0.5 ETH}(projectId, ...)`.
    - Mints 1000 project tokens for the beneficiary via `controller.mintTokensOf(projectId, 1000, beneficiary, "", false)`.
      - `useReservedPercent = false` -- sucker mints bypass the reserved percent.
@@ -217,7 +217,7 @@ A project owner enables the emergency exit for tokens stuck in a broken bridge.
 6. Decreases `_outboxOf[token].balance -= terminalTokenAmount`.
 
 7. `_handleClaim()`:
-   - Adds terminal tokens back to the project's balance (if ON_CLAIM mode).
+   - Adds terminal tokens back to the project's balance.
    - Mints project tokens for the beneficiary.
 
 **Result:** Users recover their tokens locally without the bridge. Only leaves that were NOT already sent to the remote peer can be emergency-exited (leaves that were sent must be claimed on the remote chain).

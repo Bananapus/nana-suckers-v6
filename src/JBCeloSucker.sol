@@ -12,7 +12,6 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 import {JBSucker} from "./JBSucker.sol";
 import {JBOptimismSucker} from "./JBOptimismSucker.sol";
 import {JBCeloSuckerDeployer} from "./deployers/JBCeloSuckerDeployer.sol";
-import {JBAddToBalanceMode} from "./enums/JBAddToBalanceMode.sol";
 import {IWrappedNativeToken} from "./interfaces/IWrappedNativeToken.sol";
 import {JBMessageRoot} from "./structs/JBMessageRoot.sol";
 import {JBRemoteToken} from "./structs/JBRemoteToken.sol";
@@ -38,16 +37,14 @@ contract JBCeloSucker is JBOptimismSucker {
     /// @param directory A contract storing directories of terminals and controllers for each project.
     /// @param permissions A contract storing permissions.
     /// @param tokens A contract that manages token minting and burning.
-    /// @param addToBalanceMode The mode of adding tokens to balance.
     constructor(
         JBCeloSuckerDeployer deployer,
         IJBDirectory directory,
         IJBPermissions permissions,
         IJBTokens tokens,
-        JBAddToBalanceMode addToBalanceMode,
         address trustedForwarder
     )
-        JBOptimismSucker(deployer, directory, permissions, tokens, addToBalanceMode, trustedForwarder)
+        JBOptimismSucker(deployer, directory, permissions, tokens, trustedForwarder)
     {
         // Fetch the wrapped native token by doing a callback to the deployer contract.
         WRAPPED_NATIVE = JBCeloSuckerDeployer(deployer).wrappedNative();

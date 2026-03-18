@@ -6,7 +6,7 @@ import {IJBSucker} from "../src/interfaces/IJBSucker.sol";
 import {JBConstants} from "@bananapus/core-v6/src/libraries/JBConstants.sol";
 import {JBPermissionsData} from "@bananapus/core-v6/src/structs/JBPermissionsData.sol";
 import {JBPermissionIds} from "@bananapus/permission-ids-v6/src/JBPermissionIds.sol";
-import {JBAddToBalanceMode} from "../src/enums/JBAddToBalanceMode.sol";
+
 import {JBLayer} from "../src/enums/JBLayer.sol";
 import {IInbox} from "@arbitrum/nitro-contracts/src/bridge/IInbox.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
@@ -83,7 +83,6 @@ contract ForkArbitrumDeployerTest is TestBaseWorkflow, IERC721Receiver {
             directory: jbDirectory(),
             permissions: jbPermissions(),
             tokens: jbTokens(),
-            addToBalanceMode: JBAddToBalanceMode.ON_CLAIM,
             trustedForwarder: address(0)
         });
 
@@ -114,7 +113,6 @@ contract ForkArbitrumDeployerTest is TestBaseWorkflow, IERC721Receiver {
             directory: jbDirectory(),
             permissions: jbPermissions(),
             tokens: jbTokens(),
-            addToBalanceMode: JBAddToBalanceMode.ON_CLAIM,
             trustedForwarder: address(0)
         });
 
@@ -265,7 +263,6 @@ contract ForkArbitrumNativeTransferTest is TestBaseWorkflow {
             directory: jbDirectory(),
             permissions: jbPermissions(),
             tokens: jbTokens(),
-            addToBalanceMode: JBAddToBalanceMode.ON_CLAIM,
             trustedForwarder: address(0)
         });
         vm.stopPrank();

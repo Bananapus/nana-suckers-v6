@@ -18,7 +18,7 @@ src/JBSuckerRegistry.sol                # Deployer registry and tracking (~260 l
 src/deployers/                          # JBSuckerDeployer, JB{Optimism,Base,Celo,Arbitrum,CCIP}SuckerDeployer
 src/utils/MerkleLib.sol                 # Incremental merkle tree (eth2-style) (~1,030 lines)
 src/structs/                            # JBMessageRoot, JBLeaf, JBClaim, JBOutboxTree, etc.
-src/enums/                              # JBSuckerState, JBAddToBalanceMode, JBLayer
+src/enums/                              # JBSuckerState, JBLayer
 src/libraries/                          # ARBChains, ARBAddresses, CCIPHelper
 ```
 
@@ -30,7 +30,7 @@ src/libraries/                          # ARBChains, ARBAddresses, CCIPHelper
 
 The core bridging logic. Each sucker instance is associated with one project and deployed as a clone via `Initializable`. Suckers are deployed in pairs (one per chain) with matching CREATE2 addresses so `peer()` returns `_toBytes32(address(this))` by default.
 
-**Immutables:** `DIRECTORY`, `TOKENS`, `ADD_TO_BALANCE_MODE` (ON_CLAIM or MANUAL).
+**Immutables:** `DIRECTORY`, `TOKENS`.
 
 **Key state:**
 - `_outboxOf[token]` -- `JBOutboxTree`: merkle tree, balance, nonce, numberOfClaimsSent per token
@@ -49,7 +49,6 @@ The core bridging logic. Each sucker instance is associated with one project and
 - `exitThroughEmergencyHatch(JBClaim)` -- Reclaim tokens locally when the bridge is broken. Validates against the outbox tree (not inbox).
 - `enableEmergencyHatchFor(address[])` -- Project owner enables emergency exit for specific tokens. Requires `SUCKER_SAFETY` permission.
 - `setDeprecation(uint40 timestamp)` -- Set or clear the deprecation timestamp. Requires `SET_SUCKER_DEPRECATION` permission.
-- `addOutstandingAmountToBalance(token)` -- Manually add received tokens to the project balance (only in MANUAL mode).
 
 **Key internal functions:**
 - `_insertIntoTree(projectTokenCount, token, terminalTokenAmount, beneficiary)` -- Builds leaf hash, inserts into outbox merkle tree, updates balance.
@@ -58,7 +57,7 @@ The core bridging logic. Each sucker instance is associated with one project and
 - `_validateBranchRoot(expectedRoot, ...)` -- Computes `MerkleLib.branchRoot()` and compares to expected root.
 - `_sendRoot(transportPayment, token, remoteToken)` -- Builds `JBMessageRoot`, clears outbox balance, increments nonce, delegates to `_sendRootOverAMB()`.
 - `_pullBackingAssets(projectToken, count, token, minTokensReclaimed)` -- Cashes out project tokens via the primary terminal.
-- `_handleClaim(terminalToken, terminalTokenAmount, projectTokenAmount, beneficiary)` -- Optionally adds to balance (ON_CLAIM mode), mints project tokens for beneficiary.
+- `_handleClaim(terminalToken, terminalTokenAmount, projectTokenAmount, beneficiary)` -- Adds terminal tokens to balance and mints project tokens for beneficiary.
 - `_mapToken(map, transportPaymentValue)` -- Token mapping with immutability enforcement (cannot remap once outbox has entries).
 - `_addToBalance(token, amount)` -- Adds terminal tokens to the project's balance via the primary terminal.
 - `_isRemotePeer(sender)` -- Abstract. Verifies the caller is the authenticated bridge messenger representing the remote peer.
@@ -92,7 +91,7 @@ Arbitrum implementation. Uses `IInbox` for retryable tickets and `IArbGatewayRou
   - **L1 side**: Checks `sender == ARBINBOX.bridge() && IOutbox(bridge.activeOutbox()).l2ToL1Sender() == peer()`.
   - **L2 side**: Checks `sender == AddressAliasHelper.applyL1ToL2Alias(peer())`.
 - `_sendRootOverAMB(...)`:
-  - **L1 -> L2**: Creates two independent retryable tickets (one for ERC-20 bridge, one for merkle root message). Non-atomic: tickets are redeemed independently on L2 with no guaranteed ordering. Constructor enforces `ON_CLAIM` mode to prevent unbacked minting (reverts with `JBArbitrumSucker_ManualModeUnsafe` if `MANUAL` is passed).
+  - **L1 -> L2**: Creates two independent retryable tickets (one for ERC-20 bridge, one for merkle root message). Non-atomic: tickets are redeemed independently on L2 with no guaranteed ordering. `_addToBalance` checks actual token balance to prevent unbacked minting when message arrives before tokens.
   - **L2 -> L1**: Uses `ArbSys.sendTxToL1()` for message, `IArbL2GatewayRouter.outboundTransfer()` for tokens.
 - Transport payment required from L1 (covers retryable ticket gas).
 
@@ -188,7 +187,7 @@ Later, anyone calls claim(JBClaim) for a beneficiary:
   |      Compare to _inboxOf[token].root -- revert if mismatch
   |
   +--> _handleClaim():
-  |      If ON_CLAIM mode: _addToBalance(terminalToken, terminalTokenAmount)
+  |      _addToBalance(terminalToken, terminalTokenAmount)
   |      Mint project tokens for beneficiary via controller.mintTokensOf()
   |        (useReservedPercent = false -- sucker mints bypass reserved percent)
 ```
@@ -256,7 +255,7 @@ To claim, a user provides:
 | 4 | **Emergency exit safety** | `numberOfClaimsSent` determines which leaves are safe to emergency-exit. Verify: it's updated only in `_sendRoot()`, accurately tracks what was sent, and the `>= index` comparison is correct (count vs 0-based index). |
 | 5 | **Deprecation lifecycle** | State transitions are timestamp-based. Verify: `_maxMessagingDelay()` provides enough time for in-flight messages, `SENDING_DISABLED` blocks `prepare()` and `toRemote()` but allows `claim()` and `fromRemote()`, `DEPRECATED` blocks `fromRemote()` new roots. |
 | 6 | **Token mapping immutability** | Verify: once `_outboxOf[token].tree.count != 0`, remapping to a different remote token reverts. Disabling triggers root flush. Re-enabling back to the same address works. |
-| 7 | **Arbitrum non-atomic bridging** | L1->L2 creates two independent retryable tickets. Constructor enforces `ON_CLAIM` mode (reverts `JBArbitrumSucker_ManualModeUnsafe` on `MANUAL`). Verify: `_addToBalance()` checks `amountToAddToBalanceOf()` which depends on actual token balance, preventing unbacked minting when message arrives before tokens. |
+| 7 | **Arbitrum non-atomic bridging** | L1->L2 creates two independent retryable tickets. Verify: `_addToBalance()` checks `amountToAddToBalanceOf()` which depends on actual token balance, preventing unbacked minting when message arrives before tokens. |
 | 8 | **CCIP-specific: ccipReceive** | Must never revert after CCIP delivers tokens. Verify: WETH unwrap safety, `this.fromRemote()` self-call pattern, transport payment refund (best-effort, stuck ETH accepted). |
 | 9 | **Reentrancy surfaces** | `_pullBackingAssets()` calls `terminal.cashOutTokensOf()` which triggers hooks. `_handleClaim()` calls `terminal.addToBalanceOf()` and `controller.mintTokensOf()`. No ReentrancyGuard. Verify: state is updated before external calls, bitmap prevents re-entry exploits. |
 

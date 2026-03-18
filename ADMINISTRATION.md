@@ -122,7 +122,6 @@ The following values are set at deploy time and cannot be changed:
 | `DIRECTORY` | `JBSucker`, `JBSuckerRegistry`, all deployers | Constructor | The Juicebox directory contract. |
 | `TOKENS` | `JBSucker`, all deployers | Constructor | The Juicebox token management contract. |
 | `PROJECTS` | `JBSuckerRegistry` | Derived from `DIRECTORY.PROJECTS()` | The ERC-721 project ownership contract. |
-| `ADD_TO_BALANCE_MODE` | `JBSucker` | Constructor | Whether balance is added on-claim or manually (`ON_CLAIM` or `MANUAL`). |
 | `OPBRIDGE` | `JBOptimismSucker`, `JBBaseSucker`, `JBCeloSucker` | Constructor (from deployer callback) | The OP Standard Bridge address. |
 | `OPMESSENGER` | `JBOptimismSucker`, `JBBaseSucker`, `JBCeloSucker` | Constructor (from deployer callback) | The OP Cross-Domain Messenger address. |
 | `ARBINBOX` | `JBArbitrumSucker` | Constructor (from deployer callback) | The Arbitrum Inbox address. |

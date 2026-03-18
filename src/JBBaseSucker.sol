@@ -7,7 +7,6 @@ import {IJBTokens} from "@bananapus/core-v6/src/interfaces/IJBTokens.sol";
 
 import {JBOptimismSucker} from "./JBOptimismSucker.sol";
 import {JBOptimismSuckerDeployer} from "./deployers/JBOptimismSuckerDeployer.sol";
-import {JBAddToBalanceMode} from "./enums/JBAddToBalanceMode.sol";
 
 /// @notice A `JBSucker` implementation to suck tokens between two chains connected by a Base (OP Stack) bridge.
 contract JBBaseSucker is JBOptimismSucker {
@@ -19,16 +18,14 @@ contract JBBaseSucker is JBOptimismSucker {
     /// @param directory A contract storing directories of terminals and controllers for each project.
     /// @param permissions A contract storing permissions.
     /// @param tokens A contract that manages token minting and burning.
-    /// @param addToBalanceMode The mode of adding tokens to balance.
     constructor(
         JBOptimismSuckerDeployer deployer,
         IJBDirectory directory,
         IJBPermissions permissions,
         IJBTokens tokens,
-        JBAddToBalanceMode addToBalanceMode,
         address trustedForwarder
     )
-        JBOptimismSucker(deployer, directory, permissions, tokens, addToBalanceMode, trustedForwarder)
+        JBOptimismSucker(deployer, directory, permissions, tokens, trustedForwarder)
     {}
 
     //*********************************************************************//

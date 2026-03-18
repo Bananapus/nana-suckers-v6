@@ -13,7 +13,7 @@ import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import {LibClone} from "solady/src/utils/LibClone.sol";
 
 import "../../src/JBSucker.sol";
-import {JBAddToBalanceMode} from "../../src/enums/JBAddToBalanceMode.sol";
+
 import {JBClaim} from "../../src/structs/JBClaim.sol";
 import {JBLeaf} from "../../src/structs/JBLeaf.sol";
 import {JBInboxTreeRoot} from "../../src/structs/JBInboxTreeRoot.sol";
@@ -33,10 +33,9 @@ contract InvariantSucker is JBSucker {
         IJBDirectory directory,
         IJBPermissions permissions,
         IJBTokens tokens,
-        JBAddToBalanceMode addToBalanceMode,
         address forwarder
     )
-        JBSucker(directory, permissions, tokens, addToBalanceMode, forwarder)
+        JBSucker(directory, permissions, tokens, forwarder)
     {}
 
     function _sendRootOverAMB(
@@ -352,14 +351,8 @@ contract SuckerInvariantsTest is Test {
         vm.label(PROJECT, "MOCK_PROJECT");
         vm.label(TERMINAL, "MOCK_TERMINAL");
 
-        // Create MANUAL mode sucker.
-        InvariantSucker singleton = new InvariantSucker(
-            IJBDirectory(DIRECTORY),
-            IJBPermissions(PERMISSIONS),
-            IJBTokens(TOKENS),
-            JBAddToBalanceMode.MANUAL,
-            FORWARDER
-        );
+        InvariantSucker singleton =
+            new InvariantSucker(IJBDirectory(DIRECTORY), IJBPermissions(PERMISSIONS), IJBTokens(TOKENS), FORWARDER);
         sucker = InvariantSucker(payable(address(LibClone.cloneDeterministic(address(singleton), "invariant_salt"))));
         sucker.initialize(PROJECT_ID);
 

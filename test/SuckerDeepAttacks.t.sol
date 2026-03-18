@@ -6,6 +6,7 @@ import "forge-std/Test.sol";
 import {IJBController} from "@bananapus/core-v6/src/interfaces/IJBController.sol";
 import {IJBDirectory} from "@bananapus/core-v6/src/interfaces/IJBDirectory.sol";
 import {IJBPermissions} from "@bananapus/core-v6/src/interfaces/IJBPermissions.sol";
+import {IJBTerminal} from "@bananapus/core-v6/src/interfaces/IJBTerminal.sol";
 import {IJBTokens} from "@bananapus/core-v6/src/interfaces/IJBTokens.sol";
 import {JBConstants} from "@bananapus/core-v6/src/libraries/JBConstants.sol";
 import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
@@ -13,7 +14,7 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {LibClone} from "solady/src/utils/LibClone.sol";
 
 import "../src/JBSucker.sol";
-import {JBAddToBalanceMode} from "../src/enums/JBAddToBalanceMode.sol";
+
 import {JBSuckerState} from "../src/enums/JBSuckerState.sol";
 import {JBClaim} from "../src/structs/JBClaim.sol";
 import {JBLeaf} from "../src/structs/JBLeaf.sol";
@@ -38,10 +39,9 @@ contract DeepAttackSucker is JBSucker {
         IJBDirectory directory,
         IJBPermissions permissions,
         IJBTokens tokens,
-        JBAddToBalanceMode addToBalanceMode,
         address forwarder
     )
-        JBSucker(directory, permissions, tokens, addToBalanceMode, forwarder)
+        JBSucker(directory, permissions, tokens, forwarder)
     {}
 
     function _sendRootOverAMB(
@@ -184,6 +184,7 @@ contract SuckerDeepAttacks is Test {
     address constant CONTROLLER = address(900);
     address constant PROJECT = address(1000);
     address constant FORWARDER = address(1100);
+    address constant TERMINAL = address(1200);
 
     uint256 constant PROJECT_ID = 1;
     address constant TOKEN = address(0x000000000000000000000000000000000000EEEe); // JBConstants.NATIVE_TOKEN
@@ -198,6 +199,7 @@ contract SuckerDeepAttacks is Test {
         vm.label(PERMISSIONS, "MOCK_PERMISSIONS");
         vm.label(TOKENS, "MOCK_TOKENS");
         vm.label(CONTROLLER, "MOCK_CONTROLLER");
+        vm.label(TERMINAL, "MOCK_TERMINAL");
 
         sucker = _createTestSucker(PROJECT_ID, "deep_attack_salt");
 
@@ -205,16 +207,16 @@ contract SuckerDeepAttacks is Test {
         vm.mockCall(DIRECTORY, abi.encodeCall(IJBDirectory.PROJECTS, ()), abi.encode(PROJECT));
         vm.mockCall(PROJECT, abi.encodeCall(IERC721.ownerOf, (PROJECT_ID)), abi.encode(address(this)));
         vm.mockCall(DIRECTORY, abi.encodeCall(IJBDirectory.controllerOf, (PROJECT_ID)), abi.encode(CONTROLLER));
+        vm.mockCall(
+            DIRECTORY, abi.encodeCall(IJBDirectory.primaryTerminalOf, (PROJECT_ID, TOKEN)), abi.encode(TERMINAL)
+        );
+        // Mock terminal.addToBalanceOf to accept any call (including payable for native token).
+        vm.mockCall(TERMINAL, abi.encodeWithSelector(IJBTerminal.addToBalanceOf.selector), abi.encode());
     }
 
     function _createTestSucker(uint256 projectId, bytes32 salt) internal returns (DeepAttackSucker) {
-        DeepAttackSucker singleton = new DeepAttackSucker(
-            IJBDirectory(DIRECTORY),
-            IJBPermissions(PERMISSIONS),
-            IJBTokens(TOKENS),
-            JBAddToBalanceMode.MANUAL,
-            FORWARDER
-        );
+        DeepAttackSucker singleton =
+            new DeepAttackSucker(IJBDirectory(DIRECTORY), IJBPermissions(PERMISSIONS), IJBTokens(TOKENS), FORWARDER);
 
         DeepAttackSucker clone =
             DeepAttackSucker(payable(address(LibClone.cloneDeterministic(address(singleton), salt))));
@@ -456,7 +458,8 @@ contract SuckerDeepAttacks is Test {
         // Set inbox root to outbox root (simulating a round-trip).
         sucker.test_setInboxRoot(TOKEN, 1, outboxRoot);
         sucker.test_setOutboxBalance(TOKEN, 100 ether);
-        vm.deal(address(sucker), 100 ether);
+        // Fund sucker: outbox balance + claim terminalTokenAmount for _addToBalance.
+        vm.deal(address(sucker), 105 ether);
 
         _mockMint(address(this), 10 ether);
 
@@ -1032,30 +1035,6 @@ contract SuckerDeepAttacks is Test {
         assertEq(addable, 7 ether, "Addable should be actual minus tracked");
     }
 
-    /// @notice addOutstandingAmountToBalance with ON_CLAIM mode → should revert (wrong mode).
-    function test_addOutstandingAmountToBalance_wrongMode_reverts() public {
-        // Our sucker was created with MANUAL mode, so this should work.
-        // Create a different sucker with ON_CLAIM mode.
-        DeepAttackSucker onClaimSucker;
-        {
-            DeepAttackSucker singleton = new DeepAttackSucker(
-                IJBDirectory(DIRECTORY),
-                IJBPermissions(PERMISSIONS),
-                IJBTokens(TOKENS),
-                JBAddToBalanceMode.ON_CLAIM,
-                FORWARDER
-            );
-            onClaimSucker =
-                DeepAttackSucker(payable(address(LibClone.cloneDeterministic(address(singleton), "onclaim_salt"))));
-            onClaimSucker.initialize(PROJECT_ID);
-        }
-
-        vm.expectRevert(
-            abi.encodeWithSelector(JBSucker.JBSucker_ManualNotAllowed.selector, JBAddToBalanceMode.ON_CLAIM)
-        );
-        onClaimSucker.addOutstandingAmountToBalance(TOKEN);
-    }
-
     // =========================================================================
     // SECTION 9: enableEmergencyHatchFor edge cases
     // =========================================================================
@@ -1267,6 +1246,8 @@ contract SuckerDeepAttacks is Test {
         bytes32 root = sucker.test_getOutboxRoot(TOKEN);
         sucker.test_setInboxRoot(TOKEN, 1, root);
         sucker.test_setOutboxBalance(TOKEN, 100 ether);
+        // Fund sucker: outbox balance + total claim amounts (0.5+1+1.5+2+2.5 = 7.5 ether).
+        vm.deal(address(sucker), 108 ether);
 
         // Claim each index.
         for (uint256 i = 0; i < 5; i++) {

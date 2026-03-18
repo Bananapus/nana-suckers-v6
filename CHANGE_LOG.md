@@ -210,7 +210,7 @@ See section 2.4 above.
 
 ## 6. Enum Changes
 
-`JBAddToBalanceMode`, `JBLayer`, and `JBSuckerState` are **identical** between v5 and v6.
+`JBLayer` and `JBSuckerState` are **identical** between v5 and v6. `JBAddToBalanceMode` has been removed — balance is now always added atomically during `claim()`.
 
 ---
 
@@ -357,7 +357,7 @@ Throughout the codebase, function calls were updated to use named argument synta
 
 | v5 | v6 | Notes |
 |----|----|-------|
-| `JBAddToBalanceMode` | `JBAddToBalanceMode` | Identical |
+| `JBAddToBalanceMode` | _(removed)_ | Balance always added on claim. |
 | `JBLayer` | `JBLayer` | Identical |
 | `JBSuckerState` | `JBSuckerState` | Identical |
 

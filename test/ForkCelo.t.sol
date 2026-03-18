@@ -8,7 +8,7 @@ import {JBPermissionsData} from "@bananapus/core-v6/src/structs/JBPermissionsDat
 import {JBPermissionIds} from "@bananapus/permission-ids-v6/src/JBPermissionIds.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {JBTokenMapping} from "../src/structs/JBTokenMapping.sol";
-import {JBAddToBalanceMode} from "../src/enums/JBAddToBalanceMode.sol";
+
 import {IOPMessenger} from "../src/interfaces/IOPMessenger.sol";
 import {IOPStandardBridge} from "../src/interfaces/IOPStandardBridge.sol";
 import {IWrappedNativeToken} from "../src/interfaces/IWrappedNativeToken.sol";
@@ -103,7 +103,6 @@ contract ForkCeloTest is TestBaseWorkflow {
             directory: jbDirectory(),
             permissions: jbPermissions(),
             tokens: jbTokens(),
-            addToBalanceMode: JBAddToBalanceMode.MANUAL,
             trustedForwarder: address(0)
         });
         vm.stopPrank();
@@ -145,7 +144,6 @@ contract ForkCeloTest is TestBaseWorkflow {
             directory: jbDirectory(),
             permissions: jbPermissions(),
             tokens: jbTokens(),
-            addToBalanceMode: JBAddToBalanceMode.MANUAL,
             trustedForwarder: address(0)
         });
         vm.stopPrank();
@@ -373,38 +371,5 @@ contract ForkCeloTest is TestBaseWorkflow {
             }
         }
         assertTrue(foundBridgeEvent, "OP bridge/messenger should have emitted events");
-    }
-
-    /// @notice Test that the L1 sucker unwraps WETH → native ETH when adding to project balance.
-    ///
-    /// When tokens bridge from Celo → L1 via the OP bridge, the L1 bridge releases L1 WETH (ERC-20)
-    /// to the sucker — not native ETH. But the L1 project's terminal accepts native ETH (NATIVE_TOKEN).
-    /// The `_addToBalance` override in JBCeloSucker unwraps the WETH and adds native ETH to the project.
-    function test_receiveUnwrapsWeth() external {
-        uint256 wethAmount = 0.025 ether;
-
-        // Start on L1.
-        vm.selectFork(l1Fork);
-
-        // Simulate the OP bridge having released L1 WETH to the sucker
-        // (this normally happens when the bridge message is finalized on L1).
-        deal(address(L1_WETH), address(suckerL1), wethAmount);
-
-        // Record the project's terminal balance before.
-        uint256 terminalBalanceBefore = address(jbMultiTerminal()).balance;
-
-        // Anyone can call addOutstandingAmountToBalance (MANUAL mode).
-        // The override should unwrap WETH → native ETH and add to the project's balance.
-        suckerL1.addOutstandingAmountToBalance(address(L1_WETH));
-
-        // Verify: sucker no longer holds WETH.
-        assertEq(IERC20(address(L1_WETH)).balanceOf(address(suckerL1)), 0, "Sucker should have 0 WETH");
-
-        // Verify: the terminal received native ETH.
-        assertEq(
-            address(jbMultiTerminal()).balance,
-            terminalBalanceBefore + wethAmount,
-            "Terminal should have received native ETH"
-        );
     }
 }

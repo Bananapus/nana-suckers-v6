@@ -182,13 +182,8 @@ contract MapTokensDustTest is Test {
     }
 
     function _createTestSucker(uint256 _projectId, bytes32 salt) internal returns (MapTokensDustSucker) {
-        MapTokensDustSucker singleton = new MapTokensDustSucker(
-            IJBDirectory(DIRECTORY),
-            IJBPermissions(PERMISSIONS),
-            IJBTokens(TOKENS),
-            JBAddToBalanceMode.MANUAL,
-            FORWARDER
-        );
+        MapTokensDustSucker singleton =
+            new MapTokensDustSucker(IJBDirectory(DIRECTORY), IJBPermissions(PERMISSIONS), IJBTokens(TOKENS), FORWARDER);
         vm.label(address(singleton), "SUCKER_SINGLETON");
 
         MapTokensDustSucker sucker =
@@ -205,10 +200,9 @@ contract MapTokensDustSucker is JBSucker {
         IJBDirectory directory,
         IJBPermissions permissions,
         IJBTokens tokens,
-        JBAddToBalanceMode addToBalanceMode,
         address forwarder
     )
-        JBSucker(directory, permissions, tokens, addToBalanceMode, forwarder)
+        JBSucker(directory, permissions, tokens, forwarder)
     {}
 
     function _sendRootOverAMB(

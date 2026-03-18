@@ -6,13 +6,14 @@ import "forge-std/Test.sol";
 import {IJBController} from "@bananapus/core-v6/src/interfaces/IJBController.sol";
 import {IJBDirectory} from "@bananapus/core-v6/src/interfaces/IJBDirectory.sol";
 import {IJBPermissions} from "@bananapus/core-v6/src/interfaces/IJBPermissions.sol";
+import {IJBTerminal} from "@bananapus/core-v6/src/interfaces/IJBTerminal.sol";
 import {IJBTokens} from "@bananapus/core-v6/src/interfaces/IJBTokens.sol";
 import {JBConstants} from "@bananapus/core-v6/src/libraries/JBConstants.sol";
 import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import {LibClone} from "solady/src/utils/LibClone.sol";
 
 import "../src/JBSucker.sol";
-import {JBAddToBalanceMode} from "../src/enums/JBAddToBalanceMode.sol";
+
 import {JBSuckerState} from "../src/enums/JBSuckerState.sol";
 import {JBClaim} from "../src/structs/JBClaim.sol";
 import {JBLeaf} from "../src/structs/JBLeaf.sol";
@@ -34,10 +35,9 @@ contract AttackTestSucker is JBSucker {
         IJBDirectory directory,
         IJBPermissions permissions,
         IJBTokens tokens,
-        JBAddToBalanceMode addToBalanceMode,
         address forwarder
     )
-        JBSucker(directory, permissions, tokens, addToBalanceMode, forwarder)
+        JBSucker(directory, permissions, tokens, forwarder)
     {}
 
     function _sendRootOverAMB(
@@ -139,8 +139,10 @@ contract SuckerAttacks is Test {
     address constant CONTROLLER = address(900);
     address constant PROJECT = address(1000);
     address constant FORWARDER = address(1100);
+    address constant TERMINAL = address(1200);
 
     uint256 constant PROJECT_ID = 1;
+    address constant TOKEN = address(0x000000000000000000000000000000000000EEEe);
 
     AttackTestSucker sucker;
 
@@ -150,22 +152,24 @@ contract SuckerAttacks is Test {
         vm.label(TOKENS, "MOCK_TOKENS");
         vm.label(CONTROLLER, "MOCK_CONTROLLER");
         vm.label(PROJECT, "MOCK_PROJECT");
+        vm.label(TERMINAL, "MOCK_TERMINAL");
 
         sucker = _createTestSucker(PROJECT_ID, "attack_salt");
 
         // Mock directory
         vm.mockCall(DIRECTORY, abi.encodeCall(IJBDirectory.PROJECTS, ()), abi.encode(PROJECT));
         vm.mockCall(PROJECT, abi.encodeCall(IERC721.ownerOf, (PROJECT_ID)), abi.encode(address(this)));
+        vm.mockCall(DIRECTORY, abi.encodeCall(IJBDirectory.controllerOf, (PROJECT_ID)), abi.encode(CONTROLLER));
+        vm.mockCall(
+            DIRECTORY, abi.encodeCall(IJBDirectory.primaryTerminalOf, (PROJECT_ID, TOKEN)), abi.encode(TERMINAL)
+        );
+        // Mock terminal.addToBalanceOf to accept any call (including payable for native token).
+        vm.mockCall(TERMINAL, abi.encodeWithSelector(IJBTerminal.addToBalanceOf.selector), abi.encode());
     }
 
     function _createTestSucker(uint256 projectId, bytes32 salt) internal returns (AttackTestSucker) {
-        AttackTestSucker singleton = new AttackTestSucker(
-            IJBDirectory(DIRECTORY),
-            IJBPermissions(PERMISSIONS),
-            IJBTokens(TOKENS),
-            JBAddToBalanceMode.MANUAL,
-            FORWARDER
-        );
+        AttackTestSucker singleton =
+            new AttackTestSucker(IJBDirectory(DIRECTORY), IJBPermissions(PERMISSIONS), IJBTokens(TOKENS), FORWARDER);
 
         AttackTestSucker clone =
             AttackTestSucker(payable(address(LibClone.cloneDeterministic(address(singleton), salt))));
@@ -316,8 +320,10 @@ contract SuckerAttacks is Test {
         sucker.test_setInboxRoot(token, 1, root);
         sucker.test_setOutboxBalance(token, 100 ether);
 
+        // Fund the sucker with enough ETH to cover outbox balance + claim amount.
+        vm.deal(address(sucker), 105 ether);
+
         // Mock controller for minting
-        vm.mockCall(DIRECTORY, abi.encodeCall(IJBDirectory.controllerOf, (PROJECT_ID)), abi.encode(CONTROLLER));
         vm.mockCall(
             CONTROLLER,
             abi.encodeCall(IJBController.mintTokensOf, (PROJECT_ID, 5 ether, address(120), "", false)),

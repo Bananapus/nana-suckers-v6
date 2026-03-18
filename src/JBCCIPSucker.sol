@@ -13,7 +13,6 @@ import {BitMaps} from "@openzeppelin/contracts/utils/structs/BitMaps.sol";
 
 import {JBSucker} from "./JBSucker.sol";
 import {JBCCIPSuckerDeployer} from "./deployers/JBCCIPSuckerDeployer.sol";
-import {JBAddToBalanceMode} from "./enums/JBAddToBalanceMode.sol";
 import {ICCIPRouter, IWrappedNativeToken} from "./interfaces/ICCIPRouter.sol";
 import {IJBCCIPSuckerDeployer} from "./interfaces/IJBCCIPSuckerDeployer.sol";
 import {JBMessageRoot} from "./structs/JBMessageRoot.sol";
@@ -64,16 +63,14 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
     /// @param directory A contract storing directories of terminals and controllers for each project.
     /// @param tokens A contract that manages token minting and burning.
     /// @param permissions A contract storing permissions.
-    /// @param addToBalanceMode The mode of adding tokens to balance.
     constructor(
         JBCCIPSuckerDeployer deployer,
         IJBDirectory directory,
         IJBTokens tokens,
         IJBPermissions permissions,
-        JBAddToBalanceMode addToBalanceMode,
         address trustedForwarder
     )
-        JBSucker(directory, permissions, tokens, addToBalanceMode, trustedForwarder)
+        JBSucker(directory, permissions, tokens, trustedForwarder)
     {
         REMOTE_CHAIN_ID = IJBCCIPSuckerDeployer(deployer).ccipRemoteChainId();
         REMOTE_CHAIN_SELECTOR = IJBCCIPSuckerDeployer(deployer).ccipRemoteChainSelector();
@@ -273,7 +270,7 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
         // merkle root never gets processed, and the outbox state is inconsistent.
         //
         // If the refund fails, the ETH (transportPayment - fees) will be permanently stuck in this
-        // contract. There is no sweep or recovery function — `addOutstandingAmountToBalance` only
+        // contract. There is no sweep or recovery function — `_addToBalance` only
         // moves funds tracked via `fromRemote`, not arbitrary ETH. This is an accepted tradeoff:
         // stuck dust from a fee overpayment is far less harmful than bricking the entire bridge
         // operation. The event provides observability so it doesn't go unnoticed.
