@@ -258,7 +258,7 @@ abstract contract CCIPSuckerMainnetForkTestBase is TestBaseWorkflow {
             localToken: JBConstants.NATIVE_TOKEN,
             minGas: 200_000,
             remoteToken: bytes32(uint256(uint160(JBConstants.NATIVE_TOKEN))),
-            minBridgeAmount: 1
+            toRemoteFee: 1
         });
 
         vm.prank(multisig());

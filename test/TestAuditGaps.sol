@@ -230,7 +230,7 @@ contract TestAuditGaps is Test {
                 emergencyHatch: false,
                 minGas: 200_000,
                 addr: bytes32(uint256(uint160(makeAddr("remoteToken")))),
-                minBridgeAmount: 0
+                toRemoteFee: 0
             })
         );
     }
@@ -807,7 +807,7 @@ contract TestAuditGaps is Test {
                 emergencyHatch: true,
                 minGas: 0,
                 addr: bytes32(uint256(uint160(makeAddr("remote")))),
-                minBridgeAmount: 0
+                toRemoteFee: 0
             })
         );
 
@@ -978,19 +978,15 @@ contract TestAuditGaps is Test {
     }
 
     /// @notice toRemote on empty tree (no prepare calls) does nothing: no revert, no nonce increment.
-    function test_merkleTree_emptyTreeToRemoteNoOp() public {
+    function test_merkleTree_emptyTreeToRemoteReverts() public {
         _enableTokenMapping(TOKEN);
-        sucker.test_resetSendRootOverAMBCalled();
 
         // Outbox is empty.
         assertEq(sucker.test_getOutboxCount(TOKEN), 0, "Tree should be empty");
 
-        // toRemote should succeed but not send anything.
+        // toRemote should revert with NothingToSend (balance=0, count==numberOfClaimsSent==0).
+        vm.expectRevert(abi.encodeWithSelector(JBSucker.JBSucker_NothingToSend.selector));
         sucker.toRemote(TOKEN);
-
-        assertFalse(sucker.sendRootOverAMBCalled(), "AMB should NOT be called on empty tree");
-        assertEq(sucker.test_getOutboxNonce(TOKEN), 0, "Nonce should remain 0");
-        assertEq(sucker.test_getOutboxBalance(TOKEN), 0, "Balance should remain 0");
     }
 
     receive() external payable {}

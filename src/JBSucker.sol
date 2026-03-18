@@ -63,7 +63,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     error JBSucker_LeafAlreadyExecuted(address token, uint256 index);
     error JBSucker_NoTerminalForToken(uint256 projectId, address token);
     error JBSucker_NotPeer(bytes32 caller);
-    error JBSucker_QueueInsufficientSize(uint256 amount, uint256 minimumAmount);
+    error JBSucker_NothingToSend();
     error JBSucker_TokenAlreadyMapped(address localToken, bytes32 mappedTo);
     error JBSucker_TokenHasInvalidEmergencyHatchState(address token);
     error JBSucker_TokenNotMapped(address token);
@@ -660,13 +660,40 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
             revert JBSucker_TokenHasInvalidEmergencyHatchState(token);
         }
 
-        // Ensure that the amount being bridged exceeds the minimum bridge amount.
-        if (_outboxOf[token].balance < remoteToken.minBridgeAmount) {
-            revert JBSucker_QueueInsufficientSize(_outboxOf[token].balance, remoteToken.minBridgeAmount);
+        // Revert if nothing has changed since the last toRemote() call.
+        JBOutboxTree storage outbox = _outboxOf[token];
+        if (outbox.balance == 0 && outbox.tree.count == outbox.numberOfClaimsSent) {
+            revert JBSucker_NothingToSend();
+        }
+
+        // Deduct the fee from msg.value, paying it into the project.
+        uint256 transportPayment = msg.value;
+        if (remoteToken.toRemoteFee != 0) {
+            if (msg.value < remoteToken.toRemoteFee) {
+                revert JBSucker_InsufficientMsgValue(msg.value, remoteToken.toRemoteFee);
+            }
+            transportPayment = msg.value - remoteToken.toRemoteFee;
+
+            // Pay the fee into the project. The caller gets project tokens in return.
+            uint256 _projectId = projectId();
+            IJBTerminal terminal =
+                DIRECTORY.primaryTerminalOf({projectId: _projectId, token: JBConstants.NATIVE_TOKEN});
+            if (address(terminal) == address(0)) {
+                revert JBSucker_NoTerminalForToken(_projectId, JBConstants.NATIVE_TOKEN);
+            }
+            terminal.pay{value: remoteToken.toRemoteFee}({
+                projectId: _projectId,
+                token: JBConstants.NATIVE_TOKEN,
+                amount: remoteToken.toRemoteFee,
+                beneficiary: _msgSender(),
+                minReturnedTokens: 0,
+                memo: "",
+                metadata: ""
+            });
         }
 
         // Send the merkle root to the remote chain.
-        _sendRoot({transportPayment: msg.value, token: token, remoteToken: remoteToken});
+        _sendRoot({transportPayment: transportPayment, token: token, remoteToken: remoteToken});
     }
 
     //*********************************************************************//
@@ -886,7 +913,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
             // This is done so that a token can be disabled and then enabled again
             // while ensuring the remoteToken never changes (unless it hasn't been used yet)
             addr: map.remoteToken == bytes32(0) ? currentMapping.addr : map.remoteToken,
-            minBridgeAmount: map.minBridgeAmount
+            toRemoteFee: map.toRemoteFee
         });
     }
 

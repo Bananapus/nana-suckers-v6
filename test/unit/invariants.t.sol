@@ -364,7 +364,7 @@ contract SuckerInvariantsTest is Test {
                 emergencyHatch: false,
                 minGas: 200_000,
                 addr: bytes32(uint256(uint160(makeAddr("remoteToken")))),
-                minBridgeAmount: 0
+                toRemoteFee: 0
             })
         );
 

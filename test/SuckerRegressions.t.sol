@@ -158,14 +158,14 @@ contract SuckerRegressionsTest is Test {
     }
 
     // =========================================================================
-    // `_sendRoot` underflow revert on empty tree with minBridgeAmount=0
+    // `toRemote` reverts with NothingToSend on empty tree
     // =========================================================================
 
-    /// @notice Verifies that `toRemote()` does not revert when the outbox tree is empty and `minBridgeAmount` is 0.
-    /// @dev Before the fix, `_sendRoot` would underflow at `count - 1` when `outbox.tree.count == 0`.
-    /// After the fix, `_sendRoot` returns early when the tree is empty without reverting.
-    function test_L5_toRemoteWithEmptyTreeAndZeroMinBridgeAmount() public {
-        // Map a token with minBridgeAmount = 0.
+    /// @notice Verifies that `toRemote()` reverts with NothingToSend when the outbox tree is empty.
+    /// @dev With the toRemoteFee change, the "nothing to send" guard catches this case:
+    /// balance == 0 && tree.count == numberOfClaimsSent → revert.
+    function test_L5_toRemoteWithEmptyTreeReverts() public {
+        // Map a token with toRemoteFee = 0.
         sucker.test_setRemoteToken(
             TOKEN,
             JBRemoteToken({
@@ -173,29 +173,21 @@ contract SuckerRegressionsTest is Test {
                 emergencyHatch: false,
                 minGas: 200_000,
                 addr: bytes32(uint256(uint160(makeAddr("remoteToken")))),
-                minBridgeAmount: 0
+                toRemoteFee: 0
             })
         );
-
-        // Reset the tracking flag.
-        sucker.test_resetSendRootOverAMBCalled();
 
         // The outbox tree is empty (no `prepare()` calls).
         assertEq(sucker.test_getOutboxCount(TOKEN), 0);
 
-        // Call toRemote -- should NOT revert (the fix adds an early return for empty tree).
+        // Call toRemote -- should revert with NothingToSend (balance=0, count==numberOfClaimsSent==0).
+        vm.expectRevert(abi.encodeWithSelector(JBSucker.JBSucker_NothingToSend.selector));
         sucker.toRemote(TOKEN);
-
-        // Verify that _sendRootOverAMB was NOT called (early return before reaching the AMB send).
-        assertFalse(sucker.sendRootOverAMBCalled(), "sendRootOverAMB should not be called on empty tree");
-
-        // Verify that the nonce was not incremented (nothing was sent).
-        assertEq(sucker.test_getOutboxNonce(TOKEN), 0, "Nonce should remain 0 when tree is empty");
     }
 
     /// @notice Verifies that `toRemote()` still works normally when the tree has entries.
     function test_L5_toRemoteWithNonEmptyTreeStillWorks() public {
-        // Map a token with minBridgeAmount = 0.
+        // Map a token with toRemoteFee = 0.
         sucker.test_setRemoteToken(
             TOKEN,
             JBRemoteToken({
@@ -203,7 +195,7 @@ contract SuckerRegressionsTest is Test {
                 emergencyHatch: false,
                 minGas: 200_000,
                 addr: bytes32(uint256(uint160(makeAddr("remoteToken")))),
-                minBridgeAmount: 0
+                toRemoteFee: 0
             })
         );
 

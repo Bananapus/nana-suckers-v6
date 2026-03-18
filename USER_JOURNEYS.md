@@ -39,7 +39,7 @@ A project owner maps a local terminal token to its remote counterpart.
 
 **Steps:**
 
-1. Project owner calls `JBSucker.mapToken(JBTokenMapping{localToken: USDC, minGas: 200_000, remoteToken: bytes32(remoteUSDC), minBridgeAmount: 100e6})`.
+1. Project owner calls `JBSucker.mapToken(JBTokenMapping{localToken: USDC, minGas: 200_000, remoteToken: bytes32(remoteUSDC), toRemoteFee: 0.01 ether})`.
 
 2. The sucker enforces `MAP_SUCKER_TOKEN` permission from the project owner.
 
@@ -50,7 +50,7 @@ A project owner maps a local terminal token to its remote counterpart.
 
 4. Immutability check: if `_outboxOf[USDC].tree.count != 0` (outbox has entries) AND the current mapping exists AND the new remote differs, reverts with `TokenAlreadyMapped`.
 
-5. Stores the mapping: `_remoteTokenFor[USDC] = JBRemoteToken{enabled: true, emergencyHatch: false, minGas: 200_000, addr: bytes32(remoteUSDC), minBridgeAmount: 100e6}`.
+5. Stores the mapping: `_remoteTokenFor[USDC] = JBRemoteToken{enabled: true, emergencyHatch: false, minGas: 200_000, addr: bytes32(remoteUSDC), toRemoteFee: 0.01 ether}`.
 
 **Result:** USDC is now bridgeable. Users can call `prepare()` with USDC as the terminal token.
 
@@ -106,7 +106,8 @@ Anyone triggers the bridge to send the outbox root and backing assets to the rem
 
 2. Validation:
    - Emergency hatch not enabled for this token.
-   - `_outboxOf[NATIVE_TOKEN].balance >= remoteToken.minBridgeAmount`.
+   - "Nothing to send" guard: reverts if `outbox.balance == 0 && outbox.tree.count == outbox.numberOfClaimsSent`.
+   - If `toRemoteFee != 0`: deducts the fee from `msg.value` and pays it into the project via `terminal.pay()`. The caller (relayer) receives project tokens. Remainder is passed as `transportPayment`.
    - Sucker not deprecated/sending-disabled.
 
 3. `_sendRoot()`:
