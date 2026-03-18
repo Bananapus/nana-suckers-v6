@@ -35,7 +35,7 @@ contract InvariantSucker is JBSucker {
         IJBTokens tokens,
         address forwarder
     )
-        JBSucker(directory, permissions, tokens, 1, forwarder)
+        JBSucker(directory, permissions, tokens, 1, 0, forwarder)
     {}
 
     function _sendRootOverAMB(
@@ -363,8 +363,7 @@ contract SuckerInvariantsTest is Test {
                 enabled: true,
                 emergencyHatch: false,
                 minGas: 200_000,
-                addr: bytes32(uint256(uint160(makeAddr("remoteToken")))),
-                toRemoteFee: 0
+                addr: bytes32(uint256(uint160(makeAddr("remoteToken"))))
             })
         );
 

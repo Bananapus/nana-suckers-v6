@@ -150,6 +150,7 @@ contract DeployerTests is Test, TestBaseWorkflow, IERC721Receiver {
             permissions: jbPermissions(),
             tokens: jbTokens(),
             feeProjectId: 1,
+            toRemoteFee: 0.001 ether,
             trustedForwarder: address(0)
         });
 
@@ -188,6 +189,7 @@ contract DeployerTests is Test, TestBaseWorkflow, IERC721Receiver {
             permissions: jbPermissions(),
             tokens: jbTokens(),
             feeProjectId: 1,
+            toRemoteFee: 0.001 ether,
             trustedForwarder: address(0)
         });
 
@@ -225,6 +227,7 @@ contract DeployerTests is Test, TestBaseWorkflow, IERC721Receiver {
             permissions: jbPermissions(),
             tokens: jbTokens(),
             feeProjectId: 1,
+            toRemoteFee: 0.001 ether,
             trustedForwarder: address(0)
         });
 
@@ -419,8 +422,7 @@ contract DeployerTests is Test, TestBaseWorkflow, IERC721Receiver {
         mappings[0] = JBTokenMapping({
             localToken: address(JBConstants.NATIVE_TOKEN),
             minGas: 300_000,
-            remoteToken: bytes32(uint256(uint160(JBConstants.NATIVE_TOKEN))),
-            toRemoteFee: 0.1 ether
+            remoteToken: bytes32(uint256(uint160(JBConstants.NATIVE_TOKEN)))
         });
 
         JBSuckerDeployerConfig[] memory configurations = new JBSuckerDeployerConfig[](1);

@@ -44,6 +44,8 @@ contract DeployScript is Script, Sphinx {
     bytes32 ARB_OP_SALT = "_SUCKER_ARB_OP_V6_";
     bytes32 OP_BASE_SALT = "_SUCKER_OP_BASE_V6_";
 
+    uint256 TO_REMOTE_FEE = 0.001 ether;
+
     bytes32 REGISTRY_SALT = "REGISTRYV6";
 
     function configureSphinx() public override {
@@ -149,6 +151,7 @@ contract DeployScript is Script, Sphinx {
                 permissions: core.permissions,
                 tokens: core.tokens,
                 feeProjectId: 1,
+                toRemoteFee: TO_REMOTE_FEE,
                 trustedForwarder: TRUSTED_FORWARDER
             });
 
@@ -181,6 +184,7 @@ contract DeployScript is Script, Sphinx {
                 permissions: core.permissions,
                 tokens: core.tokens,
                 feeProjectId: 1,
+                toRemoteFee: TO_REMOTE_FEE,
                 trustedForwarder: TRUSTED_FORWARDER
             });
 
@@ -232,6 +236,7 @@ contract DeployScript is Script, Sphinx {
                 permissions: core.permissions,
                 tokens: core.tokens,
                 feeProjectId: 1,
+                toRemoteFee: TO_REMOTE_FEE,
                 trustedForwarder: TRUSTED_FORWARDER
             });
 
@@ -264,6 +269,7 @@ contract DeployScript is Script, Sphinx {
                 permissions: core.permissions,
                 tokens: core.tokens,
                 feeProjectId: 1,
+                toRemoteFee: TO_REMOTE_FEE,
                 trustedForwarder: TRUSTED_FORWARDER
             });
 
@@ -311,6 +317,7 @@ contract DeployScript is Script, Sphinx {
                 permissions: core.permissions,
                 tokens: core.tokens,
                 feeProjectId: 1,
+                toRemoteFee: TO_REMOTE_FEE,
                 trustedForwarder: TRUSTED_FORWARDER
             });
 
@@ -346,6 +353,7 @@ contract DeployScript is Script, Sphinx {
                 permissions: core.permissions,
                 tokens: core.tokens,
                 feeProjectId: 1,
+                toRemoteFee: TO_REMOTE_FEE,
                 trustedForwarder: TRUSTED_FORWARDER
             });
 
@@ -537,6 +545,7 @@ contract DeployScript is Script, Sphinx {
             tokens: tokens,
             permissions: permissions,
             feeProjectId: 1,
+            toRemoteFee: TO_REMOTE_FEE,
             trustedForwarder: trustedForwarder
         });
 

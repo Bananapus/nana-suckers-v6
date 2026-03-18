@@ -39,7 +39,7 @@ contract RegressionSucker is JBSucker {
         IJBTokens tokens,
         address forwarder
     )
-        JBSucker(directory, permissions, tokens, 1, forwarder)
+        JBSucker(directory, permissions, tokens, 1, 0, forwarder)
     {}
 
     function _sendRootOverAMB(
@@ -162,18 +162,17 @@ contract SuckerRegressionsTest is Test {
     // =========================================================================
 
     /// @notice Verifies that `toRemote()` reverts with NothingToSend when the outbox tree is empty.
-    /// @dev With the toRemoteFee change, the "nothing to send" guard catches this case:
+    /// @dev The "nothing to send" guard catches this case:
     /// balance == 0 && tree.count == numberOfClaimsSent → revert.
     function test_L5_toRemoteWithEmptyTreeReverts() public {
-        // Map a token with toRemoteFee = 0.
+        // Map a token.
         sucker.test_setRemoteToken(
             TOKEN,
             JBRemoteToken({
                 enabled: true,
                 emergencyHatch: false,
                 minGas: 200_000,
-                addr: bytes32(uint256(uint160(makeAddr("remoteToken")))),
-                toRemoteFee: 0
+                addr: bytes32(uint256(uint160(makeAddr("remoteToken"))))
             })
         );
 
@@ -187,15 +186,14 @@ contract SuckerRegressionsTest is Test {
 
     /// @notice Verifies that `toRemote()` still works normally when the tree has entries.
     function test_L5_toRemoteWithNonEmptyTreeStillWorks() public {
-        // Map a token with toRemoteFee = 0.
+        // Map a token.
         sucker.test_setRemoteToken(
             TOKEN,
             JBRemoteToken({
                 enabled: true,
                 emergencyHatch: false,
                 minGas: 200_000,
-                addr: bytes32(uint256(uint160(makeAddr("remoteToken")))),
-                toRemoteFee: 0
+                addr: bytes32(uint256(uint160(makeAddr("remoteToken"))))
             })
         );
 

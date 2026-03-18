@@ -89,6 +89,7 @@ contract MultiChainEvolutionTest is Test, TestBaseWorkflow, IERC721Receiver {
             permissions: jbPermissions(),
             tokens: jbTokens(),
             feeProjectId: 1,
+            toRemoteFee: 0.001 ether,
             trustedForwarder: address(0)
         });
         opDeployer.configureSingleton(opSingleton);
@@ -113,6 +114,7 @@ contract MultiChainEvolutionTest is Test, TestBaseWorkflow, IERC721Receiver {
             permissions: jbPermissions(),
             tokens: jbTokens(),
             feeProjectId: 1,
+            toRemoteFee: 0.001 ether,
             trustedForwarder: address(0)
         });
         ccipDeployer.configureSingleton(ccipSingleton);
@@ -201,8 +203,7 @@ contract MultiChainEvolutionTest is Test, TestBaseWorkflow, IERC721Receiver {
             opMappings[0] = JBTokenMapping({
                 localToken: JBConstants.NATIVE_TOKEN,
                 minGas: 200_000,
-                remoteToken: bytes32(uint256(uint160(JBConstants.NATIVE_TOKEN))),
-                toRemoteFee: 0.01 ether
+                remoteToken: bytes32(uint256(uint160(JBConstants.NATIVE_TOKEN)))
             });
 
             JBSuckerDeployerConfig[] memory opConfig = new JBSuckerDeployerConfig[](1);
@@ -228,7 +229,7 @@ contract MultiChainEvolutionTest is Test, TestBaseWorkflow, IERC721Receiver {
 
         _opSucker.mapToken(
             JBTokenMapping({
-                localToken: localUSDC, minGas: 200_000, remoteToken: bytes32(uint256(uint160(opUSDC))), toRemoteFee: 1e6
+                localToken: localUSDC, minGas: 200_000, remoteToken: bytes32(uint256(uint160(opUSDC)))
             })
         );
 
@@ -254,8 +255,7 @@ contract MultiChainEvolutionTest is Test, TestBaseWorkflow, IERC721Receiver {
             celoMappings[0] = JBTokenMapping({
                 localToken: JBConstants.NATIVE_TOKEN,
                 minGas: 200_000,
-                remoteToken: bytes32(uint256(uint160(celoETH))), // ERC-20 on Celo, NOT NATIVE_TOKEN
-                toRemoteFee: 0.01 ether
+                remoteToken: bytes32(uint256(uint160(celoETH))) // ERC-20 on Celo, NOT NATIVE_TOKEN
             });
 
             JBSuckerDeployerConfig[] memory celoConfig = new JBSuckerDeployerConfig[](1);
@@ -285,8 +285,7 @@ contract MultiChainEvolutionTest is Test, TestBaseWorkflow, IERC721Receiver {
             JBTokenMapping({
                 localToken: localUSDC,
                 minGas: 200_000,
-                remoteToken: bytes32(uint256(uint160(celoUSDC))),
-                toRemoteFee: 1e6
+                remoteToken: bytes32(uint256(uint160(celoUSDC)))
             })
         );
 
@@ -348,16 +347,14 @@ contract MultiChainEvolutionTest is Test, TestBaseWorkflow, IERC721Receiver {
         opMappings[0] = JBTokenMapping({
             localToken: JBConstants.NATIVE_TOKEN,
             minGas: 200_000,
-            remoteToken: bytes32(uint256(uint160(JBConstants.NATIVE_TOKEN))),
-            toRemoteFee: 0.01 ether
+            remoteToken: bytes32(uint256(uint160(JBConstants.NATIVE_TOKEN)))
         });
 
         JBTokenMapping[] memory celoMappings = new JBTokenMapping[](1);
         celoMappings[0] = JBTokenMapping({
             localToken: JBConstants.NATIVE_TOKEN,
             minGas: 200_000,
-            remoteToken: bytes32(uint256(uint160(celoETH))),
-            toRemoteFee: 0.01 ether
+            remoteToken: bytes32(uint256(uint160(celoETH)))
         });
 
         configs[0] = JBSuckerDeployerConfig({deployer: IJBSuckerDeployer(address(opDeployer)), mappings: opMappings});
@@ -397,8 +394,7 @@ contract MultiChainEvolutionTest is Test, TestBaseWorkflow, IERC721Receiver {
         initialMappings[0] = JBTokenMapping({
             localToken: JBConstants.NATIVE_TOKEN,
             minGas: 200_000,
-            remoteToken: bytes32(uint256(uint160(celoETH))),
-            toRemoteFee: 0.01 ether
+            remoteToken: bytes32(uint256(uint160(celoETH)))
         });
 
         JBSuckerDeployerConfig[] memory config = new JBSuckerDeployerConfig[](1);
@@ -417,8 +413,7 @@ contract MultiChainEvolutionTest is Test, TestBaseWorkflow, IERC721Receiver {
             JBTokenMapping({
                 localToken: localUSDC,
                 minGas: 200_000,
-                remoteToken: bytes32(uint256(uint160(celoUSDC))),
-                toRemoteFee: 1e6
+                remoteToken: bytes32(uint256(uint160(celoUSDC)))
             })
         );
 
@@ -440,8 +435,7 @@ contract MultiChainEvolutionTest is Test, TestBaseWorkflow, IERC721Receiver {
         nativeMappings[0] = JBTokenMapping({
             localToken: JBConstants.NATIVE_TOKEN,
             minGas: 200_000,
-            remoteToken: bytes32(uint256(uint160(JBConstants.NATIVE_TOKEN))),
-            toRemoteFee: 0.01 ether
+            remoteToken: bytes32(uint256(uint160(JBConstants.NATIVE_TOKEN)))
         });
 
         JBSuckerDeployerConfig[] memory opConfig = new JBSuckerDeployerConfig[](1);
@@ -452,8 +446,7 @@ contract MultiChainEvolutionTest is Test, TestBaseWorkflow, IERC721Receiver {
         celoNativeMappings[0] = JBTokenMapping({
             localToken: JBConstants.NATIVE_TOKEN,
             minGas: 200_000,
-            remoteToken: bytes32(uint256(uint160(celoETH))),
-            toRemoteFee: 0.01 ether
+            remoteToken: bytes32(uint256(uint160(celoETH)))
         });
 
         JBSuckerDeployerConfig[] memory celoConfig = new JBSuckerDeployerConfig[](1);
@@ -471,8 +464,7 @@ contract MultiChainEvolutionTest is Test, TestBaseWorkflow, IERC721Receiver {
             JBTokenMapping({
                 localToken: localUSDC,
                 minGas: 200_000,
-                remoteToken: bytes32(uint256(uint160(celoUSDC))),
-                toRemoteFee: 1e6
+                remoteToken: bytes32(uint256(uint160(celoUSDC)))
             })
         );
 
@@ -485,7 +477,7 @@ contract MultiChainEvolutionTest is Test, TestBaseWorkflow, IERC721Receiver {
         // Disable native on OP sucker.
         opSucker.mapToken(
             JBTokenMapping({
-                localToken: JBConstants.NATIVE_TOKEN, minGas: 200_000, remoteToken: bytes32(0), toRemoteFee: 0
+                localToken: JBConstants.NATIVE_TOKEN, minGas: 200_000, remoteToken: bytes32(0)
             })
         );
 
@@ -506,8 +498,7 @@ contract MultiChainEvolutionTest is Test, TestBaseWorkflow, IERC721Receiver {
         nativeMappings[0] = JBTokenMapping({
             localToken: JBConstants.NATIVE_TOKEN,
             minGas: 200_000,
-            remoteToken: bytes32(uint256(uint160(JBConstants.NATIVE_TOKEN))),
-            toRemoteFee: 0.01 ether
+            remoteToken: bytes32(uint256(uint160(JBConstants.NATIVE_TOKEN)))
         });
 
         JBSuckerDeployerConfig[] memory opConfig = new JBSuckerDeployerConfig[](1);
@@ -520,8 +511,7 @@ contract MultiChainEvolutionTest is Test, TestBaseWorkflow, IERC721Receiver {
         celoEthMappings[0] = JBTokenMapping({
             localToken: JBConstants.NATIVE_TOKEN,
             minGas: 200_000,
-            remoteToken: bytes32(uint256(uint160(celoETH))),
-            toRemoteFee: 0.01 ether
+            remoteToken: bytes32(uint256(uint160(celoETH)))
         });
 
         JBSuckerDeployerConfig[] memory celoConfig = new JBSuckerDeployerConfig[](1);
@@ -547,9 +537,8 @@ contract MultiChainEvolutionTest is Test, TestBaseWorkflow, IERC721Receiver {
                 JBTokenMapping({
                     localToken: JBConstants.NATIVE_TOKEN,
                     minGas: 200_000,
-                    remoteToken: bytes32(uint256(uint160(celoETH))),
-                    toRemoteFee: 0.01 ether
-                })
+                    remoteToken: bytes32(uint256(uint160(celoETH)))
+                        })
             );
     }
 
@@ -565,8 +554,7 @@ contract MultiChainEvolutionTest is Test, TestBaseWorkflow, IERC721Receiver {
         mappings[0] = JBTokenMapping({
             localToken: JBConstants.NATIVE_TOKEN,
             minGas: 200_000,
-            remoteToken: bytes32(uint256(uint160(JBConstants.NATIVE_TOKEN))),
-            toRemoteFee: 0.01 ether
+            remoteToken: bytes32(uint256(uint160(JBConstants.NATIVE_TOKEN)))
         });
 
         JBSuckerDeployerConfig[] memory config = new JBSuckerDeployerConfig[](1);

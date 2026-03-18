@@ -45,9 +45,10 @@ Forward-looking risk catalog for the JBSucker cross-chain bridging system.
 
 ## 5. Fee Collection Risks
 
-- **Best-effort fee collection.** `toRemoteFee` is paid into `FEE_PROJECT_ID` (typically project ID 1) via `terminal.pay()`. If the fee project has no primary terminal for `NATIVE_TOKEN`, or if `terminal.pay()` reverts for any reason, `toRemote()` silently proceeds without collecting the fee. This means `toRemoteFee` is not a hard guarantee — it can be bypassed if the fee project's terminal is misconfigured, paused, or removed.
-- **Immutable fee project.** `FEE_PROJECT_ID` is set at construction and cannot be changed. If the fee project is abandoned or its terminal removed, there is no way to redirect fees to a different project without deploying new suckers.
+- **Best-effort fee collection.** `TO_REMOTE_FEE` is a contract-level immutable (ETH, in wei) set at deploy time — uniform across all tokens, non-bypassable by integrators. It is paid into `FEE_PROJECT_ID` (typically project ID 1) via `terminal.pay()`. If the fee project has no primary terminal for `NATIVE_TOKEN`, or if `terminal.pay()` reverts for any reason, `toRemote()` silently proceeds without collecting the fee. This means fee collection is best-effort — it can fail if the fee project's terminal is misconfigured, paused, or removed — but the fee amount itself cannot be set to 0 by integrators.
+- **Immutable fee configuration.** Both `FEE_PROJECT_ID` and `TO_REMOTE_FEE` are set at construction and cannot be changed. If the fee project is abandoned or its terminal removed, there is no way to redirect fees without deploying new suckers. If ETH price changes significantly, the fixed fee may become too expensive or too cheap — requires deploying new singletons with an updated fee.
 - **Fee does not protect the sucker's own project.** The fee is paid to `FEE_PROJECT_ID` (the protocol project), not to the sucker's own `projectId()`. This is by design — the protocol project always has a native token terminal — but means the sucker's project does not directly benefit from the anti-spam fee.
+- **ETH price risk.** `TO_REMOTE_FEE` is denominated in wei and fixed at deploy time. A significant ETH price increase could make the fee prohibitively expensive for users, while a significant decrease could make it ineffective as anti-spam. The only recourse is deploying new singleton contracts with an updated fee.
 
 ## 6. Deprecation Lifecycle
 

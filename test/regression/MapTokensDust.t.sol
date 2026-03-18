@@ -54,7 +54,7 @@ contract MapTokensDustTest is Test {
         // Token A: mapped with unsent claims (tree.count=1, numberOfClaimsSent=0).
         sucker.test_setRemoteToken(
             tokenA,
-            JBRemoteToken({enabled: true, emergencyHatch: false, minGas: 200_000, addr: remoteA, toRemoteFee: 0})
+            JBRemoteToken({enabled: true, emergencyHatch: false, minGas: 200_000, addr: remoteA})
         );
         sucker.test_setOutboxTreeCount(tokenA, 1);
         // numberOfClaimsSent defaults to 0, so 0 != 1 means this token will be counted.
@@ -62,22 +62,22 @@ contract MapTokensDustTest is Test {
         // Token B: mapped with unsent claims.
         sucker.test_setRemoteToken(
             tokenB,
-            JBRemoteToken({enabled: true, emergencyHatch: false, minGas: 200_000, addr: remoteB, toRemoteFee: 0})
+            JBRemoteToken({enabled: true, emergencyHatch: false, minGas: 200_000, addr: remoteB})
         );
         sucker.test_setOutboxTreeCount(tokenB, 1);
 
         // Token C: mapped with unsent claims.
         sucker.test_setRemoteToken(
             tokenC,
-            JBRemoteToken({enabled: true, emergencyHatch: false, minGas: 200_000, addr: remoteC, toRemoteFee: 0})
+            JBRemoteToken({enabled: true, emergencyHatch: false, minGas: 200_000, addr: remoteC})
         );
         sucker.test_setOutboxTreeCount(tokenC, 1);
 
         // Build maps to disable all three tokens (remoteToken = 0).
         JBTokenMapping[] memory maps = new JBTokenMapping[](3);
-        maps[0] = JBTokenMapping({localToken: tokenA, minGas: 200_000, remoteToken: bytes32(0), toRemoteFee: 0});
-        maps[1] = JBTokenMapping({localToken: tokenB, minGas: 200_000, remoteToken: bytes32(0), toRemoteFee: 0});
-        maps[2] = JBTokenMapping({localToken: tokenC, minGas: 200_000, remoteToken: bytes32(0), toRemoteFee: 0});
+        maps[0] = JBTokenMapping({localToken: tokenA, minGas: 200_000, remoteToken: bytes32(0)});
+        maps[1] = JBTokenMapping({localToken: tokenB, minGas: 200_000, remoteToken: bytes32(0)});
+        maps[2] = JBTokenMapping({localToken: tokenC, minGas: 200_000, remoteToken: bytes32(0)});
 
         // Send 10 wei with 3 tokens to disable: 10 / 3 = 3 each, remainder = 1 wei.
         uint256 msgValue = 10;
@@ -103,19 +103,19 @@ contract MapTokensDustTest is Test {
 
         sucker.test_setRemoteToken(
             tokenA,
-            JBRemoteToken({enabled: true, emergencyHatch: false, minGas: 200_000, addr: remoteA, toRemoteFee: 0})
+            JBRemoteToken({enabled: true, emergencyHatch: false, minGas: 200_000, addr: remoteA})
         );
         sucker.test_setOutboxTreeCount(tokenA, 1);
 
         sucker.test_setRemoteToken(
             tokenB,
-            JBRemoteToken({enabled: true, emergencyHatch: false, minGas: 200_000, addr: remoteB, toRemoteFee: 0})
+            JBRemoteToken({enabled: true, emergencyHatch: false, minGas: 200_000, addr: remoteB})
         );
         sucker.test_setOutboxTreeCount(tokenB, 1);
 
         JBTokenMapping[] memory maps = new JBTokenMapping[](2);
-        maps[0] = JBTokenMapping({localToken: tokenA, minGas: 200_000, remoteToken: bytes32(0), toRemoteFee: 0});
-        maps[1] = JBTokenMapping({localToken: tokenB, minGas: 200_000, remoteToken: bytes32(0), toRemoteFee: 0});
+        maps[0] = JBTokenMapping({localToken: tokenA, minGas: 200_000, remoteToken: bytes32(0)});
+        maps[1] = JBTokenMapping({localToken: tokenB, minGas: 200_000, remoteToken: bytes32(0)});
 
         // 10 / 2 = 5 each, no remainder.
         uint256 msgValue = 10;
@@ -145,26 +145,26 @@ contract MapTokensDustTest is Test {
 
         sucker.test_setRemoteToken(
             tokenA,
-            JBRemoteToken({enabled: true, emergencyHatch: false, minGas: 200_000, addr: remoteA, toRemoteFee: 0})
+            JBRemoteToken({enabled: true, emergencyHatch: false, minGas: 200_000, addr: remoteA})
         );
         sucker.test_setOutboxTreeCount(tokenA, 1);
 
         sucker.test_setRemoteToken(
             tokenB,
-            JBRemoteToken({enabled: true, emergencyHatch: false, minGas: 200_000, addr: remoteB, toRemoteFee: 0})
+            JBRemoteToken({enabled: true, emergencyHatch: false, minGas: 200_000, addr: remoteB})
         );
         sucker.test_setOutboxTreeCount(tokenB, 1);
 
         sucker.test_setRemoteToken(
             tokenC,
-            JBRemoteToken({enabled: true, emergencyHatch: false, minGas: 200_000, addr: remoteC, toRemoteFee: 0})
+            JBRemoteToken({enabled: true, emergencyHatch: false, minGas: 200_000, addr: remoteC})
         );
         sucker.test_setOutboxTreeCount(tokenC, 1);
 
         JBTokenMapping[] memory maps = new JBTokenMapping[](3);
-        maps[0] = JBTokenMapping({localToken: tokenA, minGas: 200_000, remoteToken: bytes32(0), toRemoteFee: 0});
-        maps[1] = JBTokenMapping({localToken: tokenB, minGas: 200_000, remoteToken: bytes32(0), toRemoteFee: 0});
-        maps[2] = JBTokenMapping({localToken: tokenC, minGas: 200_000, remoteToken: bytes32(0), toRemoteFee: 0});
+        maps[0] = JBTokenMapping({localToken: tokenA, minGas: 200_000, remoteToken: bytes32(0)});
+        maps[1] = JBTokenMapping({localToken: tokenB, minGas: 200_000, remoteToken: bytes32(0)});
+        maps[2] = JBTokenMapping({localToken: tokenC, minGas: 200_000, remoteToken: bytes32(0)});
 
         address caller = makeAddr("caller");
         vm.deal(caller, msgValue);
@@ -202,7 +202,7 @@ contract MapTokensDustSucker is JBSucker {
         IJBTokens tokens,
         address forwarder
     )
-        JBSucker(directory, permissions, tokens, 1, forwarder)
+        JBSucker(directory, permissions, tokens, 1, 0, forwarder)
     {}
 
     function _sendRootOverAMB(

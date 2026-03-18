@@ -39,9 +39,10 @@ contract DeepAttackSucker is JBSucker {
         IJBDirectory directory,
         IJBPermissions permissions,
         IJBTokens tokens,
+        uint256 toRemoteFee,
         address forwarder
     )
-        JBSucker(directory, permissions, tokens, 1, forwarder)
+        JBSucker(directory, permissions, tokens, 1, toRemoteFee, forwarder)
     {}
 
     function _sendRootOverAMB(
@@ -215,8 +216,12 @@ contract SuckerDeepAttacks is Test {
     }
 
     function _createTestSucker(uint256 projectId, bytes32 salt) internal returns (DeepAttackSucker) {
+        return _createTestSuckerWithFee(projectId, salt, 0);
+    }
+
+    function _createTestSuckerWithFee(uint256 projectId, bytes32 salt, uint256 toRemoteFee) internal returns (DeepAttackSucker) {
         DeepAttackSucker singleton =
-            new DeepAttackSucker(IJBDirectory(DIRECTORY), IJBPermissions(PERMISSIONS), IJBTokens(TOKENS), FORWARDER);
+            new DeepAttackSucker(IJBDirectory(DIRECTORY), IJBPermissions(PERMISSIONS), IJBTokens(TOKENS), toRemoteFee, FORWARDER);
 
         DeepAttackSucker clone =
             DeepAttackSucker(payable(address(LibClone.cloneDeterministic(address(singleton), salt))));
@@ -239,8 +244,7 @@ contract SuckerDeepAttacks is Test {
                 enabled: true,
                 emergencyHatch: false,
                 minGas: 200_000,
-                addr: bytes32(uint256(uint160(makeAddr("remoteToken")))),
-                toRemoteFee: 0
+                addr: bytes32(uint256(uint160(makeAddr("remoteToken"))))
             })
         );
     }
@@ -506,8 +510,7 @@ contract SuckerDeepAttacks is Test {
                 enabled: false,
                 emergencyHatch: true,
                 minGas: 0,
-                addr: bytes32(uint256(uint160(makeAddr("remote")))),
-                toRemoteFee: 0
+                addr: bytes32(uint256(uint160(makeAddr("remote"))))
             })
         );
 
@@ -557,8 +560,7 @@ contract SuckerDeepAttacks is Test {
                 enabled: false,
                 emergencyHatch: true,
                 minGas: 0,
-                addr: bytes32(uint256(uint160(makeAddr("remote")))),
-                toRemoteFee: 0
+                addr: bytes32(uint256(uint160(makeAddr("remote"))))
             })
         );
 
@@ -596,8 +598,7 @@ contract SuckerDeepAttacks is Test {
                 enabled: false,
                 emergencyHatch: true,
                 minGas: 0,
-                addr: bytes32(uint256(uint160(makeAddr("remote")))),
-                toRemoteFee: 0
+                addr: bytes32(uint256(uint160(makeAddr("remote"))))
             })
         );
 
@@ -664,8 +665,7 @@ contract SuckerDeepAttacks is Test {
                 enabled: false,
                 emergencyHatch: true,
                 minGas: 0,
-                addr: bytes32(uint256(uint160(makeAddr("remote")))),
-                toRemoteFee: 0
+                addr: bytes32(uint256(uint160(makeAddr("remote"))))
             })
         );
 
@@ -775,8 +775,7 @@ contract SuckerDeepAttacks is Test {
                 enabled: true,
                 emergencyHatch: false,
                 minGas: 200_000,
-                addr: bytes32(uint256(uint160(remoteA))),
-                toRemoteFee: 0
+                addr: bytes32(uint256(uint160(remoteA)))
             })
         );
 
@@ -791,7 +790,7 @@ contract SuckerDeepAttacks is Test {
         );
         sucker.mapToken(
             JBTokenMapping({
-                localToken: token, minGas: 200_000, remoteToken: bytes32(uint256(uint160(remoteB))), toRemoteFee: 0
+                localToken: token, minGas: 200_000, remoteToken: bytes32(uint256(uint160(remoteB)))
             })
         );
     }
@@ -809,8 +808,7 @@ contract SuckerDeepAttacks is Test {
                 enabled: false,
                 emergencyHatch: true,
                 minGas: 200_000,
-                addr: bytes32(uint256(uint160(makeAddr("remote")))),
-                toRemoteFee: 0
+                addr: bytes32(uint256(uint160(makeAddr("remote"))))
             })
         );
 
@@ -820,8 +818,7 @@ contract SuckerDeepAttacks is Test {
             JBTokenMapping({
                 localToken: token,
                 minGas: 200_000,
-                remoteToken: bytes32(uint256(uint160(makeAddr("newRemote")))),
-                toRemoteFee: 0
+                remoteToken: bytes32(uint256(uint160(makeAddr("newRemote"))))
             })
         );
     }
@@ -838,8 +835,7 @@ contract SuckerDeepAttacks is Test {
             JBTokenMapping({
                 localToken: makeAddr("token"),
                 minGas: 200_000,
-                remoteToken: bytes32(uint256(uint160(makeAddr("remote")))),
-                toRemoteFee: 0
+                remoteToken: bytes32(uint256(uint160(makeAddr("remote"))))
             })
         );
     }
@@ -852,7 +848,7 @@ contract SuckerDeepAttacks is Test {
         vm.expectRevert(abi.encodeWithSelector(JBSucker.JBSucker_InvalidNativeRemoteAddress.selector, nonNativeRemote));
         sucker.mapToken(
             JBTokenMapping({
-                localToken: JBConstants.NATIVE_TOKEN, minGas: 0, remoteToken: nonNativeRemote, toRemoteFee: 0
+                localToken: JBConstants.NATIVE_TOKEN, minGas: 0, remoteToken: nonNativeRemote
             })
         );
     }
@@ -872,8 +868,7 @@ contract SuckerDeepAttacks is Test {
             JBTokenMapping({
                 localToken: makeAddr("erc20"),
                 minGas: 100, // Way below MESSENGER_ERC20_MIN_GAS_LIMIT
-                remoteToken: bytes32(uint256(uint160(makeAddr("remote")))),
-                toRemoteFee: 0
+                remoteToken: bytes32(uint256(uint160(makeAddr("remote"))))
             })
         );
     }
@@ -944,8 +939,7 @@ contract SuckerDeepAttacks is Test {
                 enabled: false,
                 emergencyHatch: true,
                 minGas: 0,
-                addr: bytes32(uint256(uint160(makeAddr("remote")))),
-                toRemoteFee: 0
+                addr: bytes32(uint256(uint160(makeAddr("remote"))))
             })
         );
 
@@ -961,8 +955,7 @@ contract SuckerDeepAttacks is Test {
                 enabled: true,
                 emergencyHatch: false,
                 minGas: 200_000,
-                addr: bytes32(uint256(uint160(makeAddr("remote")))),
-                toRemoteFee: 0
+                addr: bytes32(uint256(uint160(makeAddr("remote"))))
             })
         );
 
@@ -971,25 +964,27 @@ contract SuckerDeepAttacks is Test {
         sucker.toRemote(TOKEN);
     }
 
-    /// @notice toRemote with insufficient msg.value for toRemoteFee → should revert.
+    /// @notice toRemote with insufficient msg.value for TO_REMOTE_FEE → should revert.
     function test_toRemote_insufficientFee_reverts() public {
-        sucker.test_setRemoteToken(
+        // Create a sucker with TO_REMOTE_FEE = 1 ether.
+        DeepAttackSucker feeSucker = _createTestSuckerWithFee(PROJECT_ID, "fee_sucker_salt", 1 ether);
+
+        feeSucker.test_setRemoteToken(
             TOKEN,
             JBRemoteToken({
                 enabled: true,
                 emergencyHatch: false,
                 minGas: 200_000,
-                addr: bytes32(uint256(uint160(makeAddr("remote")))),
-                toRemoteFee: 1 ether
+                addr: bytes32(uint256(uint160(makeAddr("remote"))))
             })
         );
 
         // Insert an item so there IS something to send.
-        sucker.test_insertIntoTree(1 ether, TOKEN, 1 ether, bytes32(uint256(uint160(address(this)))));
+        feeSucker.test_insertIntoTree(1 ether, TOKEN, 1 ether, bytes32(uint256(uint160(address(this)))));
 
-        // Send less than the required fee.
-        vm.expectRevert(abi.encodeWithSelector(JBSucker.JBSucker_InsufficientMsgValue.selector, 0.5 ether, 1 ether));
-        sucker.toRemote{value: 0.5 ether}(TOKEN);
+        // Send less than the required fee (TO_REMOTE_FEE = 1 ether).
+        vm.expectRevert(abi.encodeWithSelector(JBSucker.JBSucker_InsufficientMsgValue.selector, 0.5 ether, feeSucker.TO_REMOTE_FEE()));
+        feeSucker.toRemote{value: 0.5 ether}(TOKEN);
     }
 
     /// @notice _sendRoot clears balance BEFORE AMB call — verify balance is 0 after toRemote.
@@ -1337,8 +1332,7 @@ contract SuckerDeepAttacks is Test {
                 enabled: true,
                 emergencyHatch: false,
                 minGas: 200_000,
-                addr: bytes32(uint256(uint160(makeAddr("remote")))),
-                toRemoteFee: 0
+                addr: bytes32(uint256(uint160(makeAddr("remote"))))
             })
         );
 
@@ -1522,13 +1516,12 @@ contract SuckerDeepAttacks is Test {
                 enabled: true,
                 emergencyHatch: false,
                 minGas: 200_000,
-                addr: bytes32(uint256(uint160(makeAddr("remoteA")))),
-                toRemoteFee: 0
+                addr: bytes32(uint256(uint160(makeAddr("remoteA"))))
             })
         );
 
         // Map to bytes32(0) to disable.
-        sucker.mapToken(JBTokenMapping({localToken: token, minGas: 200_000, remoteToken: bytes32(0), toRemoteFee: 0}));
+        sucker.mapToken(JBTokenMapping({localToken: token, minGas: 200_000, remoteToken: bytes32(0)}));
 
         JBRemoteToken memory mapping_ = sucker.test_getRemoteToken(token);
         assertFalse(mapping_.enabled, "Should be disabled");

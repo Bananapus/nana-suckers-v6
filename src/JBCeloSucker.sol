@@ -43,9 +43,10 @@ contract JBCeloSucker is JBOptimismSucker {
         IJBPermissions permissions,
         IJBTokens tokens,
         uint256 feeProjectId,
+        uint256 toRemoteFee,
         address trustedForwarder
     )
-        JBOptimismSucker(deployer, directory, permissions, tokens, feeProjectId, trustedForwarder)
+        JBOptimismSucker(deployer, directory, permissions, tokens, feeProjectId, toRemoteFee, trustedForwarder)
     {
         // Fetch the wrapped native token by doing a callback to the deployer contract.
         WRAPPED_NATIVE = JBCeloSuckerDeployer(deployer).wrappedNative();

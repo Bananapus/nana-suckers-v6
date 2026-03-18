@@ -271,6 +271,7 @@ contract CCIPSuckerForkedTests is TestBaseWorkflow {
             permissions: jbPermissions(),
             tokens: jbTokens(),
             feeProjectId: 1,
+            toRemoteFee: 0.001 ether,
             trustedForwarder: address(0)
         });
         vm.stopPrank();
@@ -331,6 +332,7 @@ contract CCIPSuckerForkedTests is TestBaseWorkflow {
             permissions: jbPermissions(),
             tokens: jbTokens(),
             feeProjectId: 1,
+            toRemoteFee: 0.001 ether,
             trustedForwarder: address(0)
         });
         vm.stopPrank();
@@ -375,8 +377,7 @@ contract CCIPSuckerForkedTests is TestBaseWorkflow {
         JBTokenMapping memory map = JBTokenMapping({
             localToken: JBConstants.NATIVE_TOKEN,
             minGas: 200_000,
-            remoteToken: bytes32(uint256(uint160(JBConstants.NATIVE_TOKEN))),
-            toRemoteFee: 1
+            remoteToken: bytes32(uint256(uint160(JBConstants.NATIVE_TOKEN)))
         });
 
         vm.prank(multisig());
@@ -446,8 +447,7 @@ contract CCIPSuckerForkedTests is TestBaseWorkflow {
         JBTokenMapping memory map = JBTokenMapping({
             localToken: address(ccipBnM),
             minGas: 200_000,
-            remoteToken: bytes32(uint256(uint160(address(ccipBnMArbSepolia)))),
-            toRemoteFee: 1
+            remoteToken: bytes32(uint256(uint160(address(ccipBnMArbSepolia))))
         });
 
         vm.prank(multisig());

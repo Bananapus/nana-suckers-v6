@@ -84,6 +84,7 @@ contract ForkArbitrumDeployerTest is TestBaseWorkflow, IERC721Receiver {
             permissions: jbPermissions(),
             tokens: jbTokens(),
             feeProjectId: 1,
+            toRemoteFee: 0.001 ether,
             trustedForwarder: address(0)
         });
 
@@ -115,6 +116,7 @@ contract ForkArbitrumDeployerTest is TestBaseWorkflow, IERC721Receiver {
             permissions: jbPermissions(),
             tokens: jbTokens(),
             feeProjectId: 1,
+            toRemoteFee: 0.001 ether,
             trustedForwarder: address(0)
         });
 
@@ -266,6 +268,7 @@ contract ForkArbitrumNativeTransferTest is TestBaseWorkflow {
             permissions: jbPermissions(),
             tokens: jbTokens(),
             feeProjectId: 1,
+            toRemoteFee: 0.001 ether,
             trustedForwarder: address(0)
         });
         vm.stopPrank();
@@ -347,8 +350,7 @@ contract ForkArbitrumNativeTransferTest is TestBaseWorkflow {
         JBTokenMapping memory map = JBTokenMapping({
             localToken: JBConstants.NATIVE_TOKEN,
             minGas: 200_000,
-            remoteToken: bytes32(uint256(uint160(JBConstants.NATIVE_TOKEN))),
-            toRemoteFee: 1
+            remoteToken: bytes32(uint256(uint160(JBConstants.NATIVE_TOKEN)))
         });
 
         vm.prank(multisig());

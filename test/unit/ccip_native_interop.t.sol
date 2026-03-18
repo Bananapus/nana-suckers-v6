@@ -75,7 +75,7 @@ contract CCIPTestSucker is JBCCIPSucker {
         IJBTokens tokens,
         IJBPermissions permissions
     )
-        JBCCIPSucker(deployer, directory, tokens, permissions, 1, address(0))
+        JBCCIPSucker(deployer, directory, tokens, permissions, 1, 0, address(0))
     {}
 
     function exposed_validateTokenMapping(JBTokenMapping calldata map) external pure {
@@ -130,7 +130,7 @@ contract BaseTestSucker is JBSucker {
         IJBPermissions permissions,
         IJBTokens tokens
     )
-        JBSucker(directory, permissions, tokens, 1, address(0))
+        JBSucker(directory, permissions, tokens, 1, 0, address(0))
     {}
 
     function exposed_validateTokenMapping(JBTokenMapping calldata map) external pure {
@@ -237,8 +237,7 @@ contract CCIPNativeInteropTest is Test {
         JBTokenMapping memory map = JBTokenMapping({
             localToken: JBConstants.NATIVE_TOKEN,
             minGas: 200_000,
-            remoteToken: bytes32(uint256(uint160(celoETH))),
-            toRemoteFee: 0.01 ether
+            remoteToken: bytes32(uint256(uint160(celoETH)))
         });
 
         // Should NOT revert — CCIP sucker allows native -> ERC20 for cross-chain interop.
@@ -253,8 +252,7 @@ contract CCIPNativeInteropTest is Test {
         JBTokenMapping memory map = JBTokenMapping({
             localToken: JBConstants.NATIVE_TOKEN,
             minGas: 200_000,
-            remoteToken: bytes32(uint256(uint160(celoETH))),
-            toRemoteFee: 0.01 ether
+            remoteToken: bytes32(uint256(uint160(celoETH)))
         });
 
         vm.expectRevert(
@@ -273,8 +271,7 @@ contract CCIPNativeInteropTest is Test {
         JBTokenMapping memory map = JBTokenMapping({
             localToken: JBConstants.NATIVE_TOKEN,
             minGas: 200_000,
-            remoteToken: bytes32(uint256(uint160(JBConstants.NATIVE_TOKEN))),
-            toRemoteFee: 0.01 ether
+            remoteToken: bytes32(uint256(uint160(JBConstants.NATIVE_TOKEN)))
         });
 
         ccipSucker.exposed_validateTokenMapping(map);
@@ -287,7 +284,7 @@ contract CCIPNativeInteropTest is Test {
 
     function test_mapToken_nativeToZero_disablesOnBoth() public view {
         JBTokenMapping memory map = JBTokenMapping({
-            localToken: JBConstants.NATIVE_TOKEN, minGas: 200_000, remoteToken: bytes32(0), toRemoteFee: 0
+            localToken: JBConstants.NATIVE_TOKEN, minGas: 200_000, remoteToken: bytes32(0)
         });
 
         ccipSucker.exposed_validateTokenMapping(map);
@@ -302,8 +299,7 @@ contract CCIPNativeInteropTest is Test {
         JBTokenMapping memory map = JBTokenMapping({
             localToken: JBConstants.NATIVE_TOKEN,
             minGas: 100_000, // Below MESSENGER_ERC20_MIN_GAS_LIMIT (200_000)
-            remoteToken: bytes32(uint256(uint160(celoETH))),
-            toRemoteFee: 0.01 ether
+            remoteToken: bytes32(uint256(uint160(celoETH)))
         });
 
         // CCIP sucker requires minGas for ALL tokens since native wraps to WETH.
@@ -410,8 +406,7 @@ contract CCIPNativeInteropTest is Test {
             enabled: true,
             emergencyHatch: false,
             minGas: 200_000,
-            addr: bytes32(uint256(uint160(celoETH))),
-            toRemoteFee: 0.01 ether
+            addr: bytes32(uint256(uint160(celoETH)))
         });
 
         JBMessageRoot memory msgRoot = JBMessageRoot({
@@ -446,8 +441,7 @@ contract CCIPNativeInteropTest is Test {
         JBTokenMapping memory map = JBTokenMapping({
             localToken: JBConstants.NATIVE_TOKEN,
             minGas: 200_000,
-            remoteToken: bytes32(uint256(uint160(celoETH))),
-            toRemoteFee: 0.01 ether
+            remoteToken: bytes32(uint256(uint160(celoETH)))
         });
         ccipSucker.exposed_validateTokenMapping(map);
 
@@ -458,8 +452,7 @@ contract CCIPNativeInteropTest is Test {
                 enabled: true,
                 emergencyHatch: false,
                 minGas: 200_000,
-                addr: bytes32(uint256(uint160(celoETH))),
-                toRemoteFee: 0.01 ether
+                addr: bytes32(uint256(uint160(celoETH)))
             })
         );
 
@@ -563,8 +556,7 @@ contract CCIPNativeInteropTest is Test {
         JBTokenMapping memory outboundMap = JBTokenMapping({
             localToken: JBConstants.NATIVE_TOKEN,
             minGas: 200_000,
-            remoteToken: bytes32(uint256(uint160(celoETH))),
-            toRemoteFee: 0.01 ether
+            remoteToken: bytes32(uint256(uint160(celoETH)))
         });
         ccipSucker.exposed_validateTokenMapping(outboundMap);
 
@@ -575,8 +567,7 @@ contract CCIPNativeInteropTest is Test {
                 enabled: true,
                 emergencyHatch: false,
                 minGas: 200_000,
-                addr: bytes32(uint256(uint160(celoETH))),
-                toRemoteFee: 0.01 ether
+                addr: bytes32(uint256(uint160(celoETH)))
             })
         );
 
@@ -588,8 +579,7 @@ contract CCIPNativeInteropTest is Test {
             enabled: true,
             emergencyHatch: false,
             minGas: 200_000,
-            addr: bytes32(uint256(uint160(celoETH))),
-            toRemoteFee: 0.01 ether
+            addr: bytes32(uint256(uint160(celoETH)))
         });
         JBMessageRoot memory sendMsg = JBMessageRoot({
             version: 1,
@@ -655,8 +645,7 @@ contract CCIPNativeInteropTest is Test {
         JBTokenMapping memory map = JBTokenMapping({
             localToken: address(0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48), // USDC-like
             minGas: 200_000,
-            remoteToken: bytes32(uint256(uint160(address(0xef4229c8c3250C675F21BCefa42f58EfbfF6002a)))), // celoUSDC-like
-            toRemoteFee: 1e6
+            remoteToken: bytes32(uint256(uint160(address(0xef4229c8c3250C675F21BCefa42f58EfbfF6002a)))) // celoUSDC-like
         });
 
         ccipSucker.exposed_validateTokenMapping(map);
@@ -671,8 +660,7 @@ contract CCIPNativeInteropTest is Test {
         JBTokenMapping memory map = JBTokenMapping({
             localToken: makeAddr("USDC"),
             minGas: 50_000, // Below MESSENGER_ERC20_MIN_GAS_LIMIT (200_000)
-            remoteToken: bytes32(uint256(uint160(makeAddr("celoUSDC")))),
-            toRemoteFee: 1e6
+            remoteToken: bytes32(uint256(uint160(makeAddr("celoUSDC"))))
         });
 
         vm.expectRevert(abi.encodeWithSelector(JBSucker.JBSucker_BelowMinGas.selector, 50_000, 200_000));
@@ -690,8 +678,7 @@ contract CCIPNativeInteropTest is Test {
         JBTokenMapping memory map = JBTokenMapping({
             localToken: JBConstants.NATIVE_TOKEN,
             minGas: 0, // Zero minGas
-            remoteToken: bytes32(uint256(uint160(JBConstants.NATIVE_TOKEN))),
-            toRemoteFee: 0.01 ether
+            remoteToken: bytes32(uint256(uint160(JBConstants.NATIVE_TOKEN)))
         });
 
         // Base sucker skips minGas for native tokens (OP/Arb bridge natively).
@@ -706,8 +693,7 @@ contract CCIPNativeInteropTest is Test {
         JBTokenMapping memory map = JBTokenMapping({
             localToken: JBConstants.NATIVE_TOKEN,
             minGas: 0, // Zero minGas
-            remoteToken: bytes32(uint256(uint160(JBConstants.NATIVE_TOKEN))),
-            toRemoteFee: 0.01 ether
+            remoteToken: bytes32(uint256(uint160(JBConstants.NATIVE_TOKEN)))
         });
 
         // CCIP sucker wraps native to WETH, so needs gas for ERC20 transfer even for native-to-native.

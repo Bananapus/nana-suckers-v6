@@ -127,6 +127,7 @@ abstract contract CCIPSuckerMainnetForkTestBase is TestBaseWorkflow {
             permissions: jbPermissions(),
             tokens: jbTokens(),
             feeProjectId: 1,
+            toRemoteFee: 0.001 ether,
             trustedForwarder: address(0)
         });
         vm.stopPrank();
@@ -171,6 +172,7 @@ abstract contract CCIPSuckerMainnetForkTestBase is TestBaseWorkflow {
             permissions: jbPermissions(),
             tokens: jbTokens(),
             feeProjectId: 1,
+            toRemoteFee: 0.001 ether,
             trustedForwarder: address(0)
         });
         vm.stopPrank();
@@ -259,8 +261,7 @@ abstract contract CCIPSuckerMainnetForkTestBase is TestBaseWorkflow {
         JBTokenMapping memory map = JBTokenMapping({
             localToken: JBConstants.NATIVE_TOKEN,
             minGas: 200_000,
-            remoteToken: bytes32(uint256(uint160(JBConstants.NATIVE_TOKEN))),
-            toRemoteFee: 1
+            remoteToken: bytes32(uint256(uint160(JBConstants.NATIVE_TOKEN)))
         });
 
         vm.prank(multisig());

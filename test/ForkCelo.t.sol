@@ -104,6 +104,7 @@ contract ForkCeloTest is TestBaseWorkflow {
             permissions: jbPermissions(),
             tokens: jbTokens(),
             feeProjectId: 1,
+            toRemoteFee: 0.001 ether,
             trustedForwarder: address(0)
         });
         vm.stopPrank();
@@ -146,6 +147,7 @@ contract ForkCeloTest is TestBaseWorkflow {
             permissions: jbPermissions(),
             tokens: jbTokens(),
             feeProjectId: 1,
+            toRemoteFee: 0.001 ether,
             trustedForwarder: address(0)
         });
         vm.stopPrank();
@@ -272,8 +274,7 @@ contract ForkCeloTest is TestBaseWorkflow {
         JBTokenMapping memory map = JBTokenMapping({
             localToken: JBConstants.NATIVE_TOKEN,
             minGas: 200_000,
-            remoteToken: bytes32(uint256(uint160(CELO_WETH))),
-            toRemoteFee: 1
+            remoteToken: bytes32(uint256(uint160(CELO_WETH)))
         });
 
         vm.prank(multisig());
@@ -332,8 +333,7 @@ contract ForkCeloTest is TestBaseWorkflow {
         JBTokenMapping memory map = JBTokenMapping({
             localToken: CELO_WETH,
             minGas: 200_000,
-            remoteToken: bytes32(uint256(uint160(address(L1_WETH)))),
-            toRemoteFee: 1
+            remoteToken: bytes32(uint256(uint160(address(L1_WETH))))
         });
 
         vm.prank(multisig());

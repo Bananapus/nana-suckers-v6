@@ -100,8 +100,12 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     /// @notice The directory of terminals and controllers for projects.
     IJBDirectory public immutable override DIRECTORY;
 
-    /// @notice The project ID that receives the `toRemoteFee` payment. Typically the protocol project (ID 1).
+    /// @notice The project ID that receives the `TO_REMOTE_FEE` payment. Typically the protocol project (ID 1).
     uint256 public immutable FEE_PROJECT_ID;
+
+    /// @notice The ETH fee (in wei) paid into the fee project via terminal.pay() on each toRemote() call.
+    /// @dev Set at deploy time — uniform across all tokens, non-bypassable by integrators.
+    uint256 public immutable TO_REMOTE_FEE;
 
     /// @notice The contract that manages token minting and burning.
     IJBTokens public immutable override TOKENS;
@@ -152,12 +156,14 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     /// @param directory A contract storing directories of terminals and controllers for each project.
     /// @param permissions A contract storing permissions.
     /// @param tokens A contract that manages token minting and burning.
-    /// @param feeProjectId The project ID that receives the `toRemoteFee` payment (typically 1).
+    /// @param feeProjectId The project ID that receives the `TO_REMOTE_FEE` payment (typically 1).
+    /// @param toRemoteFee The ETH fee (in wei) paid into the fee project on each `toRemote()` call.
     constructor(
         IJBDirectory directory,
         IJBPermissions permissions,
         IJBTokens tokens,
         uint256 feeProjectId,
+        uint256 toRemoteFee,
         address trustedForwarder
     )
         ERC2771Context(trustedForwarder)
@@ -166,6 +172,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         DIRECTORY = directory;
         TOKENS = tokens;
         FEE_PROJECT_ID = feeProjectId;
+        TO_REMOTE_FEE = toRemoteFee;
 
         // Make it so the singleton can't be initialized.
         _disableInitializers();
@@ -674,21 +681,21 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
 
         // Deduct the fee from msg.value, paying it into the fee project.
         uint256 transportPayment = msg.value;
-        if (remoteToken.toRemoteFee != 0) {
-            if (msg.value < remoteToken.toRemoteFee) {
-                revert JBSucker_InsufficientMsgValue(msg.value, remoteToken.toRemoteFee);
+        if (TO_REMOTE_FEE != 0) {
+            if (msg.value < TO_REMOTE_FEE) {
+                revert JBSucker_InsufficientMsgValue(msg.value, TO_REMOTE_FEE);
             }
-            transportPayment = msg.value - remoteToken.toRemoteFee;
+            transportPayment = msg.value - TO_REMOTE_FEE;
 
             // Pay the fee into the fee project. The caller gets fee project tokens in return.
             // Best-effort: if the terminal doesn't exist or the pay call reverts, proceed without fee.
             IJBTerminal terminal =
                 DIRECTORY.primaryTerminalOf({projectId: FEE_PROJECT_ID, token: JBConstants.NATIVE_TOKEN});
             if (address(terminal) != address(0)) {
-                try terminal.pay{value: remoteToken.toRemoteFee}({
+                try terminal.pay{value: TO_REMOTE_FEE}({
                     projectId: FEE_PROJECT_ID,
                     token: JBConstants.NATIVE_TOKEN,
-                    amount: remoteToken.toRemoteFee,
+                    amount: TO_REMOTE_FEE,
                     beneficiary: _msgSender(),
                     minReturnedTokens: 0,
                     memo: "",
@@ -924,8 +931,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
             minGas: map.minGas,
             // This is done so that a token can be disabled and then enabled again
             // while ensuring the remoteToken never changes (unless it hasn't been used yet)
-            addr: map.remoteToken == bytes32(0) ? currentMapping.addr : map.remoteToken,
-            toRemoteFee: map.toRemoteFee
+            addr: map.remoteToken == bytes32(0) ? currentMapping.addr : map.remoteToken
         });
     }
 
