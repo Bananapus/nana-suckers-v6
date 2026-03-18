@@ -6,6 +6,7 @@ import {IJBDirectory} from "@bananapus/core-v6/src/interfaces/IJBDirectory.sol";
 import {IJBPermissions} from "@bananapus/core-v6/src/interfaces/IJBPermissions.sol";
 import {IJBTokens} from "@bananapus/core-v6/src/interfaces/IJBTokens.sol";
 import "@bananapus/core-v6/script/helpers/CoreDeploymentLib.sol";
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {Sphinx} from "@sphinx-labs/contracts/contracts/foundry/SphinxPlugin.sol";
 import {Script} from "forge-std/Script.sol";
 
@@ -45,7 +46,7 @@ contract DeployScript is Script, Sphinx {
     bytes32 ARB_OP_SALT = "_SUCKER_ARB_OP_V6_";
     bytes32 OP_BASE_SALT = "_SUCKER_OP_BASE_V6_";
 
-    JBSuckerRegistry REGISTRY;
+    IJBSuckerRegistry REGISTRY;
 
     bytes32 REGISTRY_SALT = "REGISTRYV6";
 
@@ -81,15 +82,15 @@ contract DeployScript is Script, Sphinx {
         });
 
         if (!registryAlreadyDeployed) {
-            REGISTRY = new JBSuckerRegistry{salt: REGISTRY_SALT}({
+            REGISTRY = IJBSuckerRegistry(address(new JBSuckerRegistry{salt: REGISTRY_SALT}({
                 directory: core.directory,
                 permissions: core.permissions,
                 initialOwner: safeAddress(),
                 trustedForwarder: TRUSTED_FORWARDER
-            });
+            })));
         } else {
             // Compute the existing registry address.
-            REGISTRY = JBSuckerRegistry(
+            REGISTRY = IJBSuckerRegistry(
                 vm.computeCreate2Address({
                     salt: REGISTRY_SALT,
                     initCodeHash: keccak256(
@@ -123,7 +124,7 @@ contract DeployScript is Script, Sphinx {
             address feeProjectOwner = core.projects.ownerOf(1);
             if (feeProjectOwner != address(0) && feeProjectOwner != safeAddress()) {
                 // Transfer ownership to JBDAO.
-                REGISTRY.transferOwnership(feeProjectOwner);
+                Ownable(address(REGISTRY)).transferOwnership(feeProjectOwner);
             }
         }
     }
@@ -170,7 +171,7 @@ contract DeployScript is Script, Sphinx {
                 permissions: core.permissions,
                 tokens: core.tokens,
                 feeProjectId: 1,
-                registry: IJBSuckerRegistry(address(REGISTRY)),
+                registry: REGISTRY,
                 trustedForwarder: TRUSTED_FORWARDER
             });
 
@@ -203,7 +204,7 @@ contract DeployScript is Script, Sphinx {
                 permissions: core.permissions,
                 tokens: core.tokens,
                 feeProjectId: 1,
-                registry: IJBSuckerRegistry(address(REGISTRY)),
+                registry: REGISTRY,
                 trustedForwarder: TRUSTED_FORWARDER
             });
 
@@ -255,7 +256,7 @@ contract DeployScript is Script, Sphinx {
                 permissions: core.permissions,
                 tokens: core.tokens,
                 feeProjectId: 1,
-                registry: IJBSuckerRegistry(address(REGISTRY)),
+                registry: REGISTRY,
                 trustedForwarder: TRUSTED_FORWARDER
             });
 
@@ -288,7 +289,7 @@ contract DeployScript is Script, Sphinx {
                 permissions: core.permissions,
                 tokens: core.tokens,
                 feeProjectId: 1,
-                registry: IJBSuckerRegistry(address(REGISTRY)),
+                registry: REGISTRY,
                 trustedForwarder: TRUSTED_FORWARDER
             });
 
@@ -336,7 +337,7 @@ contract DeployScript is Script, Sphinx {
                 permissions: core.permissions,
                 tokens: core.tokens,
                 feeProjectId: 1,
-                registry: IJBSuckerRegistry(address(REGISTRY)),
+                registry: REGISTRY,
                 trustedForwarder: TRUSTED_FORWARDER
             });
 
@@ -372,7 +373,7 @@ contract DeployScript is Script, Sphinx {
                 permissions: core.permissions,
                 tokens: core.tokens,
                 feeProjectId: 1,
-                registry: IJBSuckerRegistry(address(REGISTRY)),
+                registry: REGISTRY,
                 trustedForwarder: TRUSTED_FORWARDER
             });
 
@@ -564,7 +565,7 @@ contract DeployScript is Script, Sphinx {
             tokens: tokens,
             permissions: permissions,
             feeProjectId: 1,
-            registry: IJBSuckerRegistry(address(REGISTRY)),
+            registry: REGISTRY,
             trustedForwarder: trustedForwarder
         });
 
