@@ -48,13 +48,16 @@ contract DeployScript is Script, Sphinx {
 
     IJBSuckerRegistry REGISTRY;
 
+    bytes32 TEMPO_SALT = "_SUCKER_ETH_TEMPO_V6";
+
     bytes32 REGISTRY_SALT = "REGISTRYV6";
 
     function configureSphinx() public override {
         // TODO: Update to contain JB Emergency Developers
         sphinxConfig.projectName = "nana-suckers-v5";
         sphinxConfig.mainnets = ["ethereum", "optimism", "base", "arbitrum"];
-        sphinxConfig.testnets = ["ethereum_sepolia", "optimism_sepolia", "base_sepolia", "arbitrum_sepolia"];
+        sphinxConfig.testnets =
+            ["ethereum_sepolia", "optimism_sepolia", "base_sepolia", "arbitrum_sepolia", "tempo_testnet"];
     }
 
     function run() public {
@@ -417,6 +420,19 @@ contract DeployScript is Script, Sphinx {
                     })
                 )
             );
+
+            // Tempo (testnet: ETH Sepolia <-> Tempo is the only verified CCIP lane).
+            if (block.chainid == 11_155_111) {
+                PRE_APPROVED_DEPLOYERS.push(
+                    address(_deployCCIPSuckerFor({salt: TEMPO_SALT, remoteChainId: CCIPHelper.TEMPO_TEST_ID}))
+                );
+            }
+            // Tempo mainnet: uncomment when Chainlink publishes Tempo CCIP mainnet config.
+            // if (block.chainid == 1) {
+            //     PRE_APPROVED_DEPLOYERS.push(
+            //         address(_deployCCIPSuckerFor({salt: TEMPO_SALT, remoteChainId: CCIPHelper.TEMPO_ID}))
+            //     );
+            // }
         }
 
         // Check if we should do the L2 portion.
@@ -514,6 +530,20 @@ contract DeployScript is Script, Sphinx {
                     })
                 )
             );
+
+            // Tempo testnet.
+        } else if (block.chainid == CCIPHelper.TEMPO_TEST_ID) {
+            // TEMPO -> ETH Sepolia.
+            PRE_APPROVED_DEPLOYERS.push(
+                address(_deployCCIPSuckerFor({salt: TEMPO_SALT, remoteChainId: CCIPHelper.ETH_SEP_ID}))
+            );
+
+            // Tempo mainnet.
+            // } else if (block.chainid == CCIPHelper.TEMPO_ID) {
+            //     // TEMPO -> ETH.
+            //     PRE_APPROVED_DEPLOYERS.push(
+            //         address(_deployCCIPSuckerFor({salt: TEMPO_SALT, remoteChainId: CCIPHelper.ETH_ID}))
+            //     );
         }
     }
 

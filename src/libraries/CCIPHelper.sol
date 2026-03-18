@@ -16,6 +16,9 @@ library CCIPHelper {
     address public constant BNB_ROUTER = 0x34B03Cb9086d7D758AC55af71584F81A598759FE;
     address public constant BASE_ROUTER = 0x881e3A65B4d4a04dD529061dd0071cf975F58bCD;
     address public constant BASE_SEP_ROUTER = 0xD3b06cEbF099CE7DA4AcCf578aaebFDBd6e88a93;
+    address public constant TEMPO_TEST_ROUTER = 0xAE7D1b3D8466718378038de45D4D376E73A04EB6;
+    // TODO: Update when Chainlink publishes Tempo CCIP mainnet config.
+    address public constant TEMPO_ROUTER = address(0);
 
     /// @notice The respective chain ids per network
     uint256 public constant ETH_ID = 1;
@@ -29,6 +32,8 @@ library CCIPHelper {
     uint256 public constant BNB_ID = 56;
     uint256 public constant BASE_ID = 8453;
     uint256 public constant BASE_SEP_ID = 84_532;
+    uint256 public constant TEMPO_TEST_ID = 42_429;
+    uint256 public constant TEMPO_ID = 4217;
 
     /// @notice The chain selector per network
     uint64 public constant ETH_SEL = 5_009_297_550_715_157_269;
@@ -42,6 +47,9 @@ library CCIPHelper {
     uint64 public constant BNB_SEL = 11_344_663_589_394_136_015;
     uint64 public constant BASE_SEL = 15_971_525_489_660_198_786;
     uint64 public constant BASE_SEP_SEL = 10_344_971_235_874_465_080;
+    uint64 public constant TEMPO_TEST_SEL = 3_963_528_237_232_804_922;
+    // TODO: Update when Chainlink publishes Tempo CCIP mainnet config.
+    uint64 public constant TEMPO_SEL = 0;
 
     /// @notice The WETH address of each chain
     address public constant ETH_WETH = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
@@ -53,6 +61,12 @@ library CCIPHelper {
     address public constant AVA_WETH = 0xB31f66AA3C1e785363F0875A1B74E27b85FD66c7;
     address public constant BNB_WETH = 0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c;
     address public constant BASE_WETH = 0x4200000000000000000000000000000000000006;
+    /// @notice WTEMP (wrapped native USD) on Tempo testnet — follows naming convention of POLY_WETH (WMATIC),
+    /// AVA_WETH
+    /// (WAVAX), etc.
+    address public constant TEMPO_TEST_WETH = 0xe875EB5437E55B74D18f6C090a5A14e4804dB2d9;
+    // TODO: Update when Tempo mainnet WTEMP address is known.
+    address public constant TEMPO_WETH = address(0);
 
     function routerOfChain(uint256 _chainId) internal pure returns (address router) {
         if (_chainId == ETH_ID) {
@@ -77,6 +91,10 @@ library CCIPHelper {
             return OP_SEP_ROUTER;
         } else if (_chainId == BASE_SEP_ID) {
             return BASE_SEP_ROUTER;
+        } else if (_chainId == TEMPO_TEST_ID) {
+            return TEMPO_TEST_ROUTER;
+        } else if (_chainId == TEMPO_ID) {
+            return TEMPO_ROUTER;
         } else {
             revert CCIPHelper_UnsupportedChain(_chainId);
         }
@@ -105,6 +123,10 @@ library CCIPHelper {
             return OP_SEP_SEL;
         } else if (_chainId == BASE_SEP_ID) {
             return BASE_SEP_SEL;
+        } else if (_chainId == TEMPO_TEST_ID) {
+            return TEMPO_TEST_SEL;
+        } else if (_chainId == TEMPO_ID) {
+            return TEMPO_SEL;
         } else {
             revert CCIPHelper_UnsupportedChain(_chainId);
         }
@@ -129,6 +151,10 @@ library CCIPHelper {
             return ETH_SEP_WETH;
         } else if (_chainId == ARB_SEP_ID) {
             return ARB_SEP_WETH;
+        } else if (_chainId == TEMPO_TEST_ID) {
+            return TEMPO_TEST_WETH;
+        } else if (_chainId == TEMPO_ID) {
+            return TEMPO_WETH;
         } else {
             revert CCIPHelper_UnsupportedChain(_chainId);
         }
