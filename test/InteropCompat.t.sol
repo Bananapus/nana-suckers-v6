@@ -134,12 +134,8 @@ contract InteropCompat is Test {
     InteropTestSucker sucker;
 
     function setUp() public {
-        InteropTestSucker singleton = new InteropTestSucker(
-            IJBDirectory(DIRECTORY),
-            IJBPermissions(PERMISSIONS),
-            IJBTokens(TOKENS),
-            FORWARDER
-        );
+        InteropTestSucker singleton =
+            new InteropTestSucker(IJBDirectory(DIRECTORY), IJBPermissions(PERMISSIONS), IJBTokens(TOKENS), FORWARDER);
 
         sucker = InteropTestSucker(payable(address(LibClone.cloneDeterministic(address(singleton), "interop"))));
         sucker.initialize(1);

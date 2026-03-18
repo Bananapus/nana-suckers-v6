@@ -351,12 +351,8 @@ contract SuckerInvariantsTest is Test {
         vm.label(PROJECT, "MOCK_PROJECT");
         vm.label(TERMINAL, "MOCK_TERMINAL");
 
-        InvariantSucker singleton = new InvariantSucker(
-            IJBDirectory(DIRECTORY),
-            IJBPermissions(PERMISSIONS),
-            IJBTokens(TOKENS),
-            FORWARDER
-        );
+        InvariantSucker singleton =
+            new InvariantSucker(IJBDirectory(DIRECTORY), IJBPermissions(PERMISSIONS), IJBTokens(TOKENS), FORWARDER);
         sucker = InvariantSucker(payable(address(LibClone.cloneDeterministic(address(singleton), "invariant_salt"))));
         sucker.initialize(PROJECT_ID);
 

@@ -48,7 +48,6 @@ contract CCIPSuckerForkedTests is TestBaseWorkflow {
     // Re-used parameters for project/ruleset/sucker setups
     JBRulesetMetadata _metadata;
 
-
     // Sucker and token
     JBCCIPSuckerDeployer suckerDeployer;
     JBCCIPSuckerDeployer suckerDeployer2;

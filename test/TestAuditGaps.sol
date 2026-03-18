@@ -206,12 +206,8 @@ contract TestAuditGaps is Test {
     }
 
     function _createTestSucker(uint256 projectId, bytes32 salt) internal returns (AuditGapSucker) {
-        AuditGapSucker singleton = new AuditGapSucker(
-            IJBDirectory(DIRECTORY),
-            IJBPermissions(PERMISSIONS),
-            IJBTokens(TOKENS),
-            FORWARDER
-        );
+        AuditGapSucker singleton =
+            new AuditGapSucker(IJBDirectory(DIRECTORY), IJBPermissions(PERMISSIONS), IJBTokens(TOKENS), FORWARDER);
 
         AuditGapSucker clone = AuditGapSucker(payable(address(LibClone.cloneDeterministic(address(singleton), salt))));
         clone.initialize(projectId);

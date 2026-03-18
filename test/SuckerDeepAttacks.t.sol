@@ -215,12 +215,8 @@ contract SuckerDeepAttacks is Test {
     }
 
     function _createTestSucker(uint256 projectId, bytes32 salt) internal returns (DeepAttackSucker) {
-        DeepAttackSucker singleton = new DeepAttackSucker(
-            IJBDirectory(DIRECTORY),
-            IJBPermissions(PERMISSIONS),
-            IJBTokens(TOKENS),
-            FORWARDER
-        );
+        DeepAttackSucker singleton =
+            new DeepAttackSucker(IJBDirectory(DIRECTORY), IJBPermissions(PERMISSIONS), IJBTokens(TOKENS), FORWARDER);
 
         DeepAttackSucker clone =
             DeepAttackSucker(payable(address(LibClone.cloneDeterministic(address(singleton), salt))));

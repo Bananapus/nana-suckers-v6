@@ -345,12 +345,10 @@ contract SuckerRegressionsTest is Test {
     // =========================================================================
 
     function _createSucker(bytes32 salt) internal returns (RegressionSucker) {
-        RegressionSucker singleton = new RegressionSucker(
-            IJBDirectory(DIRECTORY), IJBPermissions(PERMISSIONS), IJBTokens(TOKENS), FORWARDER
-        );
+        RegressionSucker singleton =
+            new RegressionSucker(IJBDirectory(DIRECTORY), IJBPermissions(PERMISSIONS), IJBTokens(TOKENS), FORWARDER);
 
-        RegressionSucker s =
-            RegressionSucker(payable(address(LibClone.cloneDeterministic(address(singleton), salt))));
+        RegressionSucker s = RegressionSucker(payable(address(LibClone.cloneDeterministic(address(singleton), salt))));
         s.initialize(PROJECT_ID);
 
         return s;

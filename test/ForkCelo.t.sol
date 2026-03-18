@@ -372,5 +372,4 @@ contract ForkCeloTest is TestBaseWorkflow {
         }
         assertTrue(foundBridgeEvent, "OP bridge/messenger should have emitted events");
     }
-
 }

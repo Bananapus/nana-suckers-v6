@@ -216,12 +216,8 @@ contract SuckerEmergencyTest is Test {
 
     function _createTestSucker(uint256 projectId, bytes32 salt) internal returns (TestSucker) {
         // Singleton.
-        TestSucker singleton = new TestSucker(
-            IJBDirectory(DIRECTORY),
-            IJBPermissions(PERMISSIONS),
-            IJBTokens(TOKENS),
-            FORWARDER
-        );
+        TestSucker singleton =
+            new TestSucker(IJBDirectory(DIRECTORY), IJBPermissions(PERMISSIONS), IJBTokens(TOKENS), FORWARDER);
         vm.label(address(singleton), "SUCKER_SINGLETON");
 
         // Clone the singleton and initialize the clone.

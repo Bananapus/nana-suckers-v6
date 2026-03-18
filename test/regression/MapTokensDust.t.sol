@@ -182,12 +182,8 @@ contract MapTokensDustTest is Test {
     }
 
     function _createTestSucker(uint256 _projectId, bytes32 salt) internal returns (MapTokensDustSucker) {
-        MapTokensDustSucker singleton = new MapTokensDustSucker(
-            IJBDirectory(DIRECTORY),
-            IJBPermissions(PERMISSIONS),
-            IJBTokens(TOKENS),
-            FORWARDER
-        );
+        MapTokensDustSucker singleton =
+            new MapTokensDustSucker(IJBDirectory(DIRECTORY), IJBPermissions(PERMISSIONS), IJBTokens(TOKENS), FORWARDER);
         vm.label(address(singleton), "SUCKER_SINGLETON");
 
         MapTokensDustSucker sucker =

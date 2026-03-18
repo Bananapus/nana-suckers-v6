@@ -168,12 +168,8 @@ contract SuckerAttacks is Test {
     }
 
     function _createTestSucker(uint256 projectId, bytes32 salt) internal returns (AttackTestSucker) {
-        AttackTestSucker singleton = new AttackTestSucker(
-            IJBDirectory(DIRECTORY),
-            IJBPermissions(PERMISSIONS),
-            IJBTokens(TOKENS),
-            FORWARDER
-        );
+        AttackTestSucker singleton =
+            new AttackTestSucker(IJBDirectory(DIRECTORY), IJBPermissions(PERMISSIONS), IJBTokens(TOKENS), FORWARDER);
 
         AttackTestSucker clone =
             AttackTestSucker(payable(address(LibClone.cloneDeterministic(address(singleton), salt))));
