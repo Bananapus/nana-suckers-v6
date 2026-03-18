@@ -14,6 +14,7 @@ import {LibClone} from "solady/src/utils/LibClone.sol";
 
 import "../src/JBSucker.sol";
 
+import {IJBSuckerRegistry} from "../src/interfaces/IJBSuckerRegistry.sol";
 import {JBClaim} from "../src/structs/JBClaim.sol";
 import {JBLeaf} from "../src/structs/JBLeaf.sol";
 import {JBInboxTreeRoot} from "../src/structs/JBInboxTreeRoot.sol";
@@ -39,7 +40,7 @@ contract RegressionSucker is JBSucker {
         IJBTokens tokens,
         address forwarder
     )
-        JBSucker(directory, permissions, tokens, 1, forwarder)
+        JBSucker(directory, permissions, tokens, 1, IJBSuckerRegistry(address(1)), forwarder)
     {}
 
     function _sendRootOverAMB(
@@ -155,6 +156,11 @@ contract SuckerRegressionsTest is Test {
         );
         // Mock terminal.addToBalanceOf to accept any call (including payable for native token).
         vm.mockCall(TERMINAL, abi.encodeWithSelector(IJBTerminal.addToBalanceOf.selector), abi.encode());
+        // Mock terminal.pay so the toRemote fee payment try-catch doesn't revert on ABI decode of empty return data.
+        vm.mockCall(TERMINAL, abi.encodeWithSelector(IJBTerminal.pay.selector), abi.encode(uint256(0)));
+
+        // Mock the registry's toRemoteFee() to return 0 (registry is address(1) with no code).
+        vm.mockCall(address(1), abi.encodeCall(IJBSuckerRegistry.toRemoteFee, ()), abi.encode(uint256(0)));
     }
 
     // =========================================================================
@@ -162,18 +168,17 @@ contract SuckerRegressionsTest is Test {
     // =========================================================================
 
     /// @notice Verifies that `toRemote()` reverts with NothingToSend when the outbox tree is empty.
-    /// @dev With the toRemoteFee change, the "nothing to send" guard catches this case:
+    /// @dev The "nothing to send" guard catches this case:
     /// balance == 0 && tree.count == numberOfClaimsSent → revert.
     function test_L5_toRemoteWithEmptyTreeReverts() public {
-        // Map a token with toRemoteFee = 0.
+        // Map a token.
         sucker.test_setRemoteToken(
             TOKEN,
             JBRemoteToken({
                 enabled: true,
                 emergencyHatch: false,
                 minGas: 200_000,
-                addr: bytes32(uint256(uint160(makeAddr("remoteToken")))),
-                toRemoteFee: 0
+                addr: bytes32(uint256(uint160(makeAddr("remoteToken"))))
             })
         );
 
@@ -187,15 +192,14 @@ contract SuckerRegressionsTest is Test {
 
     /// @notice Verifies that `toRemote()` still works normally when the tree has entries.
     function test_L5_toRemoteWithNonEmptyTreeStillWorks() public {
-        // Map a token with toRemoteFee = 0.
+        // Map a token.
         sucker.test_setRemoteToken(
             TOKEN,
             JBRemoteToken({
                 enabled: true,
                 emergencyHatch: false,
                 minGas: 200_000,
-                addr: bytes32(uint256(uint160(makeAddr("remoteToken")))),
-                toRemoteFee: 0
+                addr: bytes32(uint256(uint160(makeAddr("remoteToken"))))
             })
         );
 

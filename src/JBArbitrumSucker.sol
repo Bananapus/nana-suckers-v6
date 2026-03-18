@@ -16,6 +16,7 @@ import {BitMaps} from "@openzeppelin/contracts/utils/structs/BitMaps.sol";
 
 import {JBSucker} from "./JBSucker.sol";
 import {JBArbitrumSuckerDeployer} from "./deployers/JBArbitrumSuckerDeployer.sol";
+import {IJBSuckerRegistry} from "./interfaces/IJBSuckerRegistry.sol";
 import {JBLayer} from "./enums/JBLayer.sol";
 import {IArbGatewayRouter} from "./interfaces/IArbGatewayRouter.sol";
 import {IArbL1GatewayRouter} from "./interfaces/IArbL1GatewayRouter.sol";
@@ -63,9 +64,10 @@ contract JBArbitrumSucker is JBSucker, IJBArbitrumSucker {
         IJBPermissions permissions,
         IJBTokens tokens,
         uint256 feeProjectId,
+        IJBSuckerRegistry registry,
         address trustedForwarder
     )
-        JBSucker(directory, permissions, tokens, feeProjectId, trustedForwarder)
+        JBSucker(directory, permissions, tokens, feeProjectId, registry, trustedForwarder)
     {
         GATEWAYROUTER = JBArbitrumSuckerDeployer(deployer).arbGatewayRouter();
         ARBINBOX = JBArbitrumSuckerDeployer(deployer).arbInbox();

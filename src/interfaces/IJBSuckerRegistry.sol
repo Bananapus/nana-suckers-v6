@@ -34,11 +34,21 @@ interface IJBSuckerRegistry {
     /// @param caller The address that removed the sucker.
     event SuckerDeprecated(uint256 projectId, address sucker, address caller);
 
+    /// @notice Emitted when the toRemoteFee is changed.
+    /// @param oldFee The previous fee.
+    /// @param newFee The new fee.
+    /// @param caller The address that changed the fee.
+    event ToRemoteFeeChanged(uint256 oldFee, uint256 newFee, address caller);
+
     // View functions
 
     /// @notice The Juicebox directory.
     /// @return The directory contract.
     function DIRECTORY() external view returns (IJBDirectory);
+
+    /// @notice The maximum ETH fee (in wei) that the owner can set via setToRemoteFee().
+    /// @return The max fee constant.
+    function MAX_TO_REMOTE_FEE() external view returns (uint256);
 
     /// @notice The project registry.
     /// @return The projects contract.
@@ -65,6 +75,10 @@ interface IJBSuckerRegistry {
     /// @param projectId The ID of the project.
     /// @return The addresses of the suckers.
     function suckersOf(uint256 projectId) external view returns (address[] memory);
+
+    /// @notice The ETH fee (in wei) paid into the fee project on each toRemote() call.
+    /// @return The current fee.
+    function toRemoteFee() external view returns (uint256);
 
     // State-changing functions
 
@@ -97,4 +111,8 @@ interface IJBSuckerRegistry {
     /// @notice Remove a sucker deployer from the allowlist.
     /// @param deployer The address of the deployer to remove.
     function removeSuckerDeployer(address deployer) external;
+
+    /// @notice Set the ETH fee (in wei) paid on each toRemote() call. Owner only.
+    /// @param fee The new fee amount in wei.
+    function setToRemoteFee(uint256 fee) external;
 }

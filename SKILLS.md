@@ -8,13 +8,13 @@ Cross-chain token and fund bridging for Juicebox V6 projects, using merkle trees
 
 | Contract | Role |
 |----------|------|
-| `JBSucker` | Abstract base with full lifecycle: prepare, toRemote, fromRemote, claim, emergency hatch, deprecation. Manages outbox/inbox merkle trees per terminal token. Uses `ERC2771Context` for meta-transactions. Deployed as minimal clones via `Initializable`. Has an immutable `FEE_PROJECT_ID` (typically project ID 1) that receives `toRemoteFee` payments via `terminal.pay()`. |
+| `JBSucker` | Abstract base with full lifecycle: prepare, toRemote, fromRemote, claim, emergency hatch, deprecation. Manages outbox/inbox merkle trees per terminal token. Uses `ERC2771Context` for meta-transactions. Deployed as minimal clones via `Initializable`. Has immutable `FEE_PROJECT_ID` (typically project ID 1) and immutable `REGISTRY` (`IJBSuckerRegistry`). Reads the global `toRemoteFee` from the registry via `REGISTRY.toRemoteFee()` -- fee administration is centralized in `JBSuckerRegistry`, not per-clone. |
 | `JBCCIPSucker` | CCIP bridge implementation. Implements `IAny2EVMMessageReceiver.ccipReceive`. Wraps native ETH to WETH before bridging (CCIP only transports ERC-20s), unwraps on receive. Overrides `_validateTokenMapping` to allow `NATIVE_TOKEN` mapping to ERC-20 addresses (for chains where ETH is not native). Refunds excess transport payment after `ccipSend` via low-level call (does not revert on refund failure). |
 | `JBOptimismSucker` | OP Stack bridge implementation. Uses `IOPMessenger.sendMessage` for merkle roots and `IOPStandardBridge.bridgeERC20To` for ERC-20s. No transport payment required (`msg.value` must be 0 for ERC-20 bridging). Native tokens are sent as `msg.value` on `sendMessage`. |
 | `JBBaseSucker` | Extends `JBOptimismSucker` with Base<->Ethereum chain ID mapping (1<->8453, 11155111<->84532). |
 | `JBCeloSucker` | Extends `JBOptimismSucker` for Celo (OP Stack, custom gas token CELO). Wraps native ETH → WETH before bridging as ERC-20. Unwraps received WETH → native ETH via `_addToBalance` override. Removes `NATIVE_TOKEN → NATIVE_TOKEN` restriction. Sends messenger messages with `nativeValue = 0` (Celo's native token is CELO, not ETH). |
 | `JBArbitrumSucker` | Arbitrum bridge implementation. Uses `unsafeCreateRetryableTicket` for L1->L2 (avoids address aliasing of refund address), `ArbSys.sendTxToL1` for L2->L1. Uses `IArbL1GatewayRouter.outboundTransferCustomRefund` for L1->L2 ERC-20 bridging, `IArbL2GatewayRouter.outboundTransfer` for L2->L1. Requires `msg.value` for L1->L2 transport. Verifies remote peer via Arbitrum bridge outbox on L1, via `AddressAliasHelper` on L2. |
-| `JBSuckerRegistry` | Entry point for deploying and tracking suckers. Manages deployer allowlist (owner-only). Requires `DEPLOY_SUCKERS` permission to deploy. Tracks suckers via `EnumerableMap`. Can remove deprecated suckers via `removeDeprecatedSucker` (callable by anyone). |
+| `JBSuckerRegistry` | Entry point for deploying and tracking suckers. Manages deployer allowlist (owner-only). Requires `DEPLOY_SUCKERS` permission to deploy. Tracks suckers via `EnumerableMap`. Can remove deprecated suckers via `removeDeprecatedSucker` (callable by anyone). Owns the global `toRemoteFee` (ETH fee in wei, capped at `MAX_TO_REMOTE_FEE` = 0.001 ether), adjustable by the registry owner via `setToRemoteFee()`. Initialized to `MAX_TO_REMOTE_FEE` at construction. All suckers read the fee from the registry -- one call changes the fee everywhere. |
 | `JBSuckerDeployer` | Abstract deployer base. Uses Solady `LibClone.cloneDeterministic` to deploy suckers as minimal proxies. Two-phase setup: `setChainSpecificConstants` (bridge addresses) then `configureSingleton` (sucker implementation). Both are one-shot calls restricted to `LAYER_SPECIFIC_CONFIGURATOR`. |
 | `JBCCIPSuckerDeployer` | CCIP-specific deployer. Stores `ccipRouter` (`ICCIPRouter`), `ccipRemoteChainId` (`uint256`), `ccipRemoteChainSelector` (`uint64`). |
 | `JBOptimismSuckerDeployer` | OP-specific deployer. Stores `opMessenger` (`IOPMessenger`), `opBridge` (`IOPStandardBridge`). |
@@ -28,7 +28,8 @@ Cross-chain token and fund bridging for Juicebox V6 projects, using merkle trees
 | Function | Contract | What it does |
 |----------|----------|--------------|
 | `prepare(projectTokenCount, beneficiary, minTokensReclaimed, token)` | `JBSucker` | Transfers project tokens (ERC-20) from caller via `safeTransferFrom`, cashes them out at the project's primary terminal for the specified terminal token, inserts a leaf into the outbox merkle tree. `beneficiary` is `bytes32` for cross-VM compatibility. Amounts are capped at `uint128` for SVM compatibility. Reverts if token not mapped, sucker deprecated/sending-disabled, beneficiary is zero, or project has no ERC-20 token. |
-| `toRemote(token)` | `JBSucker` | Sends the outbox merkle root and accumulated funds for `token` to the peer sucker on the remote chain via the bridge. Reverts with `NothingToSend` if outbox is empty (balance==0 and count==numberOfClaimsSent). If `toRemoteFee != 0`, deducts the fee from `msg.value` and pays it into the fee project (`FEE_PROJECT_ID`, typically project ID 1) via `terminal.pay()` (caller gets project tokens). Best-effort: if the fee project has no native token terminal or `terminal.pay()` reverts, proceeds without fee. Remainder is passed as `transportPayment` to the bridge. Increments outbox nonce. Updates `numberOfClaimsSent` to current tree count. Reverts if emergency hatch is open for the token. |
+| `toRemote(token)` | `JBSucker` | Sends the outbox merkle root and accumulated funds for `token` to the peer sucker on the remote chain via the bridge. Reverts with `NothingToSend` if outbox is empty (balance==0 and count==numberOfClaimsSent). Reads the fee via `REGISTRY.toRemoteFee()`. If the fee != 0, deducts it from `msg.value` and pays it into the fee project (`FEE_PROJECT_ID`, typically project ID 1) via `terminal.pay()` (caller gets project tokens). Best-effort: if the fee project has no native token terminal or `terminal.pay()` reverts, proceeds without fee. Remainder is passed as `transportPayment` to the bridge. Increments outbox nonce. Updates `numberOfClaimsSent` to current tree count. Reverts if emergency hatch is open for the token. |
+| `setToRemoteFee(fee)` | `JBSuckerRegistry` | Sets the global `toRemoteFee` for all suckers. Restricted to the registry owner via OpenZeppelin `Ownable` (`onlyOwner`). The fee must be <= `MAX_TO_REMOTE_FEE` (0.001 ether). Emits `ToRemoteFeeChanged`. |
 | `fromRemote(root)` | `JBSucker` | Receives a merkle root from the remote peer. Validates `MESSAGE_VERSION` (reverts on mismatch). Updates inbox tree only if received nonce > current inbox nonce AND sucker is not `DEPRECATED`. Does NOT revert on stale nonce -- emits `StaleRootRejected` instead (to avoid losing native tokens sent with the message). |
 | `claim(claimData)` | `JBSucker` | Verifies a merkle proof against the inbox tree, marks the leaf as executed (prevents double-spend), mints project tokens for the beneficiary via `IJBController.mintTokensOf` (with `useReservedPercent: false`), and adds terminal tokens to the project's balance. |
 | `claim(claims[])` | `JBSucker` | Batch version -- iterates and calls `claim(JBClaim)` for each. |
@@ -56,7 +57,7 @@ Cross-chain token and fund bridging for Juicebox V6 projects, using merkle trees
 | `@bananapus/permission-ids-v6` | `JBPermissionIds` | `MAP_SUCKER_TOKEN`, `DEPLOY_SUCKERS`, `SUCKER_SAFETY`, `SET_SUCKER_DEPRECATION`, `MINT_TOKENS` |
 | `@chainlink/contracts-ccip` | `Client`, `IAny2EVMMessageReceiver` | CCIP message encoding/decoding (`EVM2AnyMessage`, `Any2EVMMessage`), receiver interface |
 | `@arbitrum/nitro-contracts` | `IInbox`, `IOutbox`, `IBridge`, `ArbSys`, `AddressAliasHelper` | Arbitrum retryable tickets, L2->L1 messages, L1/L2 address aliasing verification |
-| `@openzeppelin/contracts` | `SafeERC20`, `BitMaps`, `ERC165`, `Initializable`, `Ownable`, `ERC2771Context`, `EnumerableMap` | Token safety, leaf execution tracking, clone initialization, registry ownership, meta-transactions, sucker enumeration |
+| `@openzeppelin/contracts` | `SafeERC20`, `BitMaps`, `ERC165`, `Initializable`, `Ownable`, `ERC2771Context`, `EnumerableMap` | Token safety, leaf execution tracking, clone initialization, registry ownership and fee administration, meta-transactions, sucker enumeration. Note: `Ownable` is used by `JBSuckerRegistry` (not `JBSucker`). |
 | `solady` | `LibClone` | Deterministic minimal proxy deployment (`cloneDeterministic`) |
 
 ## Key Types
@@ -68,8 +69,8 @@ Cross-chain token and fund bridging for Juicebox V6 projects, using merkle trees
 | `JBOutboxTree` | `nonce` (uint64), `balance` (uint256), `tree` (MerkleLib.Tree), `numberOfClaimsSent` (uint256) | Per-token outbox state in `JBSucker` |
 | `JBInboxTreeRoot` | `nonce` (uint64), `root` (bytes32) | Per-token inbox state in `JBSucker` |
 | `JBMessageRoot` | `version` (uint8), `token` (bytes32), `amount` (uint256), `remoteRoot` (`JBInboxTreeRoot`) | Cross-chain message payload sent via bridge |
-| `JBRemoteToken` | `enabled` (bool), `emergencyHatch` (bool), `minGas` (uint32), `addr` (bytes32), `toRemoteFee` (uint256) | Token mapping config stored in `_remoteTokenFor[token]` |
-| `JBTokenMapping` | `localToken` (address), `minGas` (uint32), `remoteToken` (bytes32), `toRemoteFee` (uint256) | Input for `mapToken`/`mapTokens` |
+| `JBRemoteToken` | `enabled` (bool), `emergencyHatch` (bool), `minGas` (uint32), `addr` (bytes32) | Token mapping config stored in `_remoteTokenFor[token]` |
+| `JBTokenMapping` | `localToken` (address), `minGas` (uint32), `remoteToken` (bytes32) | Input for `mapToken`/`mapTokens` |
 | `JBSuckerDeployerConfig` | `deployer` (`IJBSuckerDeployer`), `mappings` (`JBTokenMapping[]`) | Input for `deploySuckersFor` |
 | `JBSuckersPair` | `local` (address), `remote` (bytes32), `remoteChainId` (uint256) | Return type for `suckerPairsOf` |
 | `JBSuckerState` | `ENABLED` (0), `DEPRECATION_PENDING` (1), `SENDING_DISABLED` (2), `DEPRECATED` (3) | Deprecation lifecycle states |
@@ -79,7 +80,10 @@ Cross-chain token and fund bridging for Juicebox V6 projects, using merkle trees
 
 | Name | Value | Context |
 |------|-------|---------|
-| `FEE_PROJECT_ID` | Set at construction (typically `1`) | The project that receives `toRemoteFee` payments via `terminal.pay()`. Immutable. |
+| `FEE_PROJECT_ID` | Set at construction (typically `1`) | The project that receives `toRemoteFee` payments via `terminal.pay()`. Immutable on `JBSucker`. |
+| `REGISTRY` | Set at construction | The `IJBSuckerRegistry` that manages the global `toRemoteFee`. Immutable on `JBSucker`. |
+| `toRemoteFee` | Storage variable on `JBSuckerRegistry`, initialized to `MAX_TO_REMOTE_FEE` | ETH fee (in wei) paid into the fee project on each `toRemote()` call. Adjustable by the registry owner via `setToRemoteFee()`, capped at `MAX_TO_REMOTE_FEE`. Global -- applies to all suckers. |
+| `MAX_TO_REMOTE_FEE` | `0.001 ether` | Hard cap on what `toRemoteFee` can be set to. Constant on `JBSuckerRegistry`. |
 | `MESSENGER_BASE_GAS_LIMIT` | `300_000` | Minimum gas for cross-chain `fromRemote` call |
 | `MESSENGER_ERC20_MIN_GAS_LIMIT` | `200_000` | Minimum gas for ERC-20 transfer on remote chain |
 | `_TREE_DEPTH` | `32` | Merkle tree depth (max ~4B leaves) |
@@ -137,9 +141,8 @@ Cross-chain token and fund bridging for Juicebox V6 projects, using merkle trees
 // Map WETH (ERC-20) on Ethereum to WETH (ERC-20) on Celo
 JBTokenMapping({
     localToken: WETH_ETHEREUM,
-    remoteToken: bytes32(uint256(uint160(WETH_CELO))),
     minGas: 200_000,
-    toRemoteFee: 0.01 ether
+    remoteToken: bytes32(uint256(uint160(WETH_CELO)))
 })
 ```
 
@@ -148,9 +151,8 @@ JBTokenMapping({
 // NATIVE_TOKEN on Ethereum is ETH, but on Celo it's CELO!
 JBTokenMapping({
     localToken: JBConstants.NATIVE_TOKEN,
-    remoteToken: bytes32(uint256(uint160(JBConstants.NATIVE_TOKEN))),  // WRONG
     minGas: 200_000,
-    toRemoteFee: 0.01 ether
+    remoteToken: bytes32(uint256(uint160(JBConstants.NATIVE_TOKEN)))  // WRONG
 })
 ```
 
@@ -191,8 +193,7 @@ JBTokenMapping[] memory mappings = new JBTokenMapping[](1);
 mappings[0] = JBTokenMapping({
     localToken: JBConstants.NATIVE_TOKEN,
     minGas: 200_000,
-    remoteToken: bytes32(uint256(uint160(JBConstants.NATIVE_TOKEN))),
-    toRemoteFee: 0.025 ether
+    remoteToken: bytes32(uint256(uint160(JBConstants.NATIVE_TOKEN)))
 });
 
 // 3. Deploy the sucker

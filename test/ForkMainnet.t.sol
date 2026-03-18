@@ -10,6 +10,7 @@ import {JBPermissionIds} from "@bananapus/permission-ids-v6/src/JBPermissionIds.
 import {ICCIPRouter} from "src/interfaces/ICCIPRouter.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {JBTokenMapping} from "../src/structs/JBTokenMapping.sol";
+import {IJBSuckerRegistry} from "../src/interfaces/IJBSuckerRegistry.sol";
 
 import "forge-std/Test.sol";
 import {JBCCIPSuckerDeployer} from "src/deployers/JBCCIPSuckerDeployer.sol";
@@ -127,6 +128,7 @@ abstract contract CCIPSuckerMainnetForkTestBase is TestBaseWorkflow {
             permissions: jbPermissions(),
             tokens: jbTokens(),
             feeProjectId: 1,
+            registry: IJBSuckerRegistry(address(0)),
             trustedForwarder: address(0)
         });
         vm.stopPrank();
@@ -171,6 +173,7 @@ abstract contract CCIPSuckerMainnetForkTestBase is TestBaseWorkflow {
             permissions: jbPermissions(),
             tokens: jbTokens(),
             feeProjectId: 1,
+            registry: IJBSuckerRegistry(address(0)),
             trustedForwarder: address(0)
         });
         vm.stopPrank();
@@ -185,6 +188,9 @@ abstract contract CCIPSuckerMainnetForkTestBase is TestBaseWorkflow {
         _launchProject();
         jbPermissions().setPermissionsFor(multisig(), permsL2);
         vm.stopPrank();
+
+        // Mock the registry's toRemoteFee() to return 0 (registry is address(0) with no code).
+        vm.mockCall(address(0), abi.encodeCall(IJBSuckerRegistry.toRemoteFee, ()), abi.encode(uint256(0)));
     }
 
     /// @notice Launch a project that accepts only native token.
@@ -259,8 +265,7 @@ abstract contract CCIPSuckerMainnetForkTestBase is TestBaseWorkflow {
         JBTokenMapping memory map = JBTokenMapping({
             localToken: JBConstants.NATIVE_TOKEN,
             minGas: 200_000,
-            remoteToken: bytes32(uint256(uint160(JBConstants.NATIVE_TOKEN))),
-            toRemoteFee: 1
+            remoteToken: bytes32(uint256(uint160(JBConstants.NATIVE_TOKEN)))
         });
 
         vm.prank(multisig());

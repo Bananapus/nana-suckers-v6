@@ -20,6 +20,7 @@ import {JBInboxTreeRoot} from "../../src/structs/JBInboxTreeRoot.sol";
 import {JBMessageRoot} from "../../src/structs/JBMessageRoot.sol";
 import {JBOutboxTree} from "../../src/structs/JBOutboxTree.sol";
 import {JBRemoteToken} from "../../src/structs/JBRemoteToken.sol";
+import {IJBSuckerRegistry} from "../../src/interfaces/IJBSuckerRegistry.sol";
 import {MerkleLib} from "../../src/utils/MerkleLib.sol";
 
 /// @notice Test sucker with exposed helpers for invariant testing.
@@ -35,7 +36,7 @@ contract InvariantSucker is JBSucker {
         IJBTokens tokens,
         address forwarder
     )
-        JBSucker(directory, permissions, tokens, 1, forwarder)
+        JBSucker(directory, permissions, tokens, 1, IJBSuckerRegistry(address(1)), forwarder)
     {}
 
     function _sendRootOverAMB(
@@ -363,8 +364,7 @@ contract SuckerInvariantsTest is Test {
                 enabled: true,
                 emergencyHatch: false,
                 minGas: 200_000,
-                addr: bytes32(uint256(uint160(makeAddr("remoteToken")))),
-                toRemoteFee: 0
+                addr: bytes32(uint256(uint160(makeAddr("remoteToken"))))
             })
         );
 
@@ -375,6 +375,8 @@ contract SuckerInvariantsTest is Test {
         vm.mockCall(
             DIRECTORY, abi.encodeCall(IJBDirectory.primaryTerminalOf, (PROJECT_ID, TOKEN)), abi.encode(TERMINAL)
         );
+        // Mock terminal.pay so the toRemote fee payment try-catch doesn't revert on ABI decode of empty return data.
+        vm.mockCall(TERMINAL, abi.encodeWithSelector(IJBTerminal.pay.selector), abi.encode(uint256(0)));
 
         // Create handler and target it for invariant testing.
         handler = new SuckerHandler(sucker);

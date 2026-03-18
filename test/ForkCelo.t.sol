@@ -16,6 +16,7 @@ import {IWrappedNativeToken} from "../src/interfaces/IWrappedNativeToken.sol";
 import "forge-std/Test.sol";
 import {JBCeloSuckerDeployer} from "src/deployers/JBCeloSuckerDeployer.sol";
 import {JBCeloSucker} from "../src/JBCeloSucker.sol";
+import {IJBSuckerRegistry} from "../src/interfaces/IJBSuckerRegistry.sol";
 
 /// @notice Fork test for `JBCeloSucker` — OP Stack sucker for Celo (custom gas token chain).
 ///
@@ -104,6 +105,7 @@ contract ForkCeloTest is TestBaseWorkflow {
             permissions: jbPermissions(),
             tokens: jbTokens(),
             feeProjectId: 1,
+            registry: IJBSuckerRegistry(address(0)),
             trustedForwarder: address(0)
         });
         vm.stopPrank();
@@ -146,6 +148,7 @@ contract ForkCeloTest is TestBaseWorkflow {
             permissions: jbPermissions(),
             tokens: jbTokens(),
             feeProjectId: 1,
+            registry: IJBSuckerRegistry(address(0)),
             trustedForwarder: address(0)
         });
         vm.stopPrank();
@@ -162,6 +165,12 @@ contract ForkCeloTest is TestBaseWorkflow {
         jbPermissions().setPermissionsFor(multisig(), permsL2);
         _launchWethProject();
         vm.stopPrank();
+
+        // Mock the registry's toRemoteFee() on both forks (registry is address(0) in tests).
+        vm.selectFork(l1Fork);
+        vm.mockCall(address(0), abi.encodeCall(IJBSuckerRegistry.toRemoteFee, ()), abi.encode(uint256(0)));
+        vm.selectFork(l2Fork);
+        vm.mockCall(address(0), abi.encodeCall(IJBSuckerRegistry.toRemoteFee, ()), abi.encode(uint256(0)));
     }
 
     /// @notice Launch a project on L1 that accepts native ETH.
@@ -270,10 +279,7 @@ contract ForkCeloTest is TestBaseWorkflow {
 
         // Map native ETH → Celo WETH (ERC-20 on remote).
         JBTokenMapping memory map = JBTokenMapping({
-            localToken: JBConstants.NATIVE_TOKEN,
-            minGas: 200_000,
-            remoteToken: bytes32(uint256(uint160(CELO_WETH))),
-            toRemoteFee: 1
+            localToken: JBConstants.NATIVE_TOKEN, minGas: 200_000, remoteToken: bytes32(uint256(uint160(CELO_WETH)))
         });
 
         vm.prank(multisig());
@@ -330,10 +336,7 @@ contract ForkCeloTest is TestBaseWorkflow {
         // Map Celo WETH → L1 WETH. The OP bridge's L2StandardBridge validates that the
         // remoteToken matches the Optimism Mintable ERC20's REMOTE_TOKEN() — must be L1 WETH.
         JBTokenMapping memory map = JBTokenMapping({
-            localToken: CELO_WETH,
-            minGas: 200_000,
-            remoteToken: bytes32(uint256(uint160(address(L1_WETH)))),
-            toRemoteFee: 1
+            localToken: CELO_WETH, minGas: 200_000, remoteToken: bytes32(uint256(uint160(address(L1_WETH))))
         });
 
         vm.prank(multisig());

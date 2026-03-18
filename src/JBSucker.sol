@@ -22,6 +22,7 @@ import {BitMaps} from "@openzeppelin/contracts/utils/structs/BitMaps.sol";
 import {JBSuckerState} from "./enums/JBSuckerState.sol";
 import {IJBSucker} from "./interfaces/IJBSucker.sol";
 import {IJBSuckerExtended} from "./interfaces/IJBSuckerExtended.sol";
+import {IJBSuckerRegistry} from "./interfaces/IJBSuckerRegistry.sol";
 import {JBClaim} from "./structs/JBClaim.sol";
 import {JBInboxTreeRoot} from "./structs/JBInboxTreeRoot.sol";
 import {JBMessageRoot} from "./structs/JBMessageRoot.sol";
@@ -103,6 +104,9 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     /// @notice The project ID that receives the `toRemoteFee` payment. Typically the protocol project (ID 1).
     uint256 public immutable FEE_PROJECT_ID;
 
+    /// @notice The sucker registry that manages the global `toRemoteFee`.
+    IJBSuckerRegistry public immutable REGISTRY;
+
     /// @notice The contract that manages token minting and burning.
     IJBTokens public immutable override TOKENS;
 
@@ -153,11 +157,13 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     /// @param permissions A contract storing permissions.
     /// @param tokens A contract that manages token minting and burning.
     /// @param feeProjectId The project ID that receives the `toRemoteFee` payment (typically 1).
+    /// @param registry The sucker registry that manages the global `toRemoteFee`.
     constructor(
         IJBDirectory directory,
         IJBPermissions permissions,
         IJBTokens tokens,
         uint256 feeProjectId,
+        IJBSuckerRegistry registry,
         address trustedForwarder
     )
         ERC2771Context(trustedForwarder)
@@ -166,6 +172,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         DIRECTORY = directory;
         TOKENS = tokens;
         FEE_PROJECT_ID = feeProjectId;
+        REGISTRY = registry;
 
         // Make it so the singleton can't be initialized.
         _disableInitializers();
@@ -672,36 +679,35 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
             revert JBSucker_NothingToSend();
         }
 
-        // Deduct the fee from msg.value, paying it into the fee project.
-        uint256 transportPayment = msg.value;
-        if (remoteToken.toRemoteFee != 0) {
-            if (msg.value < remoteToken.toRemoteFee) {
-                revert JBSucker_InsufficientMsgValue(msg.value, remoteToken.toRemoteFee);
-            }
-            transportPayment = msg.value - remoteToken.toRemoteFee;
+        // Read the fee from the registry.
+        uint256 _toRemoteFee = REGISTRY.toRemoteFee();
 
-            // Pay the fee into the fee project. The caller gets fee project tokens in return.
-            // Best-effort: if the terminal doesn't exist or the pay call reverts, proceed without fee.
-            IJBTerminal terminal =
-                DIRECTORY.primaryTerminalOf({projectId: FEE_PROJECT_ID, token: JBConstants.NATIVE_TOKEN});
-            if (address(terminal) != address(0)) {
-                try terminal.pay{value: remoteToken.toRemoteFee}({
-                    projectId: FEE_PROJECT_ID,
-                    token: JBConstants.NATIVE_TOKEN,
-                    amount: remoteToken.toRemoteFee,
-                    beneficiary: _msgSender(),
-                    minReturnedTokens: 0,
-                    memo: "",
-                    metadata: ""
-                }) {}
-                catch {
-                    // Fee payment failed — proceed without fee, return it as transport payment.
-                    transportPayment = msg.value;
-                }
-            } else {
-                // No terminal — proceed without fee, return it as transport payment.
+        // Deduct the fee from msg.value, paying it into the fee project.
+        if (msg.value < _toRemoteFee) {
+            revert JBSucker_InsufficientMsgValue(msg.value, _toRemoteFee);
+        }
+        uint256 transportPayment = msg.value - _toRemoteFee;
+
+        // Pay the fee into the fee project. The caller gets fee project tokens in return.
+        // Best-effort: if the terminal doesn't exist or the pay call reverts, proceed without fee.
+        IJBTerminal terminal = DIRECTORY.primaryTerminalOf({projectId: FEE_PROJECT_ID, token: JBConstants.NATIVE_TOKEN});
+        if (address(terminal) != address(0)) {
+            try terminal.pay{value: _toRemoteFee}({
+                projectId: FEE_PROJECT_ID,
+                token: JBConstants.NATIVE_TOKEN,
+                amount: _toRemoteFee,
+                beneficiary: _msgSender(),
+                minReturnedTokens: 0,
+                memo: "",
+                metadata: ""
+            }) {}
+            catch {
+                // Fee payment failed — proceed without fee, return it as transport payment.
                 transportPayment = msg.value;
             }
+        } else {
+            // No terminal — proceed without fee, return it as transport payment.
+            transportPayment = msg.value;
         }
 
         // Send the merkle root to the remote chain.
@@ -924,8 +930,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
             minGas: map.minGas,
             // This is done so that a token can be disabled and then enabled again
             // while ensuring the remoteToken never changes (unless it hasn't been used yet)
-            addr: map.remoteToken == bytes32(0) ? currentMapping.addr : map.remoteToken,
-            toRemoteFee: map.toRemoteFee
+            addr: map.remoteToken == bytes32(0) ? currentMapping.addr : map.remoteToken
         });
     }
 

@@ -8,6 +8,7 @@ import "@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol";
 import {IJBController} from "@bananapus/core-v6/src/interfaces/IJBController.sol";
 import "../../src/JBSucker.sol";
 import {IJBSuckerDeployer} from "../../src/interfaces/IJBSuckerDeployer.sol";
+import {IJBSuckerRegistry} from "../../src/interfaces/IJBSuckerRegistry.sol";
 
 import "../../src/deployers/JBOptimismSuckerDeployer.sol";
 import {JBOptimismSucker} from "../../src/JBOptimismSucker.sol";
@@ -150,6 +151,7 @@ contract DeployerTests is Test, TestBaseWorkflow, IERC721Receiver {
             permissions: jbPermissions(),
             tokens: jbTokens(),
             feeProjectId: 1,
+            registry: IJBSuckerRegistry(address(0)),
             trustedForwarder: address(0)
         });
 
@@ -188,6 +190,7 @@ contract DeployerTests is Test, TestBaseWorkflow, IERC721Receiver {
             permissions: jbPermissions(),
             tokens: jbTokens(),
             feeProjectId: 1,
+            registry: IJBSuckerRegistry(address(0)),
             trustedForwarder: address(0)
         });
 
@@ -225,6 +228,7 @@ contract DeployerTests is Test, TestBaseWorkflow, IERC721Receiver {
             permissions: jbPermissions(),
             tokens: jbTokens(),
             feeProjectId: 1,
+            registry: IJBSuckerRegistry(address(0)),
             trustedForwarder: address(0)
         });
 
@@ -419,8 +423,7 @@ contract DeployerTests is Test, TestBaseWorkflow, IERC721Receiver {
         mappings[0] = JBTokenMapping({
             localToken: address(JBConstants.NATIVE_TOKEN),
             minGas: 300_000,
-            remoteToken: bytes32(uint256(uint160(JBConstants.NATIVE_TOKEN))),
-            toRemoteFee: 0.1 ether
+            remoteToken: bytes32(uint256(uint160(JBConstants.NATIVE_TOKEN)))
         });
 
         JBSuckerDeployerConfig[] memory configurations = new JBSuckerDeployerConfig[](1);

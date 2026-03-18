@@ -14,6 +14,7 @@ import {LibClone} from "solady/src/utils/LibClone.sol";
 
 import "../src/JBSucker.sol";
 
+import {IJBSuckerRegistry} from "../src/interfaces/IJBSuckerRegistry.sol";
 import {JBSuckerState} from "../src/enums/JBSuckerState.sol";
 import {JBClaim} from "../src/structs/JBClaim.sol";
 import {JBLeaf} from "../src/structs/JBLeaf.sol";
@@ -37,7 +38,7 @@ contract AttackTestSucker is JBSucker {
         IJBTokens tokens,
         address forwarder
     )
-        JBSucker(directory, permissions, tokens, 1, forwarder)
+        JBSucker(directory, permissions, tokens, 1, IJBSuckerRegistry(address(1)), forwarder)
     {}
 
     function _sendRootOverAMB(
@@ -369,8 +370,7 @@ contract SuckerAttacks is Test {
                 enabled: true,
                 emergencyHatch: false,
                 minGas: 200_000,
-                addr: bytes32(uint256(uint160(makeAddr("remoteTokenX")))),
-                toRemoteFee: 0
+                addr: bytes32(uint256(uint160(makeAddr("remoteTokenX"))))
             })
         );
 
@@ -388,8 +388,7 @@ contract SuckerAttacks is Test {
                 enabled: true,
                 emergencyHatch: false,
                 minGas: 200_000,
-                addr: bytes32(uint256(uint160(makeAddr("remoteTokenY")))),
-                toRemoteFee: 0
+                addr: bytes32(uint256(uint160(makeAddr("remoteTokenY"))))
             })
         );
 

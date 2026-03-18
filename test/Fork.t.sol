@@ -34,6 +34,7 @@ import {JBCCIPSucker} from "../src/JBCCIPSucker.sol";
 import {BurnMintERC677Helper} from "@chainlink/local/src/ccip/CCIPLocalSimulator.sol";
 import {CCIPLocalSimulatorFork, Register} from "@chainlink/local/src/ccip/CCIPLocalSimulatorFork.sol";
 
+import {IJBSuckerRegistry} from "../src/interfaces/IJBSuckerRegistry.sol";
 import {JBClaim} from "../src/structs/JBClaim.sol";
 import {JBLeaf} from "../src/structs/JBClaim.sol";
 import {MerkleLib} from "../src/utils/MerkleLib.sol";
@@ -271,6 +272,7 @@ contract CCIPSuckerForkedTests is TestBaseWorkflow {
             permissions: jbPermissions(),
             tokens: jbTokens(),
             feeProjectId: 1,
+            registry: IJBSuckerRegistry(address(0)),
             trustedForwarder: address(0)
         });
         vm.stopPrank();
@@ -331,6 +333,7 @@ contract CCIPSuckerForkedTests is TestBaseWorkflow {
             permissions: jbPermissions(),
             tokens: jbTokens(),
             feeProjectId: 1,
+            registry: IJBSuckerRegistry(address(0)),
             trustedForwarder: address(0)
         });
         vm.stopPrank();
@@ -349,6 +352,12 @@ contract CCIPSuckerForkedTests is TestBaseWorkflow {
 
         // Enable intended chains for the L2 Sucker
         vm.stopPrank();
+
+        // Mock the registry's toRemoteFee() on both forks (registry is address(0) in tests).
+        vm.selectFork(sepoliaFork);
+        vm.mockCall(address(0), abi.encodeCall(IJBSuckerRegistry.toRemoteFee, ()), abi.encode(uint256(0)));
+        vm.selectFork(arbSepoliaFork);
+        vm.mockCall(address(0), abi.encodeCall(IJBSuckerRegistry.toRemoteFee, ()), abi.encode(uint256(0)));
     }
 
     //*********************************************************************//
@@ -375,8 +384,7 @@ contract CCIPSuckerForkedTests is TestBaseWorkflow {
         JBTokenMapping memory map = JBTokenMapping({
             localToken: JBConstants.NATIVE_TOKEN,
             minGas: 200_000,
-            remoteToken: bytes32(uint256(uint160(JBConstants.NATIVE_TOKEN))),
-            toRemoteFee: 1
+            remoteToken: bytes32(uint256(uint160(JBConstants.NATIVE_TOKEN)))
         });
 
         vm.prank(multisig());
@@ -446,8 +454,7 @@ contract CCIPSuckerForkedTests is TestBaseWorkflow {
         JBTokenMapping memory map = JBTokenMapping({
             localToken: address(ccipBnM),
             minGas: 200_000,
-            remoteToken: bytes32(uint256(uint160(address(ccipBnMArbSepolia)))),
-            toRemoteFee: 1
+            remoteToken: bytes32(uint256(uint160(address(ccipBnMArbSepolia))))
         });
 
         vm.prank(multisig());

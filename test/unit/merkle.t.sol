@@ -10,6 +10,7 @@ import {JBOptimismSucker} from "../../src/JBOptimismSucker.sol";
 
 import {JBLeaf} from "../../src/structs/JBLeaf.sol";
 import {JBClaim} from "../../src/structs/JBClaim.sol";
+import {IJBSuckerRegistry} from "../../src/interfaces/IJBSuckerRegistry.sol";
 
 contract MerkleUnitTest is JBSucker, Test {
     using MerkleLib for MerkleLib.Tree;
@@ -19,7 +20,14 @@ contract MerkleUnitTest is JBSucker, Test {
     constructor()
         // OPMessenger(address(500)),
         // OPStandardBridge(address(550)),
-        JBSucker(IJBDirectory(address(600)), IJBPermissions(address(800)), IJBTokens(address(700)), 1, address(0))
+        JBSucker(
+            IJBDirectory(address(600)),
+            IJBPermissions(address(800)),
+            IJBTokens(address(700)),
+            1,
+            IJBSuckerRegistry(address(this)),
+            address(0)
+        )
         // self.initialize(.NATIVE_TOKEN, JBConstants.NATIVE_TOKEN, JBConstants.NATIVE_TOKEN)
 
     {
@@ -194,7 +202,13 @@ contract DeployerUnitTest is Test {
 
         // Deploy the singleton.
         JBOptimismSucker _sucker = new JBOptimismSucker(
-            _deployer, IJBDirectory(address(0)), IJBPermissions(address(0)), IJBTokens(address(0)), 1, address(0)
+            _deployer,
+            IJBDirectory(address(0)),
+            IJBPermissions(address(0)),
+            IJBTokens(address(0)),
+            1,
+            IJBSuckerRegistry(address(this)),
+            address(0)
         );
 
         // Configure the singleton on the deployer.
