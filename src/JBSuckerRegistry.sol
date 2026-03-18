@@ -26,9 +26,17 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
     // --------------------------- custom errors ------------------------- //
     //*********************************************************************//
 
+    error JBSuckerRegistry_FeeExceedsMax(uint256 fee, uint256 max);
     error JBSuckerRegistry_InvalidDeployer(IJBSuckerDeployer deployer);
     error JBSuckerRegistry_SuckerDoesNotBelongToProject(uint256 projectId, address sucker);
     error JBSuckerRegistry_SuckerIsNotDeprecated(address sucker, JBSuckerState suckerState);
+
+    //*********************************************************************//
+    // ------------------------- public constants ------------------------ //
+    //*********************************************************************//
+
+    /// @notice The maximum ETH fee (in wei) that the owner can set via `setToRemoteFee()`.
+    uint256 public constant override MAX_TO_REMOTE_FEE = 0.001 ether;
 
     //*********************************************************************//
     // ------------------------- internal constants ----------------------- //
@@ -54,6 +62,9 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
     /// @notice Tracks whether the specified sucker deployer is approved by this registry.
     /// @custom:member deployer The address of the deployer to check.
     mapping(address deployer => bool) public override suckerDeployerIsAllowed;
+
+    /// @notice The ETH fee (in wei) paid into the fee project via terminal.pay() on each toRemote() call.
+    uint256 public override toRemoteFee;
 
     //*********************************************************************//
     // --------------------- internal stored properties ------------------- //
@@ -81,6 +92,7 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
     {
         DIRECTORY = directory;
         PROJECTS = directory.PROJECTS();
+        toRemoteFee = MAX_TO_REMOTE_FEE;
     }
 
     //*********************************************************************//
@@ -248,6 +260,16 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
         // slither-disable-next-line unused-return
         _suckersOf[projectId].remove(address(sucker));
         emit SuckerDeprecated({projectId: projectId, sucker: address(sucker), caller: _msgSender()});
+    }
+
+    /// @notice Set the ETH fee (in wei) paid into the fee project on each toRemote() call.
+    /// @dev Only callable by the contract owner. Fee cannot exceed MAX_TO_REMOTE_FEE.
+    /// @param fee The new fee amount in wei.
+    function setToRemoteFee(uint256 fee) public override onlyOwner {
+        if (fee > MAX_TO_REMOTE_FEE) revert JBSuckerRegistry_FeeExceedsMax(fee, MAX_TO_REMOTE_FEE);
+        uint256 oldFee = toRemoteFee;
+        toRemoteFee = fee;
+        emit ToRemoteFeeChanged(oldFee, fee, _msgSender());
     }
 
     /// @notice Removes a sucker deployer from the allowlist.

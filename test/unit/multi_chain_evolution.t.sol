@@ -8,6 +8,7 @@ import "@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol";
 import {IJBController} from "@bananapus/core-v6/src/interfaces/IJBController.sol";
 import {IJBSucker} from "../../src/interfaces/IJBSucker.sol";
 import {IJBSuckerDeployer} from "../../src/interfaces/IJBSuckerDeployer.sol";
+import {IJBSuckerRegistry} from "../../src/interfaces/IJBSuckerRegistry.sol";
 
 import "../../src/JBSucker.sol";
 import "../../src/JBOptimismSucker.sol";
@@ -89,7 +90,7 @@ contract MultiChainEvolutionTest is Test, TestBaseWorkflow, IERC721Receiver {
             permissions: jbPermissions(),
             tokens: jbTokens(),
             feeProjectId: 1,
-            feeOwner: address(this),
+            registry: IJBSuckerRegistry(address(0)),
             trustedForwarder: address(0)
         });
         opDeployer.configureSingleton(opSingleton);
@@ -114,7 +115,7 @@ contract MultiChainEvolutionTest is Test, TestBaseWorkflow, IERC721Receiver {
             permissions: jbPermissions(),
             tokens: jbTokens(),
             feeProjectId: 1,
-            feeOwner: address(this),
+            registry: IJBSuckerRegistry(address(0)),
             trustedForwarder: address(0)
         });
         ccipDeployer.configureSingleton(ccipSingleton);

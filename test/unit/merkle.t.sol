@@ -10,6 +10,7 @@ import {JBOptimismSucker} from "../../src/JBOptimismSucker.sol";
 
 import {JBLeaf} from "../../src/structs/JBLeaf.sol";
 import {JBClaim} from "../../src/structs/JBClaim.sol";
+import {IJBSuckerRegistry} from "../../src/interfaces/IJBSuckerRegistry.sol";
 
 contract MerkleUnitTest is JBSucker, Test {
     using MerkleLib for MerkleLib.Tree;
@@ -24,7 +25,7 @@ contract MerkleUnitTest is JBSucker, Test {
             IJBPermissions(address(800)),
             IJBTokens(address(700)),
             1,
-            address(this),
+            IJBSuckerRegistry(address(this)),
             address(0)
         )
         // self.initialize(.NATIVE_TOKEN, JBConstants.NATIVE_TOKEN, JBConstants.NATIVE_TOKEN)
@@ -206,7 +207,7 @@ contract DeployerUnitTest is Test {
             IJBPermissions(address(0)),
             IJBTokens(address(0)),
             1,
-            address(this),
+            IJBSuckerRegistry(address(this)),
             address(0)
         );
 

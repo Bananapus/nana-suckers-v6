@@ -12,6 +12,7 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 import {JBSucker} from "./JBSucker.sol";
 import {JBOptimismSucker} from "./JBOptimismSucker.sol";
 import {JBCeloSuckerDeployer} from "./deployers/JBCeloSuckerDeployer.sol";
+import {IJBSuckerRegistry} from "./interfaces/IJBSuckerRegistry.sol";
 import {IWrappedNativeToken} from "./interfaces/IWrappedNativeToken.sol";
 import {JBMessageRoot} from "./structs/JBMessageRoot.sol";
 import {JBRemoteToken} from "./structs/JBRemoteToken.sol";
@@ -43,10 +44,10 @@ contract JBCeloSucker is JBOptimismSucker {
         IJBPermissions permissions,
         IJBTokens tokens,
         uint256 feeProjectId,
-        address feeOwner,
+        IJBSuckerRegistry registry,
         address trustedForwarder
     )
-        JBOptimismSucker(deployer, directory, permissions, tokens, feeProjectId, feeOwner, trustedForwarder)
+        JBOptimismSucker(deployer, directory, permissions, tokens, feeProjectId, registry, trustedForwarder)
     {
         // Fetch the wrapped native token by doing a callback to the deployer contract.
         WRAPPED_NATIVE = JBCeloSuckerDeployer(deployer).wrappedNative();

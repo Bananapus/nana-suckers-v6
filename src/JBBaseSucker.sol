@@ -7,6 +7,7 @@ import {IJBTokens} from "@bananapus/core-v6/src/interfaces/IJBTokens.sol";
 
 import {JBOptimismSucker} from "./JBOptimismSucker.sol";
 import {JBOptimismSuckerDeployer} from "./deployers/JBOptimismSuckerDeployer.sol";
+import {IJBSuckerRegistry} from "./interfaces/IJBSuckerRegistry.sol";
 
 /// @notice A `JBSucker` implementation to suck tokens between two chains connected by a Base (OP Stack) bridge.
 contract JBBaseSucker is JBOptimismSucker {
@@ -24,10 +25,10 @@ contract JBBaseSucker is JBOptimismSucker {
         IJBPermissions permissions,
         IJBTokens tokens,
         uint256 feeProjectId,
-        address feeOwner,
+        IJBSuckerRegistry registry,
         address trustedForwarder
     )
-        JBOptimismSucker(deployer, directory, permissions, tokens, feeProjectId, feeOwner, trustedForwarder)
+        JBOptimismSucker(deployer, directory, permissions, tokens, feeProjectId, registry, trustedForwarder)
     {}
 
     //*********************************************************************//

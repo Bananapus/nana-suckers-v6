@@ -16,6 +16,7 @@ import {IWrappedNativeToken} from "../src/interfaces/IWrappedNativeToken.sol";
 import "forge-std/Test.sol";
 import {JBCeloSuckerDeployer} from "src/deployers/JBCeloSuckerDeployer.sol";
 import {JBCeloSucker} from "../src/JBCeloSucker.sol";
+import {IJBSuckerRegistry} from "../src/interfaces/IJBSuckerRegistry.sol";
 
 /// @notice Fork test for `JBCeloSucker` — OP Stack sucker for Celo (custom gas token chain).
 ///
@@ -104,7 +105,7 @@ contract ForkCeloTest is TestBaseWorkflow {
             permissions: jbPermissions(),
             tokens: jbTokens(),
             feeProjectId: 1,
-            feeOwner: address(this),
+            registry: IJBSuckerRegistry(address(0)),
             trustedForwarder: address(0)
         });
         vm.stopPrank();
@@ -147,7 +148,7 @@ contract ForkCeloTest is TestBaseWorkflow {
             permissions: jbPermissions(),
             tokens: jbTokens(),
             feeProjectId: 1,
-            feeOwner: address(this),
+            registry: IJBSuckerRegistry(address(0)),
             trustedForwarder: address(0)
         });
         vm.stopPrank();
@@ -164,6 +165,12 @@ contract ForkCeloTest is TestBaseWorkflow {
         jbPermissions().setPermissionsFor(multisig(), permsL2);
         _launchWethProject();
         vm.stopPrank();
+
+        // Mock the registry's toRemoteFee() on both forks (registry is address(0) in tests).
+        vm.selectFork(l1Fork);
+        vm.mockCall(address(0), abi.encodeCall(IJBSuckerRegistry.toRemoteFee, ()), abi.encode(uint256(0)));
+        vm.selectFork(l2Fork);
+        vm.mockCall(address(0), abi.encodeCall(IJBSuckerRegistry.toRemoteFee, ()), abi.encode(uint256(0)));
     }
 
     /// @notice Launch a project on L1 that accepts native ETH.

@@ -20,6 +20,7 @@ import {JBInboxTreeRoot} from "../../src/structs/JBInboxTreeRoot.sol";
 import {JBMessageRoot} from "../../src/structs/JBMessageRoot.sol";
 import {JBOutboxTree} from "../../src/structs/JBOutboxTree.sol";
 import {JBRemoteToken} from "../../src/structs/JBRemoteToken.sol";
+import {IJBSuckerRegistry} from "../../src/interfaces/IJBSuckerRegistry.sol";
 import {MerkleLib} from "../../src/utils/MerkleLib.sol";
 
 /// @notice Test sucker with exposed helpers for invariant testing.
@@ -35,7 +36,7 @@ contract InvariantSucker is JBSucker {
         IJBTokens tokens,
         address forwarder
     )
-        JBSucker(directory, permissions, tokens, 1, address(1), forwarder)
+        JBSucker(directory, permissions, tokens, 1, IJBSuckerRegistry(address(1)), forwarder)
     {}
 
     function _sendRootOverAMB(

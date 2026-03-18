@@ -8,6 +8,7 @@ import "@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol";
 import {IJBController} from "@bananapus/core-v6/src/interfaces/IJBController.sol";
 import "../../src/JBSucker.sol";
 import {IJBSuckerDeployer} from "../../src/interfaces/IJBSuckerDeployer.sol";
+import {IJBSuckerRegistry} from "../../src/interfaces/IJBSuckerRegistry.sol";
 
 import "../../src/deployers/JBOptimismSuckerDeployer.sol";
 import {JBOptimismSucker} from "../../src/JBOptimismSucker.sol";
@@ -150,7 +151,7 @@ contract DeployerTests is Test, TestBaseWorkflow, IERC721Receiver {
             permissions: jbPermissions(),
             tokens: jbTokens(),
             feeProjectId: 1,
-            feeOwner: address(this),
+            registry: IJBSuckerRegistry(address(0)),
             trustedForwarder: address(0)
         });
 
@@ -189,7 +190,7 @@ contract DeployerTests is Test, TestBaseWorkflow, IERC721Receiver {
             permissions: jbPermissions(),
             tokens: jbTokens(),
             feeProjectId: 1,
-            feeOwner: address(this),
+            registry: IJBSuckerRegistry(address(0)),
             trustedForwarder: address(0)
         });
 
@@ -227,7 +228,7 @@ contract DeployerTests is Test, TestBaseWorkflow, IERC721Receiver {
             permissions: jbPermissions(),
             tokens: jbTokens(),
             feeProjectId: 1,
-            feeOwner: address(this),
+            registry: IJBSuckerRegistry(address(0)),
             trustedForwarder: address(0)
         });
 

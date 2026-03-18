@@ -8,6 +8,7 @@ import {JBPermissionsData} from "@bananapus/core-v6/src/structs/JBPermissionsDat
 import {JBPermissionIds} from "@bananapus/permission-ids-v6/src/JBPermissionIds.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {JBTokenMapping} from "../src/structs/JBTokenMapping.sol";
+import {IJBSuckerRegistry} from "../src/interfaces/IJBSuckerRegistry.sol";
 
 import {IOPMessenger} from "../src/interfaces/IOPMessenger.sol";
 import {IOPStandardBridge} from "../src/interfaces/IOPStandardBridge.sol";
@@ -154,6 +155,9 @@ abstract contract OPStackNativeBridgeForkTestBase is TestBaseWorkflow {
         _launchProject();
         l2ProjectToken = jbController().deployERC20For(1, "SuckerToken", "SOOK", bytes32(0));
         vm.stopPrank();
+
+        // Mock the registry's toRemoteFee() to return 0 (registry is address(0) with no code).
+        vm.mockCall(address(0), abi.encodeCall(IJBSuckerRegistry.toRemoteFee, ()), abi.encode(uint256(0)));
     }
 
     /// @notice Launch a project that accepts native ETH.
@@ -359,7 +363,7 @@ contract ForkOptimismTest is OPStackNativeBridgeForkTestBase {
             permissions: permissions,
             tokens: tokens,
             feeProjectId: 1,
-            feeOwner: address(this),
+            registry: IJBSuckerRegistry(address(0)),
             trustedForwarder: address(0)
         });
     }
@@ -408,7 +412,7 @@ contract ForkBaseTest is OPStackNativeBridgeForkTestBase {
             permissions: permissions,
             tokens: tokens,
             feeProjectId: 1,
-            feeOwner: address(this),
+            registry: IJBSuckerRegistry(address(0)),
             trustedForwarder: address(0)
         });
     }

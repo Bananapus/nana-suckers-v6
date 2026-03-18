@@ -17,6 +17,7 @@ import "../../src/JBSucker.sol";
 import {JBCCIPSuckerDeployer} from "../../src/deployers/JBCCIPSuckerDeployer.sol";
 
 import {ICCIPRouter, IWrappedNativeToken} from "../../src/interfaces/ICCIPRouter.sol";
+import {IJBSuckerRegistry} from "../../src/interfaces/IJBSuckerRegistry.sol";
 import {JBInboxTreeRoot} from "../../src/structs/JBInboxTreeRoot.sol";
 import {JBMessageRoot} from "../../src/structs/JBMessageRoot.sol";
 import {JBRemoteToken} from "../../src/structs/JBRemoteToken.sol";
@@ -75,7 +76,7 @@ contract CCIPTestSucker is JBCCIPSucker {
         IJBTokens tokens,
         IJBPermissions permissions
     )
-        JBCCIPSucker(deployer, directory, tokens, permissions, 1, address(1), address(0))
+        JBCCIPSucker(deployer, directory, tokens, permissions, 1, IJBSuckerRegistry(address(1)), address(0))
     {}
 
     function exposed_validateTokenMapping(JBTokenMapping calldata map) external pure {
@@ -130,7 +131,7 @@ contract BaseTestSucker is JBSucker {
         IJBPermissions permissions,
         IJBTokens tokens
     )
-        JBSucker(directory, permissions, tokens, 1, address(1), address(0))
+        JBSucker(directory, permissions, tokens, 1, IJBSuckerRegistry(address(1)), address(0))
     {}
 
     function exposed_validateTokenMapping(JBTokenMapping calldata map) external pure {

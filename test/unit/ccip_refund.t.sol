@@ -17,6 +17,7 @@ import {JBCCIPSuckerDeployer} from "../../src/deployers/JBCCIPSuckerDeployer.sol
 
 import {IJBCCIPSuckerDeployer} from "../../src/interfaces/IJBCCIPSuckerDeployer.sol";
 import {ICCIPRouter} from "../../src/interfaces/ICCIPRouter.sol";
+import {IJBSuckerRegistry} from "../../src/interfaces/IJBSuckerRegistry.sol";
 import {IRouterClient} from "@chainlink/contracts-ccip/src/v0.8/ccip/interfaces/IRouterClient.sol";
 import {JBRemoteToken} from "../../src/structs/JBRemoteToken.sol";
 import {JBTokenMapping} from "../../src/structs/JBTokenMapping.sol";
@@ -33,7 +34,7 @@ contract CCIPSuckerHarness is JBCCIPSucker {
         IJBPermissions permissions,
         address trusted_forwarder
     )
-        JBCCIPSucker(deployer, directory, tokens, permissions, 1, address(1), trusted_forwarder)
+        JBCCIPSucker(deployer, directory, tokens, permissions, 1, IJBSuckerRegistry(address(1)), trusted_forwarder)
     {}
 
     /// @notice Directly insert a leaf into the outbox tree for testing.
@@ -125,6 +126,9 @@ contract CCIPRefundTest is Test {
         // Mock primaryTerminalOf to return address(0) so the toRemote fee payment path is skipped.
         // (The fee is 0 but the DIRECTORY call still happens unconditionally.)
         vm.mockCall(DIRECTORY, abi.encodeWithSelector(IJBDirectory.primaryTerminalOf.selector), abi.encode(address(0)));
+
+        // Mock the registry's toRemoteFee() to return 0 (registry is address(1) with no code).
+        vm.mockCall(address(1), abi.encodeCall(IJBSuckerRegistry.toRemoteFee, ()), abi.encode(uint256(0)));
 
         // Put code at MOCK_ROUTER so etch works.
         vm.etch(MOCK_ROUTER, bytes("0x1"));

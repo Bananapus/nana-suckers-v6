@@ -7,7 +7,7 @@ Admin privileges and their scope in nana-suckers-v6.
 ### Registry Owner
 
 - **How assigned:** Set at `JBSuckerRegistry` construction via the `initialOwner` parameter. Transferable via OpenZeppelin `Ownable`.
-- **Scope:** Controls which sucker deployer contracts are approved for use by the registry. Initially expected to be JuiceboxDAO (project ID 1).
+- **Scope:** Controls which sucker deployer contracts are approved for use by the registry, and sets the global `toRemoteFee` applied to all suckers. Initially expected to be JuiceboxDAO (project ID 1).
 - **Permission ID:** None (uses `onlyOwner` modifier from OpenZeppelin `Ownable`).
 
 ### Project Owner
@@ -40,12 +40,6 @@ Admin privileges and their scope in nana-suckers-v6.
 - **Scope:** Can set or cancel the deprecation timestamp on a sucker.
 - **Permission ID:** `JBPermissionIds.SET_SUCKER_DEPRECATION`
 
-### Sucker Owner (per-clone)
-
-- **How assigned:** Set during `initialize()` from the singleton's `_INITIAL_FEE_OWNER` immutable via `_transferOwnership()`. Transferable via OpenZeppelin `Ownable`'s `transferOwnership()`. Renounceable via `renounceOwnership()`.
-- **Scope:** Can adjust the `toRemoteFee` on their specific sucker clone via `setToRemoteFee()`. Each clone has its own independent owner.
-- **Permission ID:** None (uses `onlyOwner` modifier from OpenZeppelin `Ownable`).
-
 ### Layer-Specific Configurator
 
 - **How assigned:** Set at deployer construction via the `configurator` parameter. Stored as the immutable `LAYER_SPECIFIC_CONFIGURATOR` address on each `JBSuckerDeployer`.
@@ -61,6 +55,7 @@ Admin privileges and their scope in nana-suckers-v6.
 | `allowSuckerDeployer(deployer)` | Registry Owner | N/A (`onlyOwner`) | Global | Adds a deployer contract to the allowlist, enabling it to be used when deploying suckers. |
 | `allowSuckerDeployers(deployers)` | Registry Owner | N/A (`onlyOwner`) | Global | Batch version: adds multiple deployer contracts to the allowlist. |
 | `removeSuckerDeployer(deployer)` | Registry Owner | N/A (`onlyOwner`) | Global | Removes a deployer contract from the allowlist, preventing future sucker deployments through it. |
+| `setToRemoteFee(fee)` | Registry Owner | N/A (`onlyOwner`) | Global | Sets the `toRemoteFee` applied to all suckers. The fee must be <= `MAX_TO_REMOTE_FEE` (0.001 ether). Emits `ToRemoteFeeChanged`. |
 | `deploySuckersFor(projectId, salt, configs)` | Project Owner | `DEPLOY_SUCKERS` | Per-project | Deploys one or more suckers for a project using allowlisted deployers. Hashes salt with `msg.sender` for deterministic cross-chain addresses. Also calls `mapTokens` on each newly created sucker. |
 | `removeDeprecatedSucker(projectId, sucker)` | Anyone | None | Per-project | Removes a fully `DEPRECATED` sucker from the registry. Permissionless but only succeeds if the sucker is in the `DEPRECATED` state. |
 
@@ -72,9 +67,6 @@ Admin privileges and their scope in nana-suckers-v6.
 | `mapTokens(maps)` | Project Owner | `MAP_SUCKER_TOKEN` | Per-sucker | Batch version: maps multiple local-to-remote token pairs. Each mapping requires the same permission. |
 | `enableEmergencyHatchFor(tokens)` | Project Owner | `SUCKER_SAFETY` | Per-sucker | Opens the emergency hatch for specified tokens (irreversible). Sets `emergencyHatch = true` and `enabled = false` on each token's remote mapping. Allows users to exit through the outbox on the chain they deposited on. |
 | `setDeprecation(timestamp)` | Project Owner | `SET_SUCKER_DEPRECATION` | Per-sucker | Sets the timestamp after which the sucker becomes fully deprecated. Must be at least `_maxMessagingDelay()` (14 days) in the future. Set to `0` to cancel a pending deprecation. Reverts if already in `SENDING_DISABLED` or `DEPRECATED` state. |
-| `setToRemoteFee(fee)` | Sucker Owner | N/A (`onlyOwner`) | Per-clone | Sets the `toRemoteFee` for this clone. The fee must be <= `MAX_TO_REMOTE_FEE` (0.001 ether). Emits `ToRemoteFeeChanged`. |
-| `transferOwnership(newOwner)` | Sucker Owner | N/A (`onlyOwner`) | Per-clone | Transfers ownership of this clone (and thus fee-setting authority) to a new address. Inherited from OpenZeppelin `Ownable`. |
-| `renounceOwnership()` | Sucker Owner | N/A (`onlyOwner`) | Per-clone | Renounces ownership of this clone, permanently preventing future `setToRemoteFee()` calls. Inherited from OpenZeppelin `Ownable`. |
 
 ### JBSuckerDeployer (base and all subclasses)
 
@@ -130,9 +122,8 @@ The following values are set at deploy time and cannot be changed:
 |----------|----------|--------|-------------|
 | `DIRECTORY` | `JBSucker`, `JBSuckerRegistry`, all deployers | Constructor | The Juicebox directory contract. |
 | `FEE_PROJECT_ID` | `JBSucker` | Constructor | The project that receives `toRemoteFee` payments via `terminal.pay()` on each `toRemote()` call. Typically project ID 1 (the protocol project). Best-effort: fee is silently skipped if the fee project has no native token terminal or if `terminal.pay()` reverts. |
-| `_INITIAL_TO_REMOTE_FEE` | `JBSucker` | Constructor | Default ETH fee (in wei) for new clones, applied to `toRemoteFee` during `initialize()`. Private immutable on the singleton. |
-| `_INITIAL_FEE_OWNER` | `JBSucker` | Constructor | Initial owner for new clones, applied via `_transferOwnership()` during `initialize()`. Private immutable on the singleton. Controls `setToRemoteFee()` access on each clone. |
-| `MAX_TO_REMOTE_FEE` | `JBSucker` | Constant | Hard cap on what `toRemoteFee` can be set to (0.001 ether). Prevents the clone owner from setting an excessively high fee. |
+| `REGISTRY` | `JBSucker` | Constructor | The `JBSuckerRegistry` that this sucker reads the `toRemoteFee` from. |
+| `MAX_TO_REMOTE_FEE` | `JBSuckerRegistry` | Constant | Hard cap on what `toRemoteFee` can be set to (0.001 ether). Prevents the registry owner from setting an excessively high fee. |
 | `TOKENS` | `JBSucker`, all deployers | Constructor | The Juicebox token management contract. |
 | `PROJECTS` | `JBSuckerRegistry` | Derived from `DIRECTORY.PROJECTS()` | The ERC-721 project ownership contract. |
 | `OPBRIDGE` | `JBOptimismSucker`, `JBBaseSucker`, `JBCeloSucker` | Constructor (from deployer callback) | The OP Standard Bridge address. |
@@ -175,4 +166,4 @@ What admins **cannot** do:
 
 - **Cannot change the fee project.** `FEE_PROJECT_ID` is set at construction and is immutable. If the fee project's terminal changes or is removed, fee payments silently stop (best-effort design), but `toRemote()` still works.
 
-- **Can adjust the fee amount, within bounds.** The clone's owner can call `setToRemoteFee()` to adjust the fee, but it is capped at `MAX_TO_REMOTE_FEE` (0.001 ether). If ownership is renounced via `renounceOwnership()`, the fee becomes permanently fixed at its current value.
+- **Can adjust the fee amount, within bounds.** The registry owner can call `setToRemoteFee()` on `JBSuckerRegistry` to adjust the fee globally for all suckers, but it is capped at `MAX_TO_REMOTE_FEE` (0.001 ether).

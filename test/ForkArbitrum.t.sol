@@ -12,6 +12,7 @@ import {IInbox} from "@arbitrum/nitro-contracts/src/bridge/IInbox.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IERC721Receiver} from "@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol";
 import {JBTokenMapping} from "../src/structs/JBTokenMapping.sol";
+import {IJBSuckerRegistry} from "../src/interfaces/IJBSuckerRegistry.sol";
 
 import "forge-std/Test.sol";
 import {JBArbitrumSuckerDeployer} from "src/deployers/JBArbitrumSuckerDeployer.sol";
@@ -84,7 +85,7 @@ contract ForkArbitrumDeployerTest is TestBaseWorkflow, IERC721Receiver {
             permissions: jbPermissions(),
             tokens: jbTokens(),
             feeProjectId: 1,
-            feeOwner: address(this),
+            registry: IJBSuckerRegistry(address(0)),
             trustedForwarder: address(0)
         });
 
@@ -116,13 +117,19 @@ contract ForkArbitrumDeployerTest is TestBaseWorkflow, IERC721Receiver {
             permissions: jbPermissions(),
             tokens: jbTokens(),
             feeProjectId: 1,
-            feeOwner: address(this),
+            registry: IJBSuckerRegistry(address(0)),
             trustedForwarder: address(0)
         });
 
         deployerL2.configureSingleton(singletonL2);
         _launchProject();
         suckerL2 = deployerL2.createForSender(1, "arb-l2");
+
+        // Mock the registry's toRemoteFee() on both forks (registry is address(0) in tests).
+        vm.selectFork(l1Fork);
+        vm.mockCall(address(0), abi.encodeCall(IJBSuckerRegistry.toRemoteFee, ()), abi.encode(uint256(0)));
+        vm.selectFork(l2Fork);
+        vm.mockCall(address(0), abi.encodeCall(IJBSuckerRegistry.toRemoteFee, ()), abi.encode(uint256(0)));
     }
 
     /// @notice L1 deployer and sucker have correct configuration with real Arbitrum inbox and gateway router.
@@ -268,7 +275,7 @@ contract ForkArbitrumNativeTransferTest is TestBaseWorkflow {
             permissions: jbPermissions(),
             tokens: jbTokens(),
             feeProjectId: 1,
-            feeOwner: address(this),
+            registry: IJBSuckerRegistry(address(0)),
             trustedForwarder: address(0)
         });
         vm.stopPrank();
@@ -288,6 +295,9 @@ contract ForkArbitrumNativeTransferTest is TestBaseWorkflow {
         _launchProject();
         projectToken = jbController().deployERC20For(1, "SuckerToken", "SOOK", bytes32(0));
         vm.stopPrank();
+
+        // Mock the registry's toRemoteFee() (registry is address(0) in tests).
+        vm.mockCall(address(0), abi.encodeCall(IJBSuckerRegistry.toRemoteFee, ()), abi.encode(uint256(0)));
     }
 
     /// @notice Launch a project that accepts native ETH with surplus allowance.

@@ -7,6 +7,7 @@ import "../../src/JBSucker.sol";
 import {LibClone} from "solady/src/utils/LibClone.sol";
 import {MerkleLib} from "../../src/utils/MerkleLib.sol";
 import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
+import {IJBSuckerRegistry} from "../../src/interfaces/IJBSuckerRegistry.sol";
 
 /// @notice mapTokens msg.value dust from integer division.
 /// When `msg.value / numberToDisable` has a remainder, the dust wei must be refunded to the caller.
@@ -194,7 +195,7 @@ contract MapTokensDustSucker is JBSucker {
         IJBTokens tokens,
         address forwarder
     )
-        JBSucker(directory, permissions, tokens, 1, address(1), forwarder)
+        JBSucker(directory, permissions, tokens, 1, IJBSuckerRegistry(address(1)), forwarder)
     {}
 
     function _sendRootOverAMB(

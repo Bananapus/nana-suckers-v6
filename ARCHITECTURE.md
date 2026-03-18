@@ -8,12 +8,12 @@ Cross-chain token bridging for Juicebox V6. Allows project tokens and funds to m
 
 ```
 src/
-├── JBSucker.sol            — Abstract base: merkle tree management, prepare/claim logic, FEE_PROJECT_ID, admin-adjustable toRemoteFee (Ownable)
+├── JBSucker.sol            — Abstract base: merkle tree management, prepare/claim logic, FEE_PROJECT_ID, reads toRemoteFee from REGISTRY (immutable IJBSuckerRegistry)
 ├── JBBaseSucker.sol        — OP Stack base (Optimism, Base)
 ├── JBOptimismSucker.sol    — Optimism/Base bridge implementation
 ├── JBArbitrumSucker.sol    — Arbitrum bridge implementation
 ├── JBCCIPSucker.sol        — Chainlink CCIP bridge implementation
-├── JBSuckerRegistry.sol    — Registry of suckers per project, deployment permissions
+├── JBSuckerRegistry.sol    — Registry of suckers per project, deployment permissions, centralized toRemoteFee (owner-controlled, applies to all suckers)
 ├── deployers/
 │   ├── JBOptimismSuckerDeployer.sol
 │   ├── JBArbitrumSuckerDeployer.sol

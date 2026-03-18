@@ -13,6 +13,7 @@ import {BitMaps} from "@openzeppelin/contracts/utils/structs/BitMaps.sol";
 
 import {JBSucker} from "./JBSucker.sol";
 import {JBCCIPSuckerDeployer} from "./deployers/JBCCIPSuckerDeployer.sol";
+import {IJBSuckerRegistry} from "./interfaces/IJBSuckerRegistry.sol";
 import {ICCIPRouter, IWrappedNativeToken} from "./interfaces/ICCIPRouter.sol";
 import {IJBCCIPSuckerDeployer} from "./interfaces/IJBCCIPSuckerDeployer.sol";
 import {JBMessageRoot} from "./structs/JBMessageRoot.sol";
@@ -69,10 +70,10 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
         IJBTokens tokens,
         IJBPermissions permissions,
         uint256 feeProjectId,
-        address feeOwner,
+        IJBSuckerRegistry registry,
         address trustedForwarder
     )
-        JBSucker(directory, permissions, tokens, feeProjectId, feeOwner, trustedForwarder)
+        JBSucker(directory, permissions, tokens, feeProjectId, registry, trustedForwarder)
     {
         REMOTE_CHAIN_ID = IJBCCIPSuckerDeployer(deployer).ccipRemoteChainId();
         REMOTE_CHAIN_SELECTOR = IJBCCIPSuckerDeployer(deployer).ccipRemoteChainSelector();

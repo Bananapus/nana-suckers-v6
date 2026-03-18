@@ -11,6 +11,7 @@ import {BitMaps} from "@openzeppelin/contracts/utils/structs/BitMaps.sol";
 
 import {JBSucker} from "./JBSucker.sol";
 import {JBOptimismSuckerDeployer} from "./deployers/JBOptimismSuckerDeployer.sol";
+import {IJBSuckerRegistry} from "./interfaces/IJBSuckerRegistry.sol";
 import {IJBOptimismSucker} from "./interfaces/IJBOptimismSucker.sol";
 import {IOPMessenger} from "./interfaces/IOPMessenger.sol";
 import {IOPStandardBridge} from "./interfaces/IOPStandardBridge.sol";
@@ -47,10 +48,10 @@ contract JBOptimismSucker is JBSucker, IJBOptimismSucker {
         IJBPermissions permissions,
         IJBTokens tokens,
         uint256 feeProjectId,
-        address feeOwner,
+        IJBSuckerRegistry registry,
         address trustedForwarder
     )
-        JBSucker(directory, permissions, tokens, feeProjectId, feeOwner, trustedForwarder)
+        JBSucker(directory, permissions, tokens, feeProjectId, registry, trustedForwarder)
     {
         // Fetch the messenger and bridge by doing a callback to the deployer contract.
         OPBRIDGE = JBOptimismSuckerDeployer(deployer).opBridge();

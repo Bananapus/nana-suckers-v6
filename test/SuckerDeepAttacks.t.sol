@@ -11,6 +11,8 @@ import {IJBTokens} from "@bananapus/core-v6/src/interfaces/IJBTokens.sol";
 import {JBConstants} from "@bananapus/core-v6/src/libraries/JBConstants.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
+import {IJBSuckerRegistry} from "../src/interfaces/IJBSuckerRegistry.sol";
+import {JBSuckerRegistry} from "../src/JBSuckerRegistry.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {LibClone} from "solady/src/utils/LibClone.sol";
 
@@ -40,9 +42,10 @@ contract DeepAttackSucker is JBSucker {
         IJBDirectory directory,
         IJBPermissions permissions,
         IJBTokens tokens,
+        IJBSuckerRegistry registry,
         address forwarder
     )
-        JBSucker(directory, permissions, tokens, 1, address(1), forwarder)
+        JBSucker(directory, permissions, tokens, 1, registry, forwarder)
     {}
 
     function _sendRootOverAMB(
@@ -186,6 +189,7 @@ contract SuckerDeepAttacks is Test {
     address constant PROJECT = address(1000);
     address constant FORWARDER = address(1100);
     address constant TERMINAL = address(1200);
+    address constant MOCK_REGISTRY = address(1300);
 
     uint256 constant PROJECT_ID = 1;
     address constant TOKEN = address(0x000000000000000000000000000000000000EEEe); // JBConstants.NATIVE_TOKEN
@@ -201,6 +205,7 @@ contract SuckerDeepAttacks is Test {
         vm.label(TOKENS, "MOCK_TOKENS");
         vm.label(CONTROLLER, "MOCK_CONTROLLER");
         vm.label(TERMINAL, "MOCK_TERMINAL");
+        vm.label(MOCK_REGISTRY, "MOCK_REGISTRY");
 
         sucker = _createTestSucker(PROJECT_ID, "deep_attack_salt");
 
@@ -225,20 +230,16 @@ contract SuckerDeepAttacks is Test {
         internal
         returns (DeepAttackSucker)
     {
+        // Mock registry.toRemoteFee() to return the requested fee.
+        vm.mockCall(MOCK_REGISTRY, abi.encodeCall(IJBSuckerRegistry.toRemoteFee, ()), abi.encode(fee));
+
         DeepAttackSucker singleton = new DeepAttackSucker(
-            IJBDirectory(DIRECTORY), IJBPermissions(PERMISSIONS), IJBTokens(TOKENS), FORWARDER
+            IJBDirectory(DIRECTORY), IJBPermissions(PERMISSIONS), IJBTokens(TOKENS), IJBSuckerRegistry(MOCK_REGISTRY), FORWARDER
         );
 
         DeepAttackSucker clone =
             DeepAttackSucker(payable(address(LibClone.cloneDeterministic(address(singleton), salt))));
         clone.initialize(projectId);
-
-        // initialize() sets toRemoteFee to MAX_TO_REMOTE_FEE (0.001 ether).
-        // If a different fee is needed, set it via the owner (address(1)).
-        if (fee != clone.MAX_TO_REMOTE_FEE()) {
-            vm.prank(address(1));
-            clone.setToRemoteFee(fee);
-        }
 
         return clone;
     }
@@ -954,8 +955,8 @@ contract SuckerDeepAttacks is Test {
 
     /// @notice toRemote with insufficient msg.value for toRemoteFee → should revert.
     function test_toRemote_insufficientFee_reverts() public {
-        // Create a sucker with default toRemoteFee (MAX_TO_REMOTE_FEE = 0.001 ether).
-        DeepAttackSucker feeSucker = _createTestSucker(PROJECT_ID, "fee_sucker_salt");
+        // Create a sucker with toRemoteFee = 0.001 ether (via registry mock).
+        DeepAttackSucker feeSucker = _createTestSuckerWithFee(PROJECT_ID, "fee_sucker_salt", 0.001 ether);
 
         feeSucker.test_setRemoteToken(
             TOKEN,
@@ -972,75 +973,112 @@ contract SuckerDeepAttacks is Test {
 
         // Send less than the required fee (toRemoteFee = 0.001 ether).
         vm.expectRevert(
-            abi.encodeWithSelector(
-                JBSucker.JBSucker_InsufficientMsgValue.selector, 0.0005 ether, feeSucker.toRemoteFee()
-            )
+            abi.encodeWithSelector(JBSucker.JBSucker_InsufficientMsgValue.selector, 0.0005 ether, 0.001 ether)
         );
         feeSucker.toRemote{value: 0.0005 ether}(TOKEN);
     }
 
-    // ==================== setToRemoteFee tests ====================
+    // ==================== Registry setToRemoteFee tests ====================
 
-    /// @notice Owner can set fee within MAX_TO_REMOTE_FEE.
-    function test_setToRemoteFee_happyPath() public {
-        // Create a sucker whose owner is address(1) — that's the feeOwner in DeepAttackSucker.
-        DeepAttackSucker s = _createTestSucker(PROJECT_ID, "fee_owner_test");
+    /// @notice Registry owner can set fee within MAX_TO_REMOTE_FEE.
+    function test_registry_setToRemoteFee_happyPath() public {
+        JBSuckerRegistry registry = new JBSuckerRegistry({
+            directory: IJBDirectory(DIRECTORY),
+            permissions: IJBPermissions(PERMISSIONS),
+            initialOwner: address(this),
+            trustedForwarder: FORWARDER
+        });
 
-        // Set fee from the owner (address(1)).
-        vm.prank(address(1));
-        s.setToRemoteFee(0.0005 ether);
-        assertEq(s.toRemoteFee(), 0.0005 ether, "Fee should be updated");
+        registry.setToRemoteFee(0.0005 ether);
+        assertEq(registry.toRemoteFee(), 0.0005 ether, "Fee should be updated");
     }
 
-    /// @notice Owner can set fee to exactly MAX_TO_REMOTE_FEE.
-    function test_setToRemoteFee_exactMax() public {
-        DeepAttackSucker s = _createTestSucker(PROJECT_ID, "fee_max_test");
+    /// @notice Registry owner can set fee to exactly MAX_TO_REMOTE_FEE.
+    function test_registry_setToRemoteFee_exactMax() public {
+        JBSuckerRegistry registry = new JBSuckerRegistry({
+            directory: IJBDirectory(DIRECTORY),
+            permissions: IJBPermissions(PERMISSIONS),
+            initialOwner: address(this),
+            trustedForwarder: FORWARDER
+        });
 
-        vm.prank(address(1));
-        s.setToRemoteFee(0.001 ether);
-        assertEq(s.toRemoteFee(), 0.001 ether, "Fee should be set to max");
+        registry.setToRemoteFee(0.001 ether);
+        assertEq(registry.toRemoteFee(), 0.001 ether, "Fee should be set to max");
     }
 
-    /// @notice Owner can set fee to zero.
-    function test_setToRemoteFee_zero() public {
-        DeepAttackSucker s = _createTestSuckerWithFee(PROJECT_ID, "fee_zero_test", 0.001 ether);
-        assertEq(s.toRemoteFee(), 0.001 ether, "Initial fee should be 0.001 ether");
+    /// @notice Registry owner can set fee to zero.
+    function test_registry_setToRemoteFee_zero() public {
+        JBSuckerRegistry registry = new JBSuckerRegistry({
+            directory: IJBDirectory(DIRECTORY),
+            permissions: IJBPermissions(PERMISSIONS),
+            initialOwner: address(this),
+            trustedForwarder: FORWARDER
+        });
 
-        vm.prank(address(1));
-        s.setToRemoteFee(0);
-        assertEq(s.toRemoteFee(), 0, "Fee should be zero");
+        assertEq(registry.toRemoteFee(), 0.001 ether, "Initial fee should be MAX_TO_REMOTE_FEE");
+
+        registry.setToRemoteFee(0);
+        assertEq(registry.toRemoteFee(), 0, "Fee should be zero");
     }
 
-    /// @notice Non-owner cannot set fee.
-    function test_setToRemoteFee_unauthorized_reverts() public {
-        DeepAttackSucker s = _createTestSucker(PROJECT_ID, "fee_unauth_test");
+    /// @notice Non-owner cannot set fee on registry.
+    function test_registry_setToRemoteFee_unauthorized_reverts() public {
+        JBSuckerRegistry registry = new JBSuckerRegistry({
+            directory: IJBDirectory(DIRECTORY),
+            permissions: IJBPermissions(PERMISSIONS),
+            initialOwner: address(this),
+            trustedForwarder: FORWARDER
+        });
 
         vm.prank(address(0xBAD));
         vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, address(0xBAD)));
-        s.setToRemoteFee(0.0005 ether);
+        registry.setToRemoteFee(0.0005 ether);
     }
 
-    /// @notice Fee above MAX_TO_REMOTE_FEE reverts.
-    function test_setToRemoteFee_exceedsMax_reverts() public {
-        DeepAttackSucker s = _createTestSucker(PROJECT_ID, "fee_exceed_test");
+    /// @notice Fee above MAX_TO_REMOTE_FEE reverts on registry.
+    function test_registry_setToRemoteFee_exceedsMax_reverts() public {
+        JBSuckerRegistry registry = new JBSuckerRegistry({
+            directory: IJBDirectory(DIRECTORY),
+            permissions: IJBPermissions(PERMISSIONS),
+            initialOwner: address(this),
+            trustedForwarder: FORWARDER
+        });
 
-        vm.prank(address(1));
-        vm.expectRevert(abi.encodeWithSelector(JBSucker.JBSucker_FeeExceedsMax.selector, 0.002 ether, 0.001 ether));
-        s.setToRemoteFee(0.002 ether);
+        vm.expectRevert(
+            abi.encodeWithSelector(JBSuckerRegistry.JBSuckerRegistry_FeeExceedsMax.selector, 0.002 ether, 0.001 ether)
+        );
+        registry.setToRemoteFee(0.002 ether);
     }
 
-    /// @notice setToRemoteFee emits ToRemoteFeeChanged event.
-    function test_setToRemoteFee_emitsEvent() public {
-        DeepAttackSucker s = _createTestSuckerWithFee(PROJECT_ID, "fee_event_test", 0.001 ether);
+    /// @notice setToRemoteFee on registry emits ToRemoteFeeChanged event.
+    function test_registry_setToRemoteFee_emitsEvent() public {
+        JBSuckerRegistry registry = new JBSuckerRegistry({
+            directory: IJBDirectory(DIRECTORY),
+            permissions: IJBPermissions(PERMISSIONS),
+            initialOwner: address(this),
+            trustedForwarder: FORWARDER
+        });
 
-        vm.expectEmit(false, false, false, true, address(s));
-        emit JBSucker.ToRemoteFeeChanged(0.001 ether, 0.0005 ether);
+        vm.expectEmit(false, false, false, true, address(registry));
+        emit IJBSuckerRegistry.ToRemoteFeeChanged(0.001 ether, 0.0005 ether, address(this));
 
-        vm.prank(address(1));
-        s.setToRemoteFee(0.0005 ether);
+        registry.setToRemoteFee(0.0005 ether);
     }
 
-    // ==================== End setToRemoteFee tests ====================
+    /// @notice Registry initializes toRemoteFee to MAX_TO_REMOTE_FEE.
+    function test_registry_toRemoteFee_initializedToMax() public {
+        JBSuckerRegistry registry = new JBSuckerRegistry({
+            directory: IJBDirectory(DIRECTORY),
+            permissions: IJBPermissions(PERMISSIONS),
+            initialOwner: address(this),
+            trustedForwarder: FORWARDER
+        });
+
+        assertEq(registry.toRemoteFee(), 0.001 ether, "toRemoteFee should be initialized to MAX_TO_REMOTE_FEE");
+        assertEq(registry.MAX_TO_REMOTE_FEE(), 0.001 ether, "MAX_TO_REMOTE_FEE should be 0.001 ether");
+    }
+
+    // ==================== End Registry setToRemoteFee tests ====================
 
     /// @notice _sendRoot clears balance BEFORE AMB call — verify balance is 0 after toRemote.
     function test_sendRoot_clearsBalanceBeforeAMB() public {

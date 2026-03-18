@@ -11,6 +11,7 @@ import {LibClone} from "solady/src/utils/LibClone.sol";
 
 import "../src/JBSucker.sol";
 
+import {IJBSuckerRegistry} from "../src/interfaces/IJBSuckerRegistry.sol";
 import {JBInboxTreeRoot} from "../src/structs/JBInboxTreeRoot.sol";
 import {JBMessageRoot} from "../src/structs/JBMessageRoot.sol";
 import {JBRemoteToken} from "../src/structs/JBRemoteToken.sol";
@@ -28,7 +29,7 @@ contract InteropTestSucker is JBSucker {
         IJBTokens tokens,
         address forwarder
     )
-        JBSucker(directory, permissions, tokens, 1, address(1), forwarder)
+        JBSucker(directory, permissions, tokens, 1, IJBSuckerRegistry(address(1)), forwarder)
     {}
 
     function _sendRootOverAMB(
