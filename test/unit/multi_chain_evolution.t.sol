@@ -89,7 +89,6 @@ contract MultiChainEvolutionTest is Test, TestBaseWorkflow, IERC721Receiver {
             permissions: jbPermissions(),
             tokens: jbTokens(),
             feeProjectId: 1,
-            toRemoteFee: 0.001 ether,
             feeOwner: address(this),
             trustedForwarder: address(0)
         });
@@ -115,7 +114,6 @@ contract MultiChainEvolutionTest is Test, TestBaseWorkflow, IERC721Receiver {
             permissions: jbPermissions(),
             tokens: jbTokens(),
             feeProjectId: 1,
-            toRemoteFee: 0.001 ether,
             feeOwner: address(this),
             trustedForwarder: address(0)
         });

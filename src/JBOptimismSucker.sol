@@ -47,11 +47,10 @@ contract JBOptimismSucker is JBSucker, IJBOptimismSucker {
         IJBPermissions permissions,
         IJBTokens tokens,
         uint256 feeProjectId,
-        uint256 toRemoteFee,
         address feeOwner,
         address trustedForwarder
     )
-        JBSucker(directory, permissions, tokens, feeProjectId, toRemoteFee, feeOwner, trustedForwarder)
+        JBSucker(directory, permissions, tokens, feeProjectId, feeOwner, trustedForwarder)
     {
         // Fetch the messenger and bridge by doing a callback to the deployer contract.
         OPBRIDGE = JBOptimismSuckerDeployer(deployer).opBridge();

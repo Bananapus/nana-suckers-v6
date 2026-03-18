@@ -24,7 +24,6 @@ contract MerkleUnitTest is JBSucker, Test {
             IJBPermissions(address(800)),
             IJBTokens(address(700)),
             1,
-            0,
             address(this),
             address(0)
         )
@@ -207,7 +206,6 @@ contract DeployerUnitTest is Test {
             IJBPermissions(address(0)),
             IJBTokens(address(0)),
             1,
-            0.001 ether,
             address(this),
             address(0)
         );

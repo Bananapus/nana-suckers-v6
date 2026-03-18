@@ -40,7 +40,7 @@ contract AuditGapSucker is JBSucker {
         IJBTokens tokens,
         address forwarder
     )
-        JBSucker(directory, permissions, tokens, 1, 0, address(1), forwarder)
+        JBSucker(directory, permissions, tokens, 1, address(1), forwarder)
     {}
 
     function _sendRootOverAMB(

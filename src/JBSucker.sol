@@ -118,9 +118,6 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     /// @notice The initial fee owner for new clones, set at singleton construction.
     address private immutable _INITIAL_FEE_OWNER;
 
-    /// @notice The default fee for new clones, set at singleton construction.
-    uint256 private immutable _INITIAL_TO_REMOTE_FEE;
-
     //*********************************************************************//
     // ------------------------------ events ----------------------------- //
     //*********************************************************************//
@@ -136,7 +133,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     address public override deployer;
 
     /// @notice The ETH fee (in wei) paid into the fee project via terminal.pay() on each toRemote() call.
-    /// @dev Per-clone storage. Initialized to `_INITIAL_TO_REMOTE_FEE` in `initialize()`. Adjustable by the owner.
+    /// @dev Per-clone storage. Initialized to `MAX_TO_REMOTE_FEE` in `initialize()`. Adjustable by the owner.
     uint256 public toRemoteFee;
 
     //*********************************************************************//
@@ -179,14 +176,12 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     /// @param permissions A contract storing permissions.
     /// @param tokens A contract that manages token minting and burning.
     /// @param feeProjectId The project ID that receives the `toRemoteFee` payment (typically 1).
-    /// @param toRemoteFee_ The initial ETH fee (in wei) paid into the fee project on each `toRemote()` call.
     /// @param feeOwner The address authorized to adjust the `toRemoteFee` on each clone.
     constructor(
         IJBDirectory directory,
         IJBPermissions permissions,
         IJBTokens tokens,
         uint256 feeProjectId,
-        uint256 toRemoteFee_,
         address feeOwner,
         address trustedForwarder
     )
@@ -197,7 +192,6 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         DIRECTORY = directory;
         TOKENS = tokens;
         FEE_PROJECT_ID = feeProjectId;
-        _INITIAL_TO_REMOTE_FEE = toRemoteFee_;
         _INITIAL_FEE_OWNER = feeOwner;
 
         // Make it so the singleton can't be initialized.
@@ -544,7 +538,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         // slither-disable-next-line missing-zero-check
         _localProjectId = _projectId;
         deployer = _msgSender();
-        toRemoteFee = _INITIAL_TO_REMOTE_FEE;
+        toRemoteFee = MAX_TO_REMOTE_FEE;
         _transferOwnership(_INITIAL_FEE_OWNER);
     }
 
@@ -653,16 +647,6 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         });
     }
 
-    /// @notice Set the ETH fee (in wei) paid into the fee project on each `toRemote()` call.
-    /// @dev Only callable by the contract owner. Fee cannot exceed `MAX_TO_REMOTE_FEE`.
-    /// @param fee The new fee amount in wei.
-    function setToRemoteFee(uint256 fee) external onlyOwner {
-        if (fee > MAX_TO_REMOTE_FEE) revert JBSucker_FeeExceedsMax(fee, MAX_TO_REMOTE_FEE);
-        uint256 oldFee = toRemoteFee;
-        toRemoteFee = fee;
-        emit ToRemoteFeeChanged(oldFee, fee);
-    }
-
     /// @notice Set or remove the time after which this sucker will be deprecated, once deprecated the sucker will no
     /// longer be functional and it will let all users exit.
     /// @param timestamp The time after which the sucker will be deprecated. Or `0` to remove the upcoming deprecation.
@@ -696,6 +680,16 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
 
         deprecatedAfter = timestamp;
         emit DeprecationTimeUpdated(timestamp, _msgSender());
+    }
+
+    /// @notice Set the ETH fee (in wei) paid into the fee project on each `toRemote()` call.
+    /// @dev Only callable by the contract owner. Fee cannot exceed `MAX_TO_REMOTE_FEE`.
+    /// @param fee The new fee amount in wei.
+    function setToRemoteFee(uint256 fee) external onlyOwner {
+        if (fee > MAX_TO_REMOTE_FEE) revert JBSucker_FeeExceedsMax(fee, MAX_TO_REMOTE_FEE);
+        uint256 oldFee = toRemoteFee;
+        toRemoteFee = fee;
+        emit ToRemoteFeeChanged(oldFee, fee);
     }
 
     /// @notice Bridge the project tokens, cashed out funds, and beneficiary information for a given `token` to the

@@ -75,7 +75,7 @@ contract CCIPTestSucker is JBCCIPSucker {
         IJBTokens tokens,
         IJBPermissions permissions
     )
-        JBCCIPSucker(deployer, directory, tokens, permissions, 1, 0, address(1), address(0))
+        JBCCIPSucker(deployer, directory, tokens, permissions, 1, address(1), address(0))
     {}
 
     function exposed_validateTokenMapping(JBTokenMapping calldata map) external pure {
@@ -130,7 +130,7 @@ contract BaseTestSucker is JBSucker {
         IJBPermissions permissions,
         IJBTokens tokens
     )
-        JBSucker(directory, permissions, tokens, 1, 0, address(1), address(0))
+        JBSucker(directory, permissions, tokens, 1, address(1), address(0))
     {}
 
     function exposed_validateTokenMapping(JBTokenMapping calldata map) external pure {
