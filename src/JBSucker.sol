@@ -680,35 +680,32 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         }
 
         // Deduct the fee from msg.value, paying it into the fee project.
-        uint256 transportPayment = msg.value;
-        if (TO_REMOTE_FEE != 0) {
-            if (msg.value < TO_REMOTE_FEE) {
-                revert JBSucker_InsufficientMsgValue(msg.value, TO_REMOTE_FEE);
-            }
-            transportPayment = msg.value - TO_REMOTE_FEE;
+        if (msg.value < TO_REMOTE_FEE) {
+            revert JBSucker_InsufficientMsgValue(msg.value, TO_REMOTE_FEE);
+        }
+        uint256 transportPayment = msg.value - TO_REMOTE_FEE;
 
-            // Pay the fee into the fee project. The caller gets fee project tokens in return.
-            // Best-effort: if the terminal doesn't exist or the pay call reverts, proceed without fee.
-            IJBTerminal terminal =
-                DIRECTORY.primaryTerminalOf({projectId: FEE_PROJECT_ID, token: JBConstants.NATIVE_TOKEN});
-            if (address(terminal) != address(0)) {
-                try terminal.pay{value: TO_REMOTE_FEE}({
-                    projectId: FEE_PROJECT_ID,
-                    token: JBConstants.NATIVE_TOKEN,
-                    amount: TO_REMOTE_FEE,
-                    beneficiary: _msgSender(),
-                    minReturnedTokens: 0,
-                    memo: "",
-                    metadata: ""
-                }) {}
-                catch {
-                    // Fee payment failed — proceed without fee, return it as transport payment.
-                    transportPayment = msg.value;
-                }
-            } else {
-                // No terminal — proceed without fee, return it as transport payment.
+        // Pay the fee into the fee project. The caller gets fee project tokens in return.
+        // Best-effort: if the terminal doesn't exist or the pay call reverts, proceed without fee.
+        IJBTerminal terminal =
+            DIRECTORY.primaryTerminalOf({projectId: FEE_PROJECT_ID, token: JBConstants.NATIVE_TOKEN});
+        if (address(terminal) != address(0)) {
+            try terminal.pay{value: TO_REMOTE_FEE}({
+                projectId: FEE_PROJECT_ID,
+                token: JBConstants.NATIVE_TOKEN,
+                amount: TO_REMOTE_FEE,
+                beneficiary: _msgSender(),
+                minReturnedTokens: 0,
+                memo: "",
+                metadata: ""
+            }) {}
+            catch {
+                // Fee payment failed — proceed without fee, return it as transport payment.
                 transportPayment = msg.value;
             }
+        } else {
+            // No terminal — proceed without fee, return it as transport payment.
+            transportPayment = msg.value;
         }
 
         // Send the merkle root to the remote chain.

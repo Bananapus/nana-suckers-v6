@@ -155,6 +155,8 @@ contract SuckerRegressionsTest is Test {
         );
         // Mock terminal.addToBalanceOf to accept any call (including payable for native token).
         vm.mockCall(TERMINAL, abi.encodeWithSelector(IJBTerminal.addToBalanceOf.selector), abi.encode());
+        // Mock terminal.pay so the toRemote fee payment try-catch doesn't revert on ABI decode of empty return data.
+        vm.mockCall(TERMINAL, abi.encodeWithSelector(IJBTerminal.pay.selector), abi.encode(uint256(0)));
     }
 
     // =========================================================================

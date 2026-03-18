@@ -122,6 +122,10 @@ contract CCIPRefundTest is Test {
         vm.mockCall(DIRECTORY, abi.encodeCall(IJBDirectory.PROJECTS, ()), abi.encode(PROJECT));
         vm.mockCall(PROJECT, abi.encodeCall(IERC721.ownerOf, (PROJECT_ID)), abi.encode(address(this)));
 
+        // Mock primaryTerminalOf to return address(0) so the toRemote fee payment path is skipped.
+        // (The fee is 0 but the DIRECTORY call still happens unconditionally.)
+        vm.mockCall(DIRECTORY, abi.encodeWithSelector(IJBDirectory.primaryTerminalOf.selector), abi.encode(address(0)));
+
         // Put code at MOCK_ROUTER so etch works.
         vm.etch(MOCK_ROUTER, bytes("0x1"));
     }

@@ -374,6 +374,8 @@ contract SuckerInvariantsTest is Test {
         vm.mockCall(
             DIRECTORY, abi.encodeCall(IJBDirectory.primaryTerminalOf, (PROJECT_ID, TOKEN)), abi.encode(TERMINAL)
         );
+        // Mock terminal.pay so the toRemote fee payment try-catch doesn't revert on ABI decode of empty return data.
+        vm.mockCall(TERMINAL, abi.encodeWithSelector(IJBTerminal.pay.selector), abi.encode(uint256(0)));
 
         // Create handler and target it for invariant testing.
         handler = new SuckerHandler(sucker);
