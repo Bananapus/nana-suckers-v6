@@ -129,6 +129,8 @@ contract JBCeloSucker is JBOptimismSucker {
         internal
         override
     {
+        index; // Silence unused parameter warning (not needed for Celo bridge).
+
         // Revert if there's a `msg.value`. The OP bridge does not expect to be paid.
         if (transportPayment != 0) {
             revert JBSucker_UnexpectedMsgValue(transportPayment);
