@@ -33,7 +33,7 @@ contract CCIPSuckerHarness is JBCCIPSucker {
         IJBPermissions permissions,
         address trusted_forwarder
     )
-        JBCCIPSucker(deployer, directory, tokens, permissions, trusted_forwarder)
+        JBCCIPSucker(deployer, directory, tokens, permissions, 1, trusted_forwarder)
     {}
 
     /// @notice Directly insert a leaf into the outbox tree for testing.

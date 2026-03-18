@@ -68,9 +68,10 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
         IJBDirectory directory,
         IJBTokens tokens,
         IJBPermissions permissions,
+        uint256 feeProjectId,
         address trustedForwarder
     )
-        JBSucker(directory, permissions, tokens, trustedForwarder)
+        JBSucker(directory, permissions, tokens, feeProjectId, trustedForwarder)
     {
         REMOTE_CHAIN_ID = IJBCCIPSuckerDeployer(deployer).ccipRemoteChainId();
         REMOTE_CHAIN_SELECTOR = IJBCCIPSuckerDeployer(deployer).ccipRemoteChainSelector();

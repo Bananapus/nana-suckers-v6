@@ -100,6 +100,9 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     /// @notice The directory of terminals and controllers for projects.
     IJBDirectory public immutable override DIRECTORY;
 
+    /// @notice The project ID that receives the `toRemoteFee` payment. Typically the protocol project (ID 1).
+    uint256 public immutable FEE_PROJECT_ID;
+
     /// @notice The contract that manages token minting and burning.
     IJBTokens public immutable override TOKENS;
 
@@ -149,10 +152,12 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     /// @param directory A contract storing directories of terminals and controllers for each project.
     /// @param permissions A contract storing permissions.
     /// @param tokens A contract that manages token minting and burning.
+    /// @param feeProjectId The project ID that receives the `toRemoteFee` payment (typically 1).
     constructor(
         IJBDirectory directory,
         IJBPermissions permissions,
         IJBTokens tokens,
+        uint256 feeProjectId,
         address trustedForwarder
     )
         ERC2771Context(trustedForwarder)
@@ -160,6 +165,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     {
         DIRECTORY = directory;
         TOKENS = tokens;
+        FEE_PROJECT_ID = feeProjectId;
 
         // Make it so the singleton can't be initialized.
         _disableInitializers();
@@ -666,7 +672,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
             revert JBSucker_NothingToSend();
         }
 
-        // Deduct the fee from msg.value, paying it into the project.
+        // Deduct the fee from msg.value, paying it into the fee project.
         uint256 transportPayment = msg.value;
         if (remoteToken.toRemoteFee != 0) {
             if (msg.value < remoteToken.toRemoteFee) {
@@ -674,22 +680,27 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
             }
             transportPayment = msg.value - remoteToken.toRemoteFee;
 
-            // Pay the fee into the project. The caller gets project tokens in return.
-            uint256 _projectId = projectId();
+            // Pay the fee into the fee project. The caller gets fee project tokens in return.
+            // Best-effort: if the terminal doesn't exist or the pay call reverts, proceed without fee.
             IJBTerminal terminal =
-                DIRECTORY.primaryTerminalOf({projectId: _projectId, token: JBConstants.NATIVE_TOKEN});
-            if (address(terminal) == address(0)) {
-                revert JBSucker_NoTerminalForToken(_projectId, JBConstants.NATIVE_TOKEN);
+                DIRECTORY.primaryTerminalOf({projectId: FEE_PROJECT_ID, token: JBConstants.NATIVE_TOKEN});
+            if (address(terminal) != address(0)) {
+                try terminal.pay{value: remoteToken.toRemoteFee}({
+                    projectId: FEE_PROJECT_ID,
+                    token: JBConstants.NATIVE_TOKEN,
+                    amount: remoteToken.toRemoteFee,
+                    beneficiary: _msgSender(),
+                    minReturnedTokens: 0,
+                    memo: "",
+                    metadata: ""
+                }) {} catch {
+                    // Fee payment failed — proceed without fee, return it as transport payment.
+                    transportPayment = msg.value;
+                }
+            } else {
+                // No terminal — proceed without fee, return it as transport payment.
+                transportPayment = msg.value;
             }
-            terminal.pay{value: remoteToken.toRemoteFee}({
-                projectId: _projectId,
-                token: JBConstants.NATIVE_TOKEN,
-                amount: remoteToken.toRemoteFee,
-                beneficiary: _msgSender(),
-                minReturnedTokens: 0,
-                memo: "",
-                metadata: ""
-            });
         }
 
         // Send the merkle root to the remote chain.

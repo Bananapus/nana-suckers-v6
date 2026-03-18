@@ -270,6 +270,7 @@ contract CCIPSuckerForkedTests is TestBaseWorkflow {
             directory: jbDirectory(),
             permissions: jbPermissions(),
             tokens: jbTokens(),
+            feeProjectId: 1,
             trustedForwarder: address(0)
         });
         vm.stopPrank();
@@ -329,6 +330,7 @@ contract CCIPSuckerForkedTests is TestBaseWorkflow {
             directory: jbDirectory(),
             permissions: jbPermissions(),
             tokens: jbTokens(),
+            feeProjectId: 1,
             trustedForwarder: address(0)
         });
         vm.stopPrank();

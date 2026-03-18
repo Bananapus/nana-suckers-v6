@@ -126,6 +126,7 @@ abstract contract CCIPSuckerMainnetForkTestBase is TestBaseWorkflow {
             directory: jbDirectory(),
             permissions: jbPermissions(),
             tokens: jbTokens(),
+            feeProjectId: 1,
             trustedForwarder: address(0)
         });
         vm.stopPrank();
@@ -169,6 +170,7 @@ abstract contract CCIPSuckerMainnetForkTestBase is TestBaseWorkflow {
             directory: jbDirectory(),
             permissions: jbPermissions(),
             tokens: jbTokens(),
+            feeProjectId: 1,
             trustedForwarder: address(0)
         });
         vm.stopPrank();

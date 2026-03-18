@@ -360,6 +360,7 @@ contract ForkOptimismTest is OPStackNativeBridgeForkTestBase {
             directory: directory,
             permissions: permissions,
             tokens: tokens,
+            feeProjectId: 1,
             trustedForwarder: address(0)
         });
     }
@@ -407,6 +408,7 @@ contract ForkBaseTest is OPStackNativeBridgeForkTestBase {
             directory: directory,
             permissions: permissions,
             tokens: tokens,
+            feeProjectId: 1,
             trustedForwarder: address(0)
         });
     }
