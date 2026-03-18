@@ -88,7 +88,6 @@ contract MultiChainEvolutionTest is Test, TestBaseWorkflow, IERC721Receiver {
             directory: jbDirectory(),
             permissions: jbPermissions(),
             tokens: jbTokens(),
-            addToBalanceMode: JBAddToBalanceMode.MANUAL,
             trustedForwarder: address(0)
         });
         opDeployer.configureSingleton(opSingleton);
@@ -112,7 +111,6 @@ contract MultiChainEvolutionTest is Test, TestBaseWorkflow, IERC721Receiver {
             directory: jbDirectory(),
             permissions: jbPermissions(),
             tokens: jbTokens(),
-            addToBalanceMode: JBAddToBalanceMode.MANUAL,
             trustedForwarder: address(0)
         });
         ccipDeployer.configureSingleton(ccipSingleton);

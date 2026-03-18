@@ -16,7 +16,6 @@ import {BitMaps} from "@openzeppelin/contracts/utils/structs/BitMaps.sol";
 
 import {JBSucker} from "./JBSucker.sol";
 import {JBArbitrumSuckerDeployer} from "./deployers/JBArbitrumSuckerDeployer.sol";
-import {JBAddToBalanceMode} from "./enums/JBAddToBalanceMode.sol";
 import {JBLayer} from "./enums/JBLayer.sol";
 import {IArbGatewayRouter} from "./interfaces/IArbGatewayRouter.sol";
 import {IArbL1GatewayRouter} from "./interfaces/IArbL1GatewayRouter.sol";
@@ -36,7 +35,6 @@ contract JBArbitrumSucker is JBSucker, IJBArbitrumSucker {
     // --------------------------- custom errors ------------------------- //
     //*********************************************************************//
 
-    error JBArbitrumSucker_ManualModeUnsafe();
     error JBArbitrumSucker_NotEnoughGas(uint256 payment, uint256 cost);
 
     //*********************************************************************//
@@ -59,23 +57,15 @@ contract JBArbitrumSucker is JBSucker, IJBArbitrumSucker {
     /// @param directory A contract storing directories of terminals and controllers for each project.
     /// @param permissions A contract storing permissions.
     /// @param tokens A contract that manages token minting and burning.
-    /// @param addToBalanceMode The mode of adding tokens to balance.
     constructor(
         JBArbitrumSuckerDeployer deployer,
         IJBDirectory directory,
         IJBPermissions permissions,
         IJBTokens tokens,
-        JBAddToBalanceMode addToBalanceMode,
         address trustedForwarder
     )
-        JBSucker(directory, permissions, tokens, addToBalanceMode, trustedForwarder)
+        JBSucker(directory, permissions, tokens, trustedForwarder)
     {
-        // Enforce ON_CLAIM mode for Arbitrum — MANUAL mode is unsafe due to non-atomic L1→L2 bridging.
-        // See _toL2() NatSpec for details on the retryable ticket ordering problem.
-        if (addToBalanceMode == JBAddToBalanceMode.MANUAL) {
-            revert JBArbitrumSucker_ManualModeUnsafe();
-        }
-
         GATEWAYROUTER = JBArbitrumSuckerDeployer(deployer).arbGatewayRouter();
         ARBINBOX = JBArbitrumSuckerDeployer(deployer).arbInbox();
         LAYER = JBArbitrumSuckerDeployer(deployer).arbLayer();
@@ -223,16 +213,9 @@ contract JBArbitrumSucker is JBSucker, IJBArbitrumSucker {
     /// (via the gateway router, line ~245) and one for the `fromRemote` merkle root message (via the inbox,
     /// line ~274). These tickets are redeemed independently on L2, with no guaranteed ordering.
     ///
-    /// In MANUAL `ADD_TO_BALANCE_MODE`, if the message ticket is redeemed before the token ticket, `claim()` will
-    /// mint project tokens for the beneficiary even though the backing terminal tokens have not yet arrived in the
-    /// sucker contract. This creates a window where project tokens exist without terminal backing.
-    ///
-    /// In ON_CLAIM mode, `_handleClaim` calls `_addToBalance` which checks `amountToAddToBalanceOf` (derived from
-    /// the contract's actual token balance minus outbox balance). If the tokens have not arrived yet, this check
-    /// will revert with `JBSucker_InsufficientBalance`, preventing unbacked token minting.
-    ///
-    /// Recommendation: Use `JBAddToBalanceMode.ON_CLAIM` for Arbitrum suckers to ensure atomic claim + balance
-    /// settlement and avoid the non-atomic bridging window.
+    /// `_handleClaim` calls `_addToBalance` which checks `amountToAddToBalanceOf` (derived from the contract's
+    /// actual token balance minus outbox balance). If the tokens have not arrived yet, this check will revert
+    /// with `JBSucker_InsufficientBalance`, preventing unbacked token minting.
     /// @param token The token to bridge.
     /// @param amount The amount of tokens to bridge.
     /// @param data The calldata to send to the remote chain. This calls `JBSucker.fromRemote` on the remote peer.

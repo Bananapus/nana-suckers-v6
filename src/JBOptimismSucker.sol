@@ -11,7 +11,6 @@ import {BitMaps} from "@openzeppelin/contracts/utils/structs/BitMaps.sol";
 
 import {JBSucker} from "./JBSucker.sol";
 import {JBOptimismSuckerDeployer} from "./deployers/JBOptimismSuckerDeployer.sol";
-import {JBAddToBalanceMode} from "./enums/JBAddToBalanceMode.sol";
 import {IJBOptimismSucker} from "./interfaces/IJBOptimismSucker.sol";
 import {IOPMessenger} from "./interfaces/IOPMessenger.sol";
 import {IOPStandardBridge} from "./interfaces/IOPStandardBridge.sol";
@@ -42,16 +41,14 @@ contract JBOptimismSucker is JBSucker, IJBOptimismSucker {
     /// @param directory A contract storing directories of terminals and controllers for each project.
     /// @param tokens A contract that manages token minting and burning.
     /// @param permissions A contract storing permissions.
-    /// @param addToBalanceMode The mode of adding tokens to balance.
     constructor(
         JBOptimismSuckerDeployer deployer,
         IJBDirectory directory,
         IJBPermissions permissions,
         IJBTokens tokens,
-        JBAddToBalanceMode addToBalanceMode,
         address trustedForwarder
     )
-        JBSucker(directory, permissions, tokens, addToBalanceMode, trustedForwarder)
+        JBSucker(directory, permissions, tokens, trustedForwarder)
     {
         // Fetch the messenger and bridge by doing a callback to the deployer contract.
         OPBRIDGE = JBOptimismSuckerDeployer(deployer).opBridge();

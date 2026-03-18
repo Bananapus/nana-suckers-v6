@@ -14,7 +14,7 @@ import {LibClone} from "solady/src/utils/LibClone.sol";
 import {JBCCIPSucker} from "../../src/JBCCIPSucker.sol";
 import {JBSucker} from "../../src/JBSucker.sol";
 import {JBCCIPSuckerDeployer} from "../../src/deployers/JBCCIPSuckerDeployer.sol";
-import {JBAddToBalanceMode} from "../../src/enums/JBAddToBalanceMode.sol";
+
 import {IJBCCIPSuckerDeployer} from "../../src/interfaces/IJBCCIPSuckerDeployer.sol";
 import {ICCIPRouter} from "../../src/interfaces/ICCIPRouter.sol";
 import {IRouterClient} from "@chainlink/contracts-ccip/src/v0.8/ccip/interfaces/IRouterClient.sol";
@@ -31,10 +31,9 @@ contract CCIPSuckerHarness is JBCCIPSucker {
         IJBDirectory directory,
         IJBTokens tokens,
         IJBPermissions permissions,
-        JBAddToBalanceMode addToBalanceMode,
         address trusted_forwarder
     )
-        JBCCIPSucker(deployer, directory, tokens, permissions, addToBalanceMode, trusted_forwarder)
+        JBCCIPSucker(deployer, directory, tokens, permissions, trusted_forwarder)
     {}
 
     /// @notice Directly insert a leaf into the outbox tree for testing.
@@ -112,7 +111,6 @@ contract CCIPRefundTest is Test {
             IJBDirectory(DIRECTORY),
             IJBTokens(TOKENS),
             IJBPermissions(PERMISSIONS),
-            JBAddToBalanceMode.MANUAL,
             FORWARDER
         );
 

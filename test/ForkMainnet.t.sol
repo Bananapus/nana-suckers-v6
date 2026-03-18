@@ -10,7 +10,7 @@ import {JBPermissionIds} from "@bananapus/permission-ids-v6/src/JBPermissionIds.
 import {ICCIPRouter} from "src/interfaces/ICCIPRouter.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {JBTokenMapping} from "../src/structs/JBTokenMapping.sol";
-import {JBAddToBalanceMode} from "../src/enums/JBAddToBalanceMode.sol";
+
 
 import "forge-std/Test.sol";
 import {JBCCIPSuckerDeployer} from "src/deployers/JBCCIPSuckerDeployer.sol";
@@ -127,7 +127,6 @@ abstract contract CCIPSuckerMainnetForkTestBase is TestBaseWorkflow {
             directory: jbDirectory(),
             permissions: jbPermissions(),
             tokens: jbTokens(),
-            addToBalanceMode: JBAddToBalanceMode.MANUAL,
             trustedForwarder: address(0)
         });
         vm.stopPrank();
@@ -171,7 +170,6 @@ abstract contract CCIPSuckerMainnetForkTestBase is TestBaseWorkflow {
             directory: jbDirectory(),
             permissions: jbPermissions(),
             tokens: jbTokens(),
-            addToBalanceMode: JBAddToBalanceMode.MANUAL,
             trustedForwarder: address(0)
         });
         vm.stopPrank();

@@ -121,7 +121,7 @@ Chain A                              Chain B
   |                          4. claim(proof)
   |                             - verifies merkle proof
   |                             - mints project tokens
-  |                             - adds funds to balance (if ON_CLAIM)
+  |                             - adds funds to balance
 ```
 
 Each `toRemote` call increments the outbox nonce and sends the complete merkle root. On the receiving side, `fromRemote` only accepts roots with a nonce strictly greater than the current inbox nonce. If nonces arrive out of order (possible with CCIP), earlier nonces are silently skipped and their claims become unclaimable on that chain. The sender would need to use the emergency hatch on the source chain to recover funds from skipped roots.
@@ -226,7 +226,7 @@ Building these claims manually requires tracking every insertion and computing m
 
 The service looks through the entire inbox tree and returns all available claims as `JBClaim` structs ready to pass to `claim(...)`.
 
-If the sucker's `ADD_TO_BALANCE_MODE` is `ON_CLAIM`, the bridged ETH is immediately added to OhioDAO's Optimism balance. Otherwise, someone calls `addOutstandingAmountToBalance(token)` to add it manually.
+The bridged ETH is added to OhioDAO's Optimism balance when the claim is processed.
 
 ## Token Mapping
 
@@ -400,7 +400,7 @@ nana-suckers-v6/
 │   ├── JBArbitrumSucker.sol - Arbitrum bridge implementation.
 │   ├── JBSuckerRegistry.sol - Registry tracking suckers per project.
 │   ├── deployers/ - Deployers for each kind of sucker.
-│   ├── enums/ - JBAddToBalanceMode, JBLayer, JBSuckerState.
+│   ├── enums/ - JBLayer, JBSuckerState.
 │   ├── interfaces/ - Contract interfaces.
 │   ├── libraries/ - ARBAddresses, ARBChains, CCIPHelper.
 │   ├── structs/ - JBClaim, JBLeaf, JBMessageRoot, JBOutboxTree, etc.

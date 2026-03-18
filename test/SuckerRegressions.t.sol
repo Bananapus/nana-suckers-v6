@@ -13,7 +13,7 @@ import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import {LibClone} from "solady/src/utils/LibClone.sol";
 
 import "../src/JBSucker.sol";
-import {JBAddToBalanceMode} from "../src/enums/JBAddToBalanceMode.sol";
+
 import {JBClaim} from "../src/structs/JBClaim.sol";
 import {JBLeaf} from "../src/structs/JBLeaf.sol";
 import {JBInboxTreeRoot} from "../src/structs/JBInboxTreeRoot.sol";
@@ -37,10 +37,9 @@ contract RegressionSucker is JBSucker {
         IJBDirectory directory,
         IJBPermissions permissions,
         IJBTokens tokens,
-        JBAddToBalanceMode addToBalanceMode,
         address forwarder
     )
-        JBSucker(directory, permissions, tokens, addToBalanceMode, forwarder)
+        JBSucker(directory, permissions, tokens, forwarder)
     {}
 
     function _sendRootOverAMB(
@@ -133,8 +132,7 @@ contract SuckerRegressionsTest is Test {
     uint256 constant PROJECT_ID = 1;
     address constant TOKEN = address(0x000000000000000000000000000000000000EEEe);
 
-    RegressionSucker suckerManual;
-    RegressionSucker suckerOnClaim;
+    RegressionSucker sucker;
 
     function setUp() public {
         vm.warp(100 days);
@@ -146,11 +144,7 @@ contract SuckerRegressionsTest is Test {
         vm.label(PROJECT, "MOCK_PROJECT");
         vm.label(TERMINAL, "MOCK_TERMINAL");
 
-        // Create MANUAL mode sucker.
-        suckerManual = _createSucker(JBAddToBalanceMode.MANUAL, "manual_salt");
-
-        // Create ON_CLAIM mode sucker.
-        suckerOnClaim = _createSucker(JBAddToBalanceMode.ON_CLAIM, "onclaim_salt");
+        sucker = _createSucker("sucker_salt");
 
         // Common mocks.
         vm.mockCall(DIRECTORY, abi.encodeCall(IJBDirectory.PROJECTS, ()), abi.encode(PROJECT));
@@ -159,6 +153,8 @@ contract SuckerRegressionsTest is Test {
         vm.mockCall(
             DIRECTORY, abi.encodeCall(IJBDirectory.primaryTerminalOf, (PROJECT_ID, TOKEN)), abi.encode(TERMINAL)
         );
+        // Mock terminal.addToBalanceOf to accept any call (including payable for native token).
+        vm.mockCall(TERMINAL, abi.encodeWithSelector(IJBTerminal.addToBalanceOf.selector), abi.encode());
     }
 
     // =========================================================================
@@ -170,7 +166,7 @@ contract SuckerRegressionsTest is Test {
     /// After the fix, `_sendRoot` returns early when the tree is empty without reverting.
     function test_L5_toRemoteWithEmptyTreeAndZeroMinBridgeAmount() public {
         // Map a token with minBridgeAmount = 0.
-        suckerManual.test_setRemoteToken(
+        sucker.test_setRemoteToken(
             TOKEN,
             JBRemoteToken({
                 enabled: true,
@@ -182,25 +178,25 @@ contract SuckerRegressionsTest is Test {
         );
 
         // Reset the tracking flag.
-        suckerManual.test_resetSendRootOverAMBCalled();
+        sucker.test_resetSendRootOverAMBCalled();
 
         // The outbox tree is empty (no `prepare()` calls).
-        assertEq(suckerManual.test_getOutboxCount(TOKEN), 0);
+        assertEq(sucker.test_getOutboxCount(TOKEN), 0);
 
         // Call toRemote -- should NOT revert (the fix adds an early return for empty tree).
-        suckerManual.toRemote(TOKEN);
+        sucker.toRemote(TOKEN);
 
         // Verify that _sendRootOverAMB was NOT called (early return before reaching the AMB send).
-        assertFalse(suckerManual.sendRootOverAMBCalled(), "sendRootOverAMB should not be called on empty tree");
+        assertFalse(sucker.sendRootOverAMBCalled(), "sendRootOverAMB should not be called on empty tree");
 
         // Verify that the nonce was not incremented (nothing was sent).
-        assertEq(suckerManual.test_getOutboxNonce(TOKEN), 0, "Nonce should remain 0 when tree is empty");
+        assertEq(sucker.test_getOutboxNonce(TOKEN), 0, "Nonce should remain 0 when tree is empty");
     }
 
     /// @notice Verifies that `toRemote()` still works normally when the tree has entries.
     function test_L5_toRemoteWithNonEmptyTreeStillWorks() public {
         // Map a token with minBridgeAmount = 0.
-        suckerManual.test_setRemoteToken(
+        sucker.test_setRemoteToken(
             TOKEN,
             JBRemoteToken({
                 enabled: true,
@@ -212,18 +208,18 @@ contract SuckerRegressionsTest is Test {
         );
 
         // Insert a leaf into the tree and give ETH backing.
-        vm.deal(address(suckerManual), 1 ether);
-        suckerManual.test_insertIntoTree(1 ether, TOKEN, 1 ether, bytes32(uint256(uint160(address(0xBEEF)))));
-        assertEq(suckerManual.test_getOutboxCount(TOKEN), 1);
+        vm.deal(address(sucker), 1 ether);
+        sucker.test_insertIntoTree(1 ether, TOKEN, 1 ether, bytes32(uint256(uint160(address(0xBEEF)))));
+        assertEq(sucker.test_getOutboxCount(TOKEN), 1);
 
         // Reset the tracking flag.
-        suckerManual.test_resetSendRootOverAMBCalled();
+        sucker.test_resetSendRootOverAMBCalled();
 
         // Call toRemote -- should succeed and call the AMB.
-        suckerManual.toRemote(TOKEN);
+        sucker.toRemote(TOKEN);
 
-        assertTrue(suckerManual.sendRootOverAMBCalled(), "sendRootOverAMB should be called on non-empty tree");
-        assertEq(suckerManual.test_getOutboxNonce(TOKEN), 1, "Nonce should be incremented after send");
+        assertTrue(sucker.sendRootOverAMBCalled(), "sendRootOverAMB should be called on non-empty tree");
+        assertEq(sucker.test_getOutboxNonce(TOKEN), 1, "Nonce should be incremented after send");
     }
 
     // =========================================================================
@@ -239,17 +235,20 @@ contract SuckerRegressionsTest is Test {
 
         // Set up the sucker to be deprecated so emergency exit is allowed.
         uint256 deprecationTimestamp = block.timestamp + 14 days;
-        suckerManual.setDeprecation(uint40(deprecationTimestamp));
+        sucker.setDeprecation(uint40(deprecationTimestamp));
         vm.warp(deprecationTimestamp);
 
         // Set outbox balance to cover the exit.
-        suckerManual.test_setOutboxBalance(TOKEN, terminalTokenAmount);
+        sucker.test_setOutboxBalance(TOKEN, terminalTokenAmount);
 
         // Insert a leaf so there's something to claim.
-        suckerManual.test_insertIntoTree(projectTokenCount, TOKEN, terminalTokenAmount, beneficiary);
+        sucker.test_insertIntoTree(projectTokenCount, TOKEN, terminalTokenAmount, beneficiary);
 
-        // Deal ETH to cover the outbox balance.
-        vm.deal(address(suckerManual), terminalTokenAmount);
+        // Deal ETH to cover the outbox balance (set + inserted) plus the claim amount.
+        // After set (1 ether) + insert (adds 1 ether), outbox balance = 2 ether.
+        // After emergency exit decrements (2-1=1), amountToAddToBalance = sucker.balance - 1.
+        // Need sucker.balance >= 1 + terminalTokenAmount = 2 ether.
+        vm.deal(address(sucker), 2 * terminalTokenAmount);
 
         // Mock the mint call.
         vm.mockCall(
@@ -259,7 +258,7 @@ contract SuckerRegressionsTest is Test {
         );
 
         // Set merkle check to pass.
-        suckerManual.test_setNextMerkleCheckToBe(true);
+        sucker.test_setNextMerkleCheckToBe(true);
 
         // Build the claim data.
         bytes32[32] memory proof;
@@ -275,7 +274,7 @@ contract SuckerRegressionsTest is Test {
         });
 
         // Expect the EmergencyExit event with the correct parameters.
-        vm.expectEmit(true, true, false, true, address(suckerManual));
+        vm.expectEmit(true, true, false, true, address(sucker));
         emit IJBSuckerExtended.EmergencyExit({
             beneficiary: beneficiaryAddr,
             token: TOKEN,
@@ -285,7 +284,7 @@ contract SuckerRegressionsTest is Test {
         });
 
         // Perform the emergency exit.
-        suckerManual.exitThroughEmergencyHatch(claimData);
+        sucker.exitThroughEmergencyHatch(claimData);
     }
 
     // =========================================================================
@@ -293,27 +292,26 @@ contract SuckerRegressionsTest is Test {
     // Documents that ON_CLAIM mode protects against claiming without backing.
     // =========================================================================
 
-    /// @notice Demonstrates that ON_CLAIM mode correctly reverts when the sucker does not hold enough
-    /// terminal tokens to cover the claim. This is the protection against the Arbitrum non-atomicity
+    /// @notice Demonstrates that the sucker correctly reverts when it does not hold enough
+    /// terminal tokens to cover the claim. This protects against the Arbitrum non-atomicity
     /// issue: if the message ticket is redeemed before the token ticket arrives, `_addToBalance`
     /// in `_handleClaim` will revert because `amountToAddToBalanceOf` checks the actual token balance.
     ///
     /// @dev Arbitrum non-atomicity background: `JBArbitrumSucker._toL2()` creates two independent
     /// retryable tickets for ERC-20 bridging -- one for the token bridge and one for the `fromRemote`
-    /// message. These can be redeemed in any order on L2. In MANUAL mode, the claim would succeed
-    /// even if tokens haven't arrived. ON_CLAIM mode prevents this by requiring sufficient balance at
+    /// message. These can be redeemed in any order on L2. The sucker requires sufficient balance at
     /// claim time.
-    function test_M4_onClaimModeRevertsWhenTokensNotYetArrived() public {
+    function test_M4_claimRevertsWhenTokensNotYetArrived() public {
         address beneficiaryAddr = address(0xBEEF);
         bytes32 beneficiary = bytes32(uint256(uint160(beneficiaryAddr)));
         uint256 terminalTokenAmount = 1 ether;
         uint256 projectTokenCount = 5 ether;
 
         // Set up inbox root so claim validation passes (simulate fromRemote being called).
-        suckerOnClaim.test_setNextMerkleCheckToBe(true);
+        sucker.test_setNextMerkleCheckToBe(true);
 
-        // Mock the addToBalanceOf call -- but note: the ON_CLAIM sucker will check amountToAddToBalanceOf
-        // first, which depends on the actual balance of the contract.
+        // The sucker will check amountToAddToBalanceOf when handling the claim,
+        // which depends on the actual balance of the contract.
         // The sucker has 0 balance (tokens have NOT arrived yet from the Arbitrum gateway).
 
         // Mock the token mint so it would succeed if we got that far.
@@ -335,27 +333,26 @@ contract SuckerRegressionsTest is Test {
             proof: proof
         });
 
-        // The claim should revert because the ON_CLAIM sucker's _handleClaim calls _addToBalance,
+        // The claim should revert because _handleClaim calls _addToBalance,
         // which checks amountToAddToBalanceOf. With 0 contract balance and 0 outbox balance,
         // amountToAddToBalance = 0, which is less than terminalTokenAmount (1 ether).
-        // This demonstrates the ON_CLAIM protection against the Arbitrum non-atomicity issue.
         vm.expectRevert();
-        suckerOnClaim.claim(claimData);
+        sucker.claim(claimData);
     }
 
     // =========================================================================
     // Helpers
     // =========================================================================
 
-    function _createSucker(JBAddToBalanceMode mode, bytes32 salt) internal returns (RegressionSucker) {
+    function _createSucker(bytes32 salt) internal returns (RegressionSucker) {
         RegressionSucker singleton = new RegressionSucker(
-            IJBDirectory(DIRECTORY), IJBPermissions(PERMISSIONS), IJBTokens(TOKENS), mode, FORWARDER
+            IJBDirectory(DIRECTORY), IJBPermissions(PERMISSIONS), IJBTokens(TOKENS), FORWARDER
         );
 
-        RegressionSucker sucker =
+        RegressionSucker s =
             RegressionSucker(payable(address(LibClone.cloneDeterministic(address(singleton), salt))));
-        sucker.initialize(PROJECT_ID);
+        s.initialize(PROJECT_ID);
 
-        return sucker;
+        return s;
     }
 }

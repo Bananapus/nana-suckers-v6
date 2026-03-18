@@ -6,7 +6,6 @@ import {IJBController} from "@bananapus/core-v6/src/interfaces/IJBController.sol
 import {IJBDirectory} from "@bananapus/core-v6/src/interfaces/IJBDirectory.sol";
 import {IJBTokens} from "@bananapus/core-v6/src/interfaces/IJBTokens.sol";
 
-import {JBAddToBalanceMode} from "../enums/JBAddToBalanceMode.sol";
 import {JBClaim} from "../structs/JBClaim.sol";
 import {JBInboxTreeRoot} from "../structs/JBInboxTreeRoot.sol";
 import {JBMessageRoot} from "../structs/JBMessageRoot.sol";
@@ -25,7 +24,6 @@ interface IJBSucker is IERC165 {
     /// @param projectTokenCount The number of project tokens claimed.
     /// @param terminalTokenAmount The amount of terminal tokens involved.
     /// @param index The leaf index in the inbox tree.
-    /// @param autoAddedToBalance Whether the tokens were automatically added to the project's balance.
     /// @param caller The address that performed the claim.
     event Claimed(
         bytes32 beneficiary,
@@ -33,7 +31,6 @@ interface IJBSucker is IERC165 {
         uint256 projectTokenCount,
         uint256 terminalTokenAmount,
         uint256 index,
-        bool autoAddedToBalance,
         address caller
     );
 
@@ -79,10 +76,6 @@ interface IJBSucker is IERC165 {
     event StaleRootRejected(address indexed token, uint64 receivedNonce, uint64 currentNonce);
 
     // View functions
-
-    /// @notice The mode used when adding reclaimed tokens to the project's balance.
-    /// @return The add-to-balance mode.
-    function ADD_TO_BALANCE_MODE() external view returns (JBAddToBalanceMode);
 
     /// @notice The directory of terminals and controllers.
     /// @return The directory contract.
@@ -146,10 +139,6 @@ interface IJBSucker is IERC165 {
     function state() external view returns (JBSuckerState);
 
     // State-changing functions
-
-    /// @notice Add the outstanding reclaimed token balance to the project's terminal.
-    /// @param token The terminal token to add to balance.
-    function addOutstandingAmountToBalance(address token) external;
 
     /// @notice Perform multiple claims of bridged project tokens.
     /// @param claims The claims to perform.

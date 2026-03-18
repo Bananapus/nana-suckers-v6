@@ -23,7 +23,6 @@ contract MerkleUnitTest is JBSucker, Test {
             IJBDirectory(address(600)),
             IJBPermissions(address(800)),
             IJBTokens(address(700)),
-            JBAddToBalanceMode.MANUAL,
             address(0)
         )
         // self.initialize(.NATIVE_TOKEN, JBConstants.NATIVE_TOKEN, JBConstants.NATIVE_TOKEN)
@@ -165,6 +164,10 @@ contract MerkleUnitTest is JBSucker, Test {
             );
     }
 
+    /// @dev Override _addToBalance to be a no-op for merkle proof testing.
+    /// These tests focus on merkle tree proof validation, not token balance mechanics.
+    function _addToBalance(address, uint256) internal override {}
+
     function _isRemotePeer(address) internal view virtual override returns (bool valid) {
         return false;
     }
@@ -200,7 +203,6 @@ contract DeployerUnitTest is Test {
             IJBDirectory(address(0)),
             IJBPermissions(address(0)),
             IJBTokens(address(0)),
-            JBAddToBalanceMode.MANUAL,
             address(0)
         );
 

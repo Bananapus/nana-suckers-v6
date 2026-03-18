@@ -19,7 +19,6 @@ import {Context} from "@openzeppelin/contracts/utils/Context.sol";
 import {ERC165, IERC165} from "@openzeppelin/contracts/utils/introspection/ERC165.sol";
 import {BitMaps} from "@openzeppelin/contracts/utils/structs/BitMaps.sol";
 
-import {JBAddToBalanceMode} from "./enums/JBAddToBalanceMode.sol";
 import {JBSuckerState} from "./enums/JBSuckerState.sol";
 import {IJBSucker} from "./interfaces/IJBSucker.sol";
 import {IJBSuckerExtended} from "./interfaces/IJBSuckerExtended.sol";
@@ -62,7 +61,6 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     error JBSucker_InvalidNativeRemoteAddress(bytes32 remoteToken);
     error JBSucker_InvalidProof(bytes32 root, bytes32 inboxRoot);
     error JBSucker_LeafAlreadyExecuted(address token, uint256 index);
-    error JBSucker_ManualNotAllowed(JBAddToBalanceMode mode);
     error JBSucker_NoTerminalForToken(uint256 projectId, address token);
     error JBSucker_NotPeer(bytes32 caller);
     error JBSucker_QueueInsufficientSize(uint256 amount, uint256 minimumAmount);
@@ -98,10 +96,6 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     //*********************************************************************//
     // --------------- public immutable stored properties ---------------- //
     //*********************************************************************//
-
-    /// @notice Whether the `amountToAddToBalance` gets added to the project's balance automatically when `claim` is
-    /// called or manually by calling `addOutstandingAmountToBalance`.
-    JBAddToBalanceMode public immutable override ADD_TO_BALANCE_MODE;
 
     /// @notice The directory of terminals and controllers for projects.
     IJBDirectory public immutable override DIRECTORY;
@@ -155,12 +149,10 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     /// @param directory A contract storing directories of terminals and controllers for each project.
     /// @param permissions A contract storing permissions.
     /// @param tokens A contract that manages token minting and burning.
-    /// @param addToBalanceMode The mode of adding tokens to balance.
     constructor(
         IJBDirectory directory,
         IJBPermissions permissions,
         IJBTokens tokens,
-        JBAddToBalanceMode addToBalanceMode,
         address trustedForwarder
     )
         ERC2771Context(trustedForwarder)
@@ -168,7 +160,6 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     {
         DIRECTORY = directory;
         TOKENS = tokens;
-        ADD_TO_BALANCE_MODE = addToBalanceMode;
 
         // Make it so the singleton can't be initialized.
         _disableInitializers();
@@ -181,8 +172,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     // ------------------------ external views --------------------------- //
     //*********************************************************************//
 
-    /// @notice The outstanding amount of tokens to be added to the project's balance by `claim` or
-    /// `addOutstandingAmountToBalance`.
+    /// @notice The outstanding amount of tokens to be added to the project's balance by `claim`.
     /// @param token The local terminal token to get the amount to add to balance for.
     function amountToAddToBalanceOf(address token) public view override returns (uint256) {
         // Get the amount that is in this sucker to be bridged.
@@ -355,19 +345,6 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     // --------------------- external transactions ----------------------- //
     //*********************************************************************//
 
-    /// @notice Adds the reclaimed `token` balance to the projects terminal. Can only be used if `ADD_TO_BALANCE_MODE`
-    /// is
-    /// `MANUAL`.
-    /// @param token The address of the terminal token to add to the project's balance.
-    function addOutstandingAmountToBalance(address token) external override {
-        if (ADD_TO_BALANCE_MODE != JBAddToBalanceMode.MANUAL) {
-            revert JBSucker_ManualNotAllowed(ADD_TO_BALANCE_MODE);
-        }
-
-        // Add entire outstanding amount to the project's balance.
-        _addToBalance({token: token, amount: amountToAddToBalanceOf(token)});
-    }
-
     /// @notice Performs multiple claims.
     /// @param claims A list of claims to perform (including the terminal token, merkle tree leaf, and proof for each
     /// claim).
@@ -397,7 +374,6 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
             projectTokenCount: claimData.leaf.projectTokenCount,
             terminalTokenAmount: claimData.leaf.terminalTokenAmount,
             index: claimData.leaf.index,
-            autoAddedToBalance: ADD_TO_BALANCE_MODE == JBAddToBalanceMode.ON_CLAIM ? true : false,
             caller: _msgSender()
         });
 
@@ -705,7 +681,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     /// @dev Restricting this to known senders would risk breaking bridge integrations, as bridge contracts may change
     /// addresses or use proxy patterns. The sucker's accounting (`_outboxOf[token].balance` and
     /// `amountToAddToBalanceOf`) already tracks expected native token amounts, so excess ETH sent here does not
-    /// create a double-spend risk -- it would simply increase the `amountToAddToBalance` for the project.
+    /// create a double-spend risk -- it would simply increase the amount to add to balance for the project.
     receive() external payable {}
 
     //*********************************************************************//
@@ -769,8 +745,8 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     )
         internal
     {
-        // If this contract's add to balance mode is `ON_CLAIM`, add the cashed out funds to the project's balance.
-        if (ADD_TO_BALANCE_MODE == JBAddToBalanceMode.ON_CLAIM && terminalTokenAmount != 0) {
+        // Add the cashed out funds to the project's balance.
+        if (terminalTokenAmount != 0) {
             _addToBalance({token: terminalToken, amount: terminalTokenAmount});
         }
 

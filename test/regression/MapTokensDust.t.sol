@@ -186,7 +186,6 @@ contract MapTokensDustTest is Test {
             IJBDirectory(DIRECTORY),
             IJBPermissions(PERMISSIONS),
             IJBTokens(TOKENS),
-            JBAddToBalanceMode.MANUAL,
             FORWARDER
         );
         vm.label(address(singleton), "SUCKER_SINGLETON");
@@ -205,10 +204,9 @@ contract MapTokensDustSucker is JBSucker {
         IJBDirectory directory,
         IJBPermissions permissions,
         IJBTokens tokens,
-        JBAddToBalanceMode addToBalanceMode,
         address forwarder
     )
-        JBSucker(directory, permissions, tokens, addToBalanceMode, forwarder)
+        JBSucker(directory, permissions, tokens, forwarder)
     {}
 
     function _sendRootOverAMB(

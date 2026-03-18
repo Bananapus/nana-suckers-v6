@@ -6,13 +6,15 @@ import "forge-std/Test.sol";
 import {IJBController} from "@bananapus/core-v6/src/interfaces/IJBController.sol";
 import {IJBDirectory} from "@bananapus/core-v6/src/interfaces/IJBDirectory.sol";
 import {IJBPermissions} from "@bananapus/core-v6/src/interfaces/IJBPermissions.sol";
+import {IJBTerminal} from "@bananapus/core-v6/src/interfaces/IJBTerminal.sol";
 import {IJBTokens} from "@bananapus/core-v6/src/interfaces/IJBTokens.sol";
 import {JBConstants} from "@bananapus/core-v6/src/libraries/JBConstants.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import {LibClone} from "solady/src/utils/LibClone.sol";
 
 import "../src/JBSucker.sol";
-import {JBAddToBalanceMode} from "../src/enums/JBAddToBalanceMode.sol";
+
 import {JBSuckerState} from "../src/enums/JBSuckerState.sol";
 import {JBClaim} from "../src/structs/JBClaim.sol";
 import {JBLeaf} from "../src/structs/JBLeaf.sol";
@@ -36,10 +38,9 @@ contract AuditGapSucker is JBSucker {
         IJBDirectory directory,
         IJBPermissions permissions,
         IJBTokens tokens,
-        JBAddToBalanceMode addToBalanceMode,
         address forwarder
     )
-        JBSucker(directory, permissions, tokens, addToBalanceMode, forwarder)
+        JBSucker(directory, permissions, tokens, forwarder)
     {}
 
     function _sendRootOverAMB(
@@ -175,6 +176,7 @@ contract TestAuditGaps is Test {
     address constant CONTROLLER = address(900);
     address constant PROJECT = address(1000);
     address constant FORWARDER = address(1100);
+    address constant TERMINAL = address(1200);
 
     uint256 constant PROJECT_ID = 1;
     address constant TOKEN = address(0x000000000000000000000000000000000000EEEe);
@@ -196,6 +198,11 @@ contract TestAuditGaps is Test {
         vm.mockCall(DIRECTORY, abi.encodeCall(IJBDirectory.PROJECTS, ()), abi.encode(PROJECT));
         vm.mockCall(PROJECT, abi.encodeCall(IERC721.ownerOf, (PROJECT_ID)), abi.encode(address(this)));
         vm.mockCall(DIRECTORY, abi.encodeCall(IJBDirectory.controllerOf, (PROJECT_ID)), abi.encode(CONTROLLER));
+        vm.mockCall(
+            DIRECTORY, abi.encodeCall(IJBDirectory.primaryTerminalOf, (PROJECT_ID, TOKEN)), abi.encode(TERMINAL)
+        );
+        // Mock terminal.addToBalanceOf to accept any call (including payable for native token).
+        vm.mockCall(TERMINAL, abi.encodeWithSelector(IJBTerminal.addToBalanceOf.selector), abi.encode());
     }
 
     function _createTestSucker(uint256 projectId, bytes32 salt) internal returns (AuditGapSucker) {
@@ -203,7 +210,6 @@ contract TestAuditGaps is Test {
             IJBDirectory(DIRECTORY),
             IJBPermissions(PERMISSIONS),
             IJBTokens(TOKENS),
-            JBAddToBalanceMode.MANUAL,
             FORWARDER
         );
 
@@ -308,6 +314,8 @@ contract TestAuditGaps is Test {
         bytes32 root = sucker.test_getOutboxRoot(TOKEN);
         sucker.test_setInboxRoot(TOKEN, 1, root);
         sucker.test_setOutboxBalance(TOKEN, 100 ether);
+        // Fund sucker: outbox balance + total claim amounts (1+2+3 = 6 ether).
+        vm.deal(address(sucker), 106 ether);
 
         // Claim for each beneficiary (bypass merkle).
         for (uint256 i; i < 3; i++) {
@@ -361,13 +369,16 @@ contract TestAuditGaps is Test {
         bytes32 rootA = sucker.test_getOutboxRoot(tokenA);
         sucker.test_setInboxRoot(tokenA, 1, rootA);
 
-        // Insert a leaf at index 0 for token B.
-        sucker.test_insertIntoTree(7 ether, tokenB, 3 ether, bytes32(uint256(uint160(address(0xD2)))));
+        // Insert a leaf at index 0 for token B with terminalTokenAmount=0 to avoid _addToBalance
+        // ERC20 mocking complexity. This test is about execution slot isolation, not balance handling.
+        sucker.test_insertIntoTree(7 ether, tokenB, 0, bytes32(uint256(uint160(address(0xD2)))));
         bytes32 rootB = sucker.test_getOutboxRoot(tokenB);
         sucker.test_setInboxRoot(tokenB, 1, rootB);
 
         sucker.test_setOutboxBalance(tokenA, 100 ether);
-        sucker.test_setOutboxBalance(tokenB, 100 ether);
+
+        // Fund sucker for token A (native): outbox balance + claim amount.
+        vm.deal(address(sucker), 102 ether);
 
         // Claim index 0 on token A.
         _mockMint(address(0xD1), 5 ether);
@@ -403,7 +414,7 @@ contract TestAuditGaps is Test {
                     index: 0,
                     beneficiary: bytes32(uint256(uint160(address(0xD2)))),
                     projectTokenCount: 7 ether,
-                    terminalTokenAmount: 3 ether
+                    terminalTokenAmount: 0
                 }),
                 proof: proofB
             })
@@ -521,6 +532,8 @@ contract TestAuditGaps is Test {
         bytes32 root = sucker.test_getOutboxRoot(TOKEN);
         sucker.test_setInboxRoot(TOKEN, 1, root);
         sucker.test_setOutboxBalance(TOKEN, 100 ether);
+        // Fund sucker: outbox balance + total claim amounts (0.5+1+1.5+2 = 5 ether).
+        vm.deal(address(sucker), 105 ether);
 
         // Claim in order: 2, 0, 3, 1 (non-sequential).
         uint256[4] memory claimOrder = [uint256(2), 0, 3, 1];
@@ -915,7 +928,8 @@ contract TestAuditGaps is Test {
         bytes32 root = sucker.test_getOutboxRoot(TOKEN);
         sucker.test_setInboxRoot(TOKEN, 1, root);
         sucker.test_setOutboxBalance(TOKEN, 100 ether);
-        vm.deal(address(sucker), 100 ether);
+        // Fund sucker: outbox balance + claim amount.
+        vm.deal(address(sucker), 110 ether);
 
         // Claim via inbox (regular claim) at index 0.
         _mockMint(address(this), 10 ether);

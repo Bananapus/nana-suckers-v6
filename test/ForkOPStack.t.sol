@@ -8,7 +8,7 @@ import {JBPermissionsData} from "@bananapus/core-v6/src/structs/JBPermissionsDat
 import {JBPermissionIds} from "@bananapus/permission-ids-v6/src/JBPermissionIds.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {JBTokenMapping} from "../src/structs/JBTokenMapping.sol";
-import {JBAddToBalanceMode} from "../src/enums/JBAddToBalanceMode.sol";
+
 import {IOPMessenger} from "../src/interfaces/IOPMessenger.sol";
 import {IOPStandardBridge} from "../src/interfaces/IOPStandardBridge.sol";
 
@@ -360,7 +360,6 @@ contract ForkOptimismTest is OPStackNativeBridgeForkTestBase {
             directory: directory,
             permissions: permissions,
             tokens: tokens,
-            addToBalanceMode: JBAddToBalanceMode.MANUAL,
             trustedForwarder: address(0)
         });
     }
@@ -408,7 +407,6 @@ contract ForkBaseTest is OPStackNativeBridgeForkTestBase {
             directory: directory,
             permissions: permissions,
             tokens: tokens,
-            addToBalanceMode: JBAddToBalanceMode.MANUAL,
             trustedForwarder: address(0)
         });
     }

@@ -220,7 +220,6 @@ contract SuckerEmergencyTest is Test {
             IJBDirectory(DIRECTORY),
             IJBPermissions(PERMISSIONS),
             IJBTokens(TOKENS),
-            JBAddToBalanceMode.MANUAL,
             FORWARDER
         );
         vm.label(address(singleton), "SUCKER_SINGLETON");
@@ -240,15 +239,13 @@ contract TestSucker is JBSucker {
     /// @param directory A contract storing directories of terminals and controllers for each project.
     /// @param tokens A contract that manages token minting and burning.
     /// @param permissions A contract storing permissions.
-    /// @param addToBalanceMode The mode of adding tokens to balance.
     constructor(
         IJBDirectory directory,
         IJBPermissions permissions,
         IJBTokens tokens,
-        JBAddToBalanceMode addToBalanceMode,
         address forwarder
     )
-        JBSucker(directory, permissions, tokens, addToBalanceMode, forwarder)
+        JBSucker(directory, permissions, tokens, forwarder)
     {}
 
     function _sendRootOverAMB(
@@ -302,4 +299,8 @@ contract TestSucker is JBSucker {
     function test_setOutboxBalance(address token, uint256 amount) external {
         _outboxOf[token].balance = amount;
     }
+
+    /// @dev Override _addToBalance to be a no-op for fuzz testing.
+    /// These tests focus on emergency exit state machine behavior, not token balance mechanics.
+    function _addToBalance(address, uint256) internal override {}
 }
