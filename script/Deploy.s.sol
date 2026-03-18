@@ -6,6 +6,7 @@ import {IJBDirectory} from "@bananapus/core-v6/src/interfaces/IJBDirectory.sol";
 import {IJBPermissions} from "@bananapus/core-v6/src/interfaces/IJBPermissions.sol";
 import {IJBTokens} from "@bananapus/core-v6/src/interfaces/IJBTokens.sol";
 import "@bananapus/core-v6/script/helpers/CoreDeploymentLib.sol";
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {Sphinx} from "@sphinx-labs/contracts/contracts/foundry/SphinxPlugin.sol";
 import {Script} from "forge-std/Script.sol";
 
@@ -45,6 +46,7 @@ contract DeployScript is Script, Sphinx {
     bytes32 OP_BASE_SALT = "_SUCKER_OP_BASE_V6_";
 
     uint256 TO_REMOTE_FEE = 0.001 ether;
+    address FEE_OWNER;
 
     bytes32 REGISTRY_SALT = "REGISTRYV6";
 
@@ -64,6 +66,9 @@ contract DeployScript is Script, Sphinx {
 
         // We use the same trusted forwarder as the core deployment.
         TRUSTED_FORWARDER = core.permissions.trustedForwarder();
+
+        // The fee owner is the same address as the JBPrices owner.
+        FEE_OWNER = Ownable(address(core.prices)).owner();
 
         // Perform the deployment transactions.
         deploy();
@@ -152,6 +157,7 @@ contract DeployScript is Script, Sphinx {
                 tokens: core.tokens,
                 feeProjectId: 1,
                 toRemoteFee: TO_REMOTE_FEE,
+                feeOwner: FEE_OWNER,
                 trustedForwarder: TRUSTED_FORWARDER
             });
 
@@ -185,6 +191,7 @@ contract DeployScript is Script, Sphinx {
                 tokens: core.tokens,
                 feeProjectId: 1,
                 toRemoteFee: TO_REMOTE_FEE,
+                feeOwner: FEE_OWNER,
                 trustedForwarder: TRUSTED_FORWARDER
             });
 
@@ -237,6 +244,7 @@ contract DeployScript is Script, Sphinx {
                 tokens: core.tokens,
                 feeProjectId: 1,
                 toRemoteFee: TO_REMOTE_FEE,
+                feeOwner: FEE_OWNER,
                 trustedForwarder: TRUSTED_FORWARDER
             });
 
@@ -270,6 +278,7 @@ contract DeployScript is Script, Sphinx {
                 tokens: core.tokens,
                 feeProjectId: 1,
                 toRemoteFee: TO_REMOTE_FEE,
+                feeOwner: FEE_OWNER,
                 trustedForwarder: TRUSTED_FORWARDER
             });
 
@@ -318,6 +327,7 @@ contract DeployScript is Script, Sphinx {
                 tokens: core.tokens,
                 feeProjectId: 1,
                 toRemoteFee: TO_REMOTE_FEE,
+                feeOwner: FEE_OWNER,
                 trustedForwarder: TRUSTED_FORWARDER
             });
 
@@ -354,6 +364,7 @@ contract DeployScript is Script, Sphinx {
                 tokens: core.tokens,
                 feeProjectId: 1,
                 toRemoteFee: TO_REMOTE_FEE,
+                feeOwner: FEE_OWNER,
                 trustedForwarder: TRUSTED_FORWARDER
             });
 
@@ -546,6 +557,7 @@ contract DeployScript is Script, Sphinx {
             permissions: permissions,
             feeProjectId: 1,
             toRemoteFee: TO_REMOTE_FEE,
+            feeOwner: FEE_OWNER,
             trustedForwarder: trustedForwarder
         });
 

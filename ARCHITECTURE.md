@@ -8,7 +8,7 @@ Cross-chain token bridging for Juicebox V6. Allows project tokens and funds to m
 
 ```
 src/
-├── JBSucker.sol            — Abstract base: merkle tree management, prepare/claim logic, FEE_PROJECT_ID, TO_REMOTE_FEE immutable
+├── JBSucker.sol            — Abstract base: merkle tree management, prepare/claim logic, FEE_PROJECT_ID, admin-adjustable toRemoteFee (Ownable)
 ├── JBBaseSucker.sol        — OP Stack base (Optimism, Base)
 ├── JBOptimismSucker.sol    — Optimism/Base bridge implementation
 ├── JBArbitrumSucker.sol    — Arbitrum bridge implementation

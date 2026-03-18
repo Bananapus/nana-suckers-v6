@@ -128,6 +128,7 @@ abstract contract CCIPSuckerMainnetForkTestBase is TestBaseWorkflow {
             tokens: jbTokens(),
             feeProjectId: 1,
             toRemoteFee: 0.001 ether,
+            feeOwner: address(this),
             trustedForwarder: address(0)
         });
         vm.stopPrank();
@@ -173,6 +174,7 @@ abstract contract CCIPSuckerMainnetForkTestBase is TestBaseWorkflow {
             tokens: jbTokens(),
             feeProjectId: 1,
             toRemoteFee: 0.001 ether,
+            feeOwner: address(this),
             trustedForwarder: address(0)
         });
         vm.stopPrank();

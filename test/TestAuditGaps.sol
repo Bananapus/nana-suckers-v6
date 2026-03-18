@@ -40,7 +40,7 @@ contract AuditGapSucker is JBSucker {
         IJBTokens tokens,
         address forwarder
     )
-        JBSucker(directory, permissions, tokens, 1, 0, forwarder)
+        JBSucker(directory, permissions, tokens, 1, 0, address(1), forwarder)
     {}
 
     function _sendRootOverAMB(
@@ -804,10 +804,7 @@ contract TestAuditGaps is Test {
         sucker.test_setRemoteToken(
             TOKEN,
             JBRemoteToken({
-                enabled: false,
-                emergencyHatch: true,
-                minGas: 0,
-                addr: bytes32(uint256(uint160(makeAddr("remote"))))
+                enabled: false, emergencyHatch: true, minGas: 0, addr: bytes32(uint256(uint160(makeAddr("remote"))))
             })
         );
 

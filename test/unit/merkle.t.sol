@@ -19,7 +19,15 @@ contract MerkleUnitTest is JBSucker, Test {
     constructor()
         // OPMessenger(address(500)),
         // OPStandardBridge(address(550)),
-        JBSucker(IJBDirectory(address(600)), IJBPermissions(address(800)), IJBTokens(address(700)), 1, 0, address(0))
+        JBSucker(
+            IJBDirectory(address(600)),
+            IJBPermissions(address(800)),
+            IJBTokens(address(700)),
+            1,
+            0,
+            address(this),
+            address(0)
+        )
         // self.initialize(.NATIVE_TOKEN, JBConstants.NATIVE_TOKEN, JBConstants.NATIVE_TOKEN)
 
     {
@@ -194,7 +202,14 @@ contract DeployerUnitTest is Test {
 
         // Deploy the singleton.
         JBOptimismSucker _sucker = new JBOptimismSucker(
-            _deployer, IJBDirectory(address(0)), IJBPermissions(address(0)), IJBTokens(address(0)), 1, 0.001 ether, address(0)
+            _deployer,
+            IJBDirectory(address(0)),
+            IJBPermissions(address(0)),
+            IJBTokens(address(0)),
+            1,
+            0.001 ether,
+            address(this),
+            address(0)
         );
 
         // Configure the singleton on the deployer.

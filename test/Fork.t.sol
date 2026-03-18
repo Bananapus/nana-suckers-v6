@@ -272,6 +272,7 @@ contract CCIPSuckerForkedTests is TestBaseWorkflow {
             tokens: jbTokens(),
             feeProjectId: 1,
             toRemoteFee: 0.001 ether,
+            feeOwner: address(this),
             trustedForwarder: address(0)
         });
         vm.stopPrank();
@@ -333,6 +334,7 @@ contract CCIPSuckerForkedTests is TestBaseWorkflow {
             tokens: jbTokens(),
             feeProjectId: 1,
             toRemoteFee: 0.001 ether,
+            feeOwner: address(this),
             trustedForwarder: address(0)
         });
         vm.stopPrank();

@@ -105,6 +105,7 @@ contract ForkCeloTest is TestBaseWorkflow {
             tokens: jbTokens(),
             feeProjectId: 1,
             toRemoteFee: 0.001 ether,
+            feeOwner: address(this),
             trustedForwarder: address(0)
         });
         vm.stopPrank();
@@ -148,6 +149,7 @@ contract ForkCeloTest is TestBaseWorkflow {
             tokens: jbTokens(),
             feeProjectId: 1,
             toRemoteFee: 0.001 ether,
+            feeOwner: address(this),
             trustedForwarder: address(0)
         });
         vm.stopPrank();
@@ -272,9 +274,7 @@ contract ForkCeloTest is TestBaseWorkflow {
 
         // Map native ETH → Celo WETH (ERC-20 on remote).
         JBTokenMapping memory map = JBTokenMapping({
-            localToken: JBConstants.NATIVE_TOKEN,
-            minGas: 200_000,
-            remoteToken: bytes32(uint256(uint160(CELO_WETH)))
+            localToken: JBConstants.NATIVE_TOKEN, minGas: 200_000, remoteToken: bytes32(uint256(uint160(CELO_WETH)))
         });
 
         vm.prank(multisig());
@@ -331,9 +331,7 @@ contract ForkCeloTest is TestBaseWorkflow {
         // Map Celo WETH → L1 WETH. The OP bridge's L2StandardBridge validates that the
         // remoteToken matches the Optimism Mintable ERC20's REMOTE_TOKEN() — must be L1 WETH.
         JBTokenMapping memory map = JBTokenMapping({
-            localToken: CELO_WETH,
-            minGas: 200_000,
-            remoteToken: bytes32(uint256(uint160(address(L1_WETH))))
+            localToken: CELO_WETH, minGas: 200_000, remoteToken: bytes32(uint256(uint160(address(L1_WETH))))
         });
 
         vm.prank(multisig());

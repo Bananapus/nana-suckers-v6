@@ -85,6 +85,7 @@ contract ForkArbitrumDeployerTest is TestBaseWorkflow, IERC721Receiver {
             tokens: jbTokens(),
             feeProjectId: 1,
             toRemoteFee: 0.001 ether,
+            feeOwner: address(this),
             trustedForwarder: address(0)
         });
 
@@ -117,6 +118,7 @@ contract ForkArbitrumDeployerTest is TestBaseWorkflow, IERC721Receiver {
             tokens: jbTokens(),
             feeProjectId: 1,
             toRemoteFee: 0.001 ether,
+            feeOwner: address(this),
             trustedForwarder: address(0)
         });
 
@@ -269,6 +271,7 @@ contract ForkArbitrumNativeTransferTest is TestBaseWorkflow {
             tokens: jbTokens(),
             feeProjectId: 1,
             toRemoteFee: 0.001 ether,
+            feeOwner: address(this),
             trustedForwarder: address(0)
         });
         vm.stopPrank();

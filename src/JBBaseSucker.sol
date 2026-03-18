@@ -25,9 +25,12 @@ contract JBBaseSucker is JBOptimismSucker {
         IJBTokens tokens,
         uint256 feeProjectId,
         uint256 toRemoteFee,
+        address feeOwner,
         address trustedForwarder
     )
-        JBOptimismSucker(deployer, directory, permissions, tokens, feeProjectId, toRemoteFee, trustedForwarder)
+        JBOptimismSucker(
+            deployer, directory, permissions, tokens, feeProjectId, toRemoteFee, feeOwner, trustedForwarder
+        )
     {}
 
     //*********************************************************************//

@@ -107,7 +107,7 @@ Anyone triggers the bridge to send the outbox root and backing assets to the rem
 2. Validation:
    - Emergency hatch not enabled for this token.
    - "Nothing to send" guard: reverts if `outbox.balance == 0 && outbox.tree.count == outbox.numberOfClaimsSent`.
-   - If `TO_REMOTE_FEE != 0`: deducts the fee from `msg.value` and pays it into the fee project (`FEE_PROJECT_ID`, typically project ID 1) via `terminal.pay()`. The caller (relayer) receives project tokens. Best-effort: if the fee project has no native token terminal or `terminal.pay()` reverts, proceeds without collecting the fee. Remainder is passed as `transportPayment`.
+   - If `toRemoteFee != 0` (read from storage): deducts the fee from `msg.value` and pays it into the fee project (`FEE_PROJECT_ID`, typically project ID 1) via `terminal.pay()`. The caller (relayer) receives project tokens. Best-effort: if the fee project has no native token terminal or `terminal.pay()` reverts, proceeds without collecting the fee. Remainder is passed as `transportPayment`. The fee is adjustable by the clone's owner via `setToRemoteFee()`, capped at `MAX_TO_REMOTE_FEE` (0.001 ether).
    - Sucker not deprecated/sending-disabled.
 
 3. `_sendRoot()`:

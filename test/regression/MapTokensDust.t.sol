@@ -53,23 +53,20 @@ contract MapTokensDustTest is Test {
 
         // Token A: mapped with unsent claims (tree.count=1, numberOfClaimsSent=0).
         sucker.test_setRemoteToken(
-            tokenA,
-            JBRemoteToken({enabled: true, emergencyHatch: false, minGas: 200_000, addr: remoteA})
+            tokenA, JBRemoteToken({enabled: true, emergencyHatch: false, minGas: 200_000, addr: remoteA})
         );
         sucker.test_setOutboxTreeCount(tokenA, 1);
         // numberOfClaimsSent defaults to 0, so 0 != 1 means this token will be counted.
 
         // Token B: mapped with unsent claims.
         sucker.test_setRemoteToken(
-            tokenB,
-            JBRemoteToken({enabled: true, emergencyHatch: false, minGas: 200_000, addr: remoteB})
+            tokenB, JBRemoteToken({enabled: true, emergencyHatch: false, minGas: 200_000, addr: remoteB})
         );
         sucker.test_setOutboxTreeCount(tokenB, 1);
 
         // Token C: mapped with unsent claims.
         sucker.test_setRemoteToken(
-            tokenC,
-            JBRemoteToken({enabled: true, emergencyHatch: false, minGas: 200_000, addr: remoteC})
+            tokenC, JBRemoteToken({enabled: true, emergencyHatch: false, minGas: 200_000, addr: remoteC})
         );
         sucker.test_setOutboxTreeCount(tokenC, 1);
 
@@ -102,14 +99,12 @@ contract MapTokensDustTest is Test {
         MapTokensDustSucker sucker = _createTestSucker(projectId, "");
 
         sucker.test_setRemoteToken(
-            tokenA,
-            JBRemoteToken({enabled: true, emergencyHatch: false, minGas: 200_000, addr: remoteA})
+            tokenA, JBRemoteToken({enabled: true, emergencyHatch: false, minGas: 200_000, addr: remoteA})
         );
         sucker.test_setOutboxTreeCount(tokenA, 1);
 
         sucker.test_setRemoteToken(
-            tokenB,
-            JBRemoteToken({enabled: true, emergencyHatch: false, minGas: 200_000, addr: remoteB})
+            tokenB, JBRemoteToken({enabled: true, emergencyHatch: false, minGas: 200_000, addr: remoteB})
         );
         sucker.test_setOutboxTreeCount(tokenB, 1);
 
@@ -144,20 +139,17 @@ contract MapTokensDustTest is Test {
         MapTokensDustSucker sucker = _createTestSucker(projectId, "fuzz");
 
         sucker.test_setRemoteToken(
-            tokenA,
-            JBRemoteToken({enabled: true, emergencyHatch: false, minGas: 200_000, addr: remoteA})
+            tokenA, JBRemoteToken({enabled: true, emergencyHatch: false, minGas: 200_000, addr: remoteA})
         );
         sucker.test_setOutboxTreeCount(tokenA, 1);
 
         sucker.test_setRemoteToken(
-            tokenB,
-            JBRemoteToken({enabled: true, emergencyHatch: false, minGas: 200_000, addr: remoteB})
+            tokenB, JBRemoteToken({enabled: true, emergencyHatch: false, minGas: 200_000, addr: remoteB})
         );
         sucker.test_setOutboxTreeCount(tokenB, 1);
 
         sucker.test_setRemoteToken(
-            tokenC,
-            JBRemoteToken({enabled: true, emergencyHatch: false, minGas: 200_000, addr: remoteC})
+            tokenC, JBRemoteToken({enabled: true, emergencyHatch: false, minGas: 200_000, addr: remoteC})
         );
         sucker.test_setOutboxTreeCount(tokenC, 1);
 
@@ -202,7 +194,7 @@ contract MapTokensDustSucker is JBSucker {
         IJBTokens tokens,
         address forwarder
     )
-        JBSucker(directory, permissions, tokens, 1, 0, forwarder)
+        JBSucker(directory, permissions, tokens, 1, 0, address(1), forwarder)
     {}
 
     function _sendRootOverAMB(

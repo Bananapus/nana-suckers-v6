@@ -11,6 +11,7 @@ import {IJBTerminal} from "@bananapus/core-v6/src/interfaces/IJBTerminal.sol";
 import {IJBTokens} from "@bananapus/core-v6/src/interfaces/IJBTokens.sol";
 import {JBConstants} from "@bananapus/core-v6/src/libraries/JBConstants.sol";
 import {JBPermissionIds} from "@bananapus/permission-ids-v6/src/JBPermissionIds.sol";
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {ERC2771Context} from "@openzeppelin/contracts/metatx/ERC2771Context.sol";
 import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
@@ -41,7 +42,7 @@ import {MerkleLib} from "./utils/MerkleLib.sol";
 /// `CrossDomainMessenger`, Arbitrum validates against the `Bridge` and `Outbox` contracts, and CCIP verifies
 /// through the Chainlink `Router`. Deployers of new bridge integrations must implement `_isRemotePeer` to
 /// guarantee that only messages from the legitimate remote peer are accepted.
-abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC165, IJBSuckerExtended {
+abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC165, Ownable, IJBSuckerExtended {
     using BitMaps for BitMaps.BitMap;
     using MerkleLib for MerkleLib.Tree;
     using SafeERC20 for IERC20;
@@ -67,6 +68,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     error JBSucker_TokenAlreadyMapped(address localToken, bytes32 mappedTo);
     error JBSucker_TokenHasInvalidEmergencyHatchState(address token);
     error JBSucker_TokenNotMapped(address token);
+    error JBSucker_FeeExceedsMax(uint256 fee, uint256 max);
     error JBSucker_UnexpectedMsgValue(uint256 value);
     error JBSucker_ZeroBeneficiary();
     error JBSucker_ZeroERC20Token();
@@ -74,6 +76,9 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     //*********************************************************************//
     // ------------------------- public constants ------------------------ //
     //*********************************************************************//
+
+    /// @notice The maximum ETH fee (in wei) that `FEE_OWNER` can set via `setToRemoteFee()`.
+    uint256 public constant MAX_TO_REMOTE_FEE = 0.001 ether;
 
     /// @notice A reasonable minimum gas limit for a basic cross-chain call. The minimum amount of gas required to call
     /// the `fromRemote` (successfully/safely) on the remote chain.
@@ -100,15 +105,28 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     /// @notice The directory of terminals and controllers for projects.
     IJBDirectory public immutable override DIRECTORY;
 
-    /// @notice The project ID that receives the `TO_REMOTE_FEE` payment. Typically the protocol project (ID 1).
+    /// @notice The project ID that receives the `toRemoteFee` payment. Typically the protocol project (ID 1).
     uint256 public immutable FEE_PROJECT_ID;
-
-    /// @notice The ETH fee (in wei) paid into the fee project via terminal.pay() on each toRemote() call.
-    /// @dev Set at deploy time — uniform across all tokens, non-bypassable by integrators.
-    uint256 public immutable TO_REMOTE_FEE;
 
     /// @notice The contract that manages token minting and burning.
     IJBTokens public immutable override TOKENS;
+
+    //*********************************************************************//
+    // --------------- private immutable stored properties --------------- //
+    //*********************************************************************//
+
+    /// @notice The initial fee owner for new clones, set at singleton construction.
+    address private immutable _INITIAL_FEE_OWNER;
+
+    /// @notice The default fee for new clones, set at singleton construction.
+    uint256 private immutable _INITIAL_TO_REMOTE_FEE;
+
+    //*********************************************************************//
+    // ------------------------------ events ----------------------------- //
+    //*********************************************************************//
+
+    /// @notice Emitted when the owner changes the `toRemoteFee`.
+    event ToRemoteFeeChanged(uint256 oldFee, uint256 newFee);
 
     //*********************************************************************//
     // --------------------- public stored properties -------------------- //
@@ -116,6 +134,10 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
 
     /// @notice The address of this contract's deployer.
     address public override deployer;
+
+    /// @notice The ETH fee (in wei) paid into the fee project via terminal.pay() on each toRemote() call.
+    /// @dev Per-clone storage. Initialized to `_INITIAL_TO_REMOTE_FEE` in `initialize()`. Adjustable by the owner.
+    uint256 public toRemoteFee;
 
     //*********************************************************************//
     // --------------------- private stored properties ------------------- //
@@ -156,23 +178,27 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     /// @param directory A contract storing directories of terminals and controllers for each project.
     /// @param permissions A contract storing permissions.
     /// @param tokens A contract that manages token minting and burning.
-    /// @param feeProjectId The project ID that receives the `TO_REMOTE_FEE` payment (typically 1).
-    /// @param toRemoteFee The ETH fee (in wei) paid into the fee project on each `toRemote()` call.
+    /// @param feeProjectId The project ID that receives the `toRemoteFee` payment (typically 1).
+    /// @param toRemoteFee_ The initial ETH fee (in wei) paid into the fee project on each `toRemote()` call.
+    /// @param feeOwner The address authorized to adjust the `toRemoteFee` on each clone.
     constructor(
         IJBDirectory directory,
         IJBPermissions permissions,
         IJBTokens tokens,
         uint256 feeProjectId,
-        uint256 toRemoteFee,
+        uint256 toRemoteFee_,
+        address feeOwner,
         address trustedForwarder
     )
         ERC2771Context(trustedForwarder)
         JBPermissioned(permissions)
+        Ownable(feeOwner)
     {
         DIRECTORY = directory;
         TOKENS = tokens;
         FEE_PROJECT_ID = feeProjectId;
-        TO_REMOTE_FEE = toRemoteFee;
+        _INITIAL_TO_REMOTE_FEE = toRemoteFee_;
+        _INITIAL_FEE_OWNER = feeOwner;
 
         // Make it so the singleton can't be initialized.
         _disableInitializers();
@@ -518,6 +544,8 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         // slither-disable-next-line missing-zero-check
         _localProjectId = _projectId;
         deployer = _msgSender();
+        toRemoteFee = _INITIAL_TO_REMOTE_FEE;
+        _transferOwnership(_INITIAL_FEE_OWNER);
     }
 
     /// @notice Map an ERC-20 token on the local chain to an ERC-20 token on the remote chain, allowing that token to be
@@ -625,6 +653,16 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         });
     }
 
+    /// @notice Set the ETH fee (in wei) paid into the fee project on each `toRemote()` call.
+    /// @dev Only callable by the contract owner. Fee cannot exceed `MAX_TO_REMOTE_FEE`.
+    /// @param fee The new fee amount in wei.
+    function setToRemoteFee(uint256 fee) external onlyOwner {
+        if (fee > MAX_TO_REMOTE_FEE) revert JBSucker_FeeExceedsMax(fee, MAX_TO_REMOTE_FEE);
+        uint256 oldFee = toRemoteFee;
+        toRemoteFee = fee;
+        emit ToRemoteFeeChanged(oldFee, fee);
+    }
+
     /// @notice Set or remove the time after which this sucker will be deprecated, once deprecated the sucker will no
     /// longer be functional and it will let all users exit.
     /// @param timestamp The time after which the sucker will be deprecated. Or `0` to remove the upcoming deprecation.
@@ -679,21 +717,23 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
             revert JBSucker_NothingToSend();
         }
 
+        // Cache the storage read for gas efficiency.
+        uint256 _toRemoteFee = toRemoteFee;
+
         // Deduct the fee from msg.value, paying it into the fee project.
-        if (msg.value < TO_REMOTE_FEE) {
-            revert JBSucker_InsufficientMsgValue(msg.value, TO_REMOTE_FEE);
+        if (msg.value < _toRemoteFee) {
+            revert JBSucker_InsufficientMsgValue(msg.value, _toRemoteFee);
         }
-        uint256 transportPayment = msg.value - TO_REMOTE_FEE;
+        uint256 transportPayment = msg.value - _toRemoteFee;
 
         // Pay the fee into the fee project. The caller gets fee project tokens in return.
         // Best-effort: if the terminal doesn't exist or the pay call reverts, proceed without fee.
-        IJBTerminal terminal =
-            DIRECTORY.primaryTerminalOf({projectId: FEE_PROJECT_ID, token: JBConstants.NATIVE_TOKEN});
+        IJBTerminal terminal = DIRECTORY.primaryTerminalOf({projectId: FEE_PROJECT_ID, token: JBConstants.NATIVE_TOKEN});
         if (address(terminal) != address(0)) {
-            try terminal.pay{value: TO_REMOTE_FEE}({
+            try terminal.pay{value: _toRemoteFee}({
                 projectId: FEE_PROJECT_ID,
                 token: JBConstants.NATIVE_TOKEN,
-                amount: TO_REMOTE_FEE,
+                amount: _toRemoteFee,
                 beneficiary: _msgSender(),
                 minReturnedTokens: 0,
                 memo: "",

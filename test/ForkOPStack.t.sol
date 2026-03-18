@@ -360,6 +360,7 @@ contract ForkOptimismTest is OPStackNativeBridgeForkTestBase {
             tokens: tokens,
             feeProjectId: 1,
             toRemoteFee: 0.001 ether,
+            feeOwner: address(this),
             trustedForwarder: address(0)
         });
     }
@@ -409,6 +410,7 @@ contract ForkBaseTest is OPStackNativeBridgeForkTestBase {
             tokens: tokens,
             feeProjectId: 1,
             toRemoteFee: 0.001 ether,
+            feeOwner: address(this),
             trustedForwarder: address(0)
         });
     }

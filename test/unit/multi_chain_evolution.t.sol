@@ -90,6 +90,7 @@ contract MultiChainEvolutionTest is Test, TestBaseWorkflow, IERC721Receiver {
             tokens: jbTokens(),
             feeProjectId: 1,
             toRemoteFee: 0.001 ether,
+            feeOwner: address(this),
             trustedForwarder: address(0)
         });
         opDeployer.configureSingleton(opSingleton);
@@ -115,6 +116,7 @@ contract MultiChainEvolutionTest is Test, TestBaseWorkflow, IERC721Receiver {
             tokens: jbTokens(),
             feeProjectId: 1,
             toRemoteFee: 0.001 ether,
+            feeOwner: address(this),
             trustedForwarder: address(0)
         });
         ccipDeployer.configureSingleton(ccipSingleton);
@@ -228,9 +230,7 @@ contract MultiChainEvolutionTest is Test, TestBaseWorkflow, IERC721Receiver {
         // ---------------------------------------------------------------
 
         _opSucker.mapToken(
-            JBTokenMapping({
-                localToken: localUSDC, minGas: 200_000, remoteToken: bytes32(uint256(uint160(opUSDC)))
-            })
+            JBTokenMapping({localToken: localUSDC, minGas: 200_000, remoteToken: bytes32(uint256(uint160(opUSDC)))})
         );
 
         assertTrue(_opSucker.remoteTokenFor(localUSDC).enabled, "Phase 3: USDC enabled on OP");
@@ -282,11 +282,7 @@ contract MultiChainEvolutionTest is Test, TestBaseWorkflow, IERC721Receiver {
         // ---------------------------------------------------------------
 
         _celoSucker.mapToken(
-            JBTokenMapping({
-                localToken: localUSDC,
-                minGas: 200_000,
-                remoteToken: bytes32(uint256(uint160(celoUSDC)))
-            })
+            JBTokenMapping({localToken: localUSDC, minGas: 200_000, remoteToken: bytes32(uint256(uint160(celoUSDC)))})
         );
 
         assertTrue(_celoSucker.remoteTokenFor(localUSDC).enabled, "Phase 5: USDC enabled on Celo");
@@ -352,9 +348,7 @@ contract MultiChainEvolutionTest is Test, TestBaseWorkflow, IERC721Receiver {
 
         JBTokenMapping[] memory celoMappings = new JBTokenMapping[](1);
         celoMappings[0] = JBTokenMapping({
-            localToken: JBConstants.NATIVE_TOKEN,
-            minGas: 200_000,
-            remoteToken: bytes32(uint256(uint160(celoETH)))
+            localToken: JBConstants.NATIVE_TOKEN, minGas: 200_000, remoteToken: bytes32(uint256(uint160(celoETH)))
         });
 
         configs[0] = JBSuckerDeployerConfig({deployer: IJBSuckerDeployer(address(opDeployer)), mappings: opMappings});
@@ -392,9 +386,7 @@ contract MultiChainEvolutionTest is Test, TestBaseWorkflow, IERC721Receiver {
         // Deploy CCIP sucker with just native mapping.
         JBTokenMapping[] memory initialMappings = new JBTokenMapping[](1);
         initialMappings[0] = JBTokenMapping({
-            localToken: JBConstants.NATIVE_TOKEN,
-            minGas: 200_000,
-            remoteToken: bytes32(uint256(uint160(celoETH)))
+            localToken: JBConstants.NATIVE_TOKEN, minGas: 200_000, remoteToken: bytes32(uint256(uint160(celoETH)))
         });
 
         JBSuckerDeployerConfig[] memory config = new JBSuckerDeployerConfig[](1);
@@ -410,11 +402,7 @@ contract MultiChainEvolutionTest is Test, TestBaseWorkflow, IERC721Receiver {
 
         // Later: project owner adds USDC.
         sucker.mapToken(
-            JBTokenMapping({
-                localToken: localUSDC,
-                minGas: 200_000,
-                remoteToken: bytes32(uint256(uint160(celoUSDC)))
-            })
+            JBTokenMapping({localToken: localUSDC, minGas: 200_000, remoteToken: bytes32(uint256(uint160(celoUSDC)))})
         );
 
         // Now both are mapped.
@@ -444,9 +432,7 @@ contract MultiChainEvolutionTest is Test, TestBaseWorkflow, IERC721Receiver {
 
         JBTokenMapping[] memory celoNativeMappings = new JBTokenMapping[](1);
         celoNativeMappings[0] = JBTokenMapping({
-            localToken: JBConstants.NATIVE_TOKEN,
-            minGas: 200_000,
-            remoteToken: bytes32(uint256(uint160(celoETH)))
+            localToken: JBConstants.NATIVE_TOKEN, minGas: 200_000, remoteToken: bytes32(uint256(uint160(celoETH)))
         });
 
         JBSuckerDeployerConfig[] memory celoConfig = new JBSuckerDeployerConfig[](1);
@@ -461,11 +447,7 @@ contract MultiChainEvolutionTest is Test, TestBaseWorkflow, IERC721Receiver {
 
         // Map USDC only on the Celo sucker.
         celoSucker.mapToken(
-            JBTokenMapping({
-                localToken: localUSDC,
-                minGas: 200_000,
-                remoteToken: bytes32(uint256(uint160(celoUSDC)))
-            })
+            JBTokenMapping({localToken: localUSDC, minGas: 200_000, remoteToken: bytes32(uint256(uint160(celoUSDC)))})
         );
 
         // OP sucker should NOT have USDC mapped.
@@ -476,9 +458,7 @@ contract MultiChainEvolutionTest is Test, TestBaseWorkflow, IERC721Receiver {
 
         // Disable native on OP sucker.
         opSucker.mapToken(
-            JBTokenMapping({
-                localToken: JBConstants.NATIVE_TOKEN, minGas: 200_000, remoteToken: bytes32(0)
-            })
+            JBTokenMapping({localToken: JBConstants.NATIVE_TOKEN, minGas: 200_000, remoteToken: bytes32(0)})
         );
 
         // OP native disabled, Celo native unaffected.
@@ -509,9 +489,7 @@ contract MultiChainEvolutionTest is Test, TestBaseWorkflow, IERC721Receiver {
         // CCIP sucker: deploy with NATIVE -> celoETH (ERC-20). Should succeed.
         JBTokenMapping[] memory celoEthMappings = new JBTokenMapping[](1);
         celoEthMappings[0] = JBTokenMapping({
-            localToken: JBConstants.NATIVE_TOKEN,
-            minGas: 200_000,
-            remoteToken: bytes32(uint256(uint160(celoETH)))
+            localToken: JBConstants.NATIVE_TOKEN, minGas: 200_000, remoteToken: bytes32(uint256(uint160(celoETH)))
         });
 
         JBSuckerDeployerConfig[] memory celoConfig = new JBSuckerDeployerConfig[](1);
@@ -538,7 +516,7 @@ contract MultiChainEvolutionTest is Test, TestBaseWorkflow, IERC721Receiver {
                     localToken: JBConstants.NATIVE_TOKEN,
                     minGas: 200_000,
                     remoteToken: bytes32(uint256(uint160(celoETH)))
-                        })
+                })
             );
     }
 

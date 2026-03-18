@@ -9,6 +9,7 @@ import {IJBPermissions} from "@bananapus/core-v6/src/interfaces/IJBPermissions.s
 import {IJBTerminal} from "@bananapus/core-v6/src/interfaces/IJBTerminal.sol";
 import {IJBTokens} from "@bananapus/core-v6/src/interfaces/IJBTokens.sol";
 import {JBConstants} from "@bananapus/core-v6/src/libraries/JBConstants.sol";
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {LibClone} from "solady/src/utils/LibClone.sol";
@@ -42,7 +43,7 @@ contract DeepAttackSucker is JBSucker {
         uint256 toRemoteFee,
         address forwarder
     )
-        JBSucker(directory, permissions, tokens, 1, toRemoteFee, forwarder)
+        JBSucker(directory, permissions, tokens, 1, toRemoteFee, address(1), forwarder)
     {}
 
     function _sendRootOverAMB(
@@ -221,9 +222,17 @@ contract SuckerDeepAttacks is Test {
         return _createTestSuckerWithFee(projectId, salt, 0);
     }
 
-    function _createTestSuckerWithFee(uint256 projectId, bytes32 salt, uint256 toRemoteFee) internal returns (DeepAttackSucker) {
-        DeepAttackSucker singleton =
-            new DeepAttackSucker(IJBDirectory(DIRECTORY), IJBPermissions(PERMISSIONS), IJBTokens(TOKENS), toRemoteFee, FORWARDER);
+    function _createTestSuckerWithFee(
+        uint256 projectId,
+        bytes32 salt,
+        uint256 toRemoteFee
+    )
+        internal
+        returns (DeepAttackSucker)
+    {
+        DeepAttackSucker singleton = new DeepAttackSucker(
+            IJBDirectory(DIRECTORY), IJBPermissions(PERMISSIONS), IJBTokens(TOKENS), toRemoteFee, FORWARDER
+        );
 
         DeepAttackSucker clone =
             DeepAttackSucker(payable(address(LibClone.cloneDeterministic(address(singleton), salt))));
@@ -509,10 +518,7 @@ contract SuckerDeepAttacks is Test {
         sucker.test_setRemoteToken(
             TOKEN,
             JBRemoteToken({
-                enabled: false,
-                emergencyHatch: true,
-                minGas: 0,
-                addr: bytes32(uint256(uint160(makeAddr("remote"))))
+                enabled: false, emergencyHatch: true, minGas: 0, addr: bytes32(uint256(uint160(makeAddr("remote"))))
             })
         );
 
@@ -559,10 +565,7 @@ contract SuckerDeepAttacks is Test {
         sucker.test_setRemoteToken(
             TOKEN,
             JBRemoteToken({
-                enabled: false,
-                emergencyHatch: true,
-                minGas: 0,
-                addr: bytes32(uint256(uint160(makeAddr("remote"))))
+                enabled: false, emergencyHatch: true, minGas: 0, addr: bytes32(uint256(uint160(makeAddr("remote"))))
             })
         );
 
@@ -597,10 +600,7 @@ contract SuckerDeepAttacks is Test {
         sucker.test_setRemoteToken(
             TOKEN,
             JBRemoteToken({
-                enabled: false,
-                emergencyHatch: true,
-                minGas: 0,
-                addr: bytes32(uint256(uint160(makeAddr("remote"))))
+                enabled: false, emergencyHatch: true, minGas: 0, addr: bytes32(uint256(uint160(makeAddr("remote"))))
             })
         );
 
@@ -664,10 +664,7 @@ contract SuckerDeepAttacks is Test {
         sucker.test_setRemoteToken(
             TOKEN,
             JBRemoteToken({
-                enabled: false,
-                emergencyHatch: true,
-                minGas: 0,
-                addr: bytes32(uint256(uint160(makeAddr("remote"))))
+                enabled: false, emergencyHatch: true, minGas: 0, addr: bytes32(uint256(uint160(makeAddr("remote"))))
             })
         );
 
@@ -774,10 +771,7 @@ contract SuckerDeepAttacks is Test {
         sucker.test_setRemoteToken(
             token,
             JBRemoteToken({
-                enabled: true,
-                emergencyHatch: false,
-                minGas: 200_000,
-                addr: bytes32(uint256(uint160(remoteA)))
+                enabled: true, emergencyHatch: false, minGas: 200_000, addr: bytes32(uint256(uint160(remoteA)))
             })
         );
 
@@ -791,9 +785,7 @@ contract SuckerDeepAttacks is Test {
             )
         );
         sucker.mapToken(
-            JBTokenMapping({
-                localToken: token, minGas: 200_000, remoteToken: bytes32(uint256(uint160(remoteB)))
-            })
+            JBTokenMapping({localToken: token, minGas: 200_000, remoteToken: bytes32(uint256(uint160(remoteB)))})
         );
     }
 
@@ -818,9 +810,7 @@ contract SuckerDeepAttacks is Test {
         vm.expectRevert(abi.encodeWithSelector(JBSucker.JBSucker_TokenHasInvalidEmergencyHatchState.selector, token));
         sucker.mapToken(
             JBTokenMapping({
-                localToken: token,
-                minGas: 200_000,
-                remoteToken: bytes32(uint256(uint160(makeAddr("newRemote"))))
+                localToken: token, minGas: 200_000, remoteToken: bytes32(uint256(uint160(makeAddr("newRemote"))))
             })
         );
     }
@@ -848,11 +838,7 @@ contract SuckerDeepAttacks is Test {
 
         bytes32 nonNativeRemote = bytes32(uint256(uint160(makeAddr("nonNative"))));
         vm.expectRevert(abi.encodeWithSelector(JBSucker.JBSucker_InvalidNativeRemoteAddress.selector, nonNativeRemote));
-        sucker.mapToken(
-            JBTokenMapping({
-                localToken: JBConstants.NATIVE_TOKEN, minGas: 0, remoteToken: nonNativeRemote
-            })
-        );
+        sucker.mapToken(JBTokenMapping({localToken: JBConstants.NATIVE_TOKEN, minGas: 0, remoteToken: nonNativeRemote}));
     }
 
     /// @notice mapToken: ERC20 with gas below minimum → should revert.
@@ -938,10 +924,7 @@ contract SuckerDeepAttacks is Test {
         sucker.test_setRemoteToken(
             TOKEN,
             JBRemoteToken({
-                enabled: false,
-                emergencyHatch: true,
-                minGas: 0,
-                addr: bytes32(uint256(uint160(makeAddr("remote"))))
+                enabled: false, emergencyHatch: true, minGas: 0, addr: bytes32(uint256(uint160(makeAddr("remote"))))
             })
         );
 
@@ -966,9 +949,9 @@ contract SuckerDeepAttacks is Test {
         sucker.toRemote(TOKEN);
     }
 
-    /// @notice toRemote with insufficient msg.value for TO_REMOTE_FEE → should revert.
+    /// @notice toRemote with insufficient msg.value for toRemoteFee → should revert.
     function test_toRemote_insufficientFee_reverts() public {
-        // Create a sucker with TO_REMOTE_FEE = 1 ether.
+        // Create a sucker with toRemoteFee = 1 ether.
         DeepAttackSucker feeSucker = _createTestSuckerWithFee(PROJECT_ID, "fee_sucker_salt", 1 ether);
 
         feeSucker.test_setRemoteToken(
@@ -984,10 +967,75 @@ contract SuckerDeepAttacks is Test {
         // Insert an item so there IS something to send.
         feeSucker.test_insertIntoTree(1 ether, TOKEN, 1 ether, bytes32(uint256(uint160(address(this)))));
 
-        // Send less than the required fee (TO_REMOTE_FEE = 1 ether).
-        vm.expectRevert(abi.encodeWithSelector(JBSucker.JBSucker_InsufficientMsgValue.selector, 0.5 ether, feeSucker.TO_REMOTE_FEE()));
+        // Send less than the required fee (toRemoteFee = 1 ether).
+        vm.expectRevert(
+            abi.encodeWithSelector(JBSucker.JBSucker_InsufficientMsgValue.selector, 0.5 ether, feeSucker.toRemoteFee())
+        );
         feeSucker.toRemote{value: 0.5 ether}(TOKEN);
     }
+
+    // ==================== setToRemoteFee tests ====================
+
+    /// @notice Owner can set fee within MAX_TO_REMOTE_FEE.
+    function test_setToRemoteFee_happyPath() public {
+        // Create a sucker whose owner is address(1) — that's the feeOwner in DeepAttackSucker.
+        DeepAttackSucker s = _createTestSucker(PROJECT_ID, "fee_owner_test");
+
+        // Set fee from the owner (address(1)).
+        vm.prank(address(1));
+        s.setToRemoteFee(0.0005 ether);
+        assertEq(s.toRemoteFee(), 0.0005 ether, "Fee should be updated");
+    }
+
+    /// @notice Owner can set fee to exactly MAX_TO_REMOTE_FEE.
+    function test_setToRemoteFee_exactMax() public {
+        DeepAttackSucker s = _createTestSucker(PROJECT_ID, "fee_max_test");
+
+        vm.prank(address(1));
+        s.setToRemoteFee(0.001 ether);
+        assertEq(s.toRemoteFee(), 0.001 ether, "Fee should be set to max");
+    }
+
+    /// @notice Owner can set fee to zero.
+    function test_setToRemoteFee_zero() public {
+        DeepAttackSucker s = _createTestSuckerWithFee(PROJECT_ID, "fee_zero_test", 0.001 ether);
+        assertEq(s.toRemoteFee(), 0.001 ether, "Initial fee should be 0.001 ether");
+
+        vm.prank(address(1));
+        s.setToRemoteFee(0);
+        assertEq(s.toRemoteFee(), 0, "Fee should be zero");
+    }
+
+    /// @notice Non-owner cannot set fee.
+    function test_setToRemoteFee_unauthorized_reverts() public {
+        DeepAttackSucker s = _createTestSucker(PROJECT_ID, "fee_unauth_test");
+
+        vm.prank(address(0xBAD));
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, address(0xBAD)));
+        s.setToRemoteFee(0.0005 ether);
+    }
+
+    /// @notice Fee above MAX_TO_REMOTE_FEE reverts.
+    function test_setToRemoteFee_exceedsMax_reverts() public {
+        DeepAttackSucker s = _createTestSucker(PROJECT_ID, "fee_exceed_test");
+
+        vm.prank(address(1));
+        vm.expectRevert(abi.encodeWithSelector(JBSucker.JBSucker_FeeExceedsMax.selector, 0.002 ether, 0.001 ether));
+        s.setToRemoteFee(0.002 ether);
+    }
+
+    /// @notice setToRemoteFee emits ToRemoteFeeChanged event.
+    function test_setToRemoteFee_emitsEvent() public {
+        DeepAttackSucker s = _createTestSuckerWithFee(PROJECT_ID, "fee_event_test", 0.001 ether);
+
+        vm.expectEmit(false, false, false, true, address(s));
+        emit JBSucker.ToRemoteFeeChanged(0.001 ether, 0.0005 ether);
+
+        vm.prank(address(1));
+        s.setToRemoteFee(0.0005 ether);
+    }
+
+    // ==================== End setToRemoteFee tests ====================
 
     /// @notice _sendRoot clears balance BEFORE AMB call — verify balance is 0 after toRemote.
     function test_sendRoot_clearsBalanceBeforeAMB() public {
