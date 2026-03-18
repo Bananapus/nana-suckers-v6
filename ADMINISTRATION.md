@@ -120,6 +120,7 @@ The following values are set at deploy time and cannot be changed:
 | Property | Contract | Set By | Description |
 |----------|----------|--------|-------------|
 | `DIRECTORY` | `JBSucker`, `JBSuckerRegistry`, all deployers | Constructor | The Juicebox directory contract. |
+| `FEE_PROJECT_ID` | `JBSucker` | Constructor | The project that receives `toRemoteFee` payments via `terminal.pay()` on each `toRemote()` call. Typically project ID 1 (the protocol project). Best-effort: fee is silently skipped if the fee project has no native token terminal or if `terminal.pay()` reverts. |
 | `TOKENS` | `JBSucker`, all deployers | Constructor | The Juicebox token management contract. |
 | `PROJECTS` | `JBSuckerRegistry` | Derived from `DIRECTORY.PROJECTS()` | The ERC-721 project ownership contract. |
 | `OPBRIDGE` | `JBOptimismSucker`, `JBBaseSucker`, `JBCeloSucker` | Constructor (from deployer callback) | The OP Standard Bridge address. |
@@ -159,3 +160,5 @@ What admins **cannot** do:
 - **Cannot change the peer address.** The peer is determined by deterministic deployment (CREATE2 with sender-specific salt). There is no admin function to change which remote address is trusted.
 
 - **Cannot change the project ID.** The `projectId` is set once during `initialize()` and is immutable thereafter (enforced by OpenZeppelin `Initializable`).
+
+- **Cannot change the fee project.** `FEE_PROJECT_ID` is set at construction and is immutable. If the fee project's terminal changes or is removed, `toRemoteFee` payments silently stop (best-effort design), but `toRemote()` still works.

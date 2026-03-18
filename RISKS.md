@@ -43,7 +43,13 @@ Forward-looking risk catalog for the JBSucker cross-chain bridging system.
 - **`fromRemote` accepts roots for unmapped tokens.** By design, to avoid permanent loss of already-bridged tokens. Claims against those roots fail at the mapping lookup. This means stale token data can accumulate in inbox storage indefinitely.
 - **minGas too low = permanent fund loss.** If `minGas` is below the actual gas needed for the remote call, the bridge message will fail on the remote chain. The OP/CCIP implementations enforce `MESSENGER_ERC20_MIN_GAS_LIMIT` (200k), but the actual gas needed could be higher depending on the remote token implementation.
 
-## 5. Deprecation Lifecycle
+## 5. Fee Collection Risks
+
+- **Best-effort fee collection.** `toRemoteFee` is paid into `FEE_PROJECT_ID` (typically project ID 1) via `terminal.pay()`. If the fee project has no primary terminal for `NATIVE_TOKEN`, or if `terminal.pay()` reverts for any reason, `toRemote()` silently proceeds without collecting the fee. This means `toRemoteFee` is not a hard guarantee — it can be bypassed if the fee project's terminal is misconfigured, paused, or removed.
+- **Immutable fee project.** `FEE_PROJECT_ID` is set at construction and cannot be changed. If the fee project is abandoned or its terminal removed, there is no way to redirect fees to a different project without deploying new suckers.
+- **Fee does not protect the sucker's own project.** The fee is paid to `FEE_PROJECT_ID` (the protocol project), not to the sucker's own `projectId()`. This is by design — the protocol project always has a native token terminal — but means the sucker's project does not directly benefit from the anti-spam fee.
+
+## 6. Deprecation Lifecycle
 
 - **State machine: ENABLED -> DEPRECATION_PENDING -> SENDING_DISABLED -> DEPRECATED.**
   - `DEPRECATION_PENDING`: fully functional, warning only. `block.timestamp < deprecatedAfter - _maxMessagingDelay()`.
@@ -54,7 +60,7 @@ Forward-looking risk catalog for the JBSucker cross-chain bridging system.
 - **Stuck tokens during deprecation.** Tokens that were `prepare()`d but not yet `toRemote()`d before SENDING_DISABLED cannot be sent to the remote chain. They can only be recovered via emergency exit after the sucker reaches DEPRECATED state.
 - **Both sides must deprecate.** The deprecation must be called on both the local and remote sucker with matching timestamps. If only one side deprecates, the other side continues accepting roots while the deprecated side blocks sends -- tokens become unreachable on the non-deprecated side.
 
-## 6. Emergency Hatch
+## 7. Emergency Hatch
 
 - **Two independent activation paths:**
   1. Per-token: `enableEmergencyHatchFor(tokens)` -- requires `SUCKER_SAFETY` permission from project owner. Allows emergency exit for specific tokens while the sucker is still ENABLED.
@@ -64,7 +70,7 @@ Forward-looking risk catalog for the JBSucker cross-chain bridging system.
 - **Emergency exit decrements `outbox.balance`.** If emergency exits drain the outbox balance below the amount that was already sent to the bridge, the accounting becomes inconsistent. The contract guards against this by only allowing exit for unsent leaves.
 - **Emergency hatch + minting.** Emergency exit calls `_handleClaim`, which mints project tokens via the controller. If the controller or token contract is broken/missing, emergency exits also revert -- there is no "raw withdrawal" of terminal tokens without minting.
 
-## 7. DoS Vectors
+## 8. DoS Vectors
 
 - **Large proof calldata.** Each claim requires a 32-element `bytes32[32]` proof array (1024 bytes). Batch claims (`claim(JBClaim[])`) scale linearly. A batch of 100 claims is ~100KB of calldata, approaching some L2 calldata limits.
 - **Bridge gas limits.** `MESSENGER_BASE_GAS_LIMIT` is 300k and `MESSENGER_ERC20_MIN_GAS_LIMIT` is 200k. If the remote chain's gas costs increase (e.g., after an EVM upgrade), these hardcoded limits may become insufficient, causing all bridge messages to fail.
@@ -75,7 +81,7 @@ Forward-looking risk catalog for the JBSucker cross-chain bridging system.
 - **Unbounded sucker count per project.** `JBSuckerRegistry._suckersOf` uses an EnumerableMap with no cap. `suckerPairsOf` iterates all suckers with external calls per iteration. Extremely large sucker counts could cause view functions to exceed gas limits.
 - **Unrestricted `receive()`.** Anyone can send ETH to the sucker, inflating `amountToAddToBalanceOf`. This is by design (needed for bridge/terminal returns) but means the project can receive unexpected balance additions.
 
-## 8. Invariants to Verify
+## 9. Invariants to Verify
 
 - **Nonce monotonicity.** Outbox nonce increments exactly once per `_sendRoot` call. Inbox nonce only increases (never decreases or replays). Tested in `invariant_nonceMonotonicallyIncreases`.
 - **No double-claim.** `_executedFor[token].get(index)` is checked before and set before any external call. Each leaf index can be claimed exactly once. Tested in `invariant_eachLeafClaimedOnce`.

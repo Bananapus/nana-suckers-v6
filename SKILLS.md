@@ -8,7 +8,7 @@ Cross-chain token and fund bridging for Juicebox V6 projects, using merkle trees
 
 | Contract | Role |
 |----------|------|
-| `JBSucker` | Abstract base with full lifecycle: prepare, toRemote, fromRemote, claim, emergency hatch, deprecation. Manages outbox/inbox merkle trees per terminal token. Uses `ERC2771Context` for meta-transactions. Deployed as minimal clones via `Initializable`. |
+| `JBSucker` | Abstract base with full lifecycle: prepare, toRemote, fromRemote, claim, emergency hatch, deprecation. Manages outbox/inbox merkle trees per terminal token. Uses `ERC2771Context` for meta-transactions. Deployed as minimal clones via `Initializable`. Has an immutable `FEE_PROJECT_ID` (typically project ID 1) that receives `toRemoteFee` payments via `terminal.pay()`. |
 | `JBCCIPSucker` | CCIP bridge implementation. Implements `IAny2EVMMessageReceiver.ccipReceive`. Wraps native ETH to WETH before bridging (CCIP only transports ERC-20s), unwraps on receive. Overrides `_validateTokenMapping` to allow `NATIVE_TOKEN` mapping to ERC-20 addresses (for chains where ETH is not native). Refunds excess transport payment after `ccipSend` via low-level call (does not revert on refund failure). |
 | `JBOptimismSucker` | OP Stack bridge implementation. Uses `IOPMessenger.sendMessage` for merkle roots and `IOPStandardBridge.bridgeERC20To` for ERC-20s. No transport payment required (`msg.value` must be 0 for ERC-20 bridging). Native tokens are sent as `msg.value` on `sendMessage`. |
 | `JBBaseSucker` | Extends `JBOptimismSucker` with Base<->Ethereum chain ID mapping (1<->8453, 11155111<->84532). |
@@ -28,7 +28,7 @@ Cross-chain token and fund bridging for Juicebox V6 projects, using merkle trees
 | Function | Contract | What it does |
 |----------|----------|--------------|
 | `prepare(projectTokenCount, beneficiary, minTokensReclaimed, token)` | `JBSucker` | Transfers project tokens (ERC-20) from caller via `safeTransferFrom`, cashes them out at the project's primary terminal for the specified terminal token, inserts a leaf into the outbox merkle tree. `beneficiary` is `bytes32` for cross-VM compatibility. Amounts are capped at `uint128` for SVM compatibility. Reverts if token not mapped, sucker deprecated/sending-disabled, beneficiary is zero, or project has no ERC-20 token. |
-| `toRemote(token)` | `JBSucker` | Sends the outbox merkle root and accumulated funds for `token` to the peer sucker on the remote chain via the bridge. Reverts with `NothingToSend` if outbox is empty (balance==0 and count==numberOfClaimsSent). If `toRemoteFee != 0`, deducts the fee from `msg.value` and pays it into the project via `terminal.pay()` (caller gets project tokens). Remainder is passed as `transportPayment` to the bridge. Increments outbox nonce. Updates `numberOfClaimsSent` to current tree count. Reverts if emergency hatch is open for the token. |
+| `toRemote(token)` | `JBSucker` | Sends the outbox merkle root and accumulated funds for `token` to the peer sucker on the remote chain via the bridge. Reverts with `NothingToSend` if outbox is empty (balance==0 and count==numberOfClaimsSent). If `toRemoteFee != 0`, deducts the fee from `msg.value` and pays it into the fee project (`FEE_PROJECT_ID`, typically project ID 1) via `terminal.pay()` (caller gets project tokens). Best-effort: if the fee project has no native token terminal or `terminal.pay()` reverts, proceeds without fee. Remainder is passed as `transportPayment` to the bridge. Increments outbox nonce. Updates `numberOfClaimsSent` to current tree count. Reverts if emergency hatch is open for the token. |
 | `fromRemote(root)` | `JBSucker` | Receives a merkle root from the remote peer. Validates `MESSAGE_VERSION` (reverts on mismatch). Updates inbox tree only if received nonce > current inbox nonce AND sucker is not `DEPRECATED`. Does NOT revert on stale nonce -- emits `StaleRootRejected` instead (to avoid losing native tokens sent with the message). |
 | `claim(claimData)` | `JBSucker` | Verifies a merkle proof against the inbox tree, marks the leaf as executed (prevents double-spend), mints project tokens for the beneficiary via `IJBController.mintTokensOf` (with `useReservedPercent: false`), and adds terminal tokens to the project's balance. |
 | `claim(claims[])` | `JBSucker` | Batch version -- iterates and calls `claim(JBClaim)` for each. |
@@ -79,6 +79,7 @@ Cross-chain token and fund bridging for Juicebox V6 projects, using merkle trees
 
 | Name | Value | Context |
 |------|-------|---------|
+| `FEE_PROJECT_ID` | Set at construction (typically `1`) | The project that receives `toRemoteFee` payments via `terminal.pay()`. Immutable. |
 | `MESSENGER_BASE_GAS_LIMIT` | `300_000` | Minimum gas for cross-chain `fromRemote` call |
 | `MESSENGER_ERC20_MIN_GAS_LIMIT` | `200_000` | Minimum gas for ERC-20 transfer on remote chain |
 | `_TREE_DEPTH` | `32` | Merkle tree depth (max ~4B leaves) |
