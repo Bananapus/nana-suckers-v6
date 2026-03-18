@@ -6,7 +6,6 @@ import {IJBDirectory} from "@bananapus/core-v6/src/interfaces/IJBDirectory.sol";
 import {IJBPermissions} from "@bananapus/core-v6/src/interfaces/IJBPermissions.sol";
 import {IJBTokens} from "@bananapus/core-v6/src/interfaces/IJBTokens.sol";
 import "@bananapus/core-v6/script/helpers/CoreDeploymentLib.sol";
-import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {Sphinx} from "@sphinx-labs/contracts/contracts/foundry/SphinxPlugin.sol";
 import {Script} from "forge-std/Script.sol";
 
@@ -66,8 +65,7 @@ contract DeployScript is Script, Sphinx {
         // We use the same trusted forwarder as the core deployment.
         TRUSTED_FORWARDER = core.permissions.trustedForwarder();
 
-        // The fee owner is the same address as the JBPrices owner.
-        FEE_OWNER = Ownable(address(core.prices)).owner();
+        FEE_OWNER = safeAddress();
 
         // Perform the deployment transactions.
         deploy();
