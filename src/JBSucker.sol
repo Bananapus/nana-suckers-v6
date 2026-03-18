@@ -510,7 +510,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     function initialize(uint256 _projectId) public initializer {
         // slither-disable-next-line missing-zero-check
         _localProjectId = _projectId;
-        deployer = msg.sender;
+        deployer = _msgSender();
     }
 
     /// @notice Map an ERC-20 token on the local chain to an ERC-20 token on the remote chain, allowing that token to be
