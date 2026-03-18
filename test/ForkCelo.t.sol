@@ -103,6 +103,7 @@ contract ForkCeloTest is TestBaseWorkflow {
             directory: jbDirectory(),
             permissions: jbPermissions(),
             tokens: jbTokens(),
+            feeProjectId: 1,
             trustedForwarder: address(0)
         });
         vm.stopPrank();
@@ -144,6 +145,7 @@ contract ForkCeloTest is TestBaseWorkflow {
             directory: jbDirectory(),
             permissions: jbPermissions(),
             tokens: jbTokens(),
+            feeProjectId: 1,
             trustedForwarder: address(0)
         });
         vm.stopPrank();
@@ -271,7 +273,7 @@ contract ForkCeloTest is TestBaseWorkflow {
             localToken: JBConstants.NATIVE_TOKEN,
             minGas: 200_000,
             remoteToken: bytes32(uint256(uint160(CELO_WETH))),
-            minBridgeAmount: 1
+            toRemoteFee: 1
         });
 
         vm.prank(multisig());
@@ -331,7 +333,7 @@ contract ForkCeloTest is TestBaseWorkflow {
             localToken: CELO_WETH,
             minGas: 200_000,
             remoteToken: bytes32(uint256(uint160(address(L1_WETH)))),
-            minBridgeAmount: 1
+            toRemoteFee: 1
         });
 
         vm.prank(multisig());

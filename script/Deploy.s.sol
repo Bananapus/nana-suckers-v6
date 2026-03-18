@@ -148,6 +148,7 @@ contract DeployScript is Script, Sphinx {
                 directory: core.directory,
                 permissions: core.permissions,
                 tokens: core.tokens,
+                feeProjectId: 1,
                 trustedForwarder: TRUSTED_FORWARDER
             });
 
@@ -179,6 +180,7 @@ contract DeployScript is Script, Sphinx {
                 directory: core.directory,
                 permissions: core.permissions,
                 tokens: core.tokens,
+                feeProjectId: 1,
                 trustedForwarder: TRUSTED_FORWARDER
             });
 
@@ -229,6 +231,7 @@ contract DeployScript is Script, Sphinx {
                 directory: core.directory,
                 permissions: core.permissions,
                 tokens: core.tokens,
+                feeProjectId: 1,
                 trustedForwarder: TRUSTED_FORWARDER
             });
 
@@ -260,6 +263,7 @@ contract DeployScript is Script, Sphinx {
                 directory: core.directory,
                 permissions: core.permissions,
                 tokens: core.tokens,
+                feeProjectId: 1,
                 trustedForwarder: TRUSTED_FORWARDER
             });
 
@@ -306,6 +310,7 @@ contract DeployScript is Script, Sphinx {
                 directory: core.directory,
                 permissions: core.permissions,
                 tokens: core.tokens,
+                feeProjectId: 1,
                 trustedForwarder: TRUSTED_FORWARDER
             });
 
@@ -340,6 +345,7 @@ contract DeployScript is Script, Sphinx {
                 directory: core.directory,
                 permissions: core.permissions,
                 tokens: core.tokens,
+                feeProjectId: 1,
                 trustedForwarder: TRUSTED_FORWARDER
             });
 
@@ -530,6 +536,7 @@ contract DeployScript is Script, Sphinx {
             directory: directory,
             tokens: tokens,
             permissions: permissions,
+            feeProjectId: 1,
             trustedForwarder: trustedForwarder
         });
 

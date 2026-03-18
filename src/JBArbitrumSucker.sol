@@ -62,9 +62,10 @@ contract JBArbitrumSucker is JBSucker, IJBArbitrumSucker {
         IJBDirectory directory,
         IJBPermissions permissions,
         IJBTokens tokens,
+        uint256 feeProjectId,
         address trustedForwarder
     )
-        JBSucker(directory, permissions, tokens, trustedForwarder)
+        JBSucker(directory, permissions, tokens, feeProjectId, trustedForwarder)
     {
         GATEWAYROUTER = JBArbitrumSuckerDeployer(deployer).arbGatewayRouter();
         ARBINBOX = JBArbitrumSuckerDeployer(deployer).arbInbox();

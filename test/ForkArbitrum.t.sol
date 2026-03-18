@@ -83,6 +83,7 @@ contract ForkArbitrumDeployerTest is TestBaseWorkflow, IERC721Receiver {
             directory: jbDirectory(),
             permissions: jbPermissions(),
             tokens: jbTokens(),
+            feeProjectId: 1,
             trustedForwarder: address(0)
         });
 
@@ -113,6 +114,7 @@ contract ForkArbitrumDeployerTest is TestBaseWorkflow, IERC721Receiver {
             directory: jbDirectory(),
             permissions: jbPermissions(),
             tokens: jbTokens(),
+            feeProjectId: 1,
             trustedForwarder: address(0)
         });
 
@@ -263,6 +265,7 @@ contract ForkArbitrumNativeTransferTest is TestBaseWorkflow {
             directory: jbDirectory(),
             permissions: jbPermissions(),
             tokens: jbTokens(),
+            feeProjectId: 1,
             trustedForwarder: address(0)
         });
         vm.stopPrank();
@@ -345,7 +348,7 @@ contract ForkArbitrumNativeTransferTest is TestBaseWorkflow {
             localToken: JBConstants.NATIVE_TOKEN,
             minGas: 200_000,
             remoteToken: bytes32(uint256(uint160(JBConstants.NATIVE_TOKEN))),
-            minBridgeAmount: 1
+            toRemoteFee: 1
         });
 
         vm.prank(multisig());

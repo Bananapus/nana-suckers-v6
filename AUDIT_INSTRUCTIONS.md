@@ -152,7 +152,7 @@ User calls prepare(projectTokenCount, beneficiary, minTokensReclaimed, token)
 ```
 Anyone calls toRemote(token)
   |
-  +--> Validate: emergency hatch not enabled, outbox balance >= minBridgeAmount, sucker not deprecated
+  +--> Validate: emergency hatch not enabled, nothing-to-send guard, deduct toRemoteFee (if set), sucker not deprecated
   +--> _sendRoot():
   |      Read outbox tree count and balance
   |      Clear outbox balance (set to 0)

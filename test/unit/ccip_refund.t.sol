@@ -33,7 +33,7 @@ contract CCIPSuckerHarness is JBCCIPSucker {
         IJBPermissions permissions,
         address trusted_forwarder
     )
-        JBCCIPSucker(deployer, directory, tokens, permissions, trusted_forwarder)
+        JBCCIPSucker(deployer, directory, tokens, permissions, 1, trusted_forwarder)
     {}
 
     /// @notice Directly insert a leaf into the outbox tree for testing.
@@ -146,7 +146,7 @@ contract CCIPRefundTest is Test {
                 emergencyHatch: false,
                 minGas: 200_000,
                 addr: bytes32(uint256(uint160(makeAddr("remoteToken")))),
-                minBridgeAmount: 0
+                toRemoteFee: 0
             })
         );
 

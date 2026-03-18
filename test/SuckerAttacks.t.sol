@@ -37,7 +37,7 @@ contract AttackTestSucker is JBSucker {
         IJBTokens tokens,
         address forwarder
     )
-        JBSucker(directory, permissions, tokens, forwarder)
+        JBSucker(directory, permissions, tokens, 1, forwarder)
     {}
 
     function _sendRootOverAMB(
@@ -370,7 +370,7 @@ contract SuckerAttacks is Test {
                 emergencyHatch: false,
                 minGas: 200_000,
                 addr: bytes32(uint256(uint160(makeAddr("remoteTokenX")))),
-                minBridgeAmount: 0
+                toRemoteFee: 0
             })
         );
 
@@ -389,7 +389,7 @@ contract SuckerAttacks is Test {
                 emergencyHatch: false,
                 minGas: 200_000,
                 addr: bytes32(uint256(uint160(makeAddr("remoteTokenY")))),
-                minBridgeAmount: 0
+                toRemoteFee: 0
             })
         );
 

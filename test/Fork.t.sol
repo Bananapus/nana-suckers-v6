@@ -270,6 +270,7 @@ contract CCIPSuckerForkedTests is TestBaseWorkflow {
             directory: jbDirectory(),
             permissions: jbPermissions(),
             tokens: jbTokens(),
+            feeProjectId: 1,
             trustedForwarder: address(0)
         });
         vm.stopPrank();
@@ -329,6 +330,7 @@ contract CCIPSuckerForkedTests is TestBaseWorkflow {
             directory: jbDirectory(),
             permissions: jbPermissions(),
             tokens: jbTokens(),
+            feeProjectId: 1,
             trustedForwarder: address(0)
         });
         vm.stopPrank();
@@ -374,7 +376,7 @@ contract CCIPSuckerForkedTests is TestBaseWorkflow {
             localToken: JBConstants.NATIVE_TOKEN,
             minGas: 200_000,
             remoteToken: bytes32(uint256(uint160(JBConstants.NATIVE_TOKEN))),
-            minBridgeAmount: 1
+            toRemoteFee: 1
         });
 
         vm.prank(multisig());
@@ -445,7 +447,7 @@ contract CCIPSuckerForkedTests is TestBaseWorkflow {
             localToken: address(ccipBnM),
             minGas: 200_000,
             remoteToken: bytes32(uint256(uint160(address(ccipBnMArbSepolia)))),
-            minBridgeAmount: 1
+            toRemoteFee: 1
         });
 
         vm.prank(multisig());

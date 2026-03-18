@@ -83,7 +83,7 @@ graph TD;
 
 | Contract | Description |
 |----------|-------------|
-| [`JBSucker`](src/JBSucker.sol) | Abstract base. Manages outbox/inbox merkle trees, `prepare`/`toRemote`/`claim` lifecycle, token mapping, deprecation, and emergency hatch. Deployed as clones via `Initializable`. Uses `ERC2771Context` for meta-transactions. |
+| [`JBSucker`](src/JBSucker.sol) | Abstract base. Manages outbox/inbox merkle trees, `prepare`/`toRemote`/`claim` lifecycle, token mapping, deprecation, and emergency hatch. Deployed as clones via `Initializable`. Uses `ERC2771Context` for meta-transactions. Has an immutable `FEE_PROJECT_ID` (set at construction, typically project ID 1) that receives `toRemoteFee` payments. |
 | [`JBCCIPSucker`](src/JBCCIPSucker.sol) | Extends `JBSucker`. Bridges via Chainlink CCIP (`ccipSend`/`ccipReceive`). Supports any CCIP-connected chain pair. Wraps native ETH to WETH before bridging (CCIP only transports ERC-20s) and unwraps on the receiving end. Can map `NATIVE_TOKEN` to ERC-20 addresses on the remote chain (unlike OP/Arbitrum suckers). |
 | [`JBOptimismSucker`](src/JBOptimismSucker.sol) | Extends `JBSucker`. Bridges via OP Standard Bridge + OP Messenger. No `msg.value` required for transport. |
 | [`JBBaseSucker`](src/JBBaseSucker.sol) | Thin wrapper around `JBOptimismSucker` with Base chain IDs (Ethereum 1 <-> Base 8453, Sepolia 11155111 <-> Base Sepolia 84532). |
@@ -236,14 +236,14 @@ Token mappings define which local terminal token corresponds to which remote ter
 - **Immutable once used.** After an outbox tree has entries for a token, the mapping cannot be changed to a different remote token. It can only be disabled (by setting `remoteToken` to `bytes32(0)`), which triggers a final root flush to settle outstanding claims. A disabled mapping can be re-enabled back to the same remote token.
 - **Minimum gas enforcement.** ERC-20 mappings must specify `minGas >= MESSENGER_ERC20_MIN_GAS_LIMIT` (200,000). Native token mappings on the base `JBSucker` do not require minimum gas, but `JBCCIPSucker` requires it for all tokens (because CCIP wraps native to WETH, an ERC-20 transfer).
 - **Native token rules.** On `JBSucker` (OP/Arb), `NATIVE_TOKEN` can only map to `NATIVE_TOKEN` or `bytes32(0)`. `JBCCIPSucker` and `JBCeloSucker` override this to allow `NATIVE_TOKEN` mapping to any remote address (for chains where ETH is an ERC-20).
-- **`minBridgeAmount`** prevents spam by requiring a minimum outbox balance before `toRemote` can be called.
+- **`toRemoteFee`** is an ETH fee (in wei) paid into the fee project (determined by the immutable `FEE_PROJECT_ID`, typically project ID 1) via `terminal.pay()` on each `toRemote()` call, making spam economically costly. The caller receives project tokens in return (incentivizing relayers). The fee is best-effort: if the fee project has no native token terminal, or if `terminal.pay()` reverts, `toRemote()` proceeds without collecting the fee. A "nothing to send" guard also prevents free repeated calls when nothing has changed.
 
 ```solidity
 struct JBTokenMapping {
     address localToken;       // Local terminal token address
     uint32 minGas;            // Minimum gas for bridging
     bytes32 remoteToken;      // Remote token (bytes32 for cross-VM compat)
-    uint256 minBridgeAmount;  // Minimum balance to trigger bridging
+    uint256 toRemoteFee;      // ETH fee paid into project on each toRemote() call
 }
 ```
 
@@ -310,7 +310,7 @@ mappings[0] = JBTokenMapping({
     localToken: JBConstants.NATIVE_TOKEN,
     minGas: 200_000,
     remoteToken: bytes32(uint256(uint160(JBConstants.NATIVE_TOKEN))),  // bytes32
-    minBridgeAmount: 0.025 ether
+    toRemoteFee: 0.025 ether
 });
 
 JBSuckerDeployerConfig[] memory configs = new JBSuckerDeployerConfig[](1);
@@ -326,7 +326,7 @@ address[] memory suckers = registry.deploySuckersFor(12, salt, configs);
 
 - The [`JBTokenMapping`](src/structs/JBTokenMapping.sol) maps local mainnet ETH to remote Optimism ETH.
   - `remoteToken` is `bytes32`, not `address`. For EVM addresses, use `bytes32(uint256(uint160(addr)))`.
-  - `minBridgeAmount` prevents spam -- ours blocks attempts to bridge less than 0.025 ETH.
+  - `toRemoteFee` prevents spam -- the caller pays 0.025 ETH into the fee project (`FEE_PROJECT_ID`, typically project ID 1) on each `toRemote()` call, receiving project tokens in return.
   - `minGas` requires a gas limit of at least 200,000 for ERC-20s. If your token has expensive transfer logic, you may need more.
 - The [`JBSuckerDeployerConfig`](src/structs/JBSuckerDeployerConfig.sol) specifies which deployer to use. You can only use approved deployers through the registry -- check for `SuckerDeployerAllowed` events or contact the registry's owner.
 - **For the suckers to be peers, the `salt` has to match on both chains and the same address must call `deploySuckersFor(...)`.**
