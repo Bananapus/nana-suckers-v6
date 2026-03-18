@@ -17,6 +17,7 @@ The most pervasive breaking change in v6 is the systematic replacement of `addre
 | `peer()` return type | `returns (address)` | `returns (bytes32)` |
 | `prepare()` beneficiary param | `address beneficiary` | `bytes32 beneficiary` |
 | `Claimed` event `beneficiary` | `address beneficiary` | `bytes32 beneficiary` |
+| `Claimed` event `autoAddedToBalance` | `bool autoAddedToBalance` | _(removed)_ |
 | `InsertToOutboxTree` event `beneficiary` | `address indexed beneficiary` | `bytes32 indexed beneficiary` |
 
 All callers of `peer()` and `prepare()` must update to use `bytes32`. For EVM-to-EVM usage, addresses are left-padded to 32 bytes via `_toBytes32(address)`.
@@ -152,6 +153,7 @@ In v5, `JBSucker.initialize()` used `msg.sender` to set the `deployer` field. In
 |----------|-------|-------------|
 | `JBSucker` | `JBSucker_AmountExceedsUint128(uint256 amount)` | Thrown when `terminalTokenAmount` or `projectTokenCount` exceeds `uint128` in `_insertIntoTree`. Guards against overflow for SVM/Solana compatibility. |
 | `JBSucker` | `JBSucker_InvalidMessageVersion(uint8 received, uint8 expected)` | Thrown in `fromRemote` when the message version does not match `MESSAGE_VERSION`. Prevents processing incompatible messages. |
+| `JBSucker` | `JBSucker_NothingToSend()` | Thrown in `toRemote()` when the outbox has zero balance and no unsent claims. Prevents unnecessary bridge calls. |
 | `CCIPHelper` | `CCIPHelper_UnsupportedChain(uint256 chainId)` | Replaces bare `revert("Unsupported chain")` strings with a typed error. |
 | `JBSuckerRegistry` | `JBSuckerRegistry_FeeExceedsMax(uint256 fee, uint256 max)` | Thrown when `setToRemoteFee` is called with a fee exceeding `MAX_TO_REMOTE_FEE`. |
 
@@ -182,7 +184,7 @@ See section 2.3 above.
 
 | Contract | Event | Change |
 |----------|-------|--------|
-| `IJBSucker` | `Claimed` | `beneficiary` field changed from `address` to `bytes32`. |
+| `IJBSucker` | `Claimed` | `beneficiary` field changed from `address` to `bytes32`. `bool autoAddedToBalance` parameter removed (the `MANUAL` add-to-balance mode was removed in v6, so balance is always added on claim). |
 | `IJBSucker` | `InsertToOutboxTree` | `beneficiary` indexed field changed from `address indexed` to `bytes32 indexed`. |
 
 ### 3.3 Unchanged Events
@@ -366,7 +368,7 @@ Throughout the codebase, function calls were updated to use named argument synta
 
 | v5 | v6 | Notes |
 |----|----|-------|
-| `IJBSucker` | `IJBSucker` | `peer()` returns `bytes32`. `prepare()` takes `bytes32 beneficiary`. `Claimed`/`InsertToOutboxTree` events use `bytes32`. New `StaleRootRejected` event. `ADD_TO_BALANCE_MODE()` and `addOutstandingAmountToBalance()` removed. NatSpec added. |
+| `IJBSucker` | `IJBSucker` | `peer()` returns `bytes32`. `prepare()` takes `bytes32 beneficiary`. `Claimed`/`InsertToOutboxTree` events use `bytes32`. `Claimed` event `autoAddedToBalance` parameter removed. New `StaleRootRejected` event. New `JBSucker_NothingToSend` error. `ADD_TO_BALANCE_MODE()` and `addOutstandingAmountToBalance()` removed. NatSpec added. |
 | `IJBSuckerExtended` | `IJBSuckerExtended` | New `EmergencyExit` event. NatSpec added. |
 | `IJBSuckerRegistry` | `IJBSuckerRegistry` | `deploySuckersFor` configurations changed to `calldata`. New `toRemoteFee()`, `MAX_TO_REMOTE_FEE()`, `setToRemoteFee()`, `ToRemoteFeeChanged` event, `FeeExceedsMax` error. NatSpec added. |
 | `IJBSuckerDeployer` | `IJBSuckerDeployer` | All errors removed from interface (moved to contract). NatSpec added. |
