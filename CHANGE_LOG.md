@@ -17,6 +17,7 @@ The most pervasive breaking change in v6 is the systematic replacement of `addre
 | `peer()` return type | `returns (address)` | `returns (bytes32)` |
 | `prepare()` beneficiary param | `address beneficiary` | `bytes32 beneficiary` |
 | `Claimed` event `beneficiary` | `address beneficiary` | `bytes32 beneficiary` |
+| `Claimed` event `autoAddedToBalance` | `bool autoAddedToBalance` | _(removed)_ |
 | `InsertToOutboxTree` event `beneficiary` | `address indexed beneficiary` | `bytes32 indexed beneficiary` |
 
 All callers of `peer()` and `prepare()` must update to use `bytes32`. For EVM-to-EVM usage, addresses are left-padded to 32 bytes via `_toBytes32(address)`.
@@ -29,8 +30,10 @@ All callers of `peer()` and `prepare()` must update to use `bytes32`. For EVM-to
 | `JBMessageRoot` | `token` | `address` | `bytes32` |
 | `JBMessageRoot` | (new field) `version` | N/A | `uint8` (inserted as first field) |
 | `JBRemoteToken` | `addr` | `address` | `bytes32` |
+| `JBRemoteToken` | `minBridgeAmount` | `uint256` | _(removed)_ |
 | `JBSuckersPair` | `remote` | `address` | `bytes32` |
 | `JBTokenMapping` | `remoteToken` | `address` | `bytes32` |
+| `JBTokenMapping` | `minBridgeAmount` | `uint256` | _(removed)_ |
 
 These are ABI-breaking changes. All off-chain infrastructure (indexers, relayers, frontends) must update to use `bytes32` for these fields.
 
@@ -76,6 +79,48 @@ In v5, deployer errors were declared in `IJBSuckerDeployer` (the interface). In 
 
 Changed from `memory` to `calldata` for gas efficiency.
 
+### 1.9 Anti-Spam Mechanism: `minBridgeAmount` Replaced by `toRemoteFee`
+
+The v5 per-token `minBridgeAmount` anti-spam mechanism has been replaced by a global `toRemoteFee` in v6. This is a fundamental design change:
+
+| Aspect | v5 | v6 |
+|--------|----|----|
+| Mechanism | Per-token minimum bridge threshold (`minBridgeAmount` in `JBRemoteToken`/`JBTokenMapping`) | Global ETH fee paid on every `toRemote()` call |
+| Configuration | Set per-token during `mapTokens()` | Centralized in `JBSuckerRegistry`, admin-adjustable via `setToRemoteFee()` |
+| Check | `_outboxOf[token].balance < remoteToken.minBridgeAmount` reverts with `JBSucker_QueueInsufficientSize` | `msg.value < toRemoteFee` reverts with `JBSucker_InsufficientMsgValue` |
+| Fee destination | N/A (no fee, just a threshold) | Paid into `FEE_PROJECT_ID` via `terminal.pay()`. Caller receives fee project tokens. |
+| Cap | None | `MAX_TO_REMOTE_FEE = 0.001 ether` |
+
+The `JBSucker` constructor gained two new parameters: `feeProjectId` (the project that receives the fee, typically project ID 1) and `registry` (typed as `IJBSuckerRegistry`, which manages the global `toRemoteFee`). These replace the `addToBalanceMode` parameter. See section 1.10 for the `addToBalanceMode` removal.
+
+### 1.10 `MANUAL` `AddToBalanceMode` Removed
+
+The `MANUAL` option of `JBAddToBalanceMode` has been removed entirely. In v5, suckers could be deployed with either `MANUAL` or `ON_CLAIM` mode. In v6, balance is always added atomically during `claim()` (the `ON_CLAIM` behavior). This simplifies the sucker lifecycle.
+
+| Removed in v6 | Description |
+|----------------|-------------|
+| `JBAddToBalanceMode` enum | Removed. Only had `MANUAL` and `ON_CLAIM`. |
+| `ADD_TO_BALANCE_MODE` immutable | Removed from `JBSucker` and `IJBSucker`. |
+| `addOutstandingAmountToBalance(address token)` | Public function removed from `IJBSucker` and `JBSucker`. Was only usable in `MANUAL` mode. |
+| `JBSucker_ManualNotAllowed` error | Removed (was thrown when calling `addOutstandingAmountToBalance` in non-MANUAL mode). |
+
+Note: `amountToAddToBalanceOf(address token)` is still present in v6 -- it is used internally by the always-on-claim flow.
+
+### 1.11 JBSucker Constructor Change
+
+| Parameter | v5 | v6 |
+|-----------|----|----|
+| `addToBalanceMode` | `JBAddToBalanceMode addToBalanceMode` | _(removed)_ |
+| `feeProjectId` | _(not present)_ | `uint256 feeProjectId` |
+| `registry` | _(not present)_ | `IJBSuckerRegistry registry` |
+| `trusted_forwarder` naming | `address trusted_forwarder` | `address trustedForwarder` (camelCase) |
+
+All subclass constructors (`JBOptimismSucker`, `JBArbitrumSucker`, `JBCCIPSucker`, `JBBaseSucker`, `JBCeloSucker`) are updated accordingly.
+
+### 1.12 `initialize()` ERC2771 Fix
+
+In v5, `JBSucker.initialize()` used `msg.sender` to set the `deployer` field. In v6, this was corrected to `_msgSender()` for ERC2771 meta-transaction compatibility. This is a behavioral fix: when called through a trusted forwarder, v5 would incorrectly record the forwarder address as the deployer instead of the actual sender.
+
 ---
 
 ## 2. New Features
@@ -100,6 +145,7 @@ Changed from `memory` to `calldata` for gas efficiency.
 | `IJBSucker` | `StaleRootRejected(address indexed token, uint64 receivedNonce, uint64 currentNonce)` | Emitted when a received inbox root is rejected because its nonce is stale (not greater than the current nonce). Aids off-chain monitoring of out-of-order or duplicate message deliveries. |
 | `IJBSuckerExtended` | `EmergencyExit(address indexed beneficiary, address indexed token, uint256 terminalTokenAmount, uint256 projectTokenCount, address caller)` | Emitted when a beneficiary exits through the emergency hatch. v5 had no event for emergency exits. |
 | `JBCCIPSucker` | `TransportPaymentRefundFailed(address indexed recipient, uint256 amount)` | Emitted when a CCIP transport payment refund fails after a successful `ccipSend`. Replaces the v5 `JBCCIPSucker_FailedToRefundFee` revert to avoid reverting after the bridge message is committed. |
+| `IJBSuckerRegistry` | `ToRemoteFeeChanged(uint256 oldFee, uint256 newFee, address caller)` | Emitted when the registry owner changes the global `toRemoteFee`. New in v6 (no v5 equivalent). |
 
 ### 2.4 New Errors
 
@@ -107,13 +153,16 @@ Changed from `memory` to `calldata` for gas efficiency.
 |----------|-------|-------------|
 | `JBSucker` | `JBSucker_AmountExceedsUint128(uint256 amount)` | Thrown when `terminalTokenAmount` or `projectTokenCount` exceeds `uint128` in `_insertIntoTree`. Guards against overflow for SVM/Solana compatibility. |
 | `JBSucker` | `JBSucker_InvalidMessageVersion(uint8 received, uint8 expected)` | Thrown in `fromRemote` when the message version does not match `MESSAGE_VERSION`. Prevents processing incompatible messages. |
+| `JBSucker` | `JBSucker_NothingToSend()` | Thrown in `toRemote()` when the outbox has zero balance and no unsent claims. Prevents unnecessary bridge calls. |
 | `CCIPHelper` | `CCIPHelper_UnsupportedChain(uint256 chainId)` | Replaces bare `revert("Unsupported chain")` strings with a typed error. |
+| `JBSuckerRegistry` | `JBSuckerRegistry_FeeExceedsMax(uint256 fee, uint256 max)` | Thrown when `setToRemoteFee` is called with a fee exceeding `MAX_TO_REMOTE_FEE`. |
 
 ### 2.5 New Constants
 
 | Contract | Constant | Description |
 |----------|----------|-------------|
 | `JBSucker` | `uint8 public constant MESSAGE_VERSION = 1` | The message format version. Used to reject incompatible messages from remote chains. |
+| `JBSuckerRegistry` | `uint256 public constant MAX_TO_REMOTE_FEE = 0.001 ether` | The maximum ETH fee the registry owner can set via `setToRemoteFee()`. |
 
 ### 2.6 New Internal Helpers
 
@@ -135,7 +184,7 @@ See section 2.3 above.
 
 | Contract | Event | Change |
 |----------|-------|--------|
-| `IJBSucker` | `Claimed` | `beneficiary` field changed from `address` to `bytes32`. |
+| `IJBSucker` | `Claimed` | `beneficiary` field changed from `address` to `bytes32`. `bool autoAddedToBalance` parameter removed (the `MANUAL` add-to-balance mode was removed in v6, so balance is always added on claim). |
 | `IJBSucker` | `InsertToOutboxTree` | `beneficiary` indexed field changed from `address indexed` to `bytes32 indexed`. |
 
 ### 3.3 Unchanged Events
@@ -168,6 +217,8 @@ See section 2.4 above.
 |----------|-------|-------|
 | `JBArbitrumSucker` | `JBArbitrumSucker_ChainNotSupported(uint256 chainId)` | Error was declared but never used in v5. Removed. |
 | `JBCCIPSucker` | `JBCCIPSucker_FailedToRefundFee()` | Replaced by `TransportPaymentRefundFailed` event. Refund failure no longer reverts. |
+| `JBSucker` | `JBSucker_ManualNotAllowed(JBAddToBalanceMode mode)` | Removed along with `MANUAL` `AddToBalanceMode`. Balance is always added on claim in v6. |
+| `JBSucker` | `JBSucker_QueueInsufficientSize(uint256 amount, uint256 minimumAmount)` | Removed. The per-token `minBridgeAmount` threshold was replaced by the global `toRemoteFee` mechanism. |
 | `JBSuckerRegistry` | `JBSuckerRegistry_RulesetDoesNotAllowAddingSucker(uint256 projectId)` | Removed entirely (was declared but unused in v5). |
 
 ### 4.4 Moved Errors (Interface -> Contract)
@@ -194,8 +245,10 @@ See section 2.4 above.
 | `JBMessageRoot` | `token` | `address` | `bytes32` | Cross-VM compatibility |
 | `JBMessageRoot` | `version` | _(not present)_ | `uint8` | New field for message versioning (first field) |
 | `JBRemoteToken` | `addr` | `address` | `bytes32` | Cross-VM compatibility |
+| `JBRemoteToken` | `minBridgeAmount` | `uint256` | _(removed)_ | Anti-spam moved to global `toRemoteFee` in `JBSuckerRegistry` |
 | `JBSuckersPair` | `remote` | `address` | `bytes32` | Cross-VM compatibility |
 | `JBTokenMapping` | `remoteToken` | `address` | `bytes32` | Cross-VM compatibility |
+| `JBTokenMapping` | `minBridgeAmount` | `uint256` | _(removed)_ | Anti-spam moved to global `toRemoteFee` in `JBSuckerRegistry` |
 
 ### 5.2 Unchanged Structs
 
@@ -234,6 +287,11 @@ See section 2.4 above.
 | **`mapTokens` dust refund** | `mapTokens()` now refunds the remainder from integer division of `msg.value` when disabling multiple tokens, preventing dust ETH from being stuck in the contract. |
 | **`_handleClaim` beneficiary conversion** | Converts `bytes32` beneficiary to `address` via `_toAddress()` before minting project tokens. |
 | **`_sendRoot` message construction** | Now includes `version: MESSAGE_VERSION` in the `JBMessageRoot` struct. |
+| **`toRemoteFee` anti-spam** | `toRemote()` now charges a global ETH fee (read from `REGISTRY.toRemoteFee()`) paid into `FEE_PROJECT_ID` via `terminal.pay()`. Replaces the v5 per-token `minBridgeAmount` threshold check. Fee payment is best-effort (try-catch): if the terminal doesn't exist or the pay call reverts, the fee is returned as transport payment. |
+| **New immutables** | `FEE_PROJECT_ID` (`uint256`) and `REGISTRY` (`IJBSuckerRegistry`) added. `REGISTRY` is typed as `IJBSuckerRegistry` (not a raw `address`), avoiding casts at usage sites. |
+| **`MANUAL` mode removed** | `ADD_TO_BALANCE_MODE` immutable, `addOutstandingAmountToBalance()` function, and `JBSucker_ManualNotAllowed` error all removed. Balance is always added atomically during `claim()`. |
+| **Constructor parameter changes** | `addToBalanceMode` parameter removed. `feeProjectId` and `registry` parameters added. `trusted_forwarder` renamed to `trustedForwarder`. |
+| **`initialize()` ERC2771 fix** | `deployer = msg.sender` changed to `deployer = _msgSender()` for correct ERC2771 meta-transaction support. |
 | **Named arguments** | Function calls throughout use named argument syntax (`{key: value}`) for improved readability. |
 
 ### 7.2 JBOptimismSucker
@@ -272,6 +330,7 @@ See section 2.4 above.
 | **Removed imports** | `IJBController`, `JBRuleset`, `JBRulesetMetadata` no longer imported. The v5 ruleset-based sucker restriction was removed. |
 | **Removed error** | `JBSuckerRegistry_RulesetDoesNotAllowAddingSucker` removed. |
 | **`suckerPairsOf`** | `sucker.peer()` now returns `bytes32`, directly assigned to `JBSuckersPair.remote` (which also changed to `bytes32`). |
+| **`toRemoteFee` management** | New `toRemoteFee` storage variable (admin-adjustable ETH fee), `MAX_TO_REMOTE_FEE` constant (`0.001 ether`), `setToRemoteFee(uint256)` function (owner-only), `ToRemoteFeeChanged` event, and `JBSuckerRegistry_FeeExceedsMax` error. Defaults to `MAX_TO_REMOTE_FEE` on construction. |
 
 ### 7.6 JBSuckerDeployer
 
@@ -309,9 +368,9 @@ Throughout the codebase, function calls were updated to use named argument synta
 
 | v5 | v6 | Notes |
 |----|----|-------|
-| `IJBSucker` | `IJBSucker` | `peer()` returns `bytes32`. `prepare()` takes `bytes32 beneficiary`. `Claimed`/`InsertToOutboxTree` events use `bytes32`. New `StaleRootRejected` event. NatSpec added. |
+| `IJBSucker` | `IJBSucker` | `peer()` returns `bytes32`. `prepare()` takes `bytes32 beneficiary`. `Claimed`/`InsertToOutboxTree` events use `bytes32`. `Claimed` event `autoAddedToBalance` parameter removed. New `StaleRootRejected` event. New `JBSucker_NothingToSend` error. `ADD_TO_BALANCE_MODE()` and `addOutstandingAmountToBalance()` removed. NatSpec added. |
 | `IJBSuckerExtended` | `IJBSuckerExtended` | New `EmergencyExit` event. NatSpec added. |
-| `IJBSuckerRegistry` | `IJBSuckerRegistry` | `deploySuckersFor` configurations changed to `calldata`. NatSpec added. |
+| `IJBSuckerRegistry` | `IJBSuckerRegistry` | `deploySuckersFor` configurations changed to `calldata`. New `toRemoteFee()`, `MAX_TO_REMOTE_FEE()`, `setToRemoteFee()`, `ToRemoteFeeChanged` event, `FeeExceedsMax` error. NatSpec added. |
 | `IJBSuckerDeployer` | `IJBSuckerDeployer` | All errors removed from interface (moved to contract). NatSpec added. |
 | `IJBSuckerDeployerFeeless` | (removed) | Feeless allowance sucker pattern removed. No replacement. |
 | `IJBArbitrumSucker` | `IJBArbitrumSucker` | NatSpec added. No functional changes. |
@@ -326,13 +385,13 @@ Throughout the codebase, function calls were updated to use named argument synta
 
 | v5 | v6 | Notes |
 |----|----|-------|
-| `JBSucker` | `JBSucker` | `address` -> `bytes32` throughout, message versioning, uint128 guard, empty outbox guard, stale root event, emergency exit event, `setDeprecation` permission change, `mapTokens` dust refund, virtual `_addToBalance`. |
+| `JBSucker` | `JBSucker` | `address` -> `bytes32` throughout, message versioning, uint128 guard, empty outbox guard, stale root event, emergency exit event, `setDeprecation` permission change, `mapTokens` dust refund, virtual `_addToBalance`. `minBridgeAmount` replaced by `toRemoteFee`. `MANUAL` mode removed. New `FEE_PROJECT_ID` + `REGISTRY` immutables. `initialize()` uses `_msgSender()`. |
 | `JBOptimismSucker` | `JBOptimismSucker` | `_sendRootOverAMB` made `virtual`. Bridge calls use `_toAddress()`/`_toBytes32()`. |
 | `JBBaseSucker` | `JBBaseSucker` | Explicit imports instead of wildcard. No functional changes. |
 | `JBArbitrumSucker` | `JBArbitrumSucker` | Bridge calls use `_toAddress()`. `_createRetryableTicket` helper extracted. Removed unused `ChainNotSupported` error. |
 | `JBCCIPSucker` | `JBCCIPSucker` | Refund failure emits event instead of reverting. `_validateTokenMapping` enforces minGas for native tokens. Bridge calls use `_toAddress()`/`_toBytes32()`. Removed `CCIPHelper` import. |
 | N/A | `JBCeloSucker` | New. OP Stack sucker for Celo (custom gas token). Wraps ETH to WETH for bridging, unwraps on receipt. |
-| `JBSuckerRegistry` | `JBSuckerRegistry` | Removed ruleset check and related imports/error. License changed to MIT. |
+| `JBSuckerRegistry` | `JBSuckerRegistry` | Removed ruleset check and related imports/error. License changed to MIT. New `toRemoteFee` management (`setToRemoteFee`, `MAX_TO_REMOTE_FEE`, `ToRemoteFeeChanged` event). |
 | `JBSuckerDeployer` | `JBSuckerDeployer` | Errors moved from interface to contract. Constructor param naming convention updated. |
 | `JBOptimismSuckerDeployer` | `JBOptimismSuckerDeployer` | `_layerSpecificConfigurationIsSet` uses `&&` instead of `\|\|`. Made `virtual`. |
 | N/A | `JBCeloSuckerDeployer` | New. Extends OP deployer with wrapped native token support. |
@@ -345,9 +404,9 @@ Throughout the codebase, function calls were updated to use named argument synta
 |----|----|-------|
 | `JBLeaf` | `JBLeaf` | `beneficiary`: `address` -> `bytes32` |
 | `JBMessageRoot` | `JBMessageRoot` | `token`: `address` -> `bytes32`. New `version` field (`uint8`). |
-| `JBRemoteToken` | `JBRemoteToken` | `addr`: `address` -> `bytes32` |
+| `JBRemoteToken` | `JBRemoteToken` | `addr`: `address` -> `bytes32`. `minBridgeAmount` removed. |
 | `JBSuckersPair` | `JBSuckersPair` | `remote`: `address` -> `bytes32` |
-| `JBTokenMapping` | `JBTokenMapping` | `remoteToken`: `address` -> `bytes32` |
+| `JBTokenMapping` | `JBTokenMapping` | `remoteToken`: `address` -> `bytes32`. `minBridgeAmount` removed. |
 | `JBClaim` | `JBClaim` | Unchanged (contains changed `JBLeaf`) |
 | `JBInboxTreeRoot` | `JBInboxTreeRoot` | Identical |
 | `JBOutboxTree` | `JBOutboxTree` | Identical |
