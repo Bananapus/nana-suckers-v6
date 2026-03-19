@@ -43,6 +43,22 @@ library CCIPHelper {
     uint64 public constant BASE_SEL = 15_971_525_489_660_198_786;
     uint64 public constant BASE_SEP_SEL = 10_344_971_235_874_465_080;
 
+    /// @notice Tempo testnet constants
+    uint256 public constant TEMPO_TEST_ID = 42_431;
+    uint64 public constant TEMPO_TEST_SEL = 3_963_528_237_232_804_922;
+    address public constant TEMPO_TEST_ROUTER = 0xAE7D1b3D8466718378038de45D4D376E73A04EB6;
+
+    /// @notice The LINK token address of each chain
+    address public constant ETH_LINK = 0x514910771AF9Ca656af840dff83E8264EcF986CA;
+    address public constant ETH_SEP_LINK = 0x779877A7B0D9E8603169DdbD7836e478b4624789;
+    address public constant OP_LINK = 0x350a791Bfc2C21F9Ed5d10980Dad2e2638ffa7f6;
+    address public constant OP_SEP_LINK = 0xE4aB69C077896252FAFBD49EFD26B5D171A32410;
+    address public constant ARB_LINK = 0xf97f4df75117a78c1A5a0DBb814Af92458539FB4;
+    address public constant ARB_SEP_LINK = 0xb1D4538B4571d411F07960EF2838Ce337FE1E80E;
+    address public constant BASE_LINK = 0x88Fb150BDc53A65fe94Dea0c9BA0a6dAf8C6e196;
+    address public constant BASE_SEP_LINK = 0xE4aB69C077896252FAFBD49EFD26B5D171A32410;
+    address public constant TEMPO_TEST_LINK = 0x779877A7B0D9E8603169DdbD7836e478b4624789;
+
     /// @notice The WETH address of each chain
     address public constant ETH_WETH = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
     address public constant ETH_SEP_WETH = 0x097D90c9d3E0B50Ca60e1ae45F6A81010f9FB534;
@@ -77,6 +93,8 @@ library CCIPHelper {
             return OP_SEP_ROUTER;
         } else if (_chainId == BASE_SEP_ID) {
             return BASE_SEP_ROUTER;
+        } else if (_chainId == TEMPO_TEST_ID) {
+            return TEMPO_TEST_ROUTER;
         } else {
             revert CCIPHelper_UnsupportedChain(_chainId);
         }
@@ -105,6 +123,8 @@ library CCIPHelper {
             return OP_SEP_SEL;
         } else if (_chainId == BASE_SEP_ID) {
             return BASE_SEP_SEL;
+        } else if (_chainId == TEMPO_TEST_ID) {
+            return TEMPO_TEST_SEL;
         } else {
             revert CCIPHelper_UnsupportedChain(_chainId);
         }
@@ -129,6 +149,30 @@ library CCIPHelper {
             return ETH_SEP_WETH;
         } else if (_chainId == ARB_SEP_ID) {
             return ARB_SEP_WETH;
+        } else {
+            revert CCIPHelper_UnsupportedChain(_chainId);
+        }
+    }
+
+    function linkOfChain(uint256 _chainId) public pure returns (address link) {
+        if (_chainId == ETH_ID) {
+            return ETH_LINK;
+        } else if (_chainId == OP_ID) {
+            return OP_LINK;
+        } else if (_chainId == ARB_ID) {
+            return ARB_LINK;
+        } else if (_chainId == BASE_ID) {
+            return BASE_LINK;
+        } else if (_chainId == ETH_SEP_ID) {
+            return ETH_SEP_LINK;
+        } else if (_chainId == OP_SEP_ID) {
+            return OP_SEP_LINK;
+        } else if (_chainId == ARB_SEP_ID) {
+            return ARB_SEP_LINK;
+        } else if (_chainId == BASE_SEP_ID) {
+            return BASE_SEP_LINK;
+        } else if (_chainId == TEMPO_TEST_ID) {
+            return TEMPO_TEST_LINK;
         } else {
             revert CCIPHelper_UnsupportedChain(_chainId);
         }
