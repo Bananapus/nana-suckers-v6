@@ -459,9 +459,8 @@ contract CCIPSuckerForkClaimTests is TestBaseWorkflow {
         {
             Vm.Log[] memory logs = vm.getRecordedLogs();
 
-            bytes32 eventSig = keccak256(
-                "InsertToOutboxTree(bytes32,address,bytes32,uint256,bytes32,uint256,uint256,address)"
-            );
+            bytes32 eventSig =
+                keccak256("InsertToOutboxTree(bytes32,address,bytes32,uint256,bytes32,uint256,uint256,address)");
 
             bool found;
 
@@ -469,10 +468,8 @@ contract CCIPSuckerForkClaimTests is TestBaseWorkflow {
                 if (logs[i].topics[0] == eventSig) {
                     capturedBeneficiary = logs[i].topics[1];
 
-                    (
-                        , // hashed
-                        capturedIndex,
-                        , // root
+                    (, // hashed
+                        capturedIndex,, // root
                         capturedProjectTokenCount,
                         capturedTerminalTokenAmount,
                         // caller
@@ -500,14 +497,20 @@ contract CCIPSuckerForkClaimTests is TestBaseWorkflow {
             suckerL1.toRemote{value: 1 ether}(JBConstants.NATIVE_TOKEN);
 
             // Verify outbox is cleared
-            assertEq(suckerL1.outboxOf(JBConstants.NATIVE_TOKEN).balance, 0, "Outbox balance should be 0 after toRemote");
+            assertEq(
+                suckerL1.outboxOf(JBConstants.NATIVE_TOKEN).balance, 0, "Outbox balance should be 0 after toRemote"
+            );
 
             // CCIP local simulator delivers the message to L2
             ccipLocalSimulatorFork.switchChainAndRouteMessage(arbSepoliaFork);
 
             // We are now on L2 (arbSepoliaFork). suckerL1 is at the same address due to CREATE2.
             // Verify inbox root was set
-            assertNotEq(suckerL1.inboxOf(JBConstants.NATIVE_TOKEN).root, bytes32(0), "Inbox root should be set after CCIP delivery");
+            assertNotEq(
+                suckerL1.inboxOf(JBConstants.NATIVE_TOKEN).root,
+                bytes32(0),
+                "Inbox root should be set after CCIP delivery"
+            );
 
             // Verify native value was delivered
             assertEq(address(suckerL1).balance, capturedTerminalTokenAmount, "Sucker should hold the bridged ETH");
@@ -546,7 +549,9 @@ contract CCIPSuckerForkClaimTests is TestBaseWorkflow {
             // Step 5: Double-claim reverts
             // ----------------------------------------------------------------
             vm.expectRevert(
-                abi.encodeWithSelector(JBSucker.JBSucker_LeafAlreadyExecuted.selector, JBConstants.NATIVE_TOKEN, capturedIndex)
+                abi.encodeWithSelector(
+                    JBSucker.JBSucker_LeafAlreadyExecuted.selector, JBConstants.NATIVE_TOKEN, capturedIndex
+                )
             );
             suckerL1.claim(claimData);
         }
