@@ -45,6 +45,7 @@ contract DeployScript is Script, Sphinx {
     bytes32 ARB_BASE_SALT = "_SUCKER_ARB_BASE_V6_";
     bytes32 ARB_OP_SALT = "_SUCKER_ARB_OP_V6_";
     bytes32 OP_BASE_SALT = "_SUCKER_OP_BASE_V6_";
+    bytes32 TEMPO_SALT = "_SUCKER_TEMPO_V6_";
 
     IJBSuckerRegistry REGISTRY;
 
@@ -389,6 +390,15 @@ contract DeployScript is Script, Sphinx {
     }
 
     function _ccipSucker() internal {
+        // Tempo testnet ↔ Ethereum Sepolia.
+        if (block.chainid == CCIPHelper.TEMPO_TEST_ID) {
+            PRE_APPROVED_DEPLOYERS.push(
+                address(
+                    _deployCCIPSuckerFor({salt: TEMPO_SALT, remoteChainId: CCIPHelper.ETH_SEP_ID})
+                )
+            );
+        }
+
         // Deploy all the L1 suckers.
         if (block.chainid == 1 || block.chainid == 11_155_111) {
             // Optimsim
@@ -417,6 +427,15 @@ contract DeployScript is Script, Sphinx {
                     })
                 )
             );
+
+            // Tempo (testnet only — Tempo ↔ Ethereum Sepolia).
+            if (block.chainid == 11_155_111) {
+                PRE_APPROVED_DEPLOYERS.push(
+                    address(
+                        _deployCCIPSuckerFor({salt: TEMPO_SALT, remoteChainId: CCIPHelper.TEMPO_TEST_ID})
+                    )
+                );
+            }
         }
 
         // Check if we should do the L2 portion.

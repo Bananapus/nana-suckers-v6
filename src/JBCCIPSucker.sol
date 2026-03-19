@@ -15,6 +15,7 @@ import {JBSucker} from "./JBSucker.sol";
 import {JBCCIPSuckerDeployer} from "./deployers/JBCCIPSuckerDeployer.sol";
 import {IJBSuckerRegistry} from "./interfaces/IJBSuckerRegistry.sol";
 import {ICCIPRouter, IWrappedNativeToken} from "./interfaces/ICCIPRouter.sol";
+import {CCIPHelper} from "./libraries/CCIPHelper.sol";
 import {IJBCCIPSuckerDeployer} from "./interfaces/IJBCCIPSuckerDeployer.sol";
 import {JBMessageRoot} from "./structs/JBMessageRoot.sol";
 import {JBRemoteToken} from "./structs/JBRemoteToken.sol";
@@ -199,6 +200,10 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
     /// @param transportPayment the amount of `msg.value` that is going to get paid for sending this message.
     /// @param token The token to bridge the outbox tree for.
     /// @param remoteToken Information about the remote token being bridged to.
+    /// @dev Supports two fee modes:
+    ///   - `transportPayment > 0`: pay CCIP fees in native ETH (existing behavior).
+    ///   - `transportPayment == 0`: pay CCIP fees in LINK from the sucker's pre-funded balance.
+    ///     This enables chains with no meaningful native token (e.g. Tempo) to use CCIP.
     function _sendRootOverAMB(
         uint256 transportPayment,
         uint256,
@@ -210,9 +215,6 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
         internal
         override
     {
-        // Make sure we are attempting to pay the bridge
-        if (transportPayment == 0) revert JBSucker_ExpectedMsgValue();
-
         uint256 gasLimit = MESSENGER_BASE_GAS_LIMIT;
         Client.EVMTokenAmount[] memory tokenAmounts;
         if (amount != 0) {
@@ -240,6 +242,11 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
             SafeERC20.forceApprove({token: IERC20(token), spender: address(CCIP_ROUTER), value: amount});
         }
 
+        // Determine fee payment mode: native ETH or LINK token.
+        // When transportPayment == 0, we pay in LINK from the sucker's pre-funded balance.
+        // This enables chains with no meaningful native token (e.g. Tempo).
+        address feeToken = transportPayment == 0 ? CCIPHelper.linkOfChain(block.chainid) : address(0);
+
         // Create an EVM2AnyMessage struct in memory with necessary information for sending a cross-chain message
         // CCIP requires EVM addresses, so convert the bytes32 peer to an address for the receiver field.
         Client.EVM2AnyMessage memory message = Client.EVM2AnyMessage({
@@ -250,39 +257,46 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
                 // Additional arguments, setting gas limit
                 Client.EVMExtraArgsV1({gasLimit: gasLimit})
             ),
-            // Set the feeToken to a feeTokenAddress, indicating specific asset will be used for fees,
-            // We pay in the native asset.
-            feeToken: address(0)
+            feeToken: feeToken
         });
 
         // Get the fee required to send the CCIP message
         // slither-disable-next-line calls-loop
         uint256 fees = CCIP_ROUTER.getFee({destinationChainSelector: REMOTE_CHAIN_SELECTOR, message: message});
 
-        if (fees > transportPayment) {
-            revert JBSucker_InsufficientMsgValue(transportPayment, fees);
-        }
+        if (transportPayment == 0) {
+            // LINK fee path: approve the router to spend LINK from the sucker's balance.
+            SafeERC20.forceApprove({token: IERC20(feeToken), spender: address(CCIP_ROUTER), value: fees});
 
-        // slither-disable-next-line calls-loop,unused-return
-        CCIP_ROUTER.ccipSend{value: fees}({destinationChainSelector: REMOTE_CHAIN_SELECTOR, message: message});
+            // slither-disable-next-line calls-loop,unused-return
+            CCIP_ROUTER.ccipSend({destinationChainSelector: REMOTE_CHAIN_SELECTOR, message: message});
+        } else {
+            // Native fee path (existing behavior).
+            if (fees > transportPayment) {
+                revert JBSucker_InsufficientMsgValue(transportPayment, fees);
+            }
 
-        // Refund remaining balance. We use a low-level call that does not revert on failure because
-        // `ccipSend` above has already committed the bridge message and transferred the tokens. If we
-        // reverted here (e.g. because the caller is a non-payable contract), the entire transaction
-        // would roll back — but the CCIP message is already in-flight. The tokens would be gone, the
-        // merkle root never gets processed, and the outbox state is inconsistent.
-        //
-        // If the refund fails, the ETH (transportPayment - fees) will be permanently stuck in this
-        // contract. There is no sweep or recovery function — `_addToBalance` only
-        // moves funds tracked via `fromRemote`, not arbitrary ETH. This is an accepted tradeoff:
-        // stuck dust from a fee overpayment is far less harmful than bricking the entire bridge
-        // operation. The event provides observability so it doesn't go unnoticed.
-        //
-        uint256 refundAmount = transportPayment - fees;
-        if (refundAmount != 0) {
-            // slither-disable-next-line calls-loop,msg-value-loop,reentrancy-events
-            (bool sent,) = _msgSender().call{value: refundAmount}("");
-            if (!sent) emit TransportPaymentRefundFailed(_msgSender(), refundAmount);
+            // slither-disable-next-line calls-loop,unused-return
+            CCIP_ROUTER.ccipSend{value: fees}({destinationChainSelector: REMOTE_CHAIN_SELECTOR, message: message});
+
+            // Refund remaining balance. We use a low-level call that does not revert on failure because
+            // `ccipSend` above has already committed the bridge message and transferred the tokens. If we
+            // reverted here (e.g. because the caller is a non-payable contract), the entire transaction
+            // would roll back — but the CCIP message is already in-flight. The tokens would be gone, the
+            // merkle root never gets processed, and the outbox state is inconsistent.
+            //
+            // If the refund fails, the ETH (transportPayment - fees) will be permanently stuck in this
+            // contract. There is no sweep or recovery function — `_addToBalance` only
+            // moves funds tracked via `fromRemote`, not arbitrary ETH. This is an accepted tradeoff:
+            // stuck dust from a fee overpayment is far less harmful than bricking the entire bridge
+            // operation. The event provides observability so it doesn't go unnoticed.
+            //
+            uint256 refundAmount = transportPayment - fees;
+            if (refundAmount != 0) {
+                // slither-disable-next-line calls-loop,msg-value-loop,reentrancy-events
+                (bool sent,) = _msgSender().call{value: refundAmount}("");
+                if (!sent) emit TransportPaymentRefundFailed(_msgSender(), refundAmount);
+            }
         }
     }
 
