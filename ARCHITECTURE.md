@@ -33,10 +33,14 @@ src/
 User → JBSucker.prepare()
   → Cash out project tokens (0% tax via sucker privilege)
   → Insert {beneficiary, token, amount} into outbox merkle tree
-  → When tree is full or manually triggered:
-    → Bridge tokens via OP/Arb/CCIP messenger
-    → Send merkle root to remote sucker
+
+User → JBSucker.toRemote{value}(token)
+  → Pay toRemoteFee (ETH) to fee project via terminal.pay() — caller gets fee project tokens
+  → Remaining msg.value forwarded as transport payment to the bridge
+  → Send merkle root + bridged tokens to remote sucker via OP/Arb/CCIP messenger
 ```
+
+The `toRemoteFee` is a global ETH fee (max 0.001 ETH) set by the registry owner via `setToRemoteFee()`. It is paid into `FEE_PROJECT_ID` (typically project 1) through the project's primary native-token terminal. If the fee payment reverts or no terminal exists, the fee is silently skipped and added to the transport payment instead.
 
 ### Inbound (Claim)
 ```
@@ -54,6 +58,31 @@ ENABLED → DEPRECATION_PENDING → SENDING_DISABLED → DEPRECATED
   (owner)    (pending period)     (no new outbox)    (fully disabled)
 ```
 
+## Token Mapping
+
+Token mappings link a local terminal token to a remote token address, enabling bridging for that pair. Mappings are managed via `mapToken()` / `mapTokens()` (requires `MAP_SUCKER_TOKEN` permission).
+
+**Immutability constraint:** Once a token has outbox tree entries (`_outboxOf[token].tree.count != 0`), it cannot be remapped to a *different* remote token — it can only be disabled by mapping to `address(0)`. This prevents double-spending: if remapping were allowed after outbox activity, the same local funds could be claimed against two different remote tokens on the remote chain.
+
+A disabled mapping can be re-enabled to the *same* remote token. A misconfigured mapping requires deploying a new sucker.
+
+When a mapping is disabled (set to `address(0)`) and unsent leaves remain in the outbox, the sucker automatically flushes the remaining root to the remote chain to settle outstanding claims.
+
+## Emergency Hatch
+
+The emergency hatch allows users to reclaim their tokens on the chain they deposited on when the bridge is no longer functional.
+
+**Who can enable it:** The project owner (or an address with the `SUCKER_SAFETY` permission) calls `enableEmergencyHatchFor(address[] tokens)`.
+
+**What it does:** Sets `emergencyHatch = true` and `enabled = false` for each token's remote mapping. This is irreversible — once the emergency hatch is enabled for a token, it cannot be disabled or remapped.
+
+**How users exit:** Users call `exitThroughEmergencyHatch(JBClaim claimData)` with a merkle proof against the *outbox* tree. The sucker validates:
+1. The emergency hatch is enabled for that token (or the sucker is in `DEPRECATED` / `SENDING_DISABLED` state).
+2. The leaf has not already been sent to the remote chain (`index >= numberOfClaimsSent`). Leaves whose roots were already bridged cannot be emergency-exited, since they could also be claimed remotely.
+3. The leaf has not already been claimed (bitmap check).
+
+The sucker then returns the terminal tokens and project tokens to the beneficiary on the local chain.
+
 ## Extension Points
 
 | Point | Interface | Purpose |
@@ -61,6 +90,18 @@ ENABLED → DEPRECATION_PENDING → SENDING_DISABLED → DEPRECATED
 | Bridge transport | Chain-specific sucker | OP, Arb, CCIP implementations |
 | Sucker deployer | `IJBSuckerDeployer` | Factory for new suckers |
 | Registry | `IJBSuckerRegistry` | Discovery and access control |
+
+## Design Decisions
+
+**Dual merkle trees instead of direct bridging.** Each sucker maintains separate outbox and inbox merkle trees per token. Outbound transfers are batched into the outbox tree via `prepare()`, and a single `toRemote()` call bridges the root and accumulated funds together. This amortizes bridge costs across many users — only one cross-chain message per batch rather than one per transfer. The inbox tree on the receiving side lets users self-serve claims with merkle proofs at their own pace.
+
+**Bitmap for claim tracking.** Each leaf index is tracked in an OpenZeppelin `BitMaps.BitMap` (`_executedFor`), which packs 256 booleans per storage slot. This is far cheaper than a `mapping(uint256 => bool)` for dense sequential indices, and the merkle tree's sequential leaf indices are a natural fit.
+
+**Immutable token mappings once outbox has entries.** After a token mapping has been used (outbox tree count > 0), remapping to a different remote token is blocked. Without this, an attacker could prepare tokens mapped to token A, then remap to token B before `toRemote()` is called, allowing the same local funds to be claimed against both tokens on the remote chain. Disabling (mapping to `address(0)`) is still allowed since it flushes remaining outbox entries and stops new ones.
+
+**`uint128` amount cap for SVM compatibility.** Both `terminalTokenAmount` and `projectTokenCount` are capped at `type(uint128).max` in `_insertIntoTree()`. This ensures the leaf data is compatible with Solana's SVM, where token amounts are `u64`/`u128`. The `bytes32` beneficiary field similarly accommodates 32-byte Solana public keys alongside 20-byte EVM addresses.
+
+**Best-effort fee payment.** The `toRemoteFee` payment to the fee project is wrapped in a try-catch. If the fee project's terminal doesn't exist or the `pay()` call reverts, the bridge proceeds without the fee. This prevents a misconfigured or paused fee project from blocking all cross-chain transfers.
 
 ## Dependencies
 - `@bananapus/core-v6` — Terminal, controller, token interfaces
