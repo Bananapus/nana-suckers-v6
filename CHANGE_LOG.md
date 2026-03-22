@@ -2,6 +2,16 @@
 
 This document describes all changes between `nana-suckers` (v5, Solidity 0.8.23) and `nana-suckers-v6` (v6, Solidity 0.8.26).
 
+## Summary
+
+The dominant theme of this release is **cross-VM preparation for Solana/SVM** — addresses throughout the sucker architecture are widened from `address` (20 bytes) to `bytes32` (32 bytes) to support non-EVM chains.
+
+- **`address` → `bytes32` throughout**: All cross-chain identifiers (peer addresses, beneficiaries, remote tokens) widened to `bytes32` for Solana/SVM compatibility. `uint128` amount caps added for SVM compatibility.
+- **Message versioning**: New `version` field in `JBMessageRoot` prevents v5/v6 message incompatibility. v6 messages use `MESSAGE_VERSION = 1`.
+- **Anti-spam redesigned**: Per-token `minBridgeAmount` replaced by a global `toRemoteFee` (max 0.001 ETH) paid to the fee project on every `toRemote()` call.
+- **`MANUAL` add-to-balance mode removed**: Balance is always added atomically during `claim()`, simplifying the sucker lifecycle.
+- **New Celo support**: `JBCeloSucker` handles Celo's non-ETH native gas token via WETH wrapping.
+
 ---
 
 ## 1. Breaking Changes
@@ -21,6 +31,8 @@ The most pervasive breaking change in v6 is the systematic replacement of `addre
 | `InsertToOutboxTree` event `beneficiary` | `address indexed beneficiary` | `bytes32 indexed beneficiary` |
 
 All callers of `peer()` and `prepare()` must update to use `bytes32`. For EVM-to-EVM usage, addresses are left-padded to 32 bytes via `_toBytes32(address)`.
+
+> **Cross-repo impact**: `nana-omnichain-deployers-v6` and `nana-fee-project-deployer-v6` both updated `JBTokenMapping.remoteToken` from `address` to `bytes32`. `nana-permission-ids-v6` split `SUCKER_SAFETY` into two permissions (`SUCKER_SAFETY` + `SET_SUCKER_DEPRECATION`) to match the v6 separation.
 
 ### 1.2 Struct Field Type Changes
 
