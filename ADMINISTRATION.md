@@ -167,3 +167,14 @@ What admins **cannot** do:
 - **Cannot change the fee project.** `FEE_PROJECT_ID` is set at construction and is immutable. If the fee project's terminal changes or is removed, fee payments silently stop (best-effort design), but `toRemote()` still works.
 
 - **Can adjust the fee amount, within bounds.** The registry owner can call `setToRemoteFee()` on `JBSuckerRegistry` to adjust the fee globally for all suckers, but it is capped at `MAX_TO_REMOTE_FEE` (0.001 ether).
+
+## Bridge Infrastructure Risks
+
+Sucker security ultimately depends on the underlying bridge infrastructure (OP Cross-Domain Messenger, Arbitrum Inbox/Outbox, CCIP Router). Each sucker's `_isRemotePeer()` check trusts these bridges to faithfully report the sender of cross-chain messages. If a bridge itself is compromised, an attacker could forge messages that pass the peer check, potentially minting unbacked project tokens on the destination chain.
+
+**Mitigations available to project owners:**
+
+- **Emergency hatch.** If a bridge is suspected to be compromised for a specific token, the project owner (or `SUCKER_SAFETY` delegate) can call `enableEmergencyHatchFor()` to immediately disable bridging for that token and allow users to exit with their outbox entries locally.
+- **Deprecation.** If the bridge is broadly compromised, the project owner (or `SET_SUCKER_DEPRECATION` delegate) can deprecate the entire sucker via `setDeprecation()`, shutting down all new outbound and eventually inbound activity.
+
+**Fee delivery is best-effort.** The `toRemoteFee` is collected by calling `terminal.pay()` to the fee project during `toRemote()`. If this call reverts (e.g., the fee project has no native token terminal or its terminal is misconfigured), the fee is silently skipped and `toRemote()` proceeds normally. This ensures bridging availability is never blocked by fee infrastructure issues, but it also means fee revenue can be lost without any on-chain signal.
