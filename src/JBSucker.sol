@@ -700,7 +700,9 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
                 minReturnedTokens: 0,
                 memo: "",
                 metadata: ""
-            }) returns (uint256) {}
+            }) returns (
+                uint256
+            ) {}
             catch {
                 // Fee payment failed — proceed without fee, return it as transport payment.
                 transportPayment = msg.value;
