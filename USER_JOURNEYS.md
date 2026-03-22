@@ -19,11 +19,10 @@ Step-by-step flows for every major user interaction with the sucker bridging sys
 
 **State changes**:
 1. Registry enforces `DEPLOY_SUCKERS` permission from the project owner.
-2. Computes `salt = keccak256(abi.encode(_msgSender(), salt))` (sender-specific determinism).
+2. Computes `salt = keccak256(abi.encode(_msgSender(), salt))` (sender-specific determinism). Note: the deployer also hashes the salt again with its own `_msgSender()` via `keccak256(abi.encodePacked(_msgSender(), salt))`, so the final CREATE2 salt is double-hashed (registry + deployer).
 3. For each configuration:
    - Validates the deployer is in the allowlist; reverts with `JBSuckerRegistry_InvalidDeployer` if not.
-   - Calls `deployer.createForSender(projectId, salt)` which deploys a clone via CREATE2.
-   - The clone's `initialize(projectId)` is called, setting `_localProjectId` and `deployer`.
+   - Calls `deployer.createForSender(projectId, salt)` which deploys a clone via CREATE2 and internally calls `initialize(projectId)` on the clone (setting `_localProjectId` and `deployer`). There is no separate `initialize()` call -- it happens inside `createForSender`.
    - Stores the sucker address in `_suckersOf[projectId]`.
    - Calls `sucker.mapTokens(configuration.mappings)` to set initial token mappings.
 4. Project owner repeats on the remote chain with the **same salt and same sender address** to deploy the matching peer sucker.
@@ -53,7 +52,7 @@ Step-by-step flows for every major user interaction with the sucker bridging sys
 1. Validates the emergency hatch is not enabled for the token; reverts with `JBSucker_TokenHasInvalidEmergencyHatchState` if so.
 2. `_validateTokenMapping()` checks native-token and min-gas rules.
 3. Enforces `MAP_SUCKER_TOKEN` permission from the project owner.
-4. Immutability check: if `_outboxOf[token].tree.count != 0` AND the current mapping exists AND the new remote differs, reverts with `JBSucker_TokenAlreadyMapped`.
+4. Immutability check: if `_remoteTokenFor[token].addr != bytes32(0)` AND the new `remoteToken` differs from the current mapping AND `remoteToken != bytes32(0)` AND `_outboxOf[token].tree.count != 0`, reverts with `JBSucker_TokenAlreadyMapped`. All four conditions must be true for the revert -- notably, the mapping is only considered immutable when both the current remote address is set and the outbox has entries.
 5. If disabling a mapping (`remoteToken == bytes32(0)`) and the outbox has unsent entries, `_sendRoot()` is called first to flush them.
 6. Stores the mapping: `_remoteTokenFor[token] = JBRemoteToken{enabled: true/false, emergencyHatch: false, minGas, addr: remoteToken}`.
 
@@ -85,7 +84,7 @@ Step-by-step flows for every major user interaction with the sucker bridging sys
 3. Validates `_remoteTokenFor[token].enabled == true`; reverts with `JBSucker_TokenNotMapped` if disabled.
 4. Validates sucker state is `ENABLED` or `DEPRECATION_PENDING`; reverts with `JBSucker_Deprecated` otherwise.
 5. Transfers `projectTokenCount` project tokens from caller to the sucker via `safeTransferFrom`.
-6. `_pullBackingAssets()`: calls `terminal.cashOutTokensOf()` to cash out at 0% cashOutTaxRate (set by JBOmnichainDeployer as data hook). Records the reclaimed amount.
+6. `_pullBackingAssets()`: calls `terminal.cashOutTokensOf()` with `beneficiary: payable(address(this))` (the sucker itself receives the reclaimed tokens) at 0% cashOutTaxRate (set by JBOmnichainDeployer as data hook). Records the reclaimed amount and asserts the balance delta matches.
 7. `_insertIntoTree()`: builds a leaf hash, inserts into `_outboxOf[token].tree`, and increments `_outboxOf[token].balance`.
 
 **Events**: `InsertToOutboxTree(beneficiary, token, hashed, index, root, projectTokenCount, terminalTokenAmount, caller)`
@@ -111,8 +110,8 @@ Step-by-step flows for every major user interaction with the sucker bridging sys
 **State changes**:
 1. Validates emergency hatch is not enabled for the token; reverts with `JBSucker_TokenHasInvalidEmergencyHatchState`.
 2. Validates the outbox has something to send; reverts with `JBSucker_NothingToSend` if `outbox.balance == 0 && outbox.tree.count == outbox.numberOfClaimsSent`.
-3. Validates `msg.value >= REGISTRY.toRemoteFee()`; reverts with `JBSucker_InsufficientMsgValue` if not.
-4. Fee deduction: pays `toRemoteFee` into the fee project (ID 1) via `terminal.pay()`. Best-effort: if the fee project has no native-token terminal or `pay()` reverts, proceeds without collecting the fee.
+3. Validates `msg.value >= REGISTRY.toRemoteFee()`; reverts with `JBSucker_InsufficientMsgValue` if insufficient. This check is a hard revert -- it happens before any best-effort logic.
+4. Fee deduction: deducts `toRemoteFee` from `msg.value` to compute `transportPayment = msg.value - toRemoteFee`. Then attempts to pay the fee into the fee project (ID 1) via `terminal.pay()`. The fee payment itself is best-effort: if the fee project has no native-token terminal or `pay()` reverts (via try-catch), the fee is returned to `transportPayment` and the call proceeds. Only the bridge transport cost uses the remaining `transportPayment`.
 5. `_sendRoot()`:
    - Reads `outbox.tree.count` and `outbox.balance`.
    - Clears `outbox.balance = 0`.
@@ -163,7 +162,7 @@ Step-by-step flows for every major user interaction with the sucker bridging sys
    - Mints `projectTokenCount` project tokens for the beneficiary via `controller.mintTokensOf()` with `useReservedPercent = false` (bypasses reserved percent).
 
 **Events**:
-- `fromRemote` path: `NewInboxTreeRoot(token, nonce, root, caller)` on success, or `StaleRootRejected(token, receivedNonce, currentNonce)` if nonce is not newer.
+- `fromRemote` path: `NewInboxTreeRoot(token, nonce, root, caller)` on success, or `StaleRootRejected(token, receivedNonce, currentNonce)` if the nonce is not newer OR if the sucker is `DEPRECATED` (even with a valid newer nonce, deprecated suckers reject new roots to prevent double-spend with emergency hatch withdrawals).
 - `claim` path: `Claimed(beneficiary, token, projectTokenCount, terminalTokenAmount, index, caller)`
 
 **Edge cases**:
