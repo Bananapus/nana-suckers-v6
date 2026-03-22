@@ -2,246 +2,264 @@
 
 Step-by-step flows for every major user interaction with the sucker bridging system.
 
+---
+
 ## 1. Deploy Suckers
 
-A project owner deploys a pair of suckers to bridge tokens between Ethereum and Optimism.
+**Entry point**: `JBSuckerRegistry.deploySuckersFor(uint256 projectId, bytes32 salt, JBSuckerDeployerConfig[] configurations)`
 
-**Actors:** Project owner, JBSuckerRegistry, JBOptimismSuckerDeployer
+**Who can call**: The project owner, or any address with the owner's `DEPLOY_SUCKERS` permission.
 
-**Steps:**
+**Parameters**:
+- `projectId` -- The ID of the project deploying suckers
+- `salt` -- A user-chosen salt for CREATE2 deterministic deployment; must match on both chains
+- `configurations` -- Array of `JBSuckerDeployerConfig` structs, each containing:
+  - `deployer` -- The allowed deployer contract (e.g., `JBOptimismSuckerDeployer`)
+  - `mappings` -- Array of `JBTokenMapping` structs for initial token mappings
 
-1. Registry owner has previously called `JBSuckerRegistry.allowSuckerDeployer(optimismDeployerAddress)`.
-
-2. Project owner calls `JBSuckerRegistry.deploySuckersFor(projectId, salt, configurations)` on Ethereum.
-   - `salt` must be the same value on both chains for CREATE2 address matching.
-   - `configurations` contains one entry: `JBSuckerDeployerConfig{deployer: optimismDeployer, mappings: [...]}`.
-
-3. Registry enforces `DEPLOY_SUCKERS` permission from the project owner.
-
-4. Registry computes `salt = keccak256(abi.encode(_msgSender(), salt))` (sender-specific determinism).
-
-5. For each configuration:
-   - Validates the deployer is in the allowlist.
-   - Calls `deployer.createForSender(projectId, salt)` which deploys a clone of `JBOptimismSucker` via CREATE2.
+**State changes**:
+1. Registry enforces `DEPLOY_SUCKERS` permission from the project owner.
+2. Computes `salt = keccak256(abi.encode(_msgSender(), salt))` (sender-specific determinism).
+3. For each configuration:
+   - Validates the deployer is in the allowlist; reverts with `JBSuckerRegistry_InvalidDeployer` if not.
+   - Calls `deployer.createForSender(projectId, salt)` which deploys a clone via CREATE2.
    - The clone's `initialize(projectId)` is called, setting `_localProjectId` and `deployer`.
-   - Registry stores the sucker address in `_suckersOf[projectId]`.
+   - Stores the sucker address in `_suckersOf[projectId]`.
    - Calls `sucker.mapTokens(configuration.mappings)` to set initial token mappings.
+4. Project owner repeats on the remote chain with the **same salt and same sender address** to deploy the matching peer sucker.
 
-6. Project owner repeats step 2 on Optimism with the **same salt and same sender address** to deploy the matching peer sucker.
+**Events**: `SuckerDeployedFor(projectId, sucker, configuration, caller)` -- emitted once per configuration entry.
 
-**Result:** Two suckers exist at matching CREATE2 addresses. Each recognizes the other as its `peer()`. Token mappings are configured for bridging.
+**Edge cases**:
+- If the deployer is not in the allowlist, reverts with `JBSuckerRegistry_InvalidDeployer`.
+- The same sender address must call on both chains for CREATE2 addresses to match; otherwise the suckers will not recognize each other as peers.
+- An empty `configurations` array is a no-op.
+
+---
 
 ## 2. Map Token
 
-A project owner maps a local terminal token to its remote counterpart.
+**Entry point**: `JBSucker.mapToken(JBTokenMapping map)` (single) or `JBSucker.mapTokens(JBTokenMapping[] maps)` (batch)
 
-**Actors:** Project owner, JBSucker
+**Who can call**: The project owner, or any address with the owner's `MAP_SUCKER_TOKEN` permission.
 
-**Steps:**
+**Parameters** (per `JBTokenMapping`):
+- `localToken` -- The terminal token address on the local chain
+- `remoteToken` -- The corresponding token on the remote chain (`bytes32` for cross-VM compatibility); set to `bytes32(0)` to disable
+- `minGas` -- Minimum gas for the bridge message; must be >= `MESSENGER_ERC20_MIN_GAS_LIMIT` (200,000) for non-native tokens
+- `minBridgeAmount` -- Minimum amount of terminal tokens to bridge
 
-1. Project owner calls `JBSucker.mapToken(JBTokenMapping{localToken: USDC, minGas: 200_000, remoteToken: bytes32(remoteUSDC)})`.
+**State changes**:
+1. Validates the emergency hatch is not enabled for the token; reverts with `JBSucker_TokenHasInvalidEmergencyHatchState` if so.
+2. `_validateTokenMapping()` checks native-token and min-gas rules.
+3. Enforces `MAP_SUCKER_TOKEN` permission from the project owner.
+4. Immutability check: if `_outboxOf[token].tree.count != 0` AND the current mapping exists AND the new remote differs, reverts with `JBSucker_TokenAlreadyMapped`.
+5. If disabling a mapping (`remoteToken == bytes32(0)`) and the outbox has unsent entries, `_sendRoot()` is called first to flush them.
+6. Stores the mapping: `_remoteTokenFor[token] = JBRemoteToken{enabled: true/false, emergencyHatch: false, minGas, addr: remoteToken}`.
 
-2. The sucker enforces `MAP_SUCKER_TOKEN` permission from the project owner.
+**Events**: None emitted directly by `mapToken`. When disabling triggers a root flush, the `RootToRemote` event is emitted by `_sendRoot()`.
 
-3. `_validateTokenMapping()` checks:
-   - For non-native tokens: `minGas >= MESSENGER_ERC20_MIN_GAS_LIMIT` (200,000).
-   - For native tokens (base class): remote must be `NATIVE_TOKEN` or `bytes32(0)`.
-   - CCIP/Celo suckers override to allow native-to-ERC20 mapping.
+**Edge cases**:
+- Once a token has outbox entries, it cannot be remapped to a *different* remote token -- only disabled (mapped to `bytes32(0)`) or re-enabled to the same address.
+- For native tokens: `remoteToken` must be `NATIVE_TOKEN` or `bytes32(0)`. CCIP/Celo suckers override this to allow native-to-ERC20 mapping.
+- Disabling a mapping that has unsent outbox entries requires `msg.value` for transport payment (to flush the root).
+- Re-enabling a previously disabled mapping (same remote address) is allowed even after outbox activity.
 
-4. Immutability check: if `_outboxOf[USDC].tree.count != 0` (outbox has entries) AND the current mapping exists AND the new remote differs, reverts with `TokenAlreadyMapped`.
-
-5. Stores the mapping: `_remoteTokenFor[USDC] = JBRemoteToken{enabled: true, emergencyHatch: false, minGas: 200_000, addr: bytes32(remoteUSDC)}`.
-
-**Result:** USDC is now bridgeable. Users can call `prepare()` with USDC as the terminal token.
-
-**Disabling a mapping:** Call `mapToken(JBTokenMapping{localToken: USDC, ..., remoteToken: bytes32(0), ...})`. If the outbox has unsent entries, `_sendRoot()` is called first to flush them. The mapping is disabled (`enabled = false`) but `addr` retains the original remote address (for re-enabling later).
+---
 
 ## 3. Prepare (Bridge Out)
 
-A user prepares project tokens to be bridged to the remote chain.
+**Entry point**: `JBSucker.prepare(uint256 projectTokenCount, bytes32 beneficiary, uint256 minTokensReclaimed, address token)`
 
-**Actors:** Token holder, JBSucker, JBMultiTerminal, JBController
+**Who can call**: Anyone (the caller must hold project tokens and have approved the sucker to transfer them).
 
-**Steps:**
+**Parameters**:
+- `projectTokenCount` -- Number of project tokens to bridge (18 decimals)
+- `beneficiary` -- Recipient on the remote chain (`bytes32` for cross-VM compatibility; left-padded EVM address or full Solana pubkey)
+- `minTokensReclaimed` -- Slippage protection: minimum terminal tokens from cash out; reverts if less
+- `token` -- Terminal token to cash out for (e.g., `NATIVE_TOKEN` for ETH)
 
-1. User approves the sucker to spend their project tokens.
+**State changes**:
+1. Validates `beneficiary != bytes32(0)`; reverts with `JBSucker_ZeroBeneficiary` if zero.
+2. Validates the project has a deployed ERC-20 token; reverts with `JBSucker_ZeroERC20Token` if not.
+3. Validates `_remoteTokenFor[token].enabled == true`; reverts with `JBSucker_TokenNotMapped` if disabled.
+4. Validates sucker state is `ENABLED` or `DEPRECATION_PENDING`; reverts with `JBSucker_Deprecated` otherwise.
+5. Transfers `projectTokenCount` project tokens from caller to the sucker via `safeTransferFrom`.
+6. `_pullBackingAssets()`: calls `terminal.cashOutTokensOf()` to cash out at 0% cashOutTaxRate (set by JBOmnichainDeployer as data hook). Records the reclaimed amount.
+7. `_insertIntoTree()`: builds a leaf hash, inserts into `_outboxOf[token].tree`, and increments `_outboxOf[token].balance`.
 
-2. User calls `JBSucker.prepare(projectTokenCount: 1000, beneficiary: bytes32(userAddressOnRemote), minTokensReclaimed: 950, token: NATIVE_TOKEN)`.
+**Events**: `InsertToOutboxTree(beneficiary, token, hashed, index, root, projectTokenCount, terminalTokenAmount, caller)`
 
-3. Validation:
-   - `beneficiary != bytes32(0)` (would revert on remote mint).
-   - Project has a deployed ERC-20 token.
-   - `_remoteTokenFor[NATIVE_TOKEN].enabled == true`.
-   - Sucker state is `ENABLED` or `DEPRECATION_PENDING` (not `SENDING_DISABLED` or `DEPRECATED`).
+**Edge cases**:
+- `projectTokenCount` and `terminalTokenAmount` must each fit in `uint128` (for SVM/Solana compatibility).
+- The 0% cashOutTaxRate is enforced by the JBOmnichainDeployer data hook, not by the sucker itself.
+- If `minTokensReclaimed` is not met, the cash-out reverts inside the terminal.
+- Multiple `prepare()` calls accumulate in the same outbox tree until `toRemote()` is called.
 
-4. Transfers 1000 project tokens from user to the sucker.
-
-5. `_pullBackingAssets()`:
-   - Gets the project's primary terminal for `NATIVE_TOKEN`.
-   - Calls `terminal.cashOutTokensOf(address(this), projectId, 1000, NATIVE_TOKEN, 950, payable(address(this)), "")`.
-   - The sucker cashes out with 0% cashOutTaxRate (configured by JBOmnichainDeployer as data hook).
-   - Records `balanceBefore`, asserts `reclaimedAmount == balanceAfter - balanceBefore`.
-   - Returns `reclaimedAmount` (e.g., 0.5 ETH).
-
-6. `_insertIntoTree()`:
-   - Guards: `terminalTokenAmount` and `projectTokenCount` fit in `uint128`.
-   - Builds leaf hash: `keccak256(abi.encode(1000, 500000000000000000, beneficiary))`.
-   - Inserts into `_outboxOf[NATIVE_TOKEN].tree` via `MerkleLib.insert()`.
-   - Updates `_outboxOf[NATIVE_TOKEN].balance += 0.5 ETH`.
-
-7. Emits `InsertToOutboxTree` with the leaf details and updated root.
-
-**Result:** The user's project tokens are burned (via cash out), the backing ETH is held by the sucker, and a leaf is recorded in the outbox merkle tree. The user waits for someone to call `toRemote()`.
+---
 
 ## 4. Bridge (toRemote)
 
-Anyone triggers the bridge to send the outbox root and backing assets to the remote chain.
+**Entry point**: `JBSucker.toRemote{value: transportPayment}(address token)`
 
-**Actors:** Relayer (anyone), JBSucker, Bridge infrastructure
+**Who can call**: Anyone (typically a relayer). The caller pays for bridge transport and any `toRemoteFee`.
 
-**Steps:**
+**Parameters**:
+- `token` -- The terminal token whose outbox tree to bridge
+- `msg.value` -- Must cover `REGISTRY.toRemoteFee()` plus any bridge-specific transport cost
 
-1. Relayer calls `JBSucker.toRemote{value: transportPayment}(NATIVE_TOKEN)`.
-   - `transportPayment` is 0 for OP bridges, non-zero for Arbitrum L1->L2 and CCIP.
-
-2. Validation:
-   - Emergency hatch not enabled for this token.
-   - "Nothing to send" guard: reverts if `outbox.balance == 0 && outbox.tree.count == outbox.numberOfClaimsSent`.
-   - If `REGISTRY.toRemoteFee() != 0`: deducts the fee from `msg.value` and pays it into the fee project (`FEE_PROJECT_ID`, typically project ID 1) via `terminal.pay()`. The caller (relayer) receives project tokens. Best-effort: if the fee project has no native token terminal or `terminal.pay()` reverts, proceeds without collecting the fee. Remainder is passed as `transportPayment`. The fee is global across all suckers, set by the registry owner via `JBSuckerRegistry.setToRemoteFee()`, capped at `MAX_TO_REMOTE_FEE` (0.001 ether).
-   - Sucker not deprecated/sending-disabled.
-
-3. `_sendRoot()`:
-   - Reads `outbox.tree.count` and `outbox.balance` (e.g., 2.5 ETH across multiple prepares).
+**State changes**:
+1. Validates emergency hatch is not enabled for the token; reverts with `JBSucker_TokenHasInvalidEmergencyHatchState`.
+2. Validates the outbox has something to send; reverts with `JBSucker_NothingToSend` if `outbox.balance == 0 && outbox.tree.count == outbox.numberOfClaimsSent`.
+3. Validates `msg.value >= REGISTRY.toRemoteFee()`; reverts with `JBSucker_InsufficientMsgValue` if not.
+4. Fee deduction: pays `toRemoteFee` into the fee project (ID 1) via `terminal.pay()`. Best-effort: if the fee project has no native-token terminal or `pay()` reverts, proceeds without collecting the fee.
+5. `_sendRoot()`:
+   - Reads `outbox.tree.count` and `outbox.balance`.
    - Clears `outbox.balance = 0`.
    - Increments `outbox.nonce`.
    - Computes `outbox.tree.root()`.
-   - Sets `outbox.numberOfClaimsSent = tree.count` (used for emergency exit bounds).
-   - Builds `JBMessageRoot{version: 1, token: remoteTokenAddr, amount: 2.5 ETH, remoteRoot: {nonce, root}}`.
+   - Sets `outbox.numberOfClaimsSent = tree.count`.
+6. `_sendRootOverAMB()` (chain-specific): bridges assets and merkle root message to the remote peer.
 
-4. `_sendRootOverAMB()` (chain-specific):
-   - **OP Stack**: Bridges ETH via `OPMESSENGER.sendMessage{value: 2.5 ETH}()` to `peer()`. Message encodes `JBSucker.fromRemote(messageRoot)`.
-   - **Arbitrum L1->L2**: Bridges ERC-20 via gateway router (retryable ticket 1), sends merkle root message via inbox (retryable ticket 2). Two independent tickets.
-   - **CCIP**: Wraps native ETH to WETH, calls `CCIP_ROUTER.ccipSend()` with token amounts and message data.
+**Events**: `RootToRemote(root, token, index, nonce, caller)`
 
-**Result:** The merkle root and backing assets are in transit to the remote chain. The bridge delivers them according to its own timeline (minutes to hours depending on the bridge).
+**Edge cases**:
+- `transportPayment` is 0 for OP bridges, non-zero for Arbitrum L1->L2 and CCIP.
+- The `toRemoteFee` is global across all suckers, set by the registry owner via `JBSuckerRegistry.setToRemoteFee()`, capped at `MAX_TO_REMOTE_FEE` (0.001 ether).
+- The caller (relayer) receives fee-project tokens in return for paying the fee.
+- Bridge delivery time varies: minutes to hours depending on the bridge infrastructure.
+- **OP Stack**: Bridges ETH via `OPMESSENGER.sendMessage{value: amount}()`.
+- **Arbitrum L1->L2**: Two independent retryable tickets -- one for ERC-20 via gateway router, one for the merkle root message via inbox.
+- **CCIP**: Wraps native ETH to WETH, calls `CCIP_ROUTER.ccipSend()` with token amounts and message data.
+
+---
 
 ## 5. Claim (Bridge In)
 
-A beneficiary claims their bridged tokens on the destination chain.
+**Entry point**: `JBSucker.claim(JBClaim claimData)` or `JBSucker.claim(JBClaim[] claims)` (batch)
 
-**Actors:** Beneficiary (or anyone on their behalf), JBSucker (destination), JBController
+**Who can call**: Anyone (permissionless -- typically the beneficiary or a relayer acting on their behalf).
 
-**Steps:**
+**Parameters** (per `JBClaim`):
+- `token` -- The terminal token on this chain
+- `leaf.index` -- The leaf's position in the merkle tree (0-based)
+- `leaf.beneficiary` -- The recipient address (`bytes32`)
+- `leaf.projectTokenCount` -- Number of project tokens to mint
+- `leaf.terminalTokenAmount` -- Amount of terminal tokens to add to balance
+- `proof` -- Merkle proof (array of `bytes32` sibling hashes)
 
-1. Bridge delivers the message. The bridge messenger calls `JBSucker.fromRemote(JBMessageRoot)`.
+**Prerequisite**: The bridge must have delivered the message first. `JBSucker.fromRemote(JBMessageRoot root)` is called by the bridge messenger, which:
+1. Validates `_isRemotePeer(_msgSender())` -- the bridge messenger represents the authenticated peer.
+2. Validates `root.version == MESSAGE_VERSION` (1).
+3. Validates `root.remoteRoot.nonce > inbox.nonce` and sucker is not `DEPRECATED`.
+4. Updates `_inboxOf[localToken].root` and `_inboxOf[localToken].nonce`.
 
-2. `fromRemote()` validates:
-   - `_isRemotePeer(_msgSender())` -- verifies the bridge messenger represents the authenticated peer.
-   - `root.version == MESSAGE_VERSION` (1).
-   - `root.remoteRoot.nonce > inbox.nonce` -- only accepts newer roots.
-   - Sucker state is not `DEPRECATED`.
+**State changes** (claim):
+1. `_validate()`: checks `_executedFor[token].get(index)` is false (not already claimed); marks it as executed.
+2. Builds leaf hash and computes root via `MerkleLib.branchRoot(hash, proof, index)`.
+3. Compares to `_inboxOf[token].root`; reverts with `InvalidProof` if mismatch.
+4. `_handleClaim()`:
+   - If `terminalTokenAmount > 0`: calls `terminal.addToBalanceOf{value: amount}(projectId, ...)` to add backing assets.
+   - Mints `projectTokenCount` project tokens for the beneficiary via `controller.mintTokensOf()` with `useReservedPercent = false` (bypasses reserved percent).
 
-3. Updates `_inboxOf[localToken].root = root.remoteRoot.root` and `_inboxOf[localToken].nonce = root.remoteRoot.nonce`.
+**Events**:
+- `fromRemote` path: `NewInboxTreeRoot(token, nonce, root, caller)` on success, or `StaleRootRejected(token, receivedNonce, currentNonce)` if nonce is not newer.
+- `claim` path: `Claimed(beneficiary, token, projectTokenCount, terminalTokenAmount, index, caller)`
 
-4. Off-chain: a relayer computes the merkle proof for the beneficiary's leaf against the inbox root. This requires knowing all leaves in the tree (from `InsertToOutboxTree` events on the source chain).
+**Edge cases**:
+- Off-chain step required: a relayer must compute the merkle proof from `InsertToOutboxTree` events on the source chain.
+- Batch `claim(JBClaim[])` iterates and claims each individually; a single invalid proof reverts the entire batch.
+- If nonces arrive out of order (e.g., CCIP), the inbox root is set to the latest nonce's root. Earlier proofs need to be regenerated against the new root (the tree is append-only, so all leaves remain provable).
+- `fromRemote()` accepts roots for unmapped tokens. Claims will fail at the token mapping lookup, but accepting prevents permanent loss of bridged tokens (a future mapping enables claims).
 
-5. Beneficiary (or anyone) calls `JBSucker.claim(JBClaim{token: ETH, leaf: {index: 3, beneficiary: userAddr, projectTokenCount: 1000, terminalTokenAmount: 0.5 ETH}, proof: [...]})`.
-
-6. `_validate()`:
-   - Checks `_executedFor[ETH].get(3)` is false (not already claimed).
-   - Sets `_executedFor[ETH].set(3)` (marks as claimed).
-   - Builds leaf hash: `keccak256(abi.encode(1000, 500000000000000000, beneficiary))`.
-   - Computes root via `MerkleLib.branchRoot(hash, proof, 3)`.
-   - Compares to `_inboxOf[ETH].root` -- reverts with `InvalidProof` if mismatch.
-
-7. `_handleClaim()`:
-   - If `terminalTokenAmount > 0`:
-     - Calls `_addToBalance(ETH, 0.5 ETH)` which forwards to `terminal.addToBalanceOf{value: 0.5 ETH}(projectId, ...)`.
-   - Mints 1000 project tokens for the beneficiary via `controller.mintTokensOf(projectId, 1000, beneficiary, "", false)`.
-     - `useReservedPercent = false` -- sucker mints bypass the reserved percent.
-
-**Result:** The beneficiary receives 1000 project tokens on the destination chain. The 0.5 ETH backing is added to the project's terminal balance.
+---
 
 ## 6. Deprecate Sucker
 
-A project owner deprecates a sucker pair, progressively disabling operations.
+**Entry point**: `JBSucker.setDeprecation(uint40 timestamp)`
 
-**Actors:** Project owner, JBSucker
+**Who can call**: The project owner, or any address with the owner's `SET_SUCKER_DEPRECATION` permission. Must be called while sucker state is `ENABLED` or `DEPRECATION_PENDING`.
 
-**Steps:**
+**Parameters**:
+- `timestamp` -- The time after which the sucker will be deprecated. Must be `>= block.timestamp + _maxMessagingDelay()` (14 days). Set to `0` to cancel a pending deprecation.
 
-1. Project owner calls `JBSucker.setDeprecation(timestamp)` on both chains, ideally with matching timestamps.
+**State changes**:
+1. Validates sucker state is `ENABLED` or `DEPRECATION_PENDING`; reverts with `JBSucker_Deprecated` if `SENDING_DISABLED` or `DEPRECATED`.
+2. Enforces `SET_SUCKER_DEPRECATION` permission from the project owner.
+3. Validates `timestamp == 0` (cancel) or `timestamp >= block.timestamp + _maxMessagingDelay()`; reverts with `JBSucker_DeprecationTimestampTooSoon` if too soon.
+4. Sets `deprecatedAfter = timestamp`.
+5. State progression over time:
+   - **Now -> timestamp - 14 days**: `DEPRECATION_PENDING`. All operations work normally.
+   - **timestamp - 14 days -> timestamp**: `SENDING_DISABLED`. `prepare()` and `toRemote()` revert. `fromRemote()` and `claim()` still work.
+   - **After timestamp**: `DEPRECATED`. `fromRemote()` rejects new roots. `claim()` still works for existing inbox roots. `exitThroughEmergencyHatch()` becomes available.
 
-2. Validation:
-   - Sucker state is `ENABLED` or `DEPRECATION_PENDING` (cannot change if already `SENDING_DISABLED` or `DEPRECATED`).
-   - `SET_SUCKER_DEPRECATION` permission from project owner.
-   - `timestamp == 0` (cancel) OR `timestamp >= block.timestamp + _maxMessagingDelay()` (14 days minimum).
+**Events**: `DeprecationTimeUpdated(timestamp, caller)`
 
-3. Sets `deprecatedAfter = timestamp`.
+**Registry cleanup**: Anyone calls `JBSuckerRegistry.removeDeprecatedSucker(projectId, suckerAddress)` after the sucker reaches `DEPRECATED` state. Emits `SuckerDeprecated(projectId, sucker, caller)`.
 
-4. State progression over time:
-   - **Now -> timestamp - 14 days**: `DEPRECATION_PENDING`. All operations work normally. Users are warned.
-   - **timestamp - 14 days -> timestamp**: `SENDING_DISABLED`. `prepare()` and `toRemote()` revert. `fromRemote()` still accepts roots. `claim()` still works.
-   - **After timestamp**: `DEPRECATED`. `fromRemote()` rejects new roots. `claim()` still works for existing inbox roots. `exitThroughEmergencyHatch()` works.
+**Edge cases**:
+- Cancellation: call `setDeprecation(0)` before reaching `SENDING_DISABLED` state.
+- Both sides of the sucker pair should be deprecated with matching timestamps; mismatched deprecation can leave one side operational.
+- `removeDeprecatedSucker` reverts with `JBSuckerRegistry_SuckerIsNotDeprecated` if the sucker has not fully reached `DEPRECATED` state.
+- `removeDeprecatedSucker` reverts with `JBSuckerRegistry_SuckerDoesNotBelongToProject` if the sucker is not registered for the given project.
 
-5. **Cancellation**: Project owner calls `setDeprecation(0)` before reaching `SENDING_DISABLED` state.
-
-6. **Registry cleanup**: Anyone calls `JBSuckerRegistry.removeDeprecatedSucker(projectId, suckerAddress)` after the sucker reaches `DEPRECATED` state.
-
-**Result:** The sucker is gracefully wound down. Users have 14+ days to claim pending bridges. No new bridges can be initiated.
+---
 
 ## 7. Enable Emergency Hatch
 
-A project owner enables the emergency exit for tokens stuck in a broken bridge.
+**Entry point**: `JBSucker.enableEmergencyHatchFor(address[] tokens)`
 
-**Actors:** Project owner, JBSucker, affected token holders
+**Who can call**: The project owner, or any address with the owner's `SUCKER_SAFETY` permission.
 
-**Steps:**
+**Parameters**:
+- `tokens` -- Array of terminal token addresses to enable the emergency hatch for
 
-1. A bridge becomes non-functional (e.g., OP Stack bridge bug, token incompatibility). Tokens are stuck in the sucker's outbox.
+**State changes**:
+1. Enforces `SUCKER_SAFETY` permission from the project owner.
+2. For each token: sets `_remoteTokenFor[token].enabled = false` and `_remoteTokenFor[token].emergencyHatch = true`.
+3. **Irreversible**: once the emergency hatch is enabled for a token, it cannot be disabled or remapped.
 
-2. Project owner calls `JBSucker.enableEmergencyHatchFor([NATIVE_TOKEN, USDC])`.
+**Events**: `EmergencyHatchOpened(tokens, caller)`
 
-3. Validation:
-   - `SUCKER_SAFETY` permission from project owner.
-   - For each token: sets `_remoteTokenFor[token].enabled = false` and `_remoteTokenFor[token].emergencyHatch = true`.
-   - **Irreversible**: Once the emergency hatch is enabled for a token, it cannot be disabled.
+**Emergency exit** (`exitThroughEmergencyHatch(JBClaim claimData)`):
 
-4. Affected users call `JBSucker.exitThroughEmergencyHatch(JBClaim{...})` with their prepare data.
+Anyone can call for a valid leaf. `_validateForEmergencyExit()`:
+1. Confirms emergency hatch is enabled for the token (or sucker is `DEPRECATED`/`SENDING_DISABLED`).
+2. Checks `index >= numberOfClaimsSent` or `numberOfClaimsSent == 0` (the leaf was NOT sent to the remote peer).
+3. Uses a separate bitmap slot (derived from `keccak256(abi.encode(terminalToken))`) to prevent collision with regular claims.
+4. Validates the merkle proof against the **outbox** tree root (not inbox).
+5. Decreases `_outboxOf[token].balance -= terminalTokenAmount`.
+6. `_handleClaim()`: adds terminal tokens back to the project's balance and mints project tokens for the beneficiary.
 
-5. `_validateForEmergencyExit()`:
-   - Confirms emergency hatch is enabled for the token (or sucker is deprecated/sending-disabled).
-   - Checks `index >= numberOfClaimsSent` or `numberOfClaimsSent == 0` (the leaf was NOT sent to the remote peer).
-   - Uses a separate bitmap slot (derived from `keccak256(abi.encode(terminalToken))`) to prevent collision with regular claims.
-   - Validates the merkle proof against the **outbox** tree root (not inbox).
+**Events** (emergency exit): `EmergencyExit(beneficiary, token, terminalTokenAmount, projectTokenCount, caller)`
 
-6. Decreases `_outboxOf[token].balance -= terminalTokenAmount`.
+**Edge cases**:
+- Only leaves with `index >= numberOfClaimsSent` can be emergency-exited. Leaves that were already sent via `toRemote()` must be claimed on the remote chain.
+- If `_sendRoot()` was called but the bridge message was never delivered, leaves with `index < numberOfClaimsSent` are blocked from emergency exit even though they cannot be claimed remotely. This is a conservative failure mode (funds locked, not double-spent). The deprecation flow provides an alternative exit path once the sucker reaches `DEPRECATED` state.
+- The emergency hatch cannot be enabled if the token's mapping has already been disabled via `mapToken` with `remoteToken == bytes32(0)` and the hatch was not set -- the hatch requires explicit activation.
 
-7. `_handleClaim()`:
-   - Adds terminal tokens back to the project's balance.
-   - Mints project tokens for the beneficiary.
-
-**Result:** Users recover their tokens locally without the bridge. Only leaves that were NOT already sent to the remote peer can be emergency-exited (leaves that were sent must be claimed on the remote chain).
-
-**Important limitation:** If `_sendRoot()` was called (incrementing `numberOfClaimsSent`) but the bridge message was never delivered, leaves with `index < numberOfClaimsSent` are blocked from emergency exit even though they cannot be claimed remotely. This is a conservative failure mode (funds locked, not double-spent). The deprecation flow provides an alternative exit path.
+---
 
 ## 8. Register Sucker Deployer
 
-The registry owner adds a new sucker deployer implementation.
+**Entry point**: `JBSuckerRegistry.allowSuckerDeployer(address deployer)` or `JBSuckerRegistry.allowSuckerDeployers(address[] deployers)` (batch)
 
-**Actors:** Registry owner (initially JuiceboxDAO / project #1), JBSuckerRegistry
+**Who can call**: The registry `owner` only (Ownable).
 
-**Steps:**
+**Parameters**:
+- `deployer` / `deployers` -- Address(es) of the sucker deployer contract(s) to allowlist
 
-1. A new sucker deployer contract is deployed (e.g., `JBCCIPSuckerDeployer` for a new chain).
+**State changes**:
+1. Sets `suckerDeployerIsAllowed[deployer] = true` for each deployer.
+2. Projects can now use this deployer in `deploySuckersFor()` configurations.
 
-2. Registry owner calls `JBSuckerRegistry.allowSuckerDeployer(deployerAddress)`.
-   - Only the registry `owner` (Ownable) can call this.
+**Events**: `SuckerDeployerAllowed(deployer, caller)` -- emitted once per deployer.
 
-3. Sets `suckerDeployerIsAllowed[deployerAddress] = true`.
+**Removing a deployer**: Registry owner calls `removeSuckerDeployer(address deployer)`. Sets `suckerDeployerIsAllowed[deployer] = false`. Emits `SuckerDeployerRemoved(deployer, caller)`. Existing suckers deployed by this deployer are unaffected -- they continue operating.
 
-4. Projects can now use this deployer in `deploySuckersFor()` configurations.
+**Setting the toRemote fee**: Registry owner calls `setToRemoteFee(uint256 fee)`. Reverts with `JBSuckerRegistry_FeeExceedsMax` if `fee > MAX_TO_REMOTE_FEE`. Emits `ToRemoteFeeChanged(oldFee, newFee, caller)`.
 
-**Removing a deployer:** Registry owner calls `removeSuckerDeployer(deployerAddress)`. Sets `suckerDeployerIsAllowed[deployerAddress] = false`. Existing suckers deployed by this deployer are unaffected -- they continue operating.
-
-**Result:** A new bridge implementation is available for projects to deploy suckers with.
+**Edge cases**:
+- Only the registry owner can manage deployers; there is no permission-based delegation for this action.
+- Removing a deployer does not affect already-deployed suckers.
+- The batch `allowSuckerDeployers` emits one `SuckerDeployerAllowed` event per deployer in the array.
