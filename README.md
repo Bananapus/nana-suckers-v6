@@ -2,31 +2,6 @@
 
 Cross-chain bridging for Juicebox V6 projects. Suckers let users cash out project tokens on one chain, move the backing funds across a bridge, and mint the same number of project tokens on another chain -- all via merkle-tree-based claims and chain-specific bridges.
 
-<details>
-  <summary>Table of Contents</summary>
-  <ol>
-    <li><a href="#what-are-suckers">What are Suckers?</a></li>
-    <li><a href="#architecture">Architecture</a></li>
-    <li><a href="#bridging-flow">Bridging Flow</a></li>
-    <li><a href="#bridging-tokens">Bridging Tokens</a></li>
-    <li><a href="#token-mapping">Token Mapping</a></li>
-    <li><a href="#deprecation-lifecycle">Deprecation Lifecycle</a></li>
-    <li><a href="#emergency-hatch">Emergency Hatch</a></li>
-    <li><a href="#launching-suckers">Launching Suckers</a></li>
-    <li><a href="#managing-suckers">Managing Suckers</a></li>
-    <li><a href="#using-the-relayer">Using the Relayer</a></li>
-    <li><a href="#resources">Resources</a></li>
-    <li><a href="#repository-layout">Repository Layout</a></li>
-    <li><a href="#usage">Usage</a></li>
-    <ul>
-      <li><a href="#install">Install</a></li>
-      <li><a href="#develop">Develop</a></li>
-      <li><a href="#scripts">Scripts</a></li>
-      <li><a href="#tips">Tips</a></li>
-    </ul>
-  </ol>
-</details>
-
 _If you're having trouble understanding this contract, take a look at the [core protocol contracts](https://github.com/Bananapus/nana-core-v6) and the [documentation](https://docs.juicebox.money/) first. If you have questions, reach out on [Discord](https://discord.com/invite/ErQYmth4dS)._
 
 ## What are Suckers?
@@ -380,6 +355,14 @@ Users can do this manually, but it's a hassle. The [`bananapus-sucker-relayer`](
 - [`MerkleLib`](src/utils/MerkleLib.sol) -- Incremental merkle tree based on [Nomad's implementation](https://github.com/nomad-xyz/nomad-monorepo/blob/main/solidity/nomad-core/libs/Merkle.sol) and the eth2 deposit contract.
 - [`juicerkle`](https://github.com/Bananapus/juicerkle) -- Service that returns available claims for a beneficiary (generates merkle proofs). Includes a [Go merkle tree implementation](https://github.com/Bananapus/juicerkle/blob/master/tree/tree.go) for computing roots and building/verifying proofs.
 - [`juicerkle-tester`](https://github.com/Bananapus/juicerkle-tester) -- End-to-end bridging test: deploys projects, tokens, and suckers, then bridges between them. Useful as a bridging walkthrough.
+
+## Risks
+
+- **Out-of-order nonce delivery (CCIP).** `fromRemote` only accepts roots with a nonce strictly greater than the current inbox nonce. If CCIP delivers messages out of order, earlier nonces are silently skipped and every claim in those skipped roots becomes permanently unclaimable on the destination chain. Affected users must use the emergency hatch on the source chain to recover their funds.
+- **Emergency hatch is irreversible per-token.** Calling `enableEmergencyHatchFor` permanently disables bridging for that token on that sucker. Once opened, the token can never be bridged by this sucker again -- a new sucker must be deployed to restore bridging for that token.
+- **`msg.value` required for Arbitrum L1-to-L2 transport.** `JBArbitrumSucker` uses `unsafeCreateRetryableTicket` for L1-to-L2 messages, which requires `msg.value` to cover the retryable ticket cost. OP Stack suckers (`JBOptimismSucker`, `JBBaseSucker`, `JBCeloSucker`) do not require `msg.value` for transport. Callers must know which sucker type they are interacting with, or the `toRemote` call will revert.
+- **Merkle tree depth is fixed at 32.** The outbox tree supports approximately 4 billion leaves, which is practically unlimited, but the tree is append-only and never pruned. Every leaf persists for the lifetime of the sucker, and proofs always require exactly 32 siblings regardless of tree size.
+- **Token mapping immutability.** Once an outbox tree has any entries for a given token, the mapping between local and remote token is locked forever. The mapping can be disabled (set `remoteToken` to `bytes32(0)`) and later re-enabled, but only to the same remote token. Mapping to a different remote token requires deploying a new sucker.
 
 ## Repository Layout
 
