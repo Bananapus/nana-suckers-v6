@@ -300,3 +300,46 @@ forge test --match-contract ForkMainnet --fork-url $ETH_RPC_URL
 # Gas analysis
 forge test --gas-report
 ```
+
+## Previous Audit Findings
+
+No prior formal audit with finding IDs has been conducted on this codebase. All risk analysis is internal. See [RISKS.md](./RISKS.md) for known risks and trust assumptions.
+
+## Anti-Patterns to Hunt
+
+| Pattern | Where to Look | Why It's Dangerous |
+|---------|--------------|-------------------|
+| Non-atomic bridging (Arbitrum L1→L2) | `JBArbitrumSucker._sendRootOverAMB()` | Two independent retryable tickets: tokens and merkle root arrive separately. If message arrives before tokens, `_handleClaim` could mint unbacked tokens. Mitigated by `amountToAddToBalanceOf()` check -- verify this is sufficient. |
+| Self-call pattern (CCIP) | `JBCCIPSucker.ccipReceive()` calls `this.fromRemote()` | The self-call bypasses the `_isRemotePeer` check since `msg.sender == address(this)`. All authentication happens in `ccipReceive`. Verify no path can call `fromRemote()` directly. |
+| Emergency hatch with no timelock | `enableEmergencyHatchFor()` | Project owner can enable emergency exit instantly. No delay, no multisig requirement. If the owner's key is compromised, they can emergency-exit tokens that are legitimately in transit. |
+| uint128 truncation | `_insertIntoTree()` | Amounts are cast to uint128 for SVM compatibility. If a project token amount exceeds uint128, it silently truncates. Verify the cast reverts on overflow. |
+| Bitmap slot collision | `_executedFor[token]` vs emergency exit bitmap | Emergency exit uses `address(bytes20(keccak256(abi.encode(terminalToken))))` as a separate bitmap key. Verify this cannot collide with any legitimate token address. |
+| Root flush on disable | `_mapToken()` with `bytes32(0)` | Disabling a token calls `_sendRoot()` to flush unsent entries. If the bridge is down, this flush reverts and the token cannot be disabled. |
+| CCIP amount validation skip | `JBCCIPSucker._sendRootOverAMB()` | Amount validation is intentionally skipped (reverting would lock tokens). If CCIP delivers fewer tokens than expected, claims are underfunded. |
+| Nonce gap acceptance | `fromRemote()` | Inbox nonce only requires `> current`, not `== current + 1`. For CCIP where messages can arrive out of order, intermediate roots are lost. |
+
+## Compiler and Version Info
+
+- **Solidity**: 0.8.26
+- **EVM target**: Cancun
+- **Optimizer**: via-IR, 200 runs
+- **Dependencies**: OpenZeppelin 5.x, Arbitrum SDK, Chainlink CCIP, nana-core-v6
+- **Build**: `forge build` (Foundry)
+
+## How to Report Findings
+
+For each finding:
+
+1. **Title** -- one line, starts with severity (CRITICAL/HIGH/MEDIUM/LOW)
+2. **Affected contract(s)** -- exact file path and line numbers
+3. **Description** -- what is wrong, in plain language
+4. **Trigger sequence** -- step-by-step, minimal steps to reproduce (include which chain each step happens on)
+5. **Impact** -- what an attacker gains, what a user loses (with numbers if possible)
+6. **Proof** -- code trace showing the exact execution path, or a Foundry test
+7. **Fix** -- minimal code change that resolves the issue
+
+**Severity guide:**
+- **CRITICAL**: Double-claim, unbacked minting, bridge fund loss. Exploitable with no preconditions.
+- **HIGH**: Conditional fund loss, authentication bypass, or broken cross-chain invariant.
+- **MEDIUM**: Value leakage, griefing, stuck tokens (recoverable via emergency hatch).
+- **LOW**: Informational, edge-case-only with no material impact.
