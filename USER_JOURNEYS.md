@@ -18,12 +18,14 @@ All user paths through the Juicebox V6 sucker bridging system. For each journey:
   - `mappings` -- Array of `JBTokenMapping` structs for initial token mappings
 
 **State changes**:
-1. `salt = keccak256(abi.encode(_msgSender(), salt))` -- Sender-specific determinism computed
-2. For each configuration:
-   1. `configuration.deployer.createForSender(projectId, salt)` -- Deploys a sucker clone via CREATE2
-   2. `sucker.initialize(projectId)` -- Sets `_localProjectId` and `deployer` on the new clone
-   3. `_suckersOf[projectId].set(address(sucker), _SUCKER_EXISTS)` -- Registers the sucker in the registry
-   4. `sucker.mapTokens(configuration.mappings)` -- Sets initial token mappings on the new sucker
+1. Registry enforces `DEPLOY_SUCKERS` permission from the project owner.
+2. Computes `salt = keccak256(abi.encode(_msgSender(), salt))` (sender-specific determinism). Note: the deployer also hashes the salt again with its own `_msgSender()` via `keccak256(abi.encodePacked(_msgSender(), salt))`, so the final CREATE2 salt is double-hashed (registry + deployer).
+3. For each configuration:
+   - Validates the deployer is in the allowlist; reverts with `JBSuckerRegistry_InvalidDeployer` if not.
+   - Calls `deployer.createForSender(projectId, salt)` which deploys a clone via CREATE2 and internally calls `initialize(projectId)` on the clone (setting `_localProjectId` and `deployer`). There is no separate `initialize()` call -- it happens inside `createForSender`.
+   - Stores the sucker address in `_suckersOf[projectId]`.
+   - Calls `sucker.mapTokens(configuration.mappings)` to set initial token mappings.
+4. Project owner repeats on the remote chain with the **same salt and same sender address** to deploy the matching peer sucker.
 
 **Events**: `SuckerDeployedFor(projectId, sucker, configuration, caller)` -- One per deployed sucker
 
@@ -47,10 +49,12 @@ All user paths through the Juicebox V6 sucker bridging system. For each journey:
   - `remoteToken` -- The remote token address as `bytes32`. Set to `bytes32(0)` to disable bridging
 
 **State changes**:
-1. `_validateTokenMapping(map)` -- Validates native token constraints and minimum gas
-2. Immutability check: if `_outboxOf[token].tree.count != 0` and current mapping exists and new remote differs, reverts
-3. If disabling (`remoteToken == bytes32(0)`) and outbox has unsent entries: `_sendRoot()` is called to flush the outbox
-4. `_remoteTokenFor[token] = JBRemoteToken{enabled: remoteToken != bytes32(0), emergencyHatch: false, minGas: map.minGas, addr: ...}` -- Stores or updates the mapping. When disabling, `addr` retains the original remote address for re-enabling
+1. Validates the emergency hatch is not enabled for the token; reverts with `JBSucker_TokenHasInvalidEmergencyHatchState` if so.
+2. `_validateTokenMapping()` checks native-token and min-gas rules.
+3. Enforces `MAP_SUCKER_TOKEN` permission from the project owner.
+4. Immutability check: if `_remoteTokenFor[token].addr != bytes32(0)` AND the new `remoteToken` differs from the current mapping AND `remoteToken != bytes32(0)` AND `_outboxOf[token].tree.count != 0`, reverts with `JBSucker_TokenAlreadyMapped`. All four conditions must be true for the revert -- notably, the mapping is only considered immutable when both the current remote address is set and the outbox has entries.
+5. If disabling a mapping (`remoteToken == bytes32(0)`) and the outbox has unsent entries, `_sendRoot()` is called first to flush them.
+6. Stores the mapping: `_remoteTokenFor[token] = JBRemoteToken{enabled: true/false, emergencyHatch: false, minGas, addr: remoteToken}`. When disabling, `addr` retains the original remote address for re-enabling.
 
 **Events**: None directly from `mapToken`. If a root flush occurs during disable, emits `RootToRemote(root, token, index, nonce, caller)`.
 
@@ -80,13 +84,13 @@ All user paths through the Juicebox V6 sucker bridging system. For each journey:
 - `token` -- The terminal token to cash out into (e.g., `NATIVE_TOKEN` or an ERC-20)
 
 **State changes**:
-1. `projectToken.safeTransferFrom(caller, sucker, projectTokenCount)` -- Transfers project tokens from user to sucker
-2. `_pullBackingAssets()`:
-   1. Calls `terminal.cashOutTokensOf(sucker, projectId, projectTokenCount, token, minTokensReclaimed, sucker, "")` -- Cashes out with 0% cashOutTaxRate (configured by JBOmnichainDeployer as data hook)
-   2. Returns `reclaimedAmount` (balance diff verified via assertion)
-3. `_insertIntoTree()`:
-   1. `_outboxOf[token].tree = outbox.tree.insert(leafHash)` -- Inserts leaf into the outbox merkle tree
-   2. `_outboxOf[token].balance += terminalTokenAmount` -- Adds reclaimed amount to the outbox balance
+1. Validates `beneficiary != bytes32(0)`; reverts with `JBSucker_ZeroBeneficiary` if zero.
+2. Validates the project has a deployed ERC-20 token; reverts with `JBSucker_ZeroERC20Token` if not.
+3. Validates `_remoteTokenFor[token].enabled == true`; reverts with `JBSucker_TokenNotMapped` if disabled.
+4. Validates sucker state is `ENABLED` or `DEPRECATION_PENDING`; reverts with `JBSucker_Deprecated` otherwise.
+5. Transfers `projectTokenCount` project tokens from caller to the sucker via `safeTransferFrom`.
+6. `_pullBackingAssets()`: calls `terminal.cashOutTokensOf()` with `beneficiary: payable(address(this))` (the sucker itself receives the reclaimed tokens) at 0% cashOutTaxRate (set by JBOmnichainDeployer as data hook). Records the reclaimed amount and asserts the balance delta matches.
+7. `_insertIntoTree()`: builds a leaf hash, inserts into `_outboxOf[token].tree`, and increments `_outboxOf[token].balance`.
 
 **Events**: `InsertToOutboxTree(beneficiary, token, hashed, index, root, projectTokenCount, terminalTokenAmount, caller)`
 
@@ -110,13 +114,17 @@ All user paths through the Juicebox V6 sucker bridging system. For each journey:
 - `token` -- The terminal token whose outbox tree root and backing assets should be sent to the remote chain
 
 **State changes**:
-1. Fee deduction: if `REGISTRY.toRemoteFee() != 0`, deducts fee from `msg.value` and pays it into `FEE_PROJECT_ID` (typically project 1) via `terminal.pay()`. The caller receives fee project tokens in return. Best-effort: if fee payment fails, the full `msg.value` becomes `transportPayment`.
-2. `_sendRoot()`:
-   1. `outbox.balance = 0` -- Clears the outbox balance (amount now in transit)
-   2. `outbox.nonce++` -- Increments the outbox nonce
-   3. `outbox.numberOfClaimsSent = tree.count` -- Marks all current leaves as sent
-   4. Computes `outbox.tree.root()` -- The current merkle root
-3. `_sendRootOverAMB()` -- Bridge-specific logic transfers assets and sends the merkle root message to the peer:
+1. Validates emergency hatch is not enabled for the token; reverts with `JBSucker_TokenHasInvalidEmergencyHatchState`.
+2. Validates the outbox has something to send; reverts with `JBSucker_NothingToSend` if `outbox.balance == 0 && outbox.tree.count == outbox.numberOfClaimsSent`.
+3. Validates `msg.value >= REGISTRY.toRemoteFee()`; reverts with `JBSucker_InsufficientMsgValue` if insufficient. This check is a hard revert -- it happens before any best-effort logic.
+4. Fee deduction: deducts `toRemoteFee` from `msg.value` to compute `transportPayment = msg.value - toRemoteFee`. Then attempts to pay the fee into the fee project (ID 1) via `terminal.pay()`. The fee payment itself is best-effort: if the fee project has no native-token terminal or `pay()` reverts (via try-catch), the fee is returned to `transportPayment` and the call proceeds. Only the bridge transport cost uses the remaining `transportPayment`.
+5. `_sendRoot()`:
+   - Reads `outbox.tree.count` and `outbox.balance`.
+   - Clears `outbox.balance = 0`.
+   - Increments `outbox.nonce`.
+   - Computes `outbox.tree.root()`.
+   - Sets `outbox.numberOfClaimsSent = tree.count`.
+6. `_sendRootOverAMB()` (chain-specific): bridges assets and merkle root message to the remote peer.
    - **OP Stack**: `OPMESSENGER.sendMessage{value: amount}()` bridges ETH and encodes `JBSucker.fromRemote(messageRoot)`
    - **Arbitrum**: Two retryable tickets -- one for ERC-20 via gateway router, one for the merkle root message via inbox
    - **CCIP**: Wraps native ETH to WETH, calls `CCIP_ROUTER.ccipSend()` with token amounts and message data
@@ -154,7 +162,7 @@ All user paths through the Juicebox V6 sucker bridging system. For each journey:
 
 **Events**:
 - On success: `NewInboxTreeRoot(token, nonce, root, caller)`
-- On rejection (stale or deprecated): `StaleRootRejected(token, receivedNonce, currentNonce)`
+- On rejection: `StaleRootRejected(token, receivedNonce, currentNonce)` -- emitted if the nonce is not newer OR if the sucker is `DEPRECATED` (even with a valid newer nonce, deprecated suckers reject new roots to prevent double-spend with emergency hatch withdrawals)
 
 **Edge cases**:
 - Reverts with `JBSucker_NotPeer` if the sender is not the authenticated remote peer

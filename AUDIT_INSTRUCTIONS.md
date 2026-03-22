@@ -14,7 +14,7 @@ src/JBBaseSucker.sol                    # Base (OP Stack variant) (~48 lines)
 src/JBCeloSucker.sol                    # Celo (OP Stack + WETH wrapping) (~196 lines)
 src/JBArbitrumSucker.sol                # Arbitrum bridge implementation (~322 lines)
 src/JBCCIPSucker.sol                    # Chainlink CCIP implementation (~306 lines)
-src/JBSuckerRegistry.sol                # Deployer registry and tracking (~260 lines)
+src/JBSuckerRegistry.sol                # Deployer registry and tracking (~282 lines)
 src/deployers/                          # JBSuckerDeployer, JB{Optimism,Base,Celo,Arbitrum,CCIP}SuckerDeployer
 src/utils/MerkleLib.sol                 # Incremental merkle tree (eth2-style) (~1,030 lines)
 src/structs/                            # JBMessageRoot, JBLeaf, JBClaim, JBOutboxTree, etc.
@@ -301,6 +301,48 @@ forge test --match-contract ForkMainnet --fork-url $ETH_RPC_URL
 forge test --gas-report
 ```
 
+## Error Reference
+
+33 custom errors across source files:
+
+| Error | Contract | Trigger |
+|-------|----------|---------|
+| `JBSucker_AmountExceedsUint128` | JBSucker | `projectTokenCount` or `terminalTokenAmount` exceeds `uint128` during `_insertIntoTree` |
+| `JBSucker_BelowMinGas` | JBSucker | Token mapping `minGas` is below `MESSENGER_ERC20_MIN_GAS_LIMIT` |
+| `JBSucker_Deprecated` | JBSucker | `prepare`, `toRemote`, or `_sendRoot` called when sucker is `SENDING_DISABLED` or `DEPRECATED` |
+| `JBSucker_DeprecationTimestampTooSoon` | JBSucker | `setDeprecation` timestamp is earlier than `block.timestamp + _maxMessagingDelay()` |
+| `JBSucker_ExpectedMsgValue` | JBArbitrumSucker, JBCCIPSucker | Transport payment is 0 when bridge requires msg.value (Arbitrum L1, CCIP) |
+| `JBSucker_InsufficientBalance` | JBSucker | `_addToBalance` amount exceeds `amountToAddToBalanceOf` (actual token balance minus outbox balance) |
+| `JBSucker_InsufficientMsgValue` | JBSucker | `msg.value` is less than the `toRemoteFee` in `toRemote` |
+| `JBSucker_InvalidMessageVersion` | JBSucker | `fromRemote` receives a root with mismatched `MESSAGE_VERSION` |
+| `JBSucker_InvalidNativeRemoteAddress` | JBSucker | Native token mapped to non-native, non-zero remote address (base class restriction) |
+| `JBSucker_InvalidProof` | JBSucker | Merkle proof does not reconstruct the stored inbox root during `_validate` |
+| `JBSucker_LeafAlreadyExecuted` | JBSucker | Leaf index already claimed in bitmap during `_validate` or `_validateForEmergencyExit` |
+| `JBSucker_NoTerminalForToken` | JBSucker | No primary terminal registered for the token when pulling backing assets or adding to balance |
+| `JBSucker_NotPeer` | JBSucker | `fromRemote` caller fails `_isRemotePeer` authentication |
+| `JBSucker_NothingToSend` | JBSucker | `toRemote` called when emergency hatch is enabled or outbox has no unsent entries |
+| `JBSucker_TokenAlreadyMapped` | JBSucker | Attempt to remap a token after outbox tree has entries (immutability enforcement) |
+| `JBSucker_TokenHasInvalidEmergencyHatchState` | JBSucker | Emergency hatch state conflict during `toRemote`, `_mapToken`, or `_validateForEmergencyExit` |
+| `JBSucker_TokenNotMapped` | JBSucker | `prepare` or `_sendRoot` called for an unmapped token |
+| `JBSucker_UnexpectedMsgValue` | JBArbitrumSucker, JBOptimismSucker, JBCeloSucker | Non-zero transport payment on bridges that don't accept it (Arbitrum L2, OP Stack, Celo) |
+| `JBSucker_ZeroBeneficiary` | JBSucker | `prepare` called with zero-address beneficiary |
+| `JBSucker_ZeroERC20Token` | JBSucker | `prepare` called when project has no ERC-20 token |
+| `JBArbitrumSucker_NotEnoughGas` | JBArbitrumSucker | Transport payment insufficient for retryable ticket gas cost |
+| `JBCCIPSucker_InvalidRouter` | JBCCIPSucker | `ccipReceive` called by address other than `CCIP_ROUTER` |
+| `JBSuckerRegistry_FeeExceedsMax` | JBSuckerRegistry | `setToRemoteFee` exceeds `MAX_TO_REMOTE_FEE` |
+| `JBSuckerRegistry_InvalidDeployer` | JBSuckerRegistry | Deployer not in allowlist during `deploySuckersFor` |
+| `JBSuckerRegistry_SuckerDoesNotBelongToProject` | JBSuckerRegistry | `removeDeprecatedSucker` called for sucker not belonging to the project |
+| `JBSuckerRegistry_SuckerIsNotDeprecated` | JBSuckerRegistry | `removeDeprecatedSucker` called for a non-deprecated sucker |
+| `JBCCIPSuckerDeployer_InvalidCCIPRouter` | JBCCIPSuckerDeployer | Zero-address CCIP router in constructor |
+| `JBSuckerDeployer_AlreadyConfigured` | JBSuckerDeployer | `configureSucker` called on an already-configured sucker |
+| `JBSuckerDeployer_DeployerIsNotConfigured` | JBSuckerDeployer | `createFor` called before deployer is configured |
+| `JBSuckerDeployer_InvalidLayerSpecificConfiguration` | JBSuckerDeployer | Layer-specific configuration validation fails |
+| `JBSuckerDeployer_LayerSpecificNotConfigured` | JBSuckerDeployer | Layer-specific configuration not set when required |
+| `JBSuckerDeployer_Unauthorized` | JBSuckerDeployer | Caller is not the expected configurator |
+| `JBSuckerDeployer_ZeroConfiguratorAddress` | JBSuckerDeployer | Zero-address configurator in constructor |
+| `CCIPHelper_UnsupportedChain` | CCIPHelper | Chain ID has no CCIP chain selector mapping |
+| `MerkleLib_InsertTreeIsFull` | MerkleLib | Merkle tree reached max capacity (`2^32 - 1` leaves) |
+
 ## Previous Audit Findings
 
 No prior formal audit with finding IDs has been conducted on this codebase. All risk analysis is internal. See [RISKS.md](./RISKS.md) for known risks and trust assumptions.
@@ -317,6 +359,17 @@ No prior formal audit with finding IDs has been conducted on this codebase. All 
 | Root flush on disable | `_mapToken()` with `bytes32(0)` | Disabling a token calls `_sendRoot()` to flush unsent entries. If the bridge is down, this flush reverts and the token cannot be disabled. |
 | CCIP amount validation skip | `JBCCIPSucker._sendRootOverAMB()` | Amount validation is intentionally skipped (reverting would lock tokens). If CCIP delivers fewer tokens than expected, claims are underfunded. |
 | Nonce gap acceptance | `fromRemote()` | Inbox nonce only requires `> current`, not `== current + 1`. For CCIP where messages can arrive out of order, intermediate roots are lost. |
+
+## Coverage Gaps
+
+The test suite covers core flows but these areas have limited or no coverage:
+
+- **CCIP amount mismatch handling**: CCIP intentionally skips amount validation (reverting would lock tokens). No tests verify behavior when the delivered token amount differs from the amount encoded in the merkle root.
+- **Arbitrum retryable ticket redemption ordering**: L1->L2 creates two independent retryable tickets (one for tokens, one for merkle root). No tests simulate the message arriving before tokens, verifying that `_addToBalance` correctly checks `amountToAddToBalanceOf` to prevent unbacked minting.
+- **Multi-hop Celo WETH wrapping**: Celo wraps native ETH to WETH before bridging and unwraps on the other side. No tests cover edge cases like partial WETH unwrap failures or WETH contract balance manipulation.
+- **Emergency exit under active bridging**: No tests for the scenario where a user calls `prepare()`, tokens are in the outbox, `toRemote()` is called (sending the root), and then emergency hatch is enabled -- verifying that `numberOfClaimsSent` correctly prevents double-spend across both chains.
+- **Concurrent deprecation and bridging**: No tests for the timing window between `SENDING_DISABLED` and `DEPRECATED` states where `fromRemote()` can still accept roots but `prepare()`/`toRemote()` are blocked.
+- **Token mapping flush under reentrancy**: `_mapToken` calls `_sendRoot()` when disabling a token with unsent outbox entries. No tests verify this flush is safe under reentrancy from the bridge callback.
 
 ## Compiler and Version Info
 

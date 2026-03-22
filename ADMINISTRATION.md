@@ -56,7 +56,7 @@ Admin privileges and their scope in nana-suckers-v6.
 | `allowSuckerDeployers(deployers)` | Registry Owner | N/A (`onlyOwner`) | Global | Batch version: adds multiple deployer contracts to the allowlist. |
 | `removeSuckerDeployer(deployer)` | Registry Owner | N/A (`onlyOwner`) | Global | Removes a deployer contract from the allowlist, preventing future sucker deployments through it. |
 | `setToRemoteFee(fee)` | Registry Owner | N/A (`onlyOwner`) | Global | Sets the `toRemoteFee` applied to all suckers. The fee must be <= `MAX_TO_REMOTE_FEE` (0.001 ether). Emits `ToRemoteFeeChanged`. |
-| `deploySuckersFor(projectId, salt, configs)` | Project Owner | `DEPLOY_SUCKERS` | Per-project | Deploys one or more suckers for a project using allowlisted deployers. Hashes salt with `msg.sender` for deterministic cross-chain addresses. Also calls `mapTokens` on each newly created sucker. |
+| `deploySuckersFor(projectId, salt, configs)` | Project Owner | `DEPLOY_SUCKERS` | Per-project | Deploys one or more suckers for a project using allowlisted deployers. Hashes salt with `_msgSender()` (which equals `msg.sender` for direct calls, or the relayed sender for ERC-2771 meta-transactions) for deterministic cross-chain addresses. Also calls `mapTokens` on each newly created sucker. |
 | `removeDeprecatedSucker(projectId, sucker)` | Anyone | None | Per-project | Removes a fully `DEPRECATED` sucker from the registry. Permissionless but only succeeds if the sucker is in the `DEPRECATED` state. |
 
 ### JBSucker
@@ -110,7 +110,7 @@ The emergency hatch is a per-token escape mechanism for when a bridge becomes no
 - Prevents `mapToken()` from remapping or re-enabling the token (reverts with `JBSucker_TokenHasInvalidEmergencyHatchState`).
 - Enables `exitThroughEmergencyHatch()` for users whose outbox entries were never sent to the remote peer (entries with `index >= numberOfClaimsSent`).
 
-**Who can exit:** Any user with a valid outbox merkle proof for a leaf that was never sent over the bridge. The exit returns both the project tokens and the terminal tokens that were cashed out during `prepare()`.
+**Who can exit:** Any user with a valid outbox merkle proof for a leaf that was never sent over the bridge. The exit mints project tokens to the beneficiary and returns the terminal tokens to the project's terminal balance. The beneficiary can then cash out the minted project tokens through the normal Juicebox mechanism if desired.
 
 **Safety constraint:** Only leaves that were never communicated to the remote peer (i.e., `index >= outbox.numberOfClaimsSent`) can be emergency-exited. Leaves already sent over the bridge (index < `numberOfClaimsSent`) cannot be emergency-exited because they may have already been claimed on the remote chain.
 
@@ -136,7 +136,7 @@ The following values are set at deploy time and cannot be changed:
 | `REMOTE_CHAIN_SELECTOR` | `JBCCIPSucker` | Constructor (from deployer callback) | The CCIP chain selector for the remote chain. |
 | `WRAPPED_NATIVE` | `JBCeloSucker` | Constructor (from deployer callback) | The wrapped native token (WETH) on the local chain. |
 | `LAYER_SPECIFIC_CONFIGURATOR` | All deployers | Constructor | The address authorized to call one-time setup functions. |
-| `peer()` | `JBSucker` | Deterministic (defaults to `address(this)` via CREATE2) | The remote peer sucker address. Assumes identical deployment on both chains. |
+| `peer()` | `JBSucker` | Deterministic (returns `bytes32` via `_toBytes32(address(this))`) | The remote peer sucker address as `bytes32`. Defaults to the local address, relying on CREATE2 giving the same address on both chains. |
 | `deployer` | `JBSucker` | Set once in `initialize()` by `msg.sender` | The address that deployed this sucker clone (the deployer contract). |
 | `projectId()` | `JBSucker` | Set once in `initialize()` | The local project ID this sucker serves. |
 | Bridge/messenger/router addresses | All deployers | `setChainSpecificConstants()` (one-time) | Bridge infrastructure addresses, set once by the configurator. |
