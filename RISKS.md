@@ -42,6 +42,7 @@ Forward-looking risk catalog for the JBSucker cross-chain bridging system.
   - Wrong native mapping can cause permanent loss: e.g., bridging ETH to a non-WETH ERC-20 address on the remote chain.
 - **`fromRemote` accepts roots for unmapped tokens.** By design, to avoid permanent loss of already-bridged tokens. Claims against those roots fail at the mapping lookup. This means stale token data can accumulate in inbox storage indefinitely.
 - **minGas too low = permanent fund loss.** If `minGas` is below the actual gas needed for the remote call, the bridge message will fail on the remote chain. The OP/CCIP implementations enforce `MESSENGER_ERC20_MIN_GAS_LIMIT` (200k), but the actual gas needed could be higher depending on the remote token implementation.
+- **Cross-reference: omnichain deployer token mapping.** When suckers are deployed through `JBOmnichainDeployer`, the `MAP_SUCKER_TOKEN` permission is granted to the sucker registry with `projectId=0` (wildcard). This means the registry can map tokens for ALL projects, not just the one being deployed. See [nana-omnichain-deployers-v6 RISKS.md](../nana-omnichain-deployers-v6/RISKS.md) section 3 for the permission escalation analysis.
 
 ## 5. Fee Collection Risks
 
@@ -51,6 +52,7 @@ Forward-looking risk catalog for the JBSucker cross-chain bridging system.
 - **Immutable fee project.** `FEE_PROJECT_ID` is set at construction and cannot be changed. If the fee project is abandoned or its terminal removed, there is no way to redirect fees without deploying new suckers.
 - **Fee does not protect the sucker's own project.** The fee is paid to `FEE_PROJECT_ID` (the protocol project), not to the sucker's own `projectId()`. This is by design — the protocol project always has a native token terminal — but means the sucker's project does not directly benefit from the anti-spam fee.
 - **ETH price risk (mitigated).** `toRemoteFee` is denominated in wei but is adjustable by the registry owner (up to `MAX_TO_REMOTE_FEE`). A significant ETH price increase can be mitigated by lowering the fee; a significant decrease can be mitigated by raising it. If registry ownership has been renounced, the fee is frozen across all suckers and the only recourse is deploying a new registry and new suckers.
+- **Cross-reference: sucker registration path.** Suckers are deployed via `JBSuckerRegistry.deploySuckersFor`, which requires `DEPLOY_SUCKERS` permission from the project owner. The registry's `deploy` function uses `CREATE2` with a deployer-specific salt. The sucker's `peer()` address is deterministic — a misconfigured peer means the sucker accepts messages from the wrong remote address. See [nana-omnichain-deployers-v6 RISKS.md](../nana-omnichain-deployers-v6/RISKS.md) for deployer-level risks.
 
 ## 6. Deprecation Lifecycle
 
@@ -96,3 +98,13 @@ Forward-looking risk catalog for the JBSucker cross-chain bridging system.
 - **Claim and emergency exit slot independence.** A regular claim (inbox path) and an emergency exit (outbox path) for the same index on the same token use different bitmap keys and do not interfere. Tested in `test_merkleTree_claimAndEmergencyExitSlotIndependence`.
 - **Tree count monotonically increases.** `MerkleLib.Tree.count` only increments (append-only). No operation decreases the count. Tested in `invariant_treeCountMonotonicallyIncreases`.
 - **Message version gate.** `fromRemote` rejects any message where `root.version != MESSAGE_VERSION`. Tested in `test_merkleTree_messageVersionValidation`.
+
+## 10. Accepted Behaviors
+
+### 10.1 Stale nonce messages silently ignored (not reverted)
+
+`fromRemote` does not revert when receiving a message with a nonce <= the current inbox nonce. Instead, it emits `StaleRootRejected` and returns silently. This is intentional for native ETH bridges: reverting a message that carries native ETH (e.g., OP bridge `relayMessage` with value) would lose the ETH. Silent acceptance preserves bridge funds while discarding the stale root. Monitoring systems should watch for `StaleRootRejected` events as indicators of bridge message ordering issues.
+
+### 10.2 Emergency hatch is irreversible
+
+Once `enableEmergencyHatchFor(token)` is called, the token mapping is permanently disabled (`enabled = false`, `emergencyHatch = true`). There is no mechanism to re-enable the mapping or close the hatch. This is a conscious trade-off: reversibility would require additional access control and state transitions that could be exploited to trap tokens. The irreversibility forces a clean deployment of a new sucker when recovery is complete.

@@ -2,28 +2,37 @@
 
 ## Purpose
 
-Cross-chain token bridging for Juicebox V6. Allows project tokens and funds to move between EVM chains via Optimism, Arbitrum, and Chainlink CCIP bridges. Uses dual merkle trees (outbox/inbox) for claim verification.
+Cross-chain token bridging for Juicebox V6. Allows project tokens and funds to move between EVM chains via Optimism, Base, Celo (OP Stack), Arbitrum, and Chainlink CCIP bridges. Uses dual merkle trees (outbox/inbox) for claim verification.
 
 ## Contract Map
 
 ```
 src/
 ├── JBSucker.sol            — Abstract base: merkle tree management, prepare/claim logic, FEE_PROJECT_ID, reads toRemoteFee from REGISTRY (immutable IJBSuckerRegistry)
-├── JBBaseSucker.sol        — OP Stack base (Optimism, Base)
-├── JBOptimismSucker.sol    — Optimism/Base bridge implementation
+├── JBOptimismSucker.sol    — OP Stack bridge implementation (Optimism, Base, Celo)
+├── JBBaseSucker.sol        — Base chain sucker (extends JBOptimismSucker, overrides peerChainId for Base ↔ Ethereum)
+├── JBCeloSucker.sol        — Celo sucker (extends JBOptimismSucker, wraps ETH → WETH for bridging, custom gas token handling)
 ├── JBArbitrumSucker.sol    — Arbitrum bridge implementation
 ├── JBCCIPSucker.sol        — Chainlink CCIP bridge implementation
 ├── JBSuckerRegistry.sol    — Registry of suckers per project, deployment permissions, centralized toRemoteFee (owner-controlled, applies to all suckers)
 ├── deployers/
+│   ├── JBSuckerDeployer.sol        — Abstract base deployer (LibClone, singleton pattern)
 │   ├── JBOptimismSuckerDeployer.sol
+│   ├── JBBaseSuckerDeployer.sol
+│   ├── JBCeloSuckerDeployer.sol
 │   ├── JBArbitrumSuckerDeployer.sol
 │   └── JBCCIPSuckerDeployer.sol
 ├── enums/
-│   └── JBSuckerState.sol   — ENABLED → DEPRECATION_PENDING → SENDING_DISABLED → DEPRECATED
+│   ├── JBSuckerState.sol   — ENABLED → DEPRECATION_PENDING → SENDING_DISABLED → DEPRECATED
+│   └── JBLayer.sol         — L1 / L2 indicator (used by JBArbitrumSucker)
+├── interfaces/             — IJBSucker, IJBSuckerRegistry, IJBSuckerDeployer, bridge-specific interfaces (OP, Arb, CCIP)
 ├── libraries/
-│   ├── JBAddressBytes.sol  — Address/bytes32 conversion
-│   └── MerkleLib.sol       — Merkle tree operations
-└── structs/                — Token mappings, sucker pairs, claims
+│   ├── ARBAddresses.sol    — Arbitrum precompile/contract addresses
+│   ├── ARBChains.sol       — Arbitrum chain ID constants
+│   └── CCIPHelper.sol      — CCIP chain selector lookups
+├── structs/                — JBClaim, JBLeaf, JBTokenMapping, JBRemoteToken, JBOutboxTree, JBMessageRoot, etc.
+└── utils/
+    └── MerkleLib.sol       — Append-only merkle tree operations
 ```
 
 ## Key Data Flows
@@ -40,16 +49,16 @@ User → JBSucker.toRemote{value}(token)
   → Send merkle root + bridged tokens to remote sucker via OP/Arb/CCIP messenger
 ```
 
-The `toRemoteFee` is a global ETH fee (max 0.001 ETH) set by the registry owner via `setToRemoteFee()`. It is paid into `FEE_PROJECT_ID` (typically project 1) through the project's primary native-token terminal. If the fee payment reverts or no terminal exists, the fee is silently skipped and added to the transport payment instead.
+The `toRemoteFee` is a global ETH fee (max 0.001 ETH) set by the registry owner via `setToRemoteFee()`. The caller must send at least `toRemoteFee` as `msg.value` (reverts otherwise). The fee is paid into `FEE_PROJECT_ID` (typically project 1) through the project's primary native-token terminal. If the `pay()` call reverts or no terminal exists, the fee is silently added to the transport payment instead (best-effort).
 
 ### Inbound (Claim)
 ```
 Remote root arrives → stored in inbox tree
 User → JBSucker.claim(proof)
+  → Check leaf not already claimed (bitmap), mark as executed
   → Verify merkle proof against inbox root
-  → Check leaf not already claimed (bitmap)
-  → Mint project tokens to beneficiary (or transfer bridged tokens)
-  → Mark leaf as executed
+  → Add bridged terminal tokens to project balance (via terminal.addToBalanceOf)
+  → Mint project tokens to beneficiary (via controller.mintTokensOf)
 ```
 
 ### Deprecation Lifecycle
@@ -106,7 +115,7 @@ The sucker then returns the terminal tokens and project tokens to the beneficiar
 ## Dependencies
 - `@bananapus/core-v6` — Terminal, controller, token interfaces
 - `@bananapus/permission-ids-v6` — DEPLOY_SUCKERS, MAP_SUCKER_TOKEN, etc.
-- `@arbitrum/nitro-contracts` — Arbitrum bridge interfaces
-- `@chainlink/contracts-ccip` — CCIP router interfaces
-- `@openzeppelin/contracts` — MerkleProof, SafeERC20
-- `solady` — LibBitmap
+- `@arbitrum/nitro-contracts` — Arbitrum bridge interfaces (IInbox, IOutbox, IBridge, ArbSys, AddressAliasHelper)
+- `@chainlink/contracts-ccip` — CCIP router and message interfaces
+- `@openzeppelin/contracts` — BitMaps, SafeERC20, ERC165, Initializable, ERC2771Context, Ownable, EnumerableMap
+- `solady` — LibClone (deterministic clone deployment for sucker deployers)
