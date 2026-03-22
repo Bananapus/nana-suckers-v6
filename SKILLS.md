@@ -28,7 +28,7 @@ Cross-chain token and fund bridging for Juicebox V6 projects, using merkle trees
 | Function | Contract | What it does |
 |----------|----------|--------------|
 | `prepare(projectTokenCount, beneficiary, minTokensReclaimed, token)` | `JBSucker` | Transfers project tokens (ERC-20) from caller via `safeTransferFrom`, cashes them out at the project's primary terminal for the specified terminal token, inserts a leaf into the outbox merkle tree. `beneficiary` is `bytes32` for cross-VM compatibility. Amounts are capped at `uint128` for SVM compatibility. Reverts if token not mapped, sucker deprecated/sending-disabled, beneficiary is zero, or project has no ERC-20 token. |
-| `toRemote(token)` | `JBSucker` | Sends the outbox merkle root and accumulated funds for `token` to the peer sucker on the remote chain via the bridge. Reverts with `NothingToSend` if outbox is empty (balance==0 and count==numberOfClaimsSent). Reads the fee via `REGISTRY.toRemoteFee()`. If the fee != 0, deducts it from `msg.value` and pays it into the fee project (`FEE_PROJECT_ID`, typically project ID 1) via `terminal.pay()` (caller gets project tokens). Best-effort: if the fee project has no native token terminal or `terminal.pay()` reverts, proceeds without fee. Remainder is passed as `transportPayment` to the bridge. Increments outbox nonce. Updates `numberOfClaimsSent` to current tree count. Reverts if emergency hatch is open for the token. |
+| `toRemote(token)` | `JBSucker` | Sends the outbox merkle root and accumulated funds for `token` to the peer sucker via the bridge. Deducts `toRemoteFee` from `msg.value` (paid into fee project), passes remainder as transport payment. Increments outbox nonce and updates `numberOfClaimsSent`. Reverts if outbox is empty or emergency hatch is open. |
 | `setToRemoteFee(fee)` | `JBSuckerRegistry` | Sets the global `toRemoteFee` for all suckers. Restricted to the registry owner via OpenZeppelin `Ownable` (`onlyOwner`). The fee must be <= `MAX_TO_REMOTE_FEE` (0.001 ether). Emits `ToRemoteFeeChanged`. |
 | `fromRemote(root)` | `JBSucker` | Receives a merkle root from the remote peer. Validates `MESSAGE_VERSION` (reverts on mismatch). Updates inbox tree only if received nonce > current inbox nonce AND sucker is not `DEPRECATED`. Does NOT revert on stale nonce -- emits `StaleRootRejected` instead (to avoid losing native tokens sent with the message). |
 | `claim(claimData)` | `JBSucker` | Verifies a merkle proof against the inbox tree, marks the leaf as executed (prevents double-spend), mints project tokens for the beneficiary via `IJBController.mintTokensOf` (with `useReservedPercent: false`), and adds terminal tokens to the project's balance. |
@@ -100,6 +100,46 @@ Cross-chain token and fund bridging for Juicebox V6 projects, using merkle trees
 | `SET_SUCKER_DEPRECATION` | `JBSucker.setDeprecation` | Setting the deprecation timestamp |
 | `MINT_TOKENS` | Needed on the sucker address | Sucker must have this to mint project tokens on claim |
 
+## Errors
+
+| Error | Contract | When |
+|-------|----------|------|
+| `JBSucker_AmountExceedsUint128` | `JBSucker` | `projectTokenCount` or `terminalTokenAmount` exceeds `uint128` (SVM cap) |
+| `JBSucker_BelowMinGas` | `JBSucker` | Token mapping `minGas` is below `MESSENGER_ERC20_MIN_GAS_LIMIT` |
+| `JBSucker_Deprecated` | `JBSucker` | `prepare` or `toRemote` called when sucker is `SENDING_DISABLED` or `DEPRECATED` |
+| `JBSucker_DeprecationTimestampTooSoon` | `JBSucker` | `setDeprecation` timestamp is less than `_maxMessagingDelay()` in the future |
+| `JBSucker_ExpectedMsgValue` | `JBSucker` | `toRemote` called without required `msg.value` for transport payment |
+| `JBSucker_InsufficientBalance` | `JBSucker` | Emergency hatch exit amount exceeds outbox balance |
+| `JBSucker_InsufficientMsgValue` | `JBSucker` | `msg.value` is less than the `toRemoteFee` |
+| `JBSucker_InvalidMessageVersion` | `JBSucker` | `fromRemote` receives a message with wrong `MESSAGE_VERSION` |
+| `JBSucker_InvalidNativeRemoteAddress` | `JBSucker` | `NATIVE_TOKEN` mapped to a non-native, non-zero remote address (base validation) |
+| `JBSucker_InvalidProof` | `JBSucker` | Merkle proof does not match the inbox root |
+| `JBSucker_LeafAlreadyExecuted` | `JBSucker` | `claim` or emergency exit for a leaf that was already processed |
+| `JBSucker_NoTerminalForToken` | `JBSucker` | Project has no terminal for the specified token |
+| `JBSucker_NotPeer` | `JBSucker` | `fromRemote` called by an address that is not the recognized peer |
+| `JBSucker_NothingToSend` | `JBSucker` | `toRemote` called when outbox has no pending entries |
+| `JBSucker_TokenAlreadyMapped` | `JBSucker` | Attempting to remap a token to a different remote address when outbox has entries |
+| `JBSucker_TokenHasInvalidEmergencyHatchState` | `JBSucker` | Operation incompatible with the token's emergency hatch state |
+| `JBSucker_TokenNotMapped` | `JBSucker` | `prepare` called for a token that has no mapping |
+| `JBSucker_UnexpectedMsgValue` | `JBSucker` | `msg.value` sent when not expected |
+| `JBSucker_ZeroBeneficiary` | `JBSucker` | `prepare` called with `bytes32(0)` beneficiary |
+| `JBSucker_ZeroERC20Token` | `JBSucker` | `prepare` called but project has no ERC-20 token deployed |
+| `JBCCIPSucker_InvalidRouter` | `JBCCIPSucker` | `ccipReceive` called by an address other than `CCIP_ROUTER` |
+| `JBArbitrumSucker_NotEnoughGas` | `JBArbitrumSucker` | `msg.value` insufficient for Arbitrum retryable ticket cost |
+| `JBSuckerRegistry_FeeExceedsMax` | `JBSuckerRegistry` | `setToRemoteFee` called with fee > `MAX_TO_REMOTE_FEE` |
+| `JBSuckerRegistry_InvalidDeployer` | `JBSuckerRegistry` | Deployer not on the allowlist |
+| `JBSuckerRegistry_SuckerDoesNotBelongToProject` | `JBSuckerRegistry` | Sucker is not registered for the given project |
+| `JBSuckerRegistry_SuckerIsNotDeprecated` | `JBSuckerRegistry` | `removeDeprecatedSucker` called on a non-deprecated sucker |
+| `JBSuckerDeployer_AlreadyConfigured` | `JBSuckerDeployer` | `configureSingleton` or `setChainSpecificConstants` called a second time |
+| `JBSuckerDeployer_DeployerIsNotConfigured` | `JBSuckerDeployer` | `createForSender` called before singleton is configured |
+| `JBSuckerDeployer_InvalidLayerSpecificConfiguration` | `JBSuckerDeployer` | Invalid bridge addresses passed to `setChainSpecificConstants` |
+| `JBSuckerDeployer_LayerSpecificNotConfigured` | `JBSuckerDeployer` | `configureSingleton` called before `setChainSpecificConstants` |
+| `JBSuckerDeployer_Unauthorized` | `JBSuckerDeployer` | Caller is not `LAYER_SPECIFIC_CONFIGURATOR` |
+| `JBSuckerDeployer_ZeroConfiguratorAddress` | `JBSuckerDeployer` | Constructor passed `address(0)` for configurator |
+| `JBCCIPSuckerDeployer_InvalidCCIPRouter` | `JBCCIPSuckerDeployer` | Zero address passed as CCIP router |
+| `CCIPHelper_UnsupportedChain` | `CCIPHelper` | Chain ID has no known CCIP chain selector mapping |
+| `MerkleLib_InsertTreeIsFull` | `MerkleLib` | Tree has reached max capacity (2^32 - 1 leaves) |
+
 ## Gotchas
 
 - **`remoteToken` is `bytes32`, not `address`.** All remote token addresses in `JBTokenMapping`, `JBRemoteToken`, and `JBMessageRoot` are `bytes32` for cross-VM compatibility (e.g., Solana). Convert EVM addresses with `bytes32(uint256(uint160(addr)))`.
@@ -108,17 +148,14 @@ Cross-chain token and fund bridging for Juicebox V6 projects, using merkle trees
 - Suckers are deployed as minimal clones (`LibClone.cloneDeterministic`). The singleton's constructor calls `_disableInitializers()` so it cannot be initialized directly. Only clones can be initialized.
 - For suckers to be peers, the same `salt` AND the same caller address must be used on both chains when calling `deploySuckersFor`. The registry hashes `keccak256(abi.encode(msg.sender, salt))`, and the deployer hashes `keccak256(abi.encodePacked(msg.sender, salt))` again.
 - `peer()` defaults to `bytes32(uint256(uint160(address(this))))` -- suckers expect to be deployed at matching addresses on both chains via deterministic deployment. Can be overridden for cross-VM peers (e.g., Solana PDA addresses).
-- `fromRemote` is `external payable` and does NOT revert on stale nonce or deprecated state -- it silently ignores the update and emits `StaleRootRejected` to avoid losing native tokens sent along with the message.
-- `JBCCIPSucker.ccipReceive` calls `this.fromRemote(root)` (external self-call) so that `_isRemotePeer` sees `msg.sender == address(this)` rather than the CCIP router.
-- `_validateTokenMapping` in `JBSucker` enforces that native token (`NATIVE_TOKEN`) can only map to `NATIVE_TOKEN` or `bytes32(0)`. `JBCCIPSucker` and `JBCeloSucker` override this to only enforce minimum gas (allowing `NATIVE_TOKEN` to map to any remote address since the remote chain may not have native ETH).
-- Emergency hatch is irreversible per-token. Once opened, the token can never be bridged again by that sucker. The invariant is: if `emergencyHatch == true` then `enabled == false`.
-- `setDeprecation` requires the timestamp to be at least `_maxMessagingDelay()` (14 days) in the future. Once in `SENDING_DISABLED` or `DEPRECATED` state, deprecation cannot be modified.
-- Deployer `setChainSpecificConstants` and `configureSingleton` are both one-shot functions -- they revert if called twice.
+- `JBCCIPSucker` and `JBCeloSucker` override `_validateTokenMapping` to only enforce minimum gas, allowing `NATIVE_TOKEN` to map to any remote address (the remote chain may not have native ETH). Base `JBSucker` restricts `NATIVE_TOKEN` to mapping only to `NATIVE_TOKEN` or `bytes32(0)`.
+- Emergency hatch is irreversible per-token. Once opened, the token can never be bridged again by that sucker. Invariant: `emergencyHatch == true` implies `enabled == false`.
 - `MESSENGER_BASE_GAS_LIMIT` is 300,000. `MESSENGER_ERC20_MIN_GAS_LIMIT` is 200,000. Token mappings must specify `minGas >= 200,000` for ERC-20s. `JBCCIPSucker` requires `minGas >= 200,000` for ALL tokens (including native) because CCIP wraps native to WETH.
 - `JBArbitrumSucker` uses `unsafeCreateRetryableTicket` (not `safeCreateRetryableTicket`) to avoid L2 address aliasing of the refund address.
 - The outbox tree tracks `numberOfClaimsSent` separately from `tree.count`. Emergency hatch exit is only available for leaves whose index >= `numberOfClaimsSent` (not yet sent to remote). A `numberOfClaimsSent` of 0 means no root has ever been sent, so all leaves can be emergency-exited.
 - Both `projectTokenCount` and `terminalTokenAmount` are capped at `uint128` in `_insertIntoTree` for SVM (Solana) compatibility.
 - Nonce ordering is non-sequential: `fromRemote` accepts any nonce strictly greater than the current inbox nonce. Out-of-order nonces (from CCIP) cause earlier nonces to be silently skipped, making their claims permanently unclaimable on that chain. The sender must use the emergency hatch on the source chain to recover.
+- `toRemote` fee payment is best-effort: if the fee project has no native token terminal or `terminal.pay()` reverts, `toRemote` proceeds without collecting the fee. The caller still receives project tokens from the fee payment when it succeeds.
 - `JBCCIPSucker` transport payment refund uses a low-level `call` that does NOT revert on failure. If the refund fails (e.g., caller is a non-payable contract), the excess ETH is permanently stuck. The `TransportPaymentRefundFailed` event provides observability.
 - The sucker has an unrestricted `receive()` function -- it must accept ETH from bridges, WETH unwrapping, and terminal cash-outs. Excess ETH increases `amountToAddToBalanceOf` for the project (not a double-spend risk).
 
