@@ -167,23 +167,39 @@ contract JBArbitrumSucker is JBSucker, IJBArbitrumSucker {
                 token: token, transportPayment: transportPayment, amount: amount, data: data, remoteToken: remoteToken
             });
         } else {
-            _toL1({token: token, amount: amount, data: data, remoteToken: remoteToken});
+            _toL1({token: token, transportPayment: transportPayment, amount: amount, data: data, remoteToken: remoteToken});
         }
         // slither-disable-end out-of-order-retryable
     }
 
     /// @notice Bridge the `token` and data to the remote L1 chain.
+    /// @dev IMPORTANT — Arbitrum non-atomic bridging limitation:
+    /// For ERC-20 transfers, this function performs two independent operations: one for the token bridge
+    /// (via the L2 gateway router) and one for the `fromRemote` merkle root message (via `ArbSys.sendTxToL1`).
+    /// These are processed independently on L1, with no guaranteed ordering.
+    ///
+    /// `_handleClaim` calls `_addToBalance` which checks `amountToAddToBalanceOf` (derived from the contract's
+    /// actual token balance minus outbox balance). If the tokens have not arrived yet, this check will revert
+    /// with `JBSucker_InsufficientBalance`, preventing unbacked token minting.
     /// @param token The token to bridge.
+    /// @param transportPayment The portion of `msg.value` allocated for bridge transport (excluding registry fees).
     /// @param amount The amount of tokens to bridge.
     /// @param data The calldata to send to the remote chain. This calls `JBSucker.fromRemote` on the remote peer.
     /// @param remoteToken Information about the remote token to bridged to.
-    function _toL1(address token, uint256 amount, bytes memory data, JBRemoteToken memory remoteToken) internal {
+    function _toL1(
+        address token,
+        uint256 transportPayment,
+        uint256 amount,
+        bytes memory data,
+        JBRemoteToken memory remoteToken
+    )
+        internal
+    {
         uint256 nativeValue;
 
-        // Revert if there's a `msg.value`. Sending a message to L1 does not require any payment.
-        if (msg.value != 0) {
-            // slither-disable-next-line msg-value-loop
-            revert JBSucker_UnexpectedMsgValue(msg.value);
+        // Revert if there's a transport payment. Sending a message to L1 does not require any payment.
+        if (transportPayment != 0) {
+            revert JBSucker_UnexpectedMsgValue(transportPayment);
         }
 
         // If the token is an ERC-20, bridge it to the peer.

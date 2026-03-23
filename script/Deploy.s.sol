@@ -52,7 +52,7 @@ contract DeployScript is Script, Sphinx {
 
     function configureSphinx() public override {
         // TODO: Update to contain JB Emergency Developers
-        sphinxConfig.projectName = "nana-suckers-v5";
+        sphinxConfig.projectName = "nana-suckers-v6";
         sphinxConfig.mainnets = ["ethereum", "optimism", "base", "arbitrum"];
         sphinxConfig.testnets = ["ethereum_sepolia", "optimism_sepolia", "base_sepolia", "arbitrum_sepolia"];
     }
@@ -71,6 +71,14 @@ contract DeployScript is Script, Sphinx {
         deploy();
     }
 
+    /// @dev Ownership transfer ordering: This function deploys multiple contracts and performs configuration in a
+    /// specific sequence. If the deployment is interrupted (e.g., by an out-of-gas error or a revert in one of the
+    /// deployer steps), intermediate states are possible where some deployers are created but not yet approved in the
+    /// registry, or the registry's ownership has not yet been transferred. When using Sphinx for deployment, the
+    /// entire `deploy()` function executes atomically within a single Gnosis Safe transaction, so partial deployment
+    /// states are not possible on-chain. However, if this script is used outside of Sphinx (e.g., via `forge script`
+    /// with `--broadcast`), each internal call would be a separate transaction, and an interruption could leave the
+    /// system in a partially configured state requiring manual intervention.
     function deploy() public sphinx {
         // Deploy the registry first — singletons need its address as an immutable.
         // If the registry is already deployed we don't have to deploy it

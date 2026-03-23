@@ -50,7 +50,7 @@ library SuckerDeploymentLib {
         // Is deployed on all (supported) chains.
         deployment.registry = IJBSuckerRegistry(
             _getDeploymentAddress({
-                path: path, projectName: "nana-suckers-v5", networkName: networkName, contractName: "JBSuckerRegistry"
+                path: path, projectName: "nana-suckers-v6", networkName: networkName, contractName: "JBSuckerRegistry"
             })
         );
 
@@ -64,7 +64,7 @@ library SuckerDeploymentLib {
             deployment.optimismDeployer = IJBSuckerDeployer(
                 _getDeploymentAddress({
                     path: path,
-                    projectName: "nana-suckers-v5",
+                    projectName: "nana-suckers-v6",
                     networkName: networkName,
                     contractName: "JBOptimismSuckerDeployer"
                 })
@@ -75,7 +75,7 @@ library SuckerDeploymentLib {
             deployment.baseDeployer = IJBSuckerDeployer(
                 _getDeploymentAddress({
                     path: path,
-                    projectName: "nana-suckers-v5",
+                    projectName: "nana-suckers-v6",
                     networkName: networkName,
                     contractName: "JBBaseSuckerDeployer"
                 })
@@ -86,7 +86,7 @@ library SuckerDeploymentLib {
             deployment.arbitrumDeployer = IJBSuckerDeployer(
                 _getDeploymentAddress({
                     path: path,
-                    projectName: "nana-suckers-v5",
+                    projectName: "nana-suckers-v6",
                     networkName: networkName,
                     contractName: "JBArbitrumSuckerDeployer"
                 })
