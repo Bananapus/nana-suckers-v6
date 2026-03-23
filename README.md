@@ -389,11 +389,19 @@ nana-suckers-v6/
 │       └── MerkleLib.sol - Incremental merkle tree (depth 32).
 └── test/
     ├── Fork.t.sol - Fork tests.
+    ├── ForkArbitrum.t.sol - Arbitrum fork tests.
+    ├── ForkCelo.t.sol - Celo fork tests.
+    ├── ForkClaim.t.sol - Fork claim tests.
+    ├── ForkMainnet.t.sol - Mainnet fork tests.
+    ├── ForkOPStack.t.sol - OP Stack fork tests.
     ├── InteropCompat.t.sol - Cross-VM compatibility tests.
     ├── SuckerAttacks.t.sol - Security-focused attack tests.
     ├── SuckerDeepAttacks.t.sol - Deep attack scenario tests.
+    ├── SuckerRegressions.t.sol - Regression tests.
+    ├── TestAuditGaps.sol - Audit gap coverage tests.
     ├── mocks/ - Mock contracts for testing.
-    └── unit/ - Unit tests (merkle, registry, deployer, emergency, arb).
+    ├── regression/ - Regression-specific tests.
+    └── unit/ - Unit tests (merkle, registry, deployer, emergency, arb, ccip, invariants).
 ```
 
 ## Usage
