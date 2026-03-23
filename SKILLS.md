@@ -124,7 +124,7 @@ Cross-chain token and fund bridging for Juicebox V6 projects, using merkle trees
 | `JBSucker_UnexpectedMsgValue` | `JBSucker` | `msg.value` sent when not expected |
 | `JBSucker_ZeroBeneficiary` | `JBSucker` | `prepare` called with `bytes32(0)` beneficiary |
 | `JBSucker_ZeroERC20Token` | `JBSucker` | `prepare` called but project has no ERC-20 token deployed |
-| `JBCCIPSucker_InvalidRouter` | `JBCCIPSucker` | `ccipReceive` called by an address other than `CCIP_ROUTER` |
+| `JBCCIPSucker_InvalidRouter` | `JBCCIPSucker` | Zero address passed as `CCIP_ROUTER` at construction time |
 | `JBArbitrumSucker_NotEnoughGas` | `JBArbitrumSucker` | `msg.value` insufficient for Arbitrum retryable ticket cost |
 | `JBSuckerRegistry_FeeExceedsMax` | `JBSuckerRegistry` | `setToRemoteFee` called with fee > `MAX_TO_REMOTE_FEE` |
 | `JBSuckerRegistry_InvalidDeployer` | `JBSuckerRegistry` | Deployer not on the allowlist |
