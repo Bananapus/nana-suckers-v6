@@ -154,22 +154,21 @@ contract JBArbitrumSucker is JBSucker, IJBArbitrumSucker {
         internal
         override
     {
-        // Bridge expects to be paid
-        if (transportPayment == 0 && LAYER == JBLayer.L1) revert JBSucker_ExpectedMsgValue();
-
         // Build the calldata that will be send to the peer. This will call `JBSucker.fromRemote` on the remote peer.
         bytes memory data = abi.encodeCall(JBSucker.fromRemote, (message));
 
         // Depending on which layer we are on, send the call to the other layer.
         // slither-disable-start out-of-order-retryable
         if (LAYER == JBLayer.L1) {
+            // L1→L2 requires transport payment for retryable tickets.
+            if (transportPayment == 0) revert JBSucker_ExpectedMsgValue();
             _toL2({
                 token: token, transportPayment: transportPayment, amount: amount, data: data, remoteToken: remoteToken
             });
         } else {
-            _toL1({
-                token: token, transportPayment: transportPayment, amount: amount, data: data, remoteToken: remoteToken
-            });
+            // L2→L1 via ArbSys is free — reject any transport payment.
+            if (transportPayment != 0) revert JBSucker_UnexpectedMsgValue(transportPayment);
+            _toL1({token: token, amount: amount, data: data, remoteToken: remoteToken});
         }
         // slither-disable-end out-of-order-retryable
     }
@@ -184,25 +183,11 @@ contract JBArbitrumSucker is JBSucker, IJBArbitrumSucker {
     /// actual token balance minus outbox balance). If the tokens have not arrived yet, this check will revert
     /// with `JBSucker_InsufficientBalance`, preventing unbacked token minting.
     /// @param token The token to bridge.
-    /// @param transportPayment The portion of `msg.value` allocated for bridge transport (excluding registry fees).
     /// @param amount The amount of tokens to bridge.
     /// @param data The calldata to send to the remote chain. This calls `JBSucker.fromRemote` on the remote peer.
     /// @param remoteToken Information about the remote token to bridged to.
-    function _toL1(
-        address token,
-        uint256 transportPayment,
-        uint256 amount,
-        bytes memory data,
-        JBRemoteToken memory remoteToken
-    )
-        internal
-    {
+    function _toL1(address token, uint256 amount, bytes memory data, JBRemoteToken memory remoteToken) internal {
         uint256 nativeValue;
-
-        // Revert if there's a transport payment. Sending a message to L1 does not require any payment.
-        if (transportPayment != 0) {
-            revert JBSucker_UnexpectedMsgValue(transportPayment);
-        }
 
         // If the token is an ERC-20, bridge it to the peer.
         // If the amount is `0` then we do not need to bridge any ERC20.
