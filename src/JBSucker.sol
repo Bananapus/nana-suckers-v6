@@ -466,6 +466,13 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     /// tree is append-only), but users will need regenerated proofs computed against the current root. This trade-off
     /// is accepted because enforcing sequential nonces could permanently block a token's inbox if a single message is
     /// delayed or lost by the bridge.
+    /// @dev Post-deprecation root rejection: Once this sucker is in the `DEPRECATED` state, incoming roots are silently
+    /// rejected (the `else` branch emits `StaleRootRejected` but does not revert). If the remote peer sent tokens via
+    /// `toRemote` shortly before deprecation, and those tokens arrive after the sucker transitions to `DEPRECATED`,
+    /// the bridged tokens will be stranded in this contract with no inbox root to claim against. This is mitigated by
+    /// the mandatory `_maxMessagingDelay()` (14-day) buffer enforced by `setDeprecation`, which gives in-flight
+    /// messages time to arrive before the sucker reaches `DEPRECATED` state. The emergency hatch provides an
+    /// additional recovery path for any tokens that are stranded despite this buffer.
     /// @param root The merkle root, token, and amount being received.
     function fromRemote(JBMessageRoot calldata root) external payable {
         // Make sure that the message came from our peer.
@@ -567,6 +574,12 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     /// @notice Prepare project tokens and the cash out amount backing them to be bridged to the remote chain.
     /// @dev This adds the tokens and funds to the outbox tree for the `token`. They will be bridged by the next call to
     /// `toRemote` for the same `token`.
+    /// @dev Reentrancy protection: This function has implicit reentrancy protection through `_pullBackingAssets`.
+    /// The `assert` in `_pullBackingAssets` verifies that the contract's token balance increased by exactly the
+    /// amount reported by the terminal's `cashOutTokensOf`. A reentrant `prepare()` call would trigger a nested
+    /// `cashOutTokensOf`, changing the contract's balance before the outer call's `assert` executes. The outer
+    /// `assert` would then fail because the balance delta no longer matches the reported `reclaimedAmount`.
+    /// Note: because `assert` is used (not `revert`), a failed reentrancy attempt will consume all remaining gas.
     /// @param projectTokenCount The number of project tokens to prepare for bridging.
     /// @param beneficiary The recipient on the remote chain (bytes32 for cross-VM compatibility).
     ///   For EVM peers: the EVM address left-padded to 32 bytes via `_toBytes32`.
@@ -664,6 +677,11 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     /// remote
     /// chain.
     /// @dev This sends the outbox root for the specified `token` to the remote chain.
+    /// @dev Fee payment failure handling: The registry fee payment uses a best-effort pattern (try/catch). If the
+    /// fee project's terminal doesn't exist or the `pay` call reverts, the fee is silently absorbed back into the
+    /// `transportPayment` instead of reverting the entire transaction. This is a deliberate design choice that favors
+    /// bridge availability over fee collection — a failed fee payment should never prevent users from bridging their
+    /// tokens. The fee amount is typically small relative to the bridged value, making the tradeoff acceptable.
     /// @param token The terminal token being bridged.
     function toRemote(address token) external payable override {
         JBRemoteToken memory remoteToken = _remoteTokenFor[token];
