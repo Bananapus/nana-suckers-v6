@@ -90,7 +90,7 @@ The emergency hatch allows users to reclaim their tokens on the chain they depos
 2. The leaf has not already been sent to the remote chain (`index >= numberOfClaimsSent`). Leaves whose roots were already bridged cannot be emergency-exited, since they could also be claimed remotely.
 3. The leaf has not already been claimed (bitmap check).
 
-The sucker then returns the terminal tokens and project tokens to the beneficiary on the local chain.
+The sucker then adds the terminal tokens back to the project's balance (via `terminal.addToBalanceOf`) and mints project tokens to the beneficiary on the local chain.
 
 ## Extension Points
 
