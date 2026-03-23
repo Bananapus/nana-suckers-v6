@@ -167,7 +167,9 @@ contract JBArbitrumSucker is JBSucker, IJBArbitrumSucker {
                 token: token, transportPayment: transportPayment, amount: amount, data: data, remoteToken: remoteToken
             });
         } else {
-            _toL1({token: token, transportPayment: transportPayment, amount: amount, data: data, remoteToken: remoteToken});
+            _toL1({
+                token: token, transportPayment: transportPayment, amount: amount, data: data, remoteToken: remoteToken
+            });
         }
         // slither-disable-end out-of-order-retryable
     }
@@ -229,8 +231,8 @@ contract JBArbitrumSucker is JBSucker, IJBArbitrumSucker {
     /// @notice Bridge the `token` and data to the remote L2 chain.
     /// @dev IMPORTANT — Arbitrum non-atomic bridging limitation:
     /// For ERC-20 transfers, this function creates two independent retryable tickets: one for the token bridge
-    /// (via the gateway router, line ~245) and one for the `fromRemote` merkle root message (via the inbox,
-    /// line ~274). These tickets are redeemed independently on L2, with no guaranteed ordering.
+    /// (via the gateway router) and one for the `fromRemote` merkle root message (via the inbox).
+    /// These tickets are redeemed independently on L2, with no guaranteed ordering.
     ///
     /// `_handleClaim` calls `_addToBalance` which checks `amountToAddToBalanceOf` (derived from the contract's
     /// actual token balance minus outbox balance). If the tokens have not arrived yet, this check will revert
