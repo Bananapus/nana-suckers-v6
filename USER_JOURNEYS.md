@@ -223,8 +223,8 @@ All user paths through the Juicebox V6 sucker bridging system. For each journey:
 
 **State progression over time**:
 - **Now -> timestamp - 14 days**: `DEPRECATION_PENDING`. All operations work normally. Users are warned.
-- **timestamp - 14 days -> timestamp**: `SENDING_DISABLED`. `prepare()` and `toRemote()` revert. `fromRemote()` still accepts roots. `claim()` still works.
-- **After timestamp**: `DEPRECATED`. `fromRemote()` rejects new roots. `claim()` still works for existing inbox roots. `exitThroughEmergencyHatch()` works.
+- **timestamp - 14 days -> timestamp**: `SENDING_DISABLED`. `prepare()` and `toRemote()` revert. `fromRemote()` still accepts roots. `claim()` still works. `exitThroughEmergencyHatch()` works (even without enabling the emergency hatch per-token).
+- **After timestamp**: `DEPRECATED`. `fromRemote()` rejects new roots. `claim()` still works for existing inbox roots. `exitThroughEmergencyHatch()` works (even without enabling the emergency hatch per-token).
 
 **Edge cases**:
 - Reverts with `JBSucker_Deprecated` if state is already `SENDING_DISABLED` or `DEPRECATED`
