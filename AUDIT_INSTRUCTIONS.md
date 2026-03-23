@@ -303,7 +303,7 @@ forge test --gas-report
 
 ## Error Reference
 
-33 custom errors across source files:
+35 custom errors across source files:
 
 | Error | Contract | Trigger |
 |-------|----------|---------|
@@ -328,7 +328,7 @@ forge test --gas-report
 | `JBSucker_ZeroBeneficiary` | JBSucker | `prepare` called with zero-address beneficiary |
 | `JBSucker_ZeroERC20Token` | JBSucker | `prepare` called when project has no ERC-20 token |
 | `JBArbitrumSucker_NotEnoughGas` | JBArbitrumSucker | Transport payment insufficient for retryable ticket gas cost |
-| `JBCCIPSucker_InvalidRouter` | JBCCIPSucker | `ccipReceive` called by address other than `CCIP_ROUTER` |
+| `JBCCIPSucker_InvalidRouter` | JBCCIPSucker | Constructor reverts when `CCIP_ROUTER == address(0)` |
 | `JBSuckerRegistry_FeeExceedsMax` | JBSuckerRegistry | `setToRemoteFee` exceeds `MAX_TO_REMOTE_FEE` |
 | `JBSuckerRegistry_InvalidDeployer` | JBSuckerRegistry | Deployer not in allowlist during `deploySuckersFor` |
 | `JBSuckerRegistry_SuckerDoesNotBelongToProject` | JBSuckerRegistry | `removeDeprecatedSucker` called for sucker not belonging to the project |
@@ -375,7 +375,7 @@ The test suite covers core flows but these areas have limited or no coverage:
 
 - **Solidity**: 0.8.26
 - **EVM target**: Cancun
-- **Optimizer**: via-IR, 200 runs
+- **Optimizer**: 200 runs (via-IR is NOT enabled)
 - **Dependencies**: OpenZeppelin 5.x, Arbitrum SDK, Chainlink CCIP, nana-core-v6
 - **Build**: `forge build` (Foundry)
 
