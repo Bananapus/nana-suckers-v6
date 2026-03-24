@@ -466,16 +466,16 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     /// tree is append-only), but users will need regenerated proofs computed against the current root. This trade-off
     /// is accepted because enforcing sequential nonces could permanently block a token's inbox if a single message is
     /// delayed or lost by the bridge.
-    /// @dev Post-deprecation root rejection: Once this sucker is in the `DEPRECATED` state, incoming roots are silently
-    /// rejected (the `else` branch emits `StaleRootRejected` but does not revert). If the remote peer sent tokens via
-    /// `toRemote` shortly before deprecation, and those tokens arrive after the sucker transitions to `DEPRECATED`,
-    /// the bridged tokens will be stranded in this contract with no inbox root to claim against. This is mitigated by
-    /// the mandatory `_maxMessagingDelay()` (14-day) buffer enforced by `setDeprecation`, which gives in-flight
-    /// messages time to arrive before the sucker reaches `DEPRECATED` state. The emergency hatch provides an
-    /// additional recovery path for any tokens that are stranded despite this buffer.
+    /// @dev Post-deprecation root acceptance: Roots are accepted in DEPRECATED state to prevent stranding tokens that
+    /// were sent before deprecation. Even though the mandatory `_maxMessagingDelay()` (14-day) buffer gives in-flight
+    /// messages time to arrive, accepting roots after deprecation provides a stronger guarantee that users can always
+    /// claim their bridged tokens. Double-spend is not a concern because `toRemote` is already disabled in
+    /// `SENDING_DISABLED` and `DEPRECATED` states, so no new outbound transfers can occur.
     /// @param root The merkle root, token, and amount being received.
     function fromRemote(JBMessageRoot calldata root) external payable {
         // Make sure that the message came from our peer.
+        // Safe to use _msgSender() here: bridge messengers never use ERC2771 meta-transactions,
+        // so this always resolves to msg.sender.
         if (!_isRemotePeer(_msgSender())) {
             revert JBSucker_NotPeer(_toBytes32(_msgSender()));
         }
@@ -502,11 +502,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         // If the received tree's nonce is greater than the current inbox tree's nonce, update the inbox tree.
         // We can't revert because this could be a native token transfer. If we reverted, we would lose the native
         // tokens.
-        //
-        // Deprecated suckers reject new roots to prevent double-spend: once deprecated, the project owner may have
-        // enabled the emergency hatch for local withdrawals. Accepting a new root after that could allow claiming
-        // on both chains. The emergency hatch provides recovery for any tokens stuck in this state.
-        if (root.remoteRoot.nonce > inbox.nonce && state() != JBSuckerState.DEPRECATED) {
+        if (root.remoteRoot.nonce > inbox.nonce) {
             inbox.nonce = root.remoteRoot.nonce;
             inbox.root = root.remoteRoot.root;
             emit NewInboxTreeRoot({

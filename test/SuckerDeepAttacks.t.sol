@@ -330,7 +330,7 @@ contract SuckerDeepAttacks is Test {
     }
 
     /// @notice fromRemote when DEPRECATED: should silently ignore even with valid higher nonce.
-    function test_fromRemote_deprecated_silentlyIgnored() public {
+    function test_fromRemote_deprecated_stillAccepts() public {
         // Set deprecation in the past so state=DEPRECATED.
         sucker.test_setDeprecatedAfter(block.timestamp - 1);
         assertEq(uint256(sucker.state()), uint256(JBSuckerState.DEPRECATED), "Should be DEPRECATED");
@@ -344,12 +344,13 @@ contract SuckerDeepAttacks is Test {
             remoteRoot: JBInboxTreeRoot({nonce: 2, root: bytes32(uint256(0xbbbb))})
         });
 
-        // Should NOT revert (native tokens would be lost), but should NOT update.
+        // Roots are accepted in DEPRECATED state to prevent stranding tokens that were sent
+        // before deprecation. Double-spend is not a concern because toRemote is already disabled.
         vm.prank(address(sucker));
         sucker.fromRemote(root);
 
-        assertEq(sucker.test_getInboxRoot(TOKEN), bytes32(uint256(0xaaaa)), "Root should NOT update when DEPRECATED");
-        assertEq(sucker.test_getInboxNonce(TOKEN), 1, "Nonce should remain 1 when DEPRECATED");
+        assertEq(sucker.test_getInboxRoot(TOKEN), bytes32(uint256(0xbbbb)), "Root SHOULD update even when DEPRECATED");
+        assertEq(sucker.test_getInboxNonce(TOKEN), 2, "Nonce should update to 2 even when DEPRECATED");
     }
 
     /// @notice fromRemote when SENDING_DISABLED: should still accept roots (only sending is disabled).

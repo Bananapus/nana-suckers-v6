@@ -558,6 +558,27 @@ contract DeployScript is Script, Sphinx {
         internal
         returns (JBCCIPSuckerDeployer deployer)
     {
+        // Check if this CCIP deployer is already deployed on this chain,
+        // if that is the case we return the existing address and skip redeployment.
+        if (_isDeployed({
+                salt: salt,
+                creationCode: type(JBCCIPSuckerDeployer).creationCode,
+                arguments: abi.encode(directory, permissions, tokens, configurator, trustedForwarder)
+            })) {
+            return JBCCIPSuckerDeployer(
+                vm.computeCreate2Address({
+                    salt: salt,
+                    initCodeHash: keccak256(
+                        abi.encodePacked(
+                            type(JBCCIPSuckerDeployer).creationCode,
+                            abi.encode(directory, permissions, tokens, configurator, trustedForwarder)
+                        )
+                    ),
+                    deployer: address(0x4e59b44847b379578588920cA78FbF26c0B4956C)
+                })
+            );
+        }
+
         deployer = new JBCCIPSuckerDeployer{salt: salt}({
             directory: directory,
             permissions: permissions,

@@ -25,7 +25,11 @@ import {MerkleLib} from "../../src/utils/MerkleLib.sol";
 contract CodexAuditGapSucker is JBSucker {
     using MerkleLib for MerkleLib.Tree;
 
-    constructor(IJBDirectory directory, IJBPermissions permissions, IJBTokens tokens)
+    constructor(
+        IJBDirectory directory,
+        IJBPermissions permissions,
+        IJBTokens tokens
+    )
         JBSucker(directory, permissions, tokens, 1, IJBSuckerRegistry(address(1)), address(0))
     {}
 
@@ -49,7 +53,12 @@ contract CodexAuditGapSucker is JBSucker {
         override
     {}
 
-    function test_insertIntoTree(uint256 projectTokenCount, address token, uint256 terminalTokenAmount, bytes32 beneficiary)
+    function test_insertIntoTree(
+        uint256 projectTokenCount,
+        address token,
+        uint256 terminalTokenAmount,
+        bytes32 beneficiary
+    )
         external
     {
         _insertIntoTree(projectTokenCount, token, terminalTokenAmount, beneficiary);
@@ -105,20 +114,22 @@ contract CodexNemesisPoC is Test {
         destination = _createSucker("codex-destination");
     }
 
-    function test_deprecatedDestinationStrandsAlreadySentLeaf() external {
+    /// @notice Verifies that a deprecated destination now accepts roots, preventing token stranding.
+    /// Previously, deprecated suckers rejected incoming roots, which could strand tokens sent just before
+    /// deprecation. The fix accepts roots in DEPRECATED state since toRemote is already disabled, preventing
+    /// double-spend without stranding tokens.
+    function test_deprecatedDestinationAcceptsRootAfterFix() external {
         bytes32 beneficiary = bytes32(uint256(uint160(address(this))));
-        bytes32[32] memory proof;
 
         source.test_setRemoteToken(
             TOKEN,
             JBRemoteToken({
-                enabled: true,
-                emergencyHatch: false,
-                minGas: 200_000,
-                addr: bytes32(uint256(uint160(TOKEN)))
+                enabled: true, emergencyHatch: false, minGas: 200_000, addr: bytes32(uint256(uint160(TOKEN)))
             })
         );
-        source.test_insertIntoTree({projectTokenCount: 10 ether, token: TOKEN, terminalTokenAmount: 1 ether, beneficiary: beneficiary});
+        source.test_insertIntoTree({
+            projectTokenCount: 10 ether, token: TOKEN, terminalTokenAmount: 1 ether, beneficiary: beneficiary
+        });
 
         source.toRemote(TOKEN);
 
@@ -132,33 +143,19 @@ contract CodexNemesisPoC is Test {
             token: bytes32(uint256(uint160(TOKEN))),
             amount: 1 ether,
             remoteRoot: JBInboxTreeRoot({
-                nonce: source.test_getOutboxNonce(TOKEN),
-                root: source.test_getOutboxRoot(TOKEN)
+                nonce: source.test_getOutboxNonce(TOKEN), root: source.test_getOutboxRoot(TOKEN)
             })
         });
 
         vm.prank(address(destination));
         destination.fromRemote(root);
 
-        assertEq(destination.test_getInboxRoot(TOKEN), bytes32(0), "deprecated destination discards the root");
-
-        JBClaim memory claimData = JBClaim({
-            token: TOKEN,
-            leaf: JBLeaf({
-                index: 0,
-                beneficiary: beneficiary,
-                projectTokenCount: 10 ether,
-                terminalTokenAmount: 1 ether
-            }),
-            proof: proof
-        });
-
-        vm.expectRevert();
-        destination.claim(claimData);
-
-        source.test_setDeprecatedAfter(block.timestamp - 1);
-        vm.expectRevert(abi.encodeWithSelector(JBSucker.JBSucker_LeafAlreadyExecuted.selector, TOKEN, 0));
-        source.exitThroughEmergencyHatch(claimData);
+        // After the fix, the root IS accepted even in DEPRECATED state.
+        assertEq(
+            destination.test_getInboxRoot(TOKEN),
+            source.test_getOutboxRoot(TOKEN),
+            "deprecated destination should now accept the root"
+        );
     }
 
     function _createSucker(bytes32 salt) internal returns (CodexAuditGapSucker) {

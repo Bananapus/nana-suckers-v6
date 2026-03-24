@@ -55,7 +55,7 @@ library SuckerDeploymentLib {
         );
 
         bytes32 _network = keccak256(abi.encodePacked(networkName));
-        bool _isMainnet = _network == keccak256("ethereum") || _network == keccak256("sepolia");
+        bool _isMainnet = _network == keccak256("ethereum") || _network == keccak256("ethereum_sepolia");
         bool _isOP = _network == keccak256("optimism") || _network == keccak256("optimism_sepolia");
         bool _isBase = _network == keccak256("base") || _network == keccak256("base_sepolia");
         bool _isArb = _network == keccak256("arbitrum") || _network == keccak256("arbitrum_sepolia");
