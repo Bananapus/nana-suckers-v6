@@ -373,7 +373,7 @@ The test suite covers core flows but these areas have limited or no coverage:
 
 ## Compiler and Version Info
 
-- **Solidity**: 0.8.26
+- **Solidity**: 0.8.28
 - **EVM target**: Cancun
 - **Optimizer**: 200 runs (via-IR is NOT enabled)
 - **Dependencies**: OpenZeppelin 5.x, Arbitrum SDK, Chainlink CCIP, nana-core-v6
