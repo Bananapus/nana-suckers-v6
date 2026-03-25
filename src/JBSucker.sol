@@ -706,6 +706,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         // Best-effort: if the terminal doesn't exist or the pay call reverts, proceed without fee.
         IJBTerminal terminal = DIRECTORY.primaryTerminalOf({projectId: FEE_PROJECT_ID, token: JBConstants.NATIVE_TOKEN});
         if (address(terminal) != address(0)) {
+            // slither-disable-next-line unused-return
             try terminal.pay{value: _toRemoteFee}({
                 projectId: FEE_PROJECT_ID,
                 token: JBConstants.NATIVE_TOKEN,
