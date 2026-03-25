@@ -56,11 +56,11 @@ Forward-looking risk catalog for the JBSucker cross-chain bridging system.
 - **State machine: ENABLED -> DEPRECATION_PENDING -> SENDING_DISABLED -> DEPRECATED.**
   - `DEPRECATION_PENDING`: fully functional, warning only. `block.timestamp < deprecatedAfter - _maxMessagingDelay()`.
   - `SENDING_DISABLED`: no new `prepare()` or `toRemote()`. `block.timestamp >= deprecatedAfter - _maxMessagingDelay()` but `< deprecatedAfter`.
-  - `DEPRECATED`: fully shut down. No new inbox roots accepted. Emergency exits allowed.
+  - `DEPRECATED`: outbound sends blocked. Incoming roots are still accepted to prevent stranding already-sent tokens. Emergency exits allowed.
 - **Irrecoverability once SENDING_DISABLED.** `setDeprecation` reverts in SENDING_DISABLED and DEPRECATED states. Once the sucker enters SENDING_DISABLED, there is no way to cancel or extend the deprecation.
 - **Messaging delay = 14 days.** `_maxMessagingDelay()` returns 14 days for all implementations. The deprecation timestamp must be at least `block.timestamp + 14 days` in the future. This is generous for OP/Arb (minutes to hours) but may be insufficient if a bridge has an extended outage.
 - **Stuck tokens during deprecation.** Tokens that were `prepare()`d but not yet `toRemote()`d before SENDING_DISABLED cannot be sent to the remote chain. They can only be recovered via emergency exit after the sucker reaches DEPRECATED state.
-- **Both sides must deprecate.** The deprecation must be called on both the local and remote sucker with matching timestamps. If only one side deprecates, the other side continues accepting roots while the deprecated side blocks sends -- tokens become unreachable on the non-deprecated side.
+- **Both sides must deprecate.** The deprecation must be called on both the local and remote sucker with matching timestamps. If only one side deprecates, the other side continues accepting roots while the deprecated side blocks outbound sends. The deprecated side still accepts incoming roots, so tokens sent before deprecation can be claimed.
 
 ## 7. Emergency Hatch
 

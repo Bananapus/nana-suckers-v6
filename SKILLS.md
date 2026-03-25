@@ -30,7 +30,7 @@ Cross-chain token and fund bridging for Juicebox V6 projects, using merkle trees
 | `prepare(projectTokenCount, beneficiary, minTokensReclaimed, token)` | `JBSucker` | Transfers project tokens (ERC-20) from caller via `safeTransferFrom`, cashes them out at the project's primary terminal for the specified terminal token, inserts a leaf into the outbox merkle tree. `beneficiary` is `bytes32` for cross-VM compatibility. Amounts are capped at `uint128` for SVM compatibility. Reverts if token not mapped, sucker deprecated/sending-disabled, beneficiary is zero, or project has no ERC-20 token. |
 | `toRemote(token)` | `JBSucker` | Sends the outbox merkle root and accumulated funds for `token` to the peer sucker via the bridge. Deducts `toRemoteFee` from `msg.value` (paid into fee project), passes remainder as transport payment. Increments outbox nonce and updates `numberOfClaimsSent`. Reverts if outbox is empty or emergency hatch is open. |
 | `setToRemoteFee(fee)` | `JBSuckerRegistry` | Sets the global `toRemoteFee` for all suckers. Restricted to the registry owner via OpenZeppelin `Ownable` (`onlyOwner`). The fee must be <= `MAX_TO_REMOTE_FEE` (0.001 ether). Emits `ToRemoteFeeChanged`. |
-| `fromRemote(root)` | `JBSucker` | Receives a merkle root from the remote peer. Validates `MESSAGE_VERSION` (reverts on mismatch). Updates inbox tree only if received nonce > current inbox nonce AND sucker is not `DEPRECATED`. Does NOT revert on stale nonce -- emits `StaleRootRejected` instead (to avoid losing native tokens sent with the message). |
+| `fromRemote(root)` | `JBSucker` | Receives a merkle root from the remote peer. Validates `MESSAGE_VERSION` (reverts on mismatch). Updates inbox tree only if received nonce > current inbox nonce. Accepts roots in all states including `DEPRECATED` to prevent stranding already-sent tokens. Does NOT revert on stale nonce -- emits `StaleRootRejected` instead (to avoid losing native tokens sent with the message). |
 | `claim(claimData)` | `JBSucker` | Verifies a merkle proof against the inbox tree, marks the leaf as executed (prevents double-spend), mints project tokens for the beneficiary via `IJBController.mintTokensOf` (with `useReservedPercent: false`), and adds terminal tokens to the project's balance. |
 | `claim(claims[])` | `JBSucker` | Batch version -- iterates and calls `claim(JBClaim)` for each. |
 | `mapToken(map)` | `JBSucker` | Maps a local terminal token to a remote token. Requires `MAP_SUCKER_TOKEN` permission. Setting `remoteToken` to `bytes32(0)` disables bridging and sends a final root to flush remaining outbox. Cannot remap to a different remote token once outbox has entries (prevents double-spend). Can re-enable a previously disabled token to the same remote address. Reverts if emergency hatch is active for the token. |
@@ -206,7 +206,7 @@ ENABLED --> DEPRECATION_PENDING --> SENDING_DISABLED --> DEPRECATED
 | `ENABLED` | `deprecatedAfter == 0` | yes | yes | yes | yes | per-token only |
 | `DEPRECATION_PENDING` | `now < deprecatedAfter - 14 days` | yes | yes | yes | yes | per-token only |
 | `SENDING_DISABLED` | `now < deprecatedAfter` | no | no | yes | yes | all tokens |
-| `DEPRECATED` | `now >= deprecatedAfter` | no | no | no (silently ignored) | yes | all tokens |
+| `DEPRECATED` | `now >= deprecatedAfter` | no | no | yes | yes | all tokens |
 
 ## Example Integration
 
