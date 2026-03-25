@@ -1,6 +1,6 @@
 # nana-suckers-v6 Changelog (v5 -> v6)
 
-This document describes all changes between `nana-suckers` (v5, Solidity 0.8.23) and `nana-suckers-v6` (v6, Solidity 0.8.28).
+This document describes all changes between `nana-suckers` (v5, Solidity 0.8.23) and `nana-suckers-v6` (v6, Solidity ^0.8.26).
 
 ## Summary
 
@@ -366,7 +366,7 @@ See section 2.4 above.
 
 ### 7.9 Solidity Version
 
-All contracts upgraded from `pragma solidity 0.8.23` to `pragma solidity 0.8.28`.
+All contracts upgraded from `pragma solidity 0.8.23` to `pragma solidity ^0.8.26`.
 
 ### 7.10 Named Arguments
 
