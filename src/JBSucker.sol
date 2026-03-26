@@ -674,10 +674,10 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     /// chain.
     /// @dev This sends the outbox root for the specified `token` to the remote chain.
     /// @dev Fee payment failure handling: The registry fee payment uses a best-effort pattern (try/catch). If the
-    /// fee project's terminal doesn't exist or the `pay` call reverts, the fee is silently absorbed back into the
-    /// `transportPayment` instead of reverting the entire transaction. This is a deliberate design choice that favors
-    /// bridge availability over fee collection — a failed fee payment should never prevent users from bridging their
-    /// tokens. The fee amount is typically small relative to the bridged value, making the tradeoff acceptable.
+    /// fee project's terminal doesn't exist or the `pay` call reverts, the fee ETH is retained by this contract
+    /// (not added back to `transportPayment`) to avoid reverting the entire transaction. This preserves
+    /// `transportPayment = msg.value - fee`, which is critical for zero-cost bridges (OP, Base, Celo, Arb L2->L1)
+    /// that revert on non-zero transport payment. The fee amount is typically small (max 0.001 ETH).
     /// @param token The terminal token being bridged.
     function toRemote(address token) external payable override {
         JBRemoteToken memory remoteToken = _remoteTokenFor[token];
@@ -704,6 +704,9 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
 
         // Pay the fee into the fee project. The caller gets fee project tokens in return.
         // Best-effort: if the terminal doesn't exist or the pay call reverts, proceed without fee.
+        // NOTE: On failure, the fee ETH is retained by this contract (not added back to transportPayment)
+        // to avoid DoS on zero-cost bridges (OP, Base, Celo, Arbitrum L2→L1) that revert on non-zero
+        // transportPayment.
         IJBTerminal terminal = DIRECTORY.primaryTerminalOf({projectId: FEE_PROJECT_ID, token: JBConstants.NATIVE_TOKEN});
         if (address(terminal) != address(0)) {
             // slither-disable-next-line unused-return
@@ -719,13 +722,10 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
                 uint256
             ) {}
             catch {
-                // Fee payment failed — proceed without fee, return it as transport payment.
-                transportPayment = msg.value;
+                // Fee payment failed — fee ETH stays in this contract, transportPayment unchanged.
             }
-        } else {
-            // No terminal — proceed without fee, return it as transport payment.
-            transportPayment = msg.value;
         }
+        // If no terminal exists, fee ETH stays in this contract. transportPayment is already correct.
 
         // Send the merkle root to the remote chain.
         _sendRoot({transportPayment: transportPayment, token: token, remoteToken: remoteToken});
