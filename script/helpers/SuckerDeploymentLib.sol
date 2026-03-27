@@ -19,6 +19,7 @@ struct SuckerDeployment {
 library SuckerDeploymentLib {
     // Cheat code address, 0x7109709ECfa91a80626fF3989D68f67F5b1DD12D.
     address internal constant VM_ADDRESS = address(uint160(uint256(keccak256("hevm cheat code"))));
+    // forge-lint: disable-next-line(screaming-snake-case-const)
     Vm internal constant vm = Vm(VM_ADDRESS);
 
     function getDeployment(string memory path) internal returns (SuckerDeployment memory deployment) {
@@ -56,6 +57,7 @@ library SuckerDeploymentLib {
 
         bytes32 _network = keccak256(abi.encodePacked(networkName));
         bool _isMainnet = _network == keccak256("ethereum") || _network == keccak256("ethereum_sepolia");
+        // forge-lint: disable-next-line(mixed-case-variable)
         bool _isOP = _network == keccak256("optimism") || _network == keccak256("optimism_sepolia");
         bool _isBase = _network == keccak256("base") || _network == keccak256("base_sepolia");
         bool _isArb = _network == keccak256("arbitrum") || _network == keccak256("arbitrum_sepolia");
@@ -110,7 +112,8 @@ library SuckerDeploymentLib {
         returns (address)
     {
         string memory deploymentJson =
-            vm.readFile(string.concat(path, projectName, "/", networkName, "/", contractName, ".json"));
+        // forge-lint: disable-next-line(unsafe-cheatcode)
+        vm.readFile(string.concat(path, projectName, "/", networkName, "/", contractName, ".json"));
         return stdJson.readAddress({json: deploymentJson, key: ".address"});
     }
 }

@@ -188,6 +188,13 @@ In v5, `JBSucker.initialize()` used `msg.sender` to set the `deployer` field. In
 
 ## 3. Event Changes
 
+### 3.0 Indexer Notes
+
+This repo requires the largest schema change for subgraphs:
+- any entity keyed by beneficiary, remote address, or remote token must now support raw `bytes32`;
+- do not assume every remote identifier can be rendered as an EVM checksum address;
+- separate transport-fee accounting from bridged-token accounting, since `toRemoteFee` replaced `minBridgeAmount`.
+
 ### 3.1 New Events
 
 See section 2.3 above.
@@ -440,3 +447,19 @@ Throughout the codebase, function calls were updated to use named argument synta
 | `ARBChains` | `ARBChains` | Identical |
 | `CCIPHelper` | `CCIPHelper` | Bare `revert("Unsupported chain")` replaced with typed `CCIPHelper_UnsupportedChain` error. |
 | `MerkleLib` | `MerkleLib` | Identical |
+
+---
+
+## 9. Post-Audit Fixes
+
+### 9.1 Deploy Script Resumability (NEW-L-1)
+
+The `Deploy.s.sol` script's `_optimismSucker()`, `_baseSucker()`, `_arbitrumSucker()`, and `_deployCCIPSuckerWith()` functions previously returned early when the deployer contract existed at the CREATE2 address, without checking whether singleton configuration or registry allowlisting had completed. If a non-Sphinx deployment was interrupted after deployer creation but before `setChainSpecificConstants()`, `configureSingleton()`, or `allowSuckerDeployers()`, re-running the script would skip the incomplete deployer, leaving it unusable.
+
+**Fix**: The early return now requires both `singleton != address(0)` and `REGISTRY.suckerDeployerIsAllowed(deployer)` to be true. If the deployer exists but is not fully configured, the script resumes from where it left off — skipping already-completed steps (deployer creation, chain-specific constants, singleton deployment) and executing only the missing ones. A new `_computeAddress()` helper was added to reuse the CREATE2 address computation logic.
+
+### 9.2 Fee Fallback DoS on Zero-Cost Bridges
+
+The `JBSucker.toRemote()` fee payment has a best-effort pattern: if the fee terminal is missing or the `pay()` call reverts, the transaction should proceed without the fee. Previously, the catch block and no-terminal branch reset `transportPayment = msg.value`, restoring the fee amount into the transport payment. This caused zero-cost bridges (OP, Base, Celo, Arbitrum L2->L1) to revert with `JBSucker_UnexpectedMsgValue` because they check `if (transportPayment != 0) revert`.
+
+**Fix**: On fee payment failure, `transportPayment` is no longer overwritten. It stays at `msg.value - _toRemoteFee` (which is 0 when the caller sends exactly the fee amount). The fee ETH is retained by the sucker contract rather than being added back to the transport payment. This preserves bridge compatibility for all zero-cost bridge implementations.

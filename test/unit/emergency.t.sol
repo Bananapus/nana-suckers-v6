@@ -1,10 +1,13 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
+// forge-lint: disable-next-line(unaliased-plain-import)
 import "forge-std/Test.sol";
 
+// forge-lint: disable-next-line(unaliased-plain-import)
 import "../../src/JBSucker.sol";
 import {LibClone} from "solady/src/utils/LibClone.sol";
+// forge-lint: disable-next-line(unaliased-plain-import)
 import /* {*} from */ "@bananapus/core-v6/test/helpers/TestBaseWorkflow.sol";
 import {IJBSuckerRegistry} from "../../src/interfaces/IJBSuckerRegistry.sol";
 
@@ -46,6 +49,7 @@ contract SuckerEmergencyTest is Test {
         // Set the state of the sucker to be deprecated.
         if (setAsDeprecated) {
             uint256 deprecationTimestamp = block.timestamp + 14 days;
+            // forge-lint: disable-next-line(unsafe-typecast)
             sucker.setDeprecation(uint40(deprecationTimestamp));
 
             // Foward until its deprecated.
@@ -94,6 +98,7 @@ contract SuckerEmergencyTest is Test {
         // Set the state of the sucker to be deprecated.
         if (sendDisabled) {
             uint256 deprecationTimestamp = block.timestamp + 14 days;
+            // forge-lint: disable-next-line(unsafe-typecast)
             sucker.setDeprecation(uint40(deprecationTimestamp));
 
             // Foward until sending is disabled, which is the next block.
@@ -245,6 +250,7 @@ contract TestSucker is JBSucker {
         JBSucker(directory, permissions, tokens, 1, IJBSuckerRegistry(address(1)), forwarder)
     {}
 
+    // forge-lint: disable-next-line(mixed-case-function)
     function _sendRootOverAMB(
         uint256 transportPayment,
         uint256,

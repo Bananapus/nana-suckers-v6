@@ -5,6 +5,7 @@ import {IInbox} from "@arbitrum/nitro-contracts/src/bridge/IInbox.sol";
 import {IJBDirectory} from "@bananapus/core-v6/src/interfaces/IJBDirectory.sol";
 import {IJBPermissions} from "@bananapus/core-v6/src/interfaces/IJBPermissions.sol";
 import {IJBTokens} from "@bananapus/core-v6/src/interfaces/IJBTokens.sol";
+// forge-lint: disable-next-line(unaliased-plain-import)
 import "@bananapus/core-v6/script/helpers/CoreDeploymentLib.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {Sphinx} from "@sphinx-labs/contracts/contracts/foundry/SphinxPlugin.sol";
@@ -26,28 +27,37 @@ import {ICCIPRouter} from "../src/interfaces/ICCIPRouter.sol";
 import {IOPMessenger} from "../src/interfaces/IOPMessenger.sol";
 import {IOPStandardBridge} from "../src/interfaces/IOPStandardBridge.sol";
 import {ARBAddresses} from "../src/libraries/ARBAddresses.sol";
-import {ARBChains} from "../src/libraries/ARBChains.sol";
 import {CCIPHelper} from "../src/libraries/CCIPHelper.sol";
 
 contract DeployScript is Script, Sphinx {
     /// @notice tracks the deployment of the core contracts for the chain we are deploying to.
     CoreDeployment core;
     /// @notice tracks the addressed of the deployers that will get pre-approved.
+    // forge-lint: disable-next-line(mixed-case-variable)
     address[] PRE_APPROVED_DEPLOYERS;
 
+    // forge-lint: disable-next-line(mixed-case-variable)
     address TRUSTED_FORWARDER;
 
     /// @notice the nonces that are used to deploy the contracts.
+    // forge-lint: disable-next-line(mixed-case-variable)
     bytes32 OP_SALT = "_SUCKER_ETH_OP_V6_";
+    // forge-lint: disable-next-line(mixed-case-variable)
     bytes32 BASE_SALT = "_SUCKER_ETH_BASE_V6_";
+    // forge-lint: disable-next-line(mixed-case-variable)
     bytes32 ARB_SALT = "_SUCKER_ETH_ARB_V6_";
 
+    // forge-lint: disable-next-line(mixed-case-variable)
     bytes32 ARB_BASE_SALT = "_SUCKER_ARB_BASE_V6_";
+    // forge-lint: disable-next-line(mixed-case-variable)
     bytes32 ARB_OP_SALT = "_SUCKER_ARB_OP_V6_";
+    // forge-lint: disable-next-line(mixed-case-variable)
     bytes32 OP_BASE_SALT = "_SUCKER_OP_BASE_V6_";
 
+    // forge-lint: disable-next-line(mixed-case-variable)
     IJBSuckerRegistry REGISTRY;
 
+    // forge-lint: disable-next-line(mixed-case-variable)
     bytes32 REGISTRY_SALT = "REGISTRYV6";
 
     function configureSphinx() public override {
@@ -144,51 +154,82 @@ contract DeployScript is Script, Sphinx {
     /// @notice handles the deployment and configuration regarding optimism (this also includes the mainnet
     /// configuration).
     function _optimismSucker() internal {
-        // Check if this sucker is already deployed on this chain,
-        // if that is the case we don't need to do anything else for this chain.
-        if (_isDeployed({
+        // Check if the deployer already exists at the CREATE2 address.
+        bool alreadyDeployed = _isDeployed({
+            salt: OP_SALT,
+            creationCode: type(JBOptimismSuckerDeployer).creationCode,
+            arguments: abi.encode(core.directory, core.permissions, core.tokens, safeAddress(), TRUSTED_FORWARDER)
+        });
+
+        // If already deployed, verify the full pipeline completed (singleton + registry allowlisting).
+        // Only skip if everything is fully configured; otherwise fall through to resume.
+        if (alreadyDeployed) {
+            address deployerAddr = _computeAddress({
                 salt: OP_SALT,
                 creationCode: type(JBOptimismSuckerDeployer).creationCode,
                 arguments: abi.encode(core.directory, core.permissions, core.tokens, safeAddress(), TRUSTED_FORWARDER)
-            })) return;
+            });
+            bool singletonSet = address(JBOptimismSuckerDeployer(deployerAddr).singleton()) != address(0);
+            bool registryAllowed = REGISTRY.suckerDeployerIsAllowed(deployerAddr);
+            if (singletonSet && registryAllowed) return;
+        }
 
         // Check if we should do the L1 portion.
         // ETH Mainnet and ETH Sepolia.
         if (block.chainid == 1 || block.chainid == 11_155_111) {
-            JBOptimismSuckerDeployer _opDeployer = new JBOptimismSuckerDeployer{salt: OP_SALT}({
-                directory: core.directory,
-                permissions: core.permissions,
-                tokens: core.tokens,
-                configurator: safeAddress(),
-                trustedForwarder: TRUSTED_FORWARDER
-            });
+            JBOptimismSuckerDeployer _opDeployer;
 
-            _opDeployer.setChainSpecificConstants({
-                messenger: IOPMessenger(
-                    block.chainid == 1
-                        ? address(0x25ace71c97B33Cc4729CF772ae268934F7ab5fA1)
-                        : address(0x58Cc85b8D04EA49cC6DBd3CbFFd00B4B8D6cb3ef)
-                ),
-                bridge: IOPStandardBridge(
-                    block.chainid == 1
-                        ? address(0x99C9fc46f92E8a1c0deC1b1747d010903E884bE1)
-                        : address(0xFBb0621E0B23b5478B630BD55a5f21f67730B0F1)
-                )
-            });
+            if (alreadyDeployed) {
+                // Resume from a partial deployment — deployer exists, recompute its address.
+                _opDeployer = JBOptimismSuckerDeployer(
+                    _computeAddress({
+                        salt: OP_SALT,
+                        creationCode: type(JBOptimismSuckerDeployer).creationCode,
+                        arguments: abi.encode(
+                            core.directory, core.permissions, core.tokens, safeAddress(), TRUSTED_FORWARDER
+                        )
+                    })
+                );
+            } else {
+                _opDeployer = new JBOptimismSuckerDeployer{salt: OP_SALT}({
+                    directory: core.directory,
+                    permissions: core.permissions,
+                    tokens: core.tokens,
+                    configurator: safeAddress(),
+                    trustedForwarder: TRUSTED_FORWARDER
+                });
+            }
 
-            // Deploy the singleton instance.
-            JBOptimismSucker _singleton = new JBOptimismSucker{salt: OP_SALT}({
-                deployer: _opDeployer,
-                directory: core.directory,
-                permissions: core.permissions,
-                tokens: core.tokens,
-                feeProjectId: 1,
-                registry: REGISTRY,
-                trustedForwarder: TRUSTED_FORWARDER
-            });
+            if (address(_opDeployer.opMessenger()) == address(0)) {
+                _opDeployer.setChainSpecificConstants({
+                    messenger: IOPMessenger(
+                        block.chainid == 1
+                            ? address(0x25ace71c97B33Cc4729CF772ae268934F7ab5fA1)
+                            : address(0x58Cc85b8D04EA49cC6DBd3CbFFd00B4B8D6cb3ef)
+                    ),
+                    bridge: IOPStandardBridge(
+                        block.chainid == 1
+                            ? address(0x99C9fc46f92E8a1c0deC1b1747d010903E884bE1)
+                            : address(0xFBb0621E0B23b5478B630BD55a5f21f67730B0F1)
+                    )
+                });
+            }
 
-            // Configure the deployer to use the singleton instance.
-            _opDeployer.configureSingleton(_singleton);
+            if (address(_opDeployer.singleton()) == address(0)) {
+                // Deploy the singleton instance.
+                JBOptimismSucker _singleton = new JBOptimismSucker{salt: OP_SALT}({
+                    deployer: _opDeployer,
+                    directory: core.directory,
+                    permissions: core.permissions,
+                    tokens: core.tokens,
+                    feeProjectId: 1,
+                    registry: REGISTRY,
+                    trustedForwarder: TRUSTED_FORWARDER
+                });
+
+                // Configure the deployer to use the singleton instance.
+                _opDeployer.configureSingleton(_singleton);
+            }
 
             PRE_APPROVED_DEPLOYERS.push(address(_opDeployer));
         }
@@ -196,32 +237,50 @@ contract DeployScript is Script, Sphinx {
         // Check if we should do the L2 portion.
         // OP & OP Sepolia.
         if (block.chainid == 10 || block.chainid == 11_155_420) {
-            JBOptimismSuckerDeployer _opDeployer = new JBOptimismSuckerDeployer{salt: OP_SALT}({
-                directory: core.directory,
-                permissions: core.permissions,
-                tokens: core.tokens,
-                configurator: safeAddress(),
-                trustedForwarder: TRUSTED_FORWARDER
-            });
+            JBOptimismSuckerDeployer _opDeployer;
 
-            _opDeployer.setChainSpecificConstants({
-                messenger: IOPMessenger(0x4200000000000000000000000000000000000007),
-                bridge: IOPStandardBridge(0x4200000000000000000000000000000000000010)
-            });
+            if (alreadyDeployed) {
+                _opDeployer = JBOptimismSuckerDeployer(
+                    _computeAddress({
+                        salt: OP_SALT,
+                        creationCode: type(JBOptimismSuckerDeployer).creationCode,
+                        arguments: abi.encode(
+                            core.directory, core.permissions, core.tokens, safeAddress(), TRUSTED_FORWARDER
+                        )
+                    })
+                );
+            } else {
+                _opDeployer = new JBOptimismSuckerDeployer{salt: OP_SALT}({
+                    directory: core.directory,
+                    permissions: core.permissions,
+                    tokens: core.tokens,
+                    configurator: safeAddress(),
+                    trustedForwarder: TRUSTED_FORWARDER
+                });
+            }
 
-            // Deploy the singleton instance.
-            JBOptimismSucker _singleton = new JBOptimismSucker{salt: OP_SALT}({
-                deployer: _opDeployer,
-                directory: core.directory,
-                permissions: core.permissions,
-                tokens: core.tokens,
-                feeProjectId: 1,
-                registry: REGISTRY,
-                trustedForwarder: TRUSTED_FORWARDER
-            });
+            if (address(_opDeployer.opMessenger()) == address(0)) {
+                _opDeployer.setChainSpecificConstants({
+                    messenger: IOPMessenger(0x4200000000000000000000000000000000000007),
+                    bridge: IOPStandardBridge(0x4200000000000000000000000000000000000010)
+                });
+            }
 
-            // Configure the deployer to use the singleton instance.
-            _opDeployer.configureSingleton(_singleton);
+            if (address(_opDeployer.singleton()) == address(0)) {
+                // Deploy the singleton instance.
+                JBOptimismSucker _singleton = new JBOptimismSucker{salt: OP_SALT}({
+                    deployer: _opDeployer,
+                    directory: core.directory,
+                    permissions: core.permissions,
+                    tokens: core.tokens,
+                    feeProjectId: 1,
+                    registry: REGISTRY,
+                    trustedForwarder: TRUSTED_FORWARDER
+                });
+
+                // Configure the deployer to use the singleton instance.
+                _opDeployer.configureSingleton(_singleton);
+            }
 
             PRE_APPROVED_DEPLOYERS.push(address(_opDeployer));
         }
@@ -229,51 +288,81 @@ contract DeployScript is Script, Sphinx {
 
     /// @notice handles the deployment and configuration regarding base (this also includes the mainnet configuration).
     function _baseSucker() internal {
-        // Check if this sucker is already deployed on this chain,
-        // if that is the case we don't need to do anything else for this chain.
-        if (_isDeployed({
+        // Check if the deployer already exists at the CREATE2 address.
+        bool alreadyDeployed = _isDeployed({
+            salt: BASE_SALT,
+            creationCode: type(JBBaseSuckerDeployer).creationCode,
+            arguments: abi.encode(core.directory, core.permissions, core.tokens, safeAddress(), TRUSTED_FORWARDER)
+        });
+
+        // If already deployed, verify the full pipeline completed (singleton + registry allowlisting).
+        // Only skip if everything is fully configured; otherwise fall through to resume.
+        if (alreadyDeployed) {
+            address deployerAddr = _computeAddress({
                 salt: BASE_SALT,
                 creationCode: type(JBBaseSuckerDeployer).creationCode,
                 arguments: abi.encode(core.directory, core.permissions, core.tokens, safeAddress(), TRUSTED_FORWARDER)
-            })) return;
+            });
+            bool singletonSet = address(JBBaseSuckerDeployer(deployerAddr).singleton()) != address(0);
+            bool registryAllowed = REGISTRY.suckerDeployerIsAllowed(deployerAddr);
+            if (singletonSet && registryAllowed) return;
+        }
 
         // Check if we should do the L1 portion.
         // ETH Mainnet and ETH Sepolia.
         if (block.chainid == 1 || block.chainid == 11_155_111) {
-            JBBaseSuckerDeployer _baseDeployer = new JBBaseSuckerDeployer{salt: BASE_SALT}({
-                directory: core.directory,
-                permissions: core.permissions,
-                tokens: core.tokens,
-                configurator: safeAddress(),
-                trustedForwarder: TRUSTED_FORWARDER
-            });
+            JBBaseSuckerDeployer _baseDeployer;
 
-            _baseDeployer.setChainSpecificConstants({
-                messenger: IOPMessenger(
-                    block.chainid == 1
-                        ? address(0x866E82a600A1414e583f7F13623F1aC5d58b0Afa)
-                        : address(0xC34855F4De64F1840e5686e64278da901e261f20)
-                ),
-                bridge: IOPStandardBridge(
-                    block.chainid == 1
-                        ? address(0x3154Cf16ccdb4C6d922629664174b904d80F2C35)
-                        : address(0xfd0Bf71F60660E2f608ed56e1659C450eB113120)
-                )
-            });
+            if (alreadyDeployed) {
+                _baseDeployer = JBBaseSuckerDeployer(
+                    _computeAddress({
+                        salt: BASE_SALT,
+                        creationCode: type(JBBaseSuckerDeployer).creationCode,
+                        arguments: abi.encode(
+                            core.directory, core.permissions, core.tokens, safeAddress(), TRUSTED_FORWARDER
+                        )
+                    })
+                );
+            } else {
+                _baseDeployer = new JBBaseSuckerDeployer{salt: BASE_SALT}({
+                    directory: core.directory,
+                    permissions: core.permissions,
+                    tokens: core.tokens,
+                    configurator: safeAddress(),
+                    trustedForwarder: TRUSTED_FORWARDER
+                });
+            }
 
-            // Deploy the singleton instance.
-            JBBaseSucker _singleton = new JBBaseSucker{salt: BASE_SALT}({
-                deployer: _baseDeployer,
-                directory: core.directory,
-                permissions: core.permissions,
-                tokens: core.tokens,
-                feeProjectId: 1,
-                registry: REGISTRY,
-                trustedForwarder: TRUSTED_FORWARDER
-            });
+            if (address(_baseDeployer.opMessenger()) == address(0)) {
+                _baseDeployer.setChainSpecificConstants({
+                    messenger: IOPMessenger(
+                        block.chainid == 1
+                            ? address(0x866E82a600A1414e583f7F13623F1aC5d58b0Afa)
+                            : address(0xC34855F4De64F1840e5686e64278da901e261f20)
+                    ),
+                    bridge: IOPStandardBridge(
+                        block.chainid == 1
+                            ? address(0x3154Cf16ccdb4C6d922629664174b904d80F2C35)
+                            : address(0xfd0Bf71F60660E2f608ed56e1659C450eB113120)
+                    )
+                });
+            }
 
-            // Configure the deployer to use the singleton instance.
-            _baseDeployer.configureSingleton(_singleton);
+            if (address(_baseDeployer.singleton()) == address(0)) {
+                // Deploy the singleton instance.
+                JBBaseSucker _singleton = new JBBaseSucker{salt: BASE_SALT}({
+                    deployer: _baseDeployer,
+                    directory: core.directory,
+                    permissions: core.permissions,
+                    tokens: core.tokens,
+                    feeProjectId: 1,
+                    registry: REGISTRY,
+                    trustedForwarder: TRUSTED_FORWARDER
+                });
+
+                // Configure the deployer to use the singleton instance.
+                _baseDeployer.configureSingleton(_singleton);
+            }
 
             PRE_APPROVED_DEPLOYERS.push(address(_baseDeployer));
         }
@@ -281,80 +370,128 @@ contract DeployScript is Script, Sphinx {
         // Check if we should do the L2 portion.
         // BASE & BASE Sepolia.
         if (block.chainid == 8453 || block.chainid == 84_532) {
-            JBBaseSuckerDeployer _baseDeployer = new JBBaseSuckerDeployer{salt: BASE_SALT}({
-                directory: core.directory,
-                permissions: core.permissions,
-                tokens: core.tokens,
-                configurator: safeAddress(),
-                trustedForwarder: TRUSTED_FORWARDER
-            });
+            JBBaseSuckerDeployer _baseDeployer;
 
-            _baseDeployer.setChainSpecificConstants({
-                messenger: IOPMessenger(0x4200000000000000000000000000000000000007),
-                bridge: IOPStandardBridge(0x4200000000000000000000000000000000000010)
-            });
+            if (alreadyDeployed) {
+                _baseDeployer = JBBaseSuckerDeployer(
+                    _computeAddress({
+                        salt: BASE_SALT,
+                        creationCode: type(JBBaseSuckerDeployer).creationCode,
+                        arguments: abi.encode(
+                            core.directory, core.permissions, core.tokens, safeAddress(), TRUSTED_FORWARDER
+                        )
+                    })
+                );
+            } else {
+                _baseDeployer = new JBBaseSuckerDeployer{salt: BASE_SALT}({
+                    directory: core.directory,
+                    permissions: core.permissions,
+                    tokens: core.tokens,
+                    configurator: safeAddress(),
+                    trustedForwarder: TRUSTED_FORWARDER
+                });
+            }
 
-            // Deploy the singleton instance.
-            JBBaseSucker _singleton = new JBBaseSucker{salt: BASE_SALT}({
-                deployer: _baseDeployer,
-                directory: core.directory,
-                permissions: core.permissions,
-                tokens: core.tokens,
-                feeProjectId: 1,
-                registry: REGISTRY,
-                trustedForwarder: TRUSTED_FORWARDER
-            });
+            if (address(_baseDeployer.opMessenger()) == address(0)) {
+                _baseDeployer.setChainSpecificConstants({
+                    messenger: IOPMessenger(0x4200000000000000000000000000000000000007),
+                    bridge: IOPStandardBridge(0x4200000000000000000000000000000000000010)
+                });
+            }
 
-            // Configure the deployer to use the singleton instance.
-            _baseDeployer.configureSingleton(_singleton);
+            if (address(_baseDeployer.singleton()) == address(0)) {
+                // Deploy the singleton instance.
+                JBBaseSucker _singleton = new JBBaseSucker{salt: BASE_SALT}({
+                    deployer: _baseDeployer,
+                    directory: core.directory,
+                    permissions: core.permissions,
+                    tokens: core.tokens,
+                    feeProjectId: 1,
+                    registry: REGISTRY,
+                    trustedForwarder: TRUSTED_FORWARDER
+                });
+
+                // Configure the deployer to use the singleton instance.
+                _baseDeployer.configureSingleton(_singleton);
+            }
 
             PRE_APPROVED_DEPLOYERS.push(address(_baseDeployer));
         }
     }
 
-    /// @notice handles the deployment and configuration regarding optimism (this also includes the mainnet
+    /// @notice handles the deployment and configuration regarding arbitrum (this also includes the mainnet
     /// configuration).
     function _arbitrumSucker() internal {
-        // Check if this sucker is already deployed on this chain,
-        // if that is the case we don't need to do anything else for this chain.
-        if (_isDeployed({
+        // Check if the deployer already exists at the CREATE2 address.
+        bool alreadyDeployed = _isDeployed({
+            salt: ARB_SALT,
+            creationCode: type(JBArbitrumSuckerDeployer).creationCode,
+            arguments: abi.encode(core.directory, core.permissions, core.tokens, safeAddress(), TRUSTED_FORWARDER)
+        });
+
+        // If already deployed, verify the full pipeline completed (singleton + registry allowlisting).
+        // Only skip if everything is fully configured; otherwise fall through to resume.
+        if (alreadyDeployed) {
+            address deployerAddr = _computeAddress({
                 salt: ARB_SALT,
                 creationCode: type(JBArbitrumSuckerDeployer).creationCode,
                 arguments: abi.encode(core.directory, core.permissions, core.tokens, safeAddress(), TRUSTED_FORWARDER)
-            })) return;
+            });
+            bool singletonSet = address(JBArbitrumSuckerDeployer(deployerAddr).singleton()) != address(0);
+            bool registryAllowed = REGISTRY.suckerDeployerIsAllowed(deployerAddr);
+            if (singletonSet && registryAllowed) return;
+        }
 
         // Check if we should do the L1 portion.
         // ETH Mainnet and ETH Sepolia.
         if (block.chainid == 1 || block.chainid == 11_155_111) {
-            JBArbitrumSuckerDeployer _arbDeployer = new JBArbitrumSuckerDeployer{salt: ARB_SALT}({
-                directory: core.directory,
-                permissions: core.permissions,
-                tokens: core.tokens,
-                configurator: safeAddress(),
-                trustedForwarder: TRUSTED_FORWARDER
-            });
+            JBArbitrumSuckerDeployer _arbDeployer;
 
-            _arbDeployer.setChainSpecificConstants({
-                layer: JBLayer.L1,
-                inbox: IInbox(block.chainid == 1 ? ARBAddresses.L1_ETH_INBOX : ARBAddresses.L1_SEP_INBOX),
-                gatewayRouter: IArbGatewayRouter(
-                    block.chainid == 1 ? ARBAddresses.L1_GATEWAY_ROUTER : ARBAddresses.L1_SEP_GATEWAY_ROUTER
-                )
-            });
+            if (alreadyDeployed) {
+                _arbDeployer = JBArbitrumSuckerDeployer(
+                    _computeAddress({
+                        salt: ARB_SALT,
+                        creationCode: type(JBArbitrumSuckerDeployer).creationCode,
+                        arguments: abi.encode(
+                            core.directory, core.permissions, core.tokens, safeAddress(), TRUSTED_FORWARDER
+                        )
+                    })
+                );
+            } else {
+                _arbDeployer = new JBArbitrumSuckerDeployer{salt: ARB_SALT}({
+                    directory: core.directory,
+                    permissions: core.permissions,
+                    tokens: core.tokens,
+                    configurator: safeAddress(),
+                    trustedForwarder: TRUSTED_FORWARDER
+                });
+            }
 
-            // Deploy the singleton instance.
-            JBArbitrumSucker _singleton = new JBArbitrumSucker{salt: ARB_SALT}({
-                deployer: _arbDeployer,
-                directory: core.directory,
-                permissions: core.permissions,
-                tokens: core.tokens,
-                feeProjectId: 1,
-                registry: REGISTRY,
-                trustedForwarder: TRUSTED_FORWARDER
-            });
+            if (address(_arbDeployer.arbGatewayRouter()) == address(0)) {
+                _arbDeployer.setChainSpecificConstants({
+                    layer: JBLayer.L1,
+                    inbox: IInbox(block.chainid == 1 ? ARBAddresses.L1_ETH_INBOX : ARBAddresses.L1_SEP_INBOX),
+                    gatewayRouter: IArbGatewayRouter(
+                        block.chainid == 1 ? ARBAddresses.L1_GATEWAY_ROUTER : ARBAddresses.L1_SEP_GATEWAY_ROUTER
+                    )
+                });
+            }
 
-            // Configure the deployer to use the singleton instance.
-            _arbDeployer.configureSingleton(_singleton);
+            if (address(_arbDeployer.singleton()) == address(0)) {
+                // Deploy the singleton instance.
+                JBArbitrumSucker _singleton = new JBArbitrumSucker{salt: ARB_SALT}({
+                    deployer: _arbDeployer,
+                    directory: core.directory,
+                    permissions: core.permissions,
+                    tokens: core.tokens,
+                    feeProjectId: 1,
+                    registry: REGISTRY,
+                    trustedForwarder: TRUSTED_FORWARDER
+                });
+
+                // Configure the deployer to use the singleton instance.
+                _arbDeployer.configureSingleton(_singleton);
+            }
 
             PRE_APPROVED_DEPLOYERS.push(address(_arbDeployer));
         }
@@ -362,35 +499,53 @@ contract DeployScript is Script, Sphinx {
         // Check if we should do the L2 portion.
         // ARB & ARB Sepolia.
         if (block.chainid == 42_161 || block.chainid == 421_614) {
-            JBArbitrumSuckerDeployer _arbDeployer = new JBArbitrumSuckerDeployer{salt: ARB_SALT}({
-                directory: core.directory,
-                permissions: core.permissions,
-                tokens: core.tokens,
-                configurator: safeAddress(),
-                trustedForwarder: TRUSTED_FORWARDER
-            });
+            JBArbitrumSuckerDeployer _arbDeployer;
 
-            _arbDeployer.setChainSpecificConstants({
-                layer: JBLayer.L2,
-                inbox: IInbox(address(0)),
-                gatewayRouter: IArbGatewayRouter(
-                    block.chainid == 42_161 ? ARBAddresses.L2_GATEWAY_ROUTER : ARBAddresses.L2_SEP_GATEWAY_ROUTER
-                )
-            });
+            if (alreadyDeployed) {
+                _arbDeployer = JBArbitrumSuckerDeployer(
+                    _computeAddress({
+                        salt: ARB_SALT,
+                        creationCode: type(JBArbitrumSuckerDeployer).creationCode,
+                        arguments: abi.encode(
+                            core.directory, core.permissions, core.tokens, safeAddress(), TRUSTED_FORWARDER
+                        )
+                    })
+                );
+            } else {
+                _arbDeployer = new JBArbitrumSuckerDeployer{salt: ARB_SALT}({
+                    directory: core.directory,
+                    permissions: core.permissions,
+                    tokens: core.tokens,
+                    configurator: safeAddress(),
+                    trustedForwarder: TRUSTED_FORWARDER
+                });
+            }
 
-            // Deploy the singleton instance.
-            JBArbitrumSucker _singleton = new JBArbitrumSucker{salt: ARB_SALT}({
-                deployer: _arbDeployer,
-                directory: core.directory,
-                permissions: core.permissions,
-                tokens: core.tokens,
-                feeProjectId: 1,
-                registry: REGISTRY,
-                trustedForwarder: TRUSTED_FORWARDER
-            });
+            if (address(_arbDeployer.arbGatewayRouter()) == address(0)) {
+                _arbDeployer.setChainSpecificConstants({
+                    layer: JBLayer.L2,
+                    inbox: IInbox(address(0)),
+                    gatewayRouter: IArbGatewayRouter(
+                        block.chainid == 42_161 ? ARBAddresses.L2_GATEWAY_ROUTER : ARBAddresses.L2_SEP_GATEWAY_ROUTER
+                    )
+                });
+            }
 
-            // Configure the deployer to use the singleton instance.
-            _arbDeployer.configureSingleton(_singleton);
+            if (address(_arbDeployer.singleton()) == address(0)) {
+                // Deploy the singleton instance.
+                JBArbitrumSucker _singleton = new JBArbitrumSucker{salt: ARB_SALT}({
+                    deployer: _arbDeployer,
+                    directory: core.directory,
+                    permissions: core.permissions,
+                    tokens: core.tokens,
+                    feeProjectId: 1,
+                    registry: REGISTRY,
+                    trustedForwarder: TRUSTED_FORWARDER
+                });
+
+                // Configure the deployer to use the singleton instance.
+                _arbDeployer.configureSingleton(_singleton);
+            }
 
             PRE_APPROVED_DEPLOYERS.push(address(_arbDeployer));
         }
@@ -525,6 +680,7 @@ contract DeployScript is Script, Sphinx {
         }
     }
 
+    // forge-lint: disable-next-line(mixed-case-function)
     function _deployCCIPSuckerFor(bytes32 salt, uint256 remoteChainId)
         internal
         returns (JBCCIPSuckerDeployer deployer)
@@ -544,6 +700,7 @@ contract DeployScript is Script, Sphinx {
         });
     }
 
+    // forge-lint: disable-next-line(mixed-case-function)
     function _deployCCIPSuckerWith(
         bytes32 salt,
         IJBDirectory directory,
@@ -558,52 +715,59 @@ contract DeployScript is Script, Sphinx {
         internal
         returns (JBCCIPSuckerDeployer deployer)
     {
-        // Check if this CCIP deployer is already deployed on this chain,
-        // if that is the case we return the existing address and skip redeployment.
-        if (_isDeployed({
-                salt: salt,
-                creationCode: type(JBCCIPSuckerDeployer).creationCode,
-                arguments: abi.encode(directory, permissions, tokens, configurator, trustedForwarder)
-            })) {
-            return JBCCIPSuckerDeployer(
-                vm.computeCreate2Address({
+        // Check if this CCIP deployer is already deployed on this chain.
+        bool alreadyDeployed = _isDeployed({
+            salt: salt,
+            creationCode: type(JBCCIPSuckerDeployer).creationCode,
+            arguments: abi.encode(directory, permissions, tokens, configurator, trustedForwarder)
+        });
+
+        if (alreadyDeployed) {
+            deployer = JBCCIPSuckerDeployer(
+                _computeAddress({
                     salt: salt,
-                    initCodeHash: keccak256(
-                        abi.encodePacked(
-                            type(JBCCIPSuckerDeployer).creationCode,
-                            abi.encode(directory, permissions, tokens, configurator, trustedForwarder)
-                        )
-                    ),
-                    deployer: address(0x4e59b44847b379578588920cA78FbF26c0B4956C)
+                    creationCode: type(JBCCIPSuckerDeployer).creationCode,
+                    arguments: abi.encode(directory, permissions, tokens, configurator, trustedForwarder)
                 })
             );
+
+            // If the full pipeline is complete (singleton configured + registry allowlisted), return early.
+            bool singletonSet = address(deployer.singleton()) != address(0);
+            bool registryAllowed = REGISTRY.suckerDeployerIsAllowed(address(deployer));
+            if (singletonSet && registryAllowed) return deployer;
+
+            // Otherwise, resume the partial deployment below.
+        } else {
+            deployer = new JBCCIPSuckerDeployer{salt: salt}({
+                directory: directory,
+                permissions: permissions,
+                tokens: tokens,
+                configurator: configurator,
+                trustedForwarder: trustedForwarder
+            });
         }
 
-        deployer = new JBCCIPSuckerDeployer{salt: salt}({
-            directory: directory,
-            permissions: permissions,
-            tokens: tokens,
-            configurator: configurator,
-            trustedForwarder: trustedForwarder
-        });
+        if (deployer.ccipRemoteChainId() == 0) {
+            deployer.setChainSpecificConstants({
+                remoteChainId: remoteChainId, remoteChainSelector: remoteChainSelector, router: router
+            });
+        }
 
-        deployer.setChainSpecificConstants({
-            remoteChainId: remoteChainId, remoteChainSelector: remoteChainSelector, router: router
-        });
+        if (address(deployer.singleton()) == address(0)) {
+            // Deploy the singleton instance.
+            JBCCIPSucker singleton = new JBCCIPSucker{salt: salt}({
+                deployer: deployer,
+                directory: directory,
+                tokens: tokens,
+                permissions: permissions,
+                feeProjectId: 1,
+                registry: REGISTRY,
+                trustedForwarder: trustedForwarder
+            });
 
-        // Deploy the singleton instance.
-        JBCCIPSucker singleton = new JBCCIPSucker{salt: salt}({
-            deployer: deployer,
-            directory: directory,
-            tokens: tokens,
-            permissions: permissions,
-            feeProjectId: 1,
-            registry: REGISTRY,
-            trustedForwarder: trustedForwarder
-        });
-
-        // Configure the singleton.
-        deployer.configureSingleton(singleton);
+            // Configure the singleton.
+            deployer.configureSingleton(singleton);
+        }
     }
 
     function _isDeployed(bytes32 salt, bytes memory creationCode, bytes memory arguments) internal view returns (bool) {
@@ -616,5 +780,22 @@ contract DeployScript is Script, Sphinx {
 
         // Return if code is already present at this address.
         return address(_deployedTo).code.length != 0;
+    }
+
+    function _computeAddress(
+        bytes32 salt,
+        bytes memory creationCode,
+        bytes memory arguments
+    )
+        internal
+        pure
+        returns (address)
+    {
+        return vm.computeCreate2Address({
+            salt: salt,
+            initCodeHash: keccak256(abi.encodePacked(creationCode, arguments)),
+            // Arachnid/deterministic-deployment-proxy address.
+            deployer: address(0x4e59b44847b379578588920cA78FbF26c0B4956C)
+        });
     }
 }

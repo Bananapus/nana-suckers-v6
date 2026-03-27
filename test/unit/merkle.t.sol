@@ -1,10 +1,13 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
+// forge-lint: disable-next-line(unaliased-plain-import)
 import "forge-std/Test.sol";
 
 import {IJBController} from "@bananapus/core-v6/src/interfaces/IJBController.sol";
+// forge-lint: disable-next-line(unaliased-plain-import)
 import "../../src/JBSucker.sol";
+// forge-lint: disable-next-line(unaliased-plain-import)
 import "../../src/deployers/JBOptimismSuckerDeployer.sol";
 import {JBOptimismSucker} from "../../src/JBOptimismSucker.sol";
 
@@ -88,6 +91,7 @@ contract MerkleUnitTest is JBSucker, Test {
         _inboxOf[JBConstants.NATIVE_TOKEN] =
             JBInboxTreeRoot({nonce: 0, root: _outboxOf[JBConstants.NATIVE_TOKEN].tree.root()});
 
+        // forge-lint: disable-next-line(mixed-case-variable)
         bytes32[32] memory __proof = _proof;
 
         // Mock the token minting.
@@ -122,6 +126,7 @@ contract MerkleUnitTest is JBSucker, Test {
         _inboxOf[JBConstants.NATIVE_TOKEN] =
             JBInboxTreeRoot({nonce: 0, root: _outboxOf[JBConstants.NATIVE_TOKEN].tree.root()});
 
+        // forge-lint: disable-next-line(mixed-case-variable)
         bytes32[32] memory __proof = _proof;
 
         // Mock the token minting.
@@ -175,6 +180,7 @@ contract MerkleUnitTest is JBSucker, Test {
         return false;
     }
 
+    // forge-lint: disable-next-line(mixed-case-function)
     function _sendRootOverAMB(
         uint256 transportPayment,
         uint256 index,

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.28;
 
+// forge-lint: disable-next-line(unaliased-plain-import)
 import /* {*} from */ "@bananapus/core-v6/test/helpers/TestBaseWorkflow.sol";
 import {IJBSucker} from "../src/interfaces/IJBSucker.sol";
 import {JBConstants} from "@bananapus/core-v6/src/libraries/JBConstants.sol";
@@ -13,6 +14,7 @@ import {IOPMessenger} from "../src/interfaces/IOPMessenger.sol";
 import {IOPStandardBridge} from "../src/interfaces/IOPStandardBridge.sol";
 import {IWrappedNativeToken} from "../src/interfaces/IWrappedNativeToken.sol";
 
+// forge-lint: disable-next-line(unaliased-plain-import)
 import "forge-std/Test.sol";
 import {JBCeloSuckerDeployer} from "src/deployers/JBCeloSuckerDeployer.sol";
 import {JBCeloSucker} from "../src/JBCeloSucker.sol";
@@ -220,9 +222,11 @@ contract ForkCeloTest is TestBaseWorkflow {
     function _launchWethProject() internal {
         // Override baseCurrency to match the WETH token so no price feed conversion is needed.
         JBRulesetMetadata memory celoMetadata = _metadata;
+        // forge-lint: disable-next-line(unsafe-typecast)
         celoMetadata.baseCurrency = uint32(uint160(CELO_WETH));
 
         JBCurrencyAmount[] memory _surplusAllowances = new JBCurrencyAmount[](1);
+        // forge-lint: disable-next-line(unsafe-typecast)
         _surplusAllowances[0] = JBCurrencyAmount({amount: 5 * 10 ** 18, currency: uint32(uint160(CELO_WETH))});
 
         JBFundAccessLimitGroup[] memory _fundAccessLimitGroup = new JBFundAccessLimitGroup[](1);
@@ -244,6 +248,7 @@ contract ForkCeloTest is TestBaseWorkflow {
         _rulesetConfigurations[0].fundAccessLimitGroups = _fundAccessLimitGroup;
 
         JBAccountingContext[] memory _tokensToAccept = new JBAccountingContext[](1);
+        // forge-lint: disable-next-line(unsafe-typecast)
         _tokensToAccept[0] = JBAccountingContext({token: CELO_WETH, decimals: 18, currency: uint32(uint160(CELO_WETH))});
 
         JBTerminalConfig[] memory _terminalConfigurations = new JBTerminalConfig[](1);

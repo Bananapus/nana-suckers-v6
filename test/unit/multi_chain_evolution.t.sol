@@ -1,23 +1,29 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
+// forge-lint: disable-next-line(unaliased-plain-import)
 import "forge-std/Test.sol";
+// forge-lint: disable-next-line(unaliased-plain-import)
 import /* {*} from */ "@bananapus/core-v6/test/helpers/TestBaseWorkflow.sol";
+// forge-lint: disable-next-line(unaliased-plain-import)
 import "@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol";
 
-import {IJBController} from "@bananapus/core-v6/src/interfaces/IJBController.sol";
 import {IJBSucker} from "../../src/interfaces/IJBSucker.sol";
 import {IJBSuckerDeployer} from "../../src/interfaces/IJBSuckerDeployer.sol";
 import {IJBSuckerRegistry} from "../../src/interfaces/IJBSuckerRegistry.sol";
 
+// forge-lint: disable-next-line(unaliased-plain-import)
 import "../../src/JBSucker.sol";
+// forge-lint: disable-next-line(unaliased-plain-import)
 import "../../src/JBOptimismSucker.sol";
+// forge-lint: disable-next-line(unaliased-plain-import)
 import "../../src/JBCCIPSucker.sol";
+// forge-lint: disable-next-line(unaliased-plain-import)
 import "../../src/deployers/JBOptimismSuckerDeployer.sol";
+// forge-lint: disable-next-line(unaliased-plain-import)
 import "../../src/deployers/JBCCIPSuckerDeployer.sol";
 import {JBSuckerRegistry} from "../../src/JBSuckerRegistry.sol";
 import {JBSuckerDeployerConfig} from "../../src/structs/JBSuckerDeployerConfig.sol";
-import {JBSuckersPair} from "../../src/structs/JBSuckersPair.sol";
 import {JBSuckerState} from "../../src/enums/JBSuckerState.sol";
 import {JBTokenMapping} from "../../src/structs/JBTokenMapping.sol";
 import {JBRemoteToken} from "../../src/structs/JBRemoteToken.sol";
@@ -49,10 +55,14 @@ contract MultiChainEvolutionTest is Test, TestBaseWorkflow, IERC721Receiver {
 
     // Token addresses representing tokens on remote chains.
     // On Celo, ETH is an ERC-20 (not native).
+    // forge-lint: disable-next-line(mixed-case-variable)
     address celoETH = address(0xCE10E001);
     // USDC addresses (local and remote).
+    // forge-lint: disable-next-line(mixed-case-variable)
     address localUSDC = address(0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48);
+    // forge-lint: disable-next-line(mixed-case-variable)
     address opUSDC = address(0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85);
+    // forge-lint: disable-next-line(mixed-case-variable)
     address celoUSDC = address(0xef4229c8c3250C675F21BCefa42f58EfbfF6002a);
 
     // Deployers (set in setUp).
@@ -211,6 +221,7 @@ contract MultiChainEvolutionTest is Test, TestBaseWorkflow, IERC721Receiver {
             opConfig[0] =
                 JBSuckerDeployerConfig({deployer: IJBSuckerDeployer(address(opDeployer)), mappings: opMappings});
 
+            // forge-lint: disable-next-line(unsafe-typecast)
             _opSucker = IJBSucker(registry.deploySuckersFor(projectId, bytes32("op_salt"), opConfig)[0]);
         }
 
@@ -261,6 +272,7 @@ contract MultiChainEvolutionTest is Test, TestBaseWorkflow, IERC721Receiver {
             celoConfig[0] =
                 JBSuckerDeployerConfig({deployer: IJBSuckerDeployer(address(ccipDeployer)), mappings: celoMappings});
 
+            // forge-lint: disable-next-line(unsafe-typecast)
             _celoSucker = IJBSucker(registry.deploySuckersFor(projectId, bytes32("celo_salt"), celoConfig)[0]);
         }
 
@@ -354,6 +366,7 @@ contract MultiChainEvolutionTest is Test, TestBaseWorkflow, IERC721Receiver {
         configs[1] =
             JBSuckerDeployerConfig({deployer: IJBSuckerDeployer(address(ccipDeployer)), mappings: celoMappings});
 
+        // forge-lint: disable-next-line(unsafe-typecast)
         address[] memory suckers = registry.deploySuckersFor(projectId, bytes32("both"), configs);
 
         assertEq(suckers.length, 2, "Should deploy 2 suckers");
@@ -392,6 +405,7 @@ contract MultiChainEvolutionTest is Test, TestBaseWorkflow, IERC721Receiver {
         config[0] =
             JBSuckerDeployerConfig({deployer: IJBSuckerDeployer(address(ccipDeployer)), mappings: initialMappings});
 
+        // forge-lint: disable-next-line(unsafe-typecast)
         address[] memory suckers = registry.deploySuckersFor(projectId, bytes32("incr"), config);
         IJBSucker sucker = IJBSucker(suckers[0]);
 
@@ -438,7 +452,9 @@ contract MultiChainEvolutionTest is Test, TestBaseWorkflow, IERC721Receiver {
         celoConfig[0] =
             JBSuckerDeployerConfig({deployer: IJBSuckerDeployer(address(ccipDeployer)), mappings: celoNativeMappings});
 
+        // forge-lint: disable-next-line(unsafe-typecast)
         address[] memory opSuckers = registry.deploySuckersFor(projectId, bytes32("ind_op"), opConfig);
+        // forge-lint: disable-next-line(unsafe-typecast)
         address[] memory celoSuckers = registry.deploySuckersFor(projectId, bytes32("ind_celo"), celoConfig);
 
         IJBSucker opSucker = IJBSucker(opSuckers[0]);
@@ -483,6 +499,7 @@ contract MultiChainEvolutionTest is Test, TestBaseWorkflow, IERC721Receiver {
         JBSuckerDeployerConfig[] memory opConfig = new JBSuckerDeployerConfig[](1);
         opConfig[0] =
             JBSuckerDeployerConfig({deployer: IJBSuckerDeployer(address(opDeployer)), mappings: nativeMappings});
+        // forge-lint: disable-next-line(unsafe-typecast)
         address[] memory opSuckers = registry.deploySuckersFor(projectId, bytes32("natv_op"), opConfig);
 
         // CCIP sucker: deploy with NATIVE -> celoETH (ERC-20). Should succeed.
@@ -496,6 +513,7 @@ contract MultiChainEvolutionTest is Test, TestBaseWorkflow, IERC721Receiver {
             JBSuckerDeployerConfig({deployer: IJBSuckerDeployer(address(ccipDeployer)), mappings: celoEthMappings});
 
         // This should succeed — CCIP allows NATIVE -> ERC-20.
+        // forge-lint: disable-next-line(unsafe-typecast)
         address[] memory celoSuckers = registry.deploySuckersFor(projectId, bytes32("natv_celo"), celoConfig);
         assertEq(
             IJBSucker(celoSuckers[0]).remoteTokenFor(JBConstants.NATIVE_TOKEN).addr,
@@ -537,6 +555,7 @@ contract MultiChainEvolutionTest is Test, TestBaseWorkflow, IERC721Receiver {
         JBSuckerDeployerConfig[] memory config = new JBSuckerDeployerConfig[](1);
         config[0] = JBSuckerDeployerConfig({deployer: IJBSuckerDeployer(address(opDeployer)), mappings: mappings});
 
+        // forge-lint: disable-next-line(unsafe-typecast)
         address[] memory firstDeploy = registry.deploySuckersFor(projectId, bytes32("v1"), config);
         address oldSucker = firstDeploy[0];
         assertEq(registry.suckersOf(projectId).length, 1);
@@ -552,6 +571,7 @@ contract MultiChainEvolutionTest is Test, TestBaseWorkflow, IERC721Receiver {
         assertEq(registry.suckersOf(projectId).length, 0, "Old sucker removed");
 
         // Deploy a replacement sucker with a new salt.
+        // forge-lint: disable-next-line(unsafe-typecast)
         address[] memory secondDeploy = registry.deploySuckersFor(projectId, bytes32("v2"), config);
         address newSucker = secondDeploy[0];
 
@@ -572,6 +592,7 @@ contract MultiChainEvolutionTest is Test, TestBaseWorkflow, IERC721Receiver {
         jbPermissions()
             .setPermissionsFor(
                 address(this),
+                // forge-lint: disable-next-line(unsafe-typecast)
                 JBPermissionsData({operator: operator, projectId: uint56(projectId), permissionIds: permissions})
             );
     }

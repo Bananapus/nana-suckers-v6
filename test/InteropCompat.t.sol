@@ -1,14 +1,15 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
+// forge-lint: disable-next-line(unaliased-plain-import)
 import "forge-std/Test.sol";
 
 import {IJBDirectory} from "@bananapus/core-v6/src/interfaces/IJBDirectory.sol";
 import {IJBPermissions} from "@bananapus/core-v6/src/interfaces/IJBPermissions.sol";
 import {IJBTokens} from "@bananapus/core-v6/src/interfaces/IJBTokens.sol";
-import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import {LibClone} from "solady/src/utils/LibClone.sol";
 
+// forge-lint: disable-next-line(unaliased-plain-import)
 import "../src/JBSucker.sol";
 
 import {IJBSuckerRegistry} from "../src/interfaces/IJBSuckerRegistry.sol";
@@ -32,6 +33,7 @@ contract InteropTestSucker is JBSucker {
         JBSucker(directory, permissions, tokens, 1, IJBSuckerRegistry(address(1)), forwarder)
     {}
 
+    // forge-lint: disable-next-line(mixed-case-function)
     function _sendRootOverAMB(
         uint256,
         uint256,
@@ -54,6 +56,7 @@ contract InteropTestSucker is JBSucker {
 
     // --- Exposed internals ---
 
+    // forge-lint: disable-next-line(mixed-case-function)
     function exposed_buildTreeHash(
         uint256 projectTokenCount,
         uint256 terminalTokenAmount,
@@ -66,14 +69,17 @@ contract InteropTestSucker is JBSucker {
         return _buildTreeHash(projectTokenCount, terminalTokenAmount, beneficiary);
     }
 
+    // forge-lint: disable-next-line(mixed-case-function)
     function exposed_toBytes32(address addr) external pure returns (bytes32) {
         return _toBytes32(addr);
     }
 
+    // forge-lint: disable-next-line(mixed-case-function)
     function exposed_toAddress(bytes32 remote) external pure returns (address) {
         return _toAddress(remote);
     }
 
+    // forge-lint: disable-next-line(mixed-case-function)
     function exposed_insertIntoTree(
         uint256 projectTokenCount,
         address token,
@@ -85,14 +91,17 @@ contract InteropTestSucker is JBSucker {
         _insertIntoTree(projectTokenCount, token, terminalTokenAmount, beneficiary);
     }
 
+    // forge-lint: disable-next-line(mixed-case-function)
     function exposed_getOutboxRoot(address token) external view returns (bytes32) {
         return _outboxOf[token].tree.root();
     }
 
+    // forge-lint: disable-next-line(mixed-case-function)
     function exposed_getOutboxCount(address token) external view returns (uint256) {
         return _outboxOf[token].tree.count;
     }
 
+    // forge-lint: disable-next-line(mixed-case-function)
     function exposed_getOutboxBranch(address token) external view returns (bytes32[32] memory) {
         bytes32[32] memory branch;
         for (uint256 i; i < 32; i++) {
@@ -101,10 +110,12 @@ contract InteropTestSucker is JBSucker {
         return branch;
     }
 
+    // forge-lint: disable-next-line(mixed-case-function)
     function exposed_setInboxRoot(address token, uint64 nonce, bytes32 root) external {
         _inboxOf[token] = JBInboxTreeRoot({nonce: nonce, root: root});
     }
 
+    // forge-lint: disable-next-line(mixed-case-function)
     function exposed_validateBranchRoot(
         bytes32 expectedRoot,
         uint256 projectTokenCount,

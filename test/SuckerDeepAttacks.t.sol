@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
+// forge-lint: disable-next-line(unaliased-plain-import)
 import "forge-std/Test.sol";
 
 import {IJBController} from "@bananapus/core-v6/src/interfaces/IJBController.sol";
@@ -16,6 +17,7 @@ import {JBSuckerRegistry} from "../src/JBSuckerRegistry.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {LibClone} from "solady/src/utils/LibClone.sol";
 
+// forge-lint: disable-next-line(unaliased-plain-import)
 import "../src/JBSucker.sol";
 
 import {JBSuckerState} from "../src/enums/JBSuckerState.sol";
@@ -23,7 +25,6 @@ import {JBClaim} from "../src/structs/JBClaim.sol";
 import {JBLeaf} from "../src/structs/JBLeaf.sol";
 import {JBInboxTreeRoot} from "../src/structs/JBInboxTreeRoot.sol";
 import {JBMessageRoot} from "../src/structs/JBMessageRoot.sol";
-import {JBOutboxTree} from "../src/structs/JBOutboxTree.sol";
 import {JBRemoteToken} from "../src/structs/JBRemoteToken.sol";
 import {JBTokenMapping} from "../src/structs/JBTokenMapping.sol";
 import {MerkleLib} from "../src/utils/MerkleLib.sol";
@@ -34,8 +35,11 @@ contract DeepAttackSucker is JBSucker {
     using BitMaps for BitMaps.BitMap;
 
     bool nextCheckShouldPass;
+    // forge-lint: disable-next-line(mixed-case-variable)
     bool public sendRootOverAMBReverted;
+    // forge-lint: disable-next-line(mixed-case-variable)
     bool public shouldRevertAMB;
+    // forge-lint: disable-next-line(mixed-case-variable)
     uint256 public lastAMBAmount;
 
     constructor(
@@ -48,6 +52,7 @@ contract DeepAttackSucker is JBSucker {
         JBSucker(directory, permissions, tokens, 1, registry, forwarder)
     {}
 
+    // forge-lint: disable-next-line(mixed-case-function)
     function _sendRootOverAMB(
         uint256,
         uint256,
@@ -730,8 +735,10 @@ contract SuckerDeepAttacks is Test {
         vm.mockCall(PERMISSIONS, abi.encodeWithSelector(IJBPermissions.hasPermission.selector), abi.encode(true));
 
         // Try to set deprecation 1 day from now (too soon, min is 14 days).
+        // forge-lint: disable-next-line(unsafe-typecast)
         uint256 tooSoon = uint40(block.timestamp + 1 days);
         vm.expectRevert();
+        // forge-lint: disable-next-line(unsafe-typecast)
         sucker.setDeprecation(uint40(tooSoon));
     }
 
@@ -741,6 +748,7 @@ contract SuckerDeepAttacks is Test {
 
         // Set a valid deprecation.
         uint256 validTime = block.timestamp + 30 days;
+        // forge-lint: disable-next-line(unsafe-typecast)
         sucker.setDeprecation(uint40(validTime));
         assertEq(uint256(sucker.state()), uint256(JBSuckerState.DEPRECATION_PENDING));
 
@@ -1363,6 +1371,7 @@ contract SuckerDeepAttacks is Test {
 
         // Claim each index.
         for (uint256 i = 0; i < 5; i++) {
+            // forge-lint: disable-next-line(unsafe-typecast)
             _mockMint(address(uint160(100 + i)), (i + 1) * 1 ether);
 
             sucker.test_setNextMerkleCheckToBe(true);
@@ -1587,6 +1596,7 @@ contract SuckerDeepAttacks is Test {
         vm.mockCall(TOKENS, abi.encodeCall(IJBTokens.tokenOf, (PROJECT_ID)), abi.encode(makeAddr("projectToken")));
 
         // A typical SVM address has all 32 bytes used (high bits non-zero).
+        // forge-lint: disable-next-line(unsafe-typecast)
         bytes32 svmBeneficiary = bytes32(uint256(0xdeadbeefcafebabe1234567890abcdef1234567890abcdef1234567890abcdef));
 
         // This will proceed past the beneficiary check. It may fail later (e.g., token transfer),
@@ -1596,6 +1606,7 @@ contract SuckerDeepAttacks is Test {
         // May revert for other reasons (token handling), but NOT ZeroBeneficiary.
         try sucker.prepare(10 ether, svmBeneficiary, 0, TOKEN) {}
         catch (bytes memory reason) {
+            // forge-lint: disable-next-line(unsafe-typecast)
             bytes4 selector = bytes4(reason);
             assertTrue(selector != JBSucker.JBSucker_ZeroBeneficiary.selector, "Should not revert with ZeroBeneficiary");
         }

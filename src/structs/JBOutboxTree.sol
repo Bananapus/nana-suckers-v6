@@ -10,6 +10,7 @@ import {MerkleLib} from "../utils/MerkleLib.sol";
 /// @custom:member tree The merkle tree.
 /// @custom:member numberOfClaimsSent the number of claims that have been sent to the peer. Used to determine which
 /// claims have been sent.
+// forge-lint: disable-next-line(pascal-case-struct)
 struct JBOutboxTree {
     uint64 nonce;
     uint256 balance;

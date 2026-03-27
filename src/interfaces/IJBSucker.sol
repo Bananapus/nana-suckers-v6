@@ -2,13 +2,11 @@
 pragma solidity ^0.8.0;
 
 import {IERC165} from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
-import {IJBController} from "@bananapus/core-v6/src/interfaces/IJBController.sol";
 import {IJBDirectory} from "@bananapus/core-v6/src/interfaces/IJBDirectory.sol";
 import {IJBTokens} from "@bananapus/core-v6/src/interfaces/IJBTokens.sol";
 
 import {JBClaim} from "../structs/JBClaim.sol";
 import {JBInboxTreeRoot} from "../structs/JBInboxTreeRoot.sol";
-import {JBMessageRoot} from "../structs/JBMessageRoot.sol";
 import {JBOutboxTree} from "../structs/JBOutboxTree.sol";
 import {JBRemoteToken} from "../structs/JBRemoteToken.sol";
 import {JBSuckerState} from "../enums/JBSuckerState.sol";

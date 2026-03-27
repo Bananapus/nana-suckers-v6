@@ -1,33 +1,34 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
+// forge-lint: disable-next-line(unaliased-plain-import)
 import "forge-std/Test.sol";
+// forge-lint: disable-next-line(unaliased-plain-import)
 import /* {*} from */ "@bananapus/core-v6/test/helpers/TestBaseWorkflow.sol";
+// forge-lint: disable-next-line(unaliased-plain-import)
 import "@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol";
 
-import {IJBController} from "@bananapus/core-v6/src/interfaces/IJBController.sol";
+// forge-lint: disable-next-line(unaliased-plain-import)
 import "../../src/JBSucker.sol";
 import {IJBSuckerDeployer} from "../../src/interfaces/IJBSuckerDeployer.sol";
 import {IJBSuckerRegistry} from "../../src/interfaces/IJBSuckerRegistry.sol";
 
+// forge-lint: disable-next-line(unaliased-plain-import)
 import "../../src/deployers/JBOptimismSuckerDeployer.sol";
 import {JBOptimismSucker} from "../../src/JBOptimismSucker.sol";
 
+// forge-lint: disable-next-line(unaliased-plain-import)
 import "../../src/deployers/JBBaseSuckerDeployer.sol";
 
+// forge-lint: disable-next-line(unaliased-plain-import)
 import "../../src/deployers/JBCCIPSuckerDeployer.sol";
 import {JBCCIPSucker} from "../../src/JBCCIPSucker.sol";
 
+// forge-lint: disable-next-line(unaliased-plain-import)
 import "../../src/deployers/JBArbitrumSuckerDeployer.sol";
 import {JBArbitrumSucker} from "../../src/JBArbitrumSucker.sol";
 
-import {JBLeaf} from "../../src/structs/JBLeaf.sol";
-import {JBClaim} from "../../src/structs/JBClaim.sol";
 import {JBSuckerDeployerConfig} from "../../src/structs/JBSuckerDeployerConfig.sol";
-
-import {JBProjects} from "@bananapus/core-v6/src/JBProjects.sol";
-import {JBDirectory} from "@bananapus/core-v6/src/JBDirectory.sol";
-import {JBPermissions} from "@bananapus/core-v6/src/JBPermissions.sol";
 
 import {JBOptimismSuckerDeployer} from "../../src/deployers/JBOptimismSuckerDeployer.sol";
 import {JBSuckerRegistry} from "./../../src/JBSuckerRegistry.sol";
@@ -133,6 +134,7 @@ contract DeployerTests is Test, TestBaseWorkflow, IERC721Receiver {
         vm.assume(address(_opMessenger) != address(0));
         vm.assume(address(_opBridge) != address(0));
 
+        // forge-lint: disable-next-line(mixed-case-variable)
         JBOptimismSuckerDeployer OPDeployer = new JBOptimismSuckerDeployer({
             directory: jbDirectory(),
             permissions: jbPermissions(),
@@ -162,6 +164,7 @@ contract DeployerTests is Test, TestBaseWorkflow, IERC721Receiver {
         assertEq(address(OPDeployer.opBridge()), address(_opBridge));
     }
 
+    // forge-lint: disable-next-line(mixed-case-function)
     function _setupCCIPDeployer(
         uint256 _remoteChainId,
         uint64 _remoteChainSelector,
@@ -170,6 +173,7 @@ contract DeployerTests is Test, TestBaseWorkflow, IERC721Receiver {
         internal
         returns (IJBSuckerDeployer deployer)
     {
+        // forge-lint: disable-next-line(mixed-case-variable)
         JBCCIPSuckerDeployer CCIPDeployer = new JBCCIPSuckerDeployer({
             directory: jbDirectory(),
             permissions: jbPermissions(),
@@ -210,6 +214,7 @@ contract DeployerTests is Test, TestBaseWorkflow, IERC721Receiver {
         internal
         returns (IJBSuckerDeployer deployer)
     {
+        // forge-lint: disable-next-line(mixed-case-variable)
         JBArbitrumSuckerDeployer ARBDeployer = new JBArbitrumSuckerDeployer({
             directory: jbDirectory(),
             permissions: jbPermissions(),
@@ -345,6 +350,7 @@ contract DeployerTests is Test, TestBaseWorkflow, IERC721Receiver {
     function testArbDeployerL1RevertsWithZeroInbox(IArbGatewayRouter _gatewayRouter) public {
         vm.assume(_gatewayRouter != IArbGatewayRouter(address(0)));
 
+        // forge-lint: disable-next-line(mixed-case-variable)
         JBArbitrumSuckerDeployer ARBDeployer = new JBArbitrumSuckerDeployer({
             directory: jbDirectory(),
             permissions: jbPermissions(),
@@ -359,6 +365,7 @@ contract DeployerTests is Test, TestBaseWorkflow, IERC721Receiver {
 
     /// @notice L2 deployment must revert when gateway router is address(0).
     function testArbDeployerL2RevertsWithZeroGateway() public {
+        // forge-lint: disable-next-line(mixed-case-variable)
         JBArbitrumSuckerDeployer ARBDeployer = new JBArbitrumSuckerDeployer({
             directory: jbDirectory(),
             permissions: jbPermissions(),
@@ -389,6 +396,7 @@ contract DeployerTests is Test, TestBaseWorkflow, IERC721Receiver {
         jbPermissions()
             .setPermissionsFor(
                 address(this),
+                // forge-lint: disable-next-line(unsafe-typecast)
                 JBPermissionsData({operator: beneficiary, projectId: uint56(_projectId), permissionIds: permissions})
             );
     }
@@ -400,6 +408,7 @@ contract DeployerTests is Test, TestBaseWorkflow, IERC721Receiver {
         jbPermissions()
             .setPermissionsFor(
                 address(this),
+                // forge-lint: disable-next-line(unsafe-typecast)
                 JBPermissionsData({operator: beneficiary, projectId: uint56(_projectId), permissionIds: permissions})
             );
     }
@@ -480,6 +489,7 @@ contract DeployerTests is Test, TestBaseWorkflow, IERC721Receiver {
         return sucker;
     }
 
+    // forge-lint: disable-next-line(mixed-case-function)
     function _assertCCIPSucker(IJBSuckerDeployer deployer, IJBSucker sucker) internal view returns (IJBSucker) {
         assertEq(
             address(JBCCIPSuckerDeployer(address(deployer)).ccipRouter()),

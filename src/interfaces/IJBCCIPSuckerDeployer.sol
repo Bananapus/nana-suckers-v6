@@ -2,7 +2,6 @@
 pragma solidity ^0.8.0;
 
 import {ICCIPRouter} from "./ICCIPRouter.sol";
-import {IJBSucker} from "./IJBSucker.sol";
 
 /// @notice Interface for a deployer of CCIP-specific suckers.
 interface IJBCCIPSuckerDeployer {

@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
+// forge-lint: disable-next-line(unaliased-plain-import)
 import "forge-std/Test.sol";
-import {IInbox} from "@arbitrum/nitro-contracts/src/bridge/IInbox.sol";
 
 contract ArbitrumTest is Test {
     uint256 maxFeePerGas = 0.2 gwei;

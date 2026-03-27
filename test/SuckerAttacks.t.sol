@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
+// forge-lint: disable-next-line(unaliased-plain-import)
 import "forge-std/Test.sol";
 
 import {IJBController} from "@bananapus/core-v6/src/interfaces/IJBController.sol";
@@ -12,17 +13,15 @@ import {JBConstants} from "@bananapus/core-v6/src/libraries/JBConstants.sol";
 import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import {LibClone} from "solady/src/utils/LibClone.sol";
 
+// forge-lint: disable-next-line(unaliased-plain-import)
 import "../src/JBSucker.sol";
 
 import {IJBSuckerRegistry} from "../src/interfaces/IJBSuckerRegistry.sol";
-import {JBSuckerState} from "../src/enums/JBSuckerState.sol";
 import {JBClaim} from "../src/structs/JBClaim.sol";
 import {JBLeaf} from "../src/structs/JBLeaf.sol";
 import {JBInboxTreeRoot} from "../src/structs/JBInboxTreeRoot.sol";
 import {JBMessageRoot} from "../src/structs/JBMessageRoot.sol";
-import {JBOutboxTree} from "../src/structs/JBOutboxTree.sol";
 import {JBRemoteToken} from "../src/structs/JBRemoteToken.sol";
-import {JBTokenMapping} from "../src/structs/JBTokenMapping.sol";
 import {MerkleLib} from "../src/utils/MerkleLib.sol";
 
 /// @notice A test sucker that exposes internals for attack testing.
@@ -41,6 +40,7 @@ contract AttackTestSucker is JBSucker {
         JBSucker(directory, permissions, tokens, 1, IJBSuckerRegistry(address(1)), forwarder)
     {}
 
+    // forge-lint: disable-next-line(mixed-case-function)
     function _sendRootOverAMB(
         uint256,
         uint256,
@@ -450,6 +450,7 @@ contract SuckerAttacks is Test {
 
         // Set up deprecated state for emergency exit
         uint256 deprecationTimestamp = block.timestamp + 14 days;
+        // forge-lint: disable-next-line(unsafe-typecast)
         sucker.setDeprecation(uint40(deprecationTimestamp));
         vm.warp(deprecationTimestamp);
 

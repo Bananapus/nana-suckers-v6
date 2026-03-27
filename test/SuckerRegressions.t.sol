@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
+// forge-lint: disable-next-line(unaliased-plain-import)
 import "forge-std/Test.sol";
 
 import {IJBController} from "@bananapus/core-v6/src/interfaces/IJBController.sol";
@@ -8,18 +9,16 @@ import {IJBDirectory} from "@bananapus/core-v6/src/interfaces/IJBDirectory.sol";
 import {IJBPermissions} from "@bananapus/core-v6/src/interfaces/IJBPermissions.sol";
 import {IJBTerminal} from "@bananapus/core-v6/src/interfaces/IJBTerminal.sol";
 import {IJBTokens} from "@bananapus/core-v6/src/interfaces/IJBTokens.sol";
-import {JBConstants} from "@bananapus/core-v6/src/libraries/JBConstants.sol";
 import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import {LibClone} from "solady/src/utils/LibClone.sol";
 
+// forge-lint: disable-next-line(unaliased-plain-import)
 import "../src/JBSucker.sol";
 
 import {IJBSuckerRegistry} from "../src/interfaces/IJBSuckerRegistry.sol";
 import {JBClaim} from "../src/structs/JBClaim.sol";
 import {JBLeaf} from "../src/structs/JBLeaf.sol";
-import {JBInboxTreeRoot} from "../src/structs/JBInboxTreeRoot.sol";
 import {JBMessageRoot} from "../src/structs/JBMessageRoot.sol";
-import {JBOutboxTree} from "../src/structs/JBOutboxTree.sol";
 import {JBRemoteToken} from "../src/structs/JBRemoteToken.sol";
 import {IJBSuckerExtended} from "../src/interfaces/IJBSuckerExtended.sol";
 import {MerkleLib} from "../src/utils/MerkleLib.sol";
@@ -32,6 +31,7 @@ contract RegressionSucker is JBSucker {
     bool nextCheckShouldPass;
 
     /// @notice Whether _sendRootOverAMB was called (for verifying empty-tree fix).
+    // forge-lint: disable-next-line(mixed-case-variable)
     bool public sendRootOverAMBCalled;
 
     constructor(
@@ -43,6 +43,7 @@ contract RegressionSucker is JBSucker {
         JBSucker(directory, permissions, tokens, 1, IJBSuckerRegistry(address(1)), forwarder)
     {}
 
+    // forge-lint: disable-next-line(mixed-case-function)
     function _sendRootOverAMB(
         uint256,
         uint256,
@@ -231,6 +232,7 @@ contract SuckerRegressionsTest is Test {
 
         // Set up the sucker to be deprecated so emergency exit is allowed.
         uint256 deprecationTimestamp = block.timestamp + 14 days;
+        // forge-lint: disable-next-line(unsafe-typecast)
         sucker.setDeprecation(uint40(deprecationTimestamp));
         vm.warp(deprecationTimestamp);
 
