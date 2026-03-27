@@ -723,9 +723,12 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
             ) {}
             catch {
                 // Fee payment failed — fee ETH stays in this contract, transportPayment unchanged.
+                // The retained ETH is recoverable: it increases `amountToAddToBalanceOf(NATIVE_TOKEN)`,
+                // so the next `claim(NATIVE_TOKEN)` call will sweep it into the project's terminal balance.
             }
         }
         // If no terminal exists, fee ETH stays in this contract. transportPayment is already correct.
+        // Same recovery path applies: retained fee ETH flows to the project via `claim`.
 
         // Send the merkle root to the remote chain.
         _sendRoot({transportPayment: transportPayment, token: token, remoteToken: remoteToken});
