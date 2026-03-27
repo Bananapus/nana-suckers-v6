@@ -2,6 +2,7 @@
 
 pragma solidity ^0.8.0;
 
+// forge-lint: disable-next-line(unaliased-plain-import)
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 
 // mock class using ERC20

@@ -7,6 +7,7 @@ pragma solidity ^0.8.0;
 /// @custom:member emergencyHatchOpened Whether the emergency hatch is opened.
 /// @custom:member minGas The minimum gas to use when bridging.
 /// @custom:member addr The address of the token on the remote chain.
+// forge-lint: disable-next-line(pascal-case-struct)
 struct JBRemoteToken {
     bool enabled;
     bool emergencyHatch;

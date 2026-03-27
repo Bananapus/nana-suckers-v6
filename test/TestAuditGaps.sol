@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
+// forge-lint: disable-next-line(unaliased-plain-import)
 import "forge-std/Test.sol";
 
 import {IJBController} from "@bananapus/core-v6/src/interfaces/IJBController.sol";
@@ -8,22 +9,18 @@ import {IJBDirectory} from "@bananapus/core-v6/src/interfaces/IJBDirectory.sol";
 import {IJBPermissions} from "@bananapus/core-v6/src/interfaces/IJBPermissions.sol";
 import {IJBTerminal} from "@bananapus/core-v6/src/interfaces/IJBTerminal.sol";
 import {IJBTokens} from "@bananapus/core-v6/src/interfaces/IJBTokens.sol";
-import {JBConstants} from "@bananapus/core-v6/src/libraries/JBConstants.sol";
-import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import {LibClone} from "solady/src/utils/LibClone.sol";
 
+// forge-lint: disable-next-line(unaliased-plain-import)
 import "../src/JBSucker.sol";
 
 import {IJBSuckerRegistry} from "../src/interfaces/IJBSuckerRegistry.sol";
-import {JBSuckerState} from "../src/enums/JBSuckerState.sol";
 import {JBClaim} from "../src/structs/JBClaim.sol";
 import {JBLeaf} from "../src/structs/JBLeaf.sol";
 import {JBInboxTreeRoot} from "../src/structs/JBInboxTreeRoot.sol";
 import {JBMessageRoot} from "../src/structs/JBMessageRoot.sol";
-import {JBOutboxTree} from "../src/structs/JBOutboxTree.sol";
 import {JBRemoteToken} from "../src/structs/JBRemoteToken.sol";
-import {JBTokenMapping} from "../src/structs/JBTokenMapping.sol";
 import {MerkleLib} from "../src/utils/MerkleLib.sol";
 
 /// @notice A test sucker that exposes internals for audit gap testing.
@@ -32,7 +29,9 @@ contract AuditGapSucker is JBSucker {
     using BitMaps for BitMaps.BitMap;
 
     bool nextCheckShouldPass;
+    // forge-lint: disable-next-line(mixed-case-variable)
     bool public sendRootOverAMBCalled;
+    // forge-lint: disable-next-line(mixed-case-variable)
     uint256 public lastAMBAmount;
 
     constructor(
@@ -44,6 +43,7 @@ contract AuditGapSucker is JBSucker {
         JBSucker(directory, permissions, tokens, 1, IJBSuckerRegistry(address(1)), forwarder)
     {}
 
+    // forge-lint: disable-next-line(mixed-case-function)
     function _sendRootOverAMB(
         uint256,
         uint256,
@@ -656,6 +656,7 @@ contract TestAuditGaps is Test {
 
         // The MerkleLib returns Z_32 for empty trees (see MerkleLib.root: count==0 → return Z_32).
         // Z_32 is the fixed hash for a completely empty depth-32 tree.
+        // forge-lint: disable-next-line(mixed-case-variable)
         bytes32 Z_32 = hex"27ae5ba08d7291c96c8cbddcc148bf48a6d68c7974b94356f53754ef6171d757";
         assertEq(emptyRoot, Z_32, "Empty tree root should be Z_32");
     }

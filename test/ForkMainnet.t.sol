@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.28;
 
+// forge-lint: disable-next-line(unaliased-plain-import)
 import /* {*} from */ "@bananapus/core-v6/test/helpers/TestBaseWorkflow.sol";
 import {IJBSucker} from "../src/interfaces/IJBSucker.sol";
-import {IJBSuckerDeployer} from "../src/interfaces/IJBSuckerDeployer.sol";
 import {JBConstants} from "@bananapus/core-v6/src/libraries/JBConstants.sol";
 import {JBPermissionsData} from "@bananapus/core-v6/src/structs/JBPermissionsData.sol";
 import {JBPermissionIds} from "@bananapus/permission-ids-v6/src/JBPermissionIds.sol";
@@ -12,6 +12,7 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {JBTokenMapping} from "../src/structs/JBTokenMapping.sol";
 import {IJBSuckerRegistry} from "../src/interfaces/IJBSuckerRegistry.sol";
 
+// forge-lint: disable-next-line(unaliased-plain-import)
 import "forge-std/Test.sol";
 import {JBCCIPSuckerDeployer} from "src/deployers/JBCCIPSuckerDeployer.sol";
 import {JBCCIPSucker} from "../src/JBCCIPSucker.sol";
@@ -298,6 +299,7 @@ abstract contract CCIPSuckerMainnetForkTestBase is TestBaseWorkflow {
 
         // Verify a CCIPSendRequested event was emitted (proves the mainnet router accepted our message).
         Vm.Log[] memory logs = vm.getRecordedLogs();
+        // forge-lint: disable-next-line(mixed-case-variable)
         bool foundCCIPSend = false;
         // CCIPSendRequested topic:
         // keccak256("CCIPSendRequested(bytes32,(uint64,address,address,uint256,uint256,(address,uint256)[],bytes,bytes[]))")

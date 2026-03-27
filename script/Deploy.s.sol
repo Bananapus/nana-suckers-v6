@@ -5,6 +5,7 @@ import {IInbox} from "@arbitrum/nitro-contracts/src/bridge/IInbox.sol";
 import {IJBDirectory} from "@bananapus/core-v6/src/interfaces/IJBDirectory.sol";
 import {IJBPermissions} from "@bananapus/core-v6/src/interfaces/IJBPermissions.sol";
 import {IJBTokens} from "@bananapus/core-v6/src/interfaces/IJBTokens.sol";
+// forge-lint: disable-next-line(unaliased-plain-import)
 import "@bananapus/core-v6/script/helpers/CoreDeploymentLib.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {Sphinx} from "@sphinx-labs/contracts/contracts/foundry/SphinxPlugin.sol";
@@ -26,28 +27,37 @@ import {ICCIPRouter} from "../src/interfaces/ICCIPRouter.sol";
 import {IOPMessenger} from "../src/interfaces/IOPMessenger.sol";
 import {IOPStandardBridge} from "../src/interfaces/IOPStandardBridge.sol";
 import {ARBAddresses} from "../src/libraries/ARBAddresses.sol";
-import {ARBChains} from "../src/libraries/ARBChains.sol";
 import {CCIPHelper} from "../src/libraries/CCIPHelper.sol";
 
 contract DeployScript is Script, Sphinx {
     /// @notice tracks the deployment of the core contracts for the chain we are deploying to.
     CoreDeployment core;
     /// @notice tracks the addressed of the deployers that will get pre-approved.
+    // forge-lint: disable-next-line(mixed-case-variable)
     address[] PRE_APPROVED_DEPLOYERS;
 
+    // forge-lint: disable-next-line(mixed-case-variable)
     address TRUSTED_FORWARDER;
 
     /// @notice the nonces that are used to deploy the contracts.
+    // forge-lint: disable-next-line(mixed-case-variable)
     bytes32 OP_SALT = "_SUCKER_ETH_OP_V6_";
+    // forge-lint: disable-next-line(mixed-case-variable)
     bytes32 BASE_SALT = "_SUCKER_ETH_BASE_V6_";
+    // forge-lint: disable-next-line(mixed-case-variable)
     bytes32 ARB_SALT = "_SUCKER_ETH_ARB_V6_";
 
+    // forge-lint: disable-next-line(mixed-case-variable)
     bytes32 ARB_BASE_SALT = "_SUCKER_ARB_BASE_V6_";
+    // forge-lint: disable-next-line(mixed-case-variable)
     bytes32 ARB_OP_SALT = "_SUCKER_ARB_OP_V6_";
+    // forge-lint: disable-next-line(mixed-case-variable)
     bytes32 OP_BASE_SALT = "_SUCKER_OP_BASE_V6_";
 
+    // forge-lint: disable-next-line(mixed-case-variable)
     IJBSuckerRegistry REGISTRY;
 
+    // forge-lint: disable-next-line(mixed-case-variable)
     bytes32 REGISTRY_SALT = "REGISTRYV6";
 
     function configureSphinx() public override {
@@ -171,13 +181,15 @@ contract DeployScript is Script, Sphinx {
 
             if (alreadyDeployed) {
                 // Resume from a partial deployment — deployer exists, recompute its address.
-                _opDeployer = JBOptimismSuckerDeployer(_computeAddress({
-                    salt: OP_SALT,
-                    creationCode: type(JBOptimismSuckerDeployer).creationCode,
-                    arguments: abi.encode(
-                        core.directory, core.permissions, core.tokens, safeAddress(), TRUSTED_FORWARDER
-                    )
-                }));
+                _opDeployer = JBOptimismSuckerDeployer(
+                    _computeAddress({
+                        salt: OP_SALT,
+                        creationCode: type(JBOptimismSuckerDeployer).creationCode,
+                        arguments: abi.encode(
+                            core.directory, core.permissions, core.tokens, safeAddress(), TRUSTED_FORWARDER
+                        )
+                    })
+                );
             } else {
                 _opDeployer = new JBOptimismSuckerDeployer{salt: OP_SALT}({
                     directory: core.directory,
@@ -228,13 +240,15 @@ contract DeployScript is Script, Sphinx {
             JBOptimismSuckerDeployer _opDeployer;
 
             if (alreadyDeployed) {
-                _opDeployer = JBOptimismSuckerDeployer(_computeAddress({
-                    salt: OP_SALT,
-                    creationCode: type(JBOptimismSuckerDeployer).creationCode,
-                    arguments: abi.encode(
-                        core.directory, core.permissions, core.tokens, safeAddress(), TRUSTED_FORWARDER
-                    )
-                }));
+                _opDeployer = JBOptimismSuckerDeployer(
+                    _computeAddress({
+                        salt: OP_SALT,
+                        creationCode: type(JBOptimismSuckerDeployer).creationCode,
+                        arguments: abi.encode(
+                            core.directory, core.permissions, core.tokens, safeAddress(), TRUSTED_FORWARDER
+                        )
+                    })
+                );
             } else {
                 _opDeployer = new JBOptimismSuckerDeployer{salt: OP_SALT}({
                     directory: core.directory,
@@ -300,13 +314,15 @@ contract DeployScript is Script, Sphinx {
             JBBaseSuckerDeployer _baseDeployer;
 
             if (alreadyDeployed) {
-                _baseDeployer = JBBaseSuckerDeployer(_computeAddress({
-                    salt: BASE_SALT,
-                    creationCode: type(JBBaseSuckerDeployer).creationCode,
-                    arguments: abi.encode(
-                        core.directory, core.permissions, core.tokens, safeAddress(), TRUSTED_FORWARDER
-                    )
-                }));
+                _baseDeployer = JBBaseSuckerDeployer(
+                    _computeAddress({
+                        salt: BASE_SALT,
+                        creationCode: type(JBBaseSuckerDeployer).creationCode,
+                        arguments: abi.encode(
+                            core.directory, core.permissions, core.tokens, safeAddress(), TRUSTED_FORWARDER
+                        )
+                    })
+                );
             } else {
                 _baseDeployer = new JBBaseSuckerDeployer{salt: BASE_SALT}({
                     directory: core.directory,
@@ -357,13 +373,15 @@ contract DeployScript is Script, Sphinx {
             JBBaseSuckerDeployer _baseDeployer;
 
             if (alreadyDeployed) {
-                _baseDeployer = JBBaseSuckerDeployer(_computeAddress({
-                    salt: BASE_SALT,
-                    creationCode: type(JBBaseSuckerDeployer).creationCode,
-                    arguments: abi.encode(
-                        core.directory, core.permissions, core.tokens, safeAddress(), TRUSTED_FORWARDER
-                    )
-                }));
+                _baseDeployer = JBBaseSuckerDeployer(
+                    _computeAddress({
+                        salt: BASE_SALT,
+                        creationCode: type(JBBaseSuckerDeployer).creationCode,
+                        arguments: abi.encode(
+                            core.directory, core.permissions, core.tokens, safeAddress(), TRUSTED_FORWARDER
+                        )
+                    })
+                );
             } else {
                 _baseDeployer = new JBBaseSuckerDeployer{salt: BASE_SALT}({
                     directory: core.directory,
@@ -430,13 +448,15 @@ contract DeployScript is Script, Sphinx {
             JBArbitrumSuckerDeployer _arbDeployer;
 
             if (alreadyDeployed) {
-                _arbDeployer = JBArbitrumSuckerDeployer(_computeAddress({
-                    salt: ARB_SALT,
-                    creationCode: type(JBArbitrumSuckerDeployer).creationCode,
-                    arguments: abi.encode(
-                        core.directory, core.permissions, core.tokens, safeAddress(), TRUSTED_FORWARDER
-                    )
-                }));
+                _arbDeployer = JBArbitrumSuckerDeployer(
+                    _computeAddress({
+                        salt: ARB_SALT,
+                        creationCode: type(JBArbitrumSuckerDeployer).creationCode,
+                        arguments: abi.encode(
+                            core.directory, core.permissions, core.tokens, safeAddress(), TRUSTED_FORWARDER
+                        )
+                    })
+                );
             } else {
                 _arbDeployer = new JBArbitrumSuckerDeployer{salt: ARB_SALT}({
                     directory: core.directory,
@@ -482,13 +502,15 @@ contract DeployScript is Script, Sphinx {
             JBArbitrumSuckerDeployer _arbDeployer;
 
             if (alreadyDeployed) {
-                _arbDeployer = JBArbitrumSuckerDeployer(_computeAddress({
-                    salt: ARB_SALT,
-                    creationCode: type(JBArbitrumSuckerDeployer).creationCode,
-                    arguments: abi.encode(
-                        core.directory, core.permissions, core.tokens, safeAddress(), TRUSTED_FORWARDER
-                    )
-                }));
+                _arbDeployer = JBArbitrumSuckerDeployer(
+                    _computeAddress({
+                        salt: ARB_SALT,
+                        creationCode: type(JBArbitrumSuckerDeployer).creationCode,
+                        arguments: abi.encode(
+                            core.directory, core.permissions, core.tokens, safeAddress(), TRUSTED_FORWARDER
+                        )
+                    })
+                );
             } else {
                 _arbDeployer = new JBArbitrumSuckerDeployer{salt: ARB_SALT}({
                     directory: core.directory,
@@ -658,6 +680,7 @@ contract DeployScript is Script, Sphinx {
         }
     }
 
+    // forge-lint: disable-next-line(mixed-case-function)
     function _deployCCIPSuckerFor(bytes32 salt, uint256 remoteChainId)
         internal
         returns (JBCCIPSuckerDeployer deployer)
@@ -677,6 +700,7 @@ contract DeployScript is Script, Sphinx {
         });
     }
 
+    // forge-lint: disable-next-line(mixed-case-function)
     function _deployCCIPSuckerWith(
         bytes32 salt,
         IJBDirectory directory,

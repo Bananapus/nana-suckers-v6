@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
+// forge-lint: disable-next-line(unaliased-plain-import)
 import "forge-std/Test.sol";
 
 import {Client} from "@chainlink/contracts-ccip/src/v0.8/ccip/libraries/Client.sol";
@@ -9,14 +10,14 @@ import {IJBDirectory} from "@bananapus/core-v6/src/interfaces/IJBDirectory.sol";
 import {IJBPermissions} from "@bananapus/core-v6/src/interfaces/IJBPermissions.sol";
 import {IJBTokens} from "@bananapus/core-v6/src/interfaces/IJBTokens.sol";
 import {JBConstants} from "@bananapus/core-v6/src/libraries/JBConstants.sol";
-import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {LibClone} from "solady/src/utils/LibClone.sol";
 
+// forge-lint: disable-next-line(unaliased-plain-import)
 import "../../src/JBCCIPSucker.sol";
+// forge-lint: disable-next-line(unaliased-plain-import)
 import "../../src/JBSucker.sol";
 import {JBCCIPSuckerDeployer} from "../../src/deployers/JBCCIPSuckerDeployer.sol";
 
-import {ICCIPRouter, IWrappedNativeToken} from "../../src/interfaces/ICCIPRouter.sol";
 import {IJBSuckerRegistry} from "../../src/interfaces/IJBSuckerRegistry.sol";
 import {JBInboxTreeRoot} from "../../src/structs/JBInboxTreeRoot.sol";
 import {JBMessageRoot} from "../../src/structs/JBMessageRoot.sol";
@@ -79,10 +80,12 @@ contract CCIPTestSucker is JBCCIPSucker {
         JBCCIPSucker(deployer, directory, tokens, permissions, 1, IJBSuckerRegistry(address(1)), address(0))
     {}
 
+    // forge-lint: disable-next-line(mixed-case-function)
     function exposed_validateTokenMapping(JBTokenMapping calldata map) external pure {
         _validateTokenMapping(map);
     }
 
+    // forge-lint: disable-next-line(mixed-case-function)
     function exposed_sendRootOverAMB(
         uint256 transportPayment,
         address token,
@@ -96,6 +99,7 @@ contract CCIPTestSucker is JBCCIPSucker {
         _sendRootOverAMB(transportPayment, 0, token, amount, remoteToken, message);
     }
 
+    // forge-lint: disable-next-line(mixed-case-function)
     function exposed_insertIntoTree(
         uint256 projectTokenCount,
         address token,
@@ -134,10 +138,12 @@ contract BaseTestSucker is JBSucker {
         JBSucker(directory, permissions, tokens, 1, IJBSuckerRegistry(address(1)), address(0))
     {}
 
+    // forge-lint: disable-next-line(mixed-case-function)
     function exposed_validateTokenMapping(JBTokenMapping calldata map) external pure {
         _validateTokenMapping(map);
     }
 
+    // forge-lint: disable-next-line(mixed-case-function)
     function _sendRootOverAMB(
         uint256,
         uint256,
@@ -176,10 +182,12 @@ contract CCIPNativeInteropTest is Test {
     uint64 constant REMOTE_CHAIN_SELECTOR = 1_311_226; // Celo CCIP selector
 
     /// @notice Represents ETH as an ERC20 on Celo.
+    // forge-lint: disable-next-line(mixed-case-variable)
     address celoETH = makeAddr("celoETH");
 
     CCIPTestSucker ccipSucker;
     BaseTestSucker baseSucker;
+    // forge-lint: disable-next-line(mixed-case-variable)
     MockWETH mockWETH;
 
     function setUp() public {
@@ -220,12 +228,14 @@ contract CCIPNativeInteropTest is Test {
             IJBTokens(MOCK_TOKENS),
             IJBPermissions(MOCK_PERMISSIONS)
         );
+        // forge-lint: disable-next-line(unsafe-typecast)
         ccipSucker = CCIPTestSucker(payable(LibClone.cloneDeterministic(address(ccipSingleton), bytes32("ccip"))));
         ccipSucker.initialize(PROJECT_ID);
 
         // Deploy base singleton and clone.
         BaseTestSucker baseSingleton =
             new BaseTestSucker(IJBDirectory(MOCK_DIRECTORY), IJBPermissions(MOCK_PERMISSIONS), IJBTokens(MOCK_TOKENS));
+        // forge-lint: disable-next-line(unsafe-typecast)
         baseSucker = BaseTestSucker(payable(LibClone.cloneDeterministic(address(baseSingleton), bytes32("base"))));
         baseSucker.initialize(PROJECT_ID);
     }

@@ -1,34 +1,22 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.28;
 
+// forge-lint: disable-next-line(unaliased-plain-import)
 import /* {*} from */ "@bananapus/core-v6/test/helpers/TestBaseWorkflow.sol";
 import {MockPriceFeed} from "@bananapus/core-v6/test/mock/MockPriceFeed.sol";
 import {IJBSucker} from "../src/interfaces/IJBSucker.sol";
-import {IJBSuckerDeployer} from "../src/interfaces/IJBSuckerDeployer.sol";
-import {IJBDirectory} from "@bananapus/core-v6/src/interfaces/IJBDirectory.sol";
-import {IJBController} from "@bananapus/core-v6/src/interfaces/IJBController.sol";
-import {IJBTokens} from "@bananapus/core-v6/src/interfaces/IJBTokens.sol";
-import {IJBTerminal} from "@bananapus/core-v6/src/interfaces/IJBTerminal.sol";
-import {IJBCashOutTerminal} from "@bananapus/core-v6/src/interfaces/IJBCashOutTerminal.sol";
 import {JBConstants} from "@bananapus/core-v6/src/libraries/JBConstants.sol";
-import {JBPermissioned} from "@bananapus/core-v6/src/abstract/JBPermissioned.sol";
 import {JBPermissionsData} from "@bananapus/core-v6/src/structs/JBPermissionsData.sol";
-import {IJBPermissions} from "@bananapus/core-v6/src/interfaces/IJBPermissions.sol";
 import {JBPermissionIds} from "@bananapus/permission-ids-v6/src/JBPermissionIds.sol";
 import {ICCIPRouter} from "src/interfaces/ICCIPRouter.sol";
-import {SafeERC20, IERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 
 import {JBTokenMapping} from "../src/structs/JBTokenMapping.sol";
-import {JBRemoteToken} from "../src/structs/JBRemoteToken.sol";
-import {JBOutboxTree} from "../src/structs/JBOutboxTree.sol";
-import {JBInboxTreeRoot} from "../src/structs/JBInboxTreeRoot.sol";
-import {JBMessageRoot} from "../src/structs/JBMessageRoot.sol";
 import {JBClaim} from "../src/structs/JBClaim.sol";
 import {JBLeaf} from "../src/structs/JBLeaf.sol";
 
-import {MerkleLib} from "../src/utils/MerkleLib.sol";
-
+// forge-lint: disable-next-line(unaliased-plain-import)
 import "forge-std/Test.sol";
 import {JBCCIPSuckerDeployer} from "src/deployers/JBCCIPSuckerDeployer.sol";
 import {JBCCIPSucker} from "../src/JBCCIPSucker.sol";
@@ -63,7 +51,9 @@ contract CCIPSuckerForkClaimTests is TestBaseWorkflow {
     uint64 ethSepoliaChainSelector = 16_015_286_601_757_825_753;
 
     // RPCs -- named endpoints from foundry.toml [rpc_endpoints].
+    // forge-lint: disable-next-line(mixed-case-variable)
     string ETHEREUM_SEPOLIA_RPC_URL = "ethereum_sepolia";
+    // forge-lint: disable-next-line(mixed-case-variable)
     string ARBITRUM_SEPOLIA_RPC_URL = "arbitrum_sepolia";
 
     //*********************************************************************//

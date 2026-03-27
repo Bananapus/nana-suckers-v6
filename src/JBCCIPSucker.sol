@@ -162,6 +162,7 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
                 // native.
                 // If this ends up not being the case then our sanity check to see if we unwrapped the native asset will
                 // fail.
+                // forge-lint: disable-next-line(mixed-case-variable)
                 IWrappedNativeToken wrapped_native = IWrappedNativeToken(tokenAmount.token);
                 uint256 balanceBefore = _balanceOf({token: JBConstants.NATIVE_TOKEN, addr: address(this)});
 
@@ -199,12 +200,14 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
     /// @param transportPayment the amount of `msg.value` that is going to get paid for sending this message.
     /// @param token The token to bridge the outbox tree for.
     /// @param remoteToken Information about the remote token being bridged to.
+    // forge-lint: disable-next-line(mixed-case-function)
     function _sendRootOverAMB(
         uint256 transportPayment,
         uint256,
         address token,
         uint256 amount,
         JBRemoteToken memory remoteToken,
+        // forge-lint: disable-next-line(mixed-case-variable)
         JBMessageRoot memory sucker_message
     )
         internal
@@ -224,6 +227,7 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
             if (token == JBConstants.NATIVE_TOKEN) {
                 // Get the wrapped native token.
                 // slither-disable-next-line calls-loop
+                // forge-lint: disable-next-line(mixed-case-variable)
                 IWrappedNativeToken wrapped_native = CCIP_ROUTER.getWrappedNative();
                 // Deposit the wrapped native asset.
                 // slither-disable-next-line calls-loop,arbitrary-send-eth

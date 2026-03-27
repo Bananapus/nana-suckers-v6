@@ -303,6 +303,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         pure
         returns (bytes32)
     {
+        // forge-lint: disable-next-line(asm-keccak256)
         return keccak256(abi.encode(projectTokenCount, terminalTokenAmount, beneficiary));
     }
 
@@ -721,7 +722,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
             }) returns (
                 uint256
             ) {}
-            catch {
+                catch {
                 // Fee payment failed — fee ETH stays in this contract, transportPayment unchanged.
                 // The retained ETH is recoverable: it increases `amountToAddToBalanceOf(NATIVE_TOKEN)`,
                 // so the next `claim(NATIVE_TOKEN)` call will sweep it into the project's terminal balance.
@@ -1081,6 +1082,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     /// @param amount The amount of terminal tokens being bridged.
     /// @param remoteToken The remote token which the terminal token is mapped to.
     /// @param message The message/root to send to the remote chain.
+    // forge-lint: disable-next-line(mixed-case-function)
     function _sendRootOverAMB(
         uint256 transportPayment,
         uint256 index,

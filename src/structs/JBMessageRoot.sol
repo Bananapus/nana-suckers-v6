@@ -8,6 +8,7 @@ import {JBInboxTreeRoot} from "./JBInboxTreeRoot.sol";
 /// @custom:member token The remote token address (bytes32 for cross-VM compatibility with SVM).
 /// @custom:member amount The amount of tokens being sent.
 /// @custom:member remoteRoot The root of the merkle tree.
+// forge-lint: disable-next-line(pascal-case-struct)
 struct JBMessageRoot {
     uint8 version;
     bytes32 token;

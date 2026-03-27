@@ -2,6 +2,7 @@
 pragma solidity ^0.8.21;
 
 import {IOPMessenger} from "../../src/interfaces/IOPMessenger.sol";
+// forge-lint: disable-next-line(unaliased-plain-import)
 import "./ERC20Mock.sol";
 
 // FROM

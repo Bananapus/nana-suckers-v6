@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.28;
 
+// forge-lint: disable-next-line(unaliased-plain-import)
 import "forge-std/Test.sol";
 
 import {IJBDirectory} from "@bananapus/core-v6/src/interfaces/IJBDirectory.sol";
@@ -11,11 +12,17 @@ import {JBConstants} from "@bananapus/core-v6/src/libraries/JBConstants.sol";
 import {IInbox} from "@arbitrum/nitro-contracts/src/bridge/IInbox.sol";
 import {LibClone} from "solady/src/utils/LibClone.sol";
 
+// forge-lint: disable-next-line(unaliased-plain-import)
 import "../../src/JBArbitrumSucker.sol";
+// forge-lint: disable-next-line(unaliased-plain-import)
 import "../../src/deployers/JBArbitrumSuckerDeployer.sol";
+// forge-lint: disable-next-line(unaliased-plain-import)
 import "../../src/enums/JBLayer.sol";
+// forge-lint: disable-next-line(unaliased-plain-import)
 import "../../src/interfaces/IArbGatewayRouter.sol";
+// forge-lint: disable-next-line(unaliased-plain-import)
 import "../../src/interfaces/IJBSuckerRegistry.sol";
+// forge-lint: disable-next-line(unaliased-plain-import)
 import "../../src/structs/JBRemoteToken.sol";
 
 contract ArbitrumL2FeeHarness is JBArbitrumSucker {
@@ -78,6 +85,7 @@ contract ArbitrumL2ToRemoteFeeDoSTest is Test {
             registry: IJBSuckerRegistry(REGISTRY)
         });
 
+        // forge-lint: disable-next-line(unsafe-typecast)
         sucker = ArbitrumL2FeeHarness(payable(LibClone.cloneDeterministic(address(singleton), bytes32("arb_fee_dos"))));
         sucker.initialize(1);
         sucker.seedOutbox(JBConstants.NATIVE_TOKEN, bytes32(uint256(uint160(JBConstants.NATIVE_TOKEN))));

@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
+// forge-lint: disable-next-line(unaliased-plain-import)
 import "forge-std/Test.sol";
 
-import {IJBController} from "@bananapus/core-v6/src/interfaces/IJBController.sol";
 import {IJBDirectory} from "@bananapus/core-v6/src/interfaces/IJBDirectory.sol";
 import {IJBPermissions} from "@bananapus/core-v6/src/interfaces/IJBPermissions.sol";
 import {IJBTerminal} from "@bananapus/core-v6/src/interfaces/IJBTerminal.sol";
@@ -12,6 +12,7 @@ import {JBConstants} from "@bananapus/core-v6/src/libraries/JBConstants.sol";
 import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import {LibClone} from "solady/src/utils/LibClone.sol";
 
+// forge-lint: disable-next-line(unaliased-plain-import)
 import "../../src/JBSucker.sol";
 import {IJBSuckerRegistry} from "../../src/interfaces/IJBSuckerRegistry.sol";
 import {JBRemoteToken} from "../../src/structs/JBRemoteToken.sol";
@@ -25,6 +26,7 @@ contract ZeroCostBridgeSucker is JBSucker {
     using BitMaps for BitMaps.BitMap;
 
     /// @notice Whether _sendRootOverAMB was called successfully.
+    // forge-lint: disable-next-line(mixed-case-variable)
     bool public sendRootOverAMBCalled;
 
     /// @notice The transportPayment value received by _sendRootOverAMB.
@@ -41,6 +43,7 @@ contract ZeroCostBridgeSucker is JBSucker {
         JBSucker(directory, permissions, tokens, feeProjectId, registry, forwarder)
     {}
 
+    // forge-lint: disable-next-line(mixed-case-function)
     function _sendRootOverAMB(
         uint256 transportPayment,
         uint256,
@@ -192,11 +195,7 @@ contract FeeFallbackTest is Test {
             abi.encodeCall(IJBDirectory.primaryTerminalOf, (FEE_PROJECT_ID, JBConstants.NATIVE_TOKEN)),
             abi.encode(feeTerminal)
         );
-        vm.mockCallRevert(
-            feeTerminal,
-            abi.encodeWithSelector(IJBTerminal.pay.selector),
-            "fee payment failed"
-        );
+        vm.mockCallRevert(feeTerminal, abi.encodeWithSelector(IJBTerminal.pay.selector), "fee payment failed");
 
         // Call toRemote with exactly the fee amount.
         sucker.toRemote{value: TO_REMOTE_FEE}(TOKEN);
@@ -238,9 +237,7 @@ contract FeeFallbackTest is Test {
         // transportPayment = 0.005 ether (non-zero) and revert. This is expected behavior —
         // zero-cost bridges should be called with exactly the fee amount.
         uint256 extraForBridge = 0.005 ether;
-        vm.expectRevert(
-            abi.encodeWithSelector(JBSucker.JBSucker_UnexpectedMsgValue.selector, extraForBridge)
-        );
+        vm.expectRevert(abi.encodeWithSelector(JBSucker.JBSucker_UnexpectedMsgValue.selector, extraForBridge));
         sucker.toRemote{value: TO_REMOTE_FEE + extraForBridge}(TOKEN);
     }
 }

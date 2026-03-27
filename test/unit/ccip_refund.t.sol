@@ -1,26 +1,22 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.28;
 
+// forge-lint: disable-next-line(unaliased-plain-import)
 import "forge-std/Test.sol";
 
-import {Client} from "@chainlink/contracts-ccip/src/v0.8/ccip/libraries/Client.sol";
 import {IJBDirectory} from "@bananapus/core-v6/src/interfaces/IJBDirectory.sol";
 import {IJBPermissions} from "@bananapus/core-v6/src/interfaces/IJBPermissions.sol";
 import {IJBTokens} from "@bananapus/core-v6/src/interfaces/IJBTokens.sol";
-import {JBConstants} from "@bananapus/core-v6/src/libraries/JBConstants.sol";
 import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import {LibClone} from "solady/src/utils/LibClone.sol";
 
 import {JBCCIPSucker} from "../../src/JBCCIPSucker.sol";
-import {JBSucker} from "../../src/JBSucker.sol";
 import {JBCCIPSuckerDeployer} from "../../src/deployers/JBCCIPSuckerDeployer.sol";
 
 import {IJBCCIPSuckerDeployer} from "../../src/interfaces/IJBCCIPSuckerDeployer.sol";
-import {ICCIPRouter} from "../../src/interfaces/ICCIPRouter.sol";
 import {IJBSuckerRegistry} from "../../src/interfaces/IJBSuckerRegistry.sol";
 import {IRouterClient} from "@chainlink/contracts-ccip/src/v0.8/ccip/interfaces/IRouterClient.sol";
 import {JBRemoteToken} from "../../src/structs/JBRemoteToken.sol";
-import {JBTokenMapping} from "../../src/structs/JBTokenMapping.sol";
 import {MerkleLib} from "../../src/utils/MerkleLib.sol";
 
 /// @notice Harness that exposes internal state for testing.
@@ -32,6 +28,7 @@ contract CCIPSuckerHarness is JBCCIPSucker {
         IJBDirectory directory,
         IJBTokens tokens,
         IJBPermissions permissions,
+        // forge-lint: disable-next-line(mixed-case-variable)
         address trusted_forwarder
     )
         JBCCIPSucker(deployer, directory, tokens, permissions, 1, IJBSuckerRegistry(address(1)), trusted_forwarder)
@@ -135,6 +132,7 @@ contract CCIPRefundTest is Test {
     }
 
     /// @notice Set up CCIP router mocks for a successful bridge operation.
+    // forge-lint: disable-next-line(mixed-case-function)
     function _mockCCIPSuccess(uint256 fee) internal {
         // Mock getFee to return the specified fee.
         vm.mockCall(MOCK_ROUTER, abi.encodeWithSelector(IRouterClient.getFee.selector), abi.encode(fee));
