@@ -27,7 +27,7 @@ import {JBSucker} from "../../src/JBSucker.sol";
 /// append a spoofed bridge-messenger address via the ERC-2771 calldata suffix.
 /// After the fix, `fromRemote()` uses `msg.sender` directly, so the forwarder's own address
 /// is checked against `_isRemotePeer` and the call reverts with `JBSucker_NotPeer`.
-contract CodexTrustedForwarderSpoofTest is Test {
+contract TrustedForwarderSpoofTest is Test {
     address internal constant DIRECTORY = address(0x1000);
     address internal constant PERMISSIONS = address(0x2000);
     address internal constant TOKENS = address(0x3000);
