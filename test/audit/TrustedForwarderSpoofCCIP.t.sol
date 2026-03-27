@@ -52,9 +52,7 @@ contract TrustedForwarderSpoofCCIPTest is Test {
         });
 
         deployer.setChainSpecificConstants({
-            remoteChainId: REMOTE_CHAIN_ID,
-            remoteChainSelector: REMOTE_CHAIN_SELECTOR,
-            router: ICCIPRouter(CCIP_ROUTER)
+            remoteChainId: REMOTE_CHAIN_ID, remoteChainSelector: REMOTE_CHAIN_SELECTOR, router: ICCIPRouter(CCIP_ROUTER)
         });
 
         JBCCIPSucker singleton = new JBCCIPSucker({
@@ -102,10 +100,8 @@ contract TrustedForwarderSpoofCCIPTest is Test {
 
         // Build the spoofed ERC-2771 calldata: real `ccipReceive` encoding + 20-byte suffix
         // that _msgSender() would have decoded as the CCIP router address.
-        bytes memory forwardedCalldata = bytes.concat(
-            abi.encodeWithSelector(JBCCIPSucker.ccipReceive.selector, ccipMsg),
-            bytes20(CCIP_ROUTER)
-        );
+        bytes memory forwardedCalldata =
+            bytes.concat(abi.encodeWithSelector(JBCCIPSucker.ccipReceive.selector, ccipMsg), bytes20(CCIP_ROUTER));
 
         // The call should revert because msg.sender is FORWARDER, not CCIP_ROUTER.
         vm.prank(FORWARDER);
