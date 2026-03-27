@@ -19,7 +19,7 @@ import {JBMessageRoot} from "../../src/structs/JBMessageRoot.sol";
 import {JBRemoteToken} from "../../src/structs/JBRemoteToken.sol";
 import {MerkleLib} from "../../src/utils/MerkleLib.sol";
 
-contract CodexAuditGapSucker is JBSucker {
+contract DeprecatedDestinationSucker is JBSucker {
     using MerkleLib for MerkleLib.Tree;
 
     constructor(
@@ -83,7 +83,7 @@ contract CodexAuditGapSucker is JBSucker {
     }
 }
 
-contract CodexNemesisPoC is Test {
+contract DeprecatedSuckerDestinationTest is Test {
     using MerkleLib for MerkleLib.Tree;
 
     address constant DIRECTORY = address(600);
@@ -94,8 +94,8 @@ contract CodexNemesisPoC is Test {
     address constant TOKEN = address(0x000000000000000000000000000000000000EEEe);
     uint256 constant PROJECT_ID = 1;
 
-    CodexAuditGapSucker internal source;
-    CodexAuditGapSucker internal destination;
+    DeprecatedDestinationSucker internal source;
+    DeprecatedDestinationSucker internal destination;
 
     function setUp() public {
         vm.warp(100 days);
@@ -156,11 +156,11 @@ contract CodexNemesisPoC is Test {
         );
     }
 
-    function _createSucker(bytes32 salt) internal returns (CodexAuditGapSucker) {
-        CodexAuditGapSucker singleton =
-            new CodexAuditGapSucker(IJBDirectory(DIRECTORY), IJBPermissions(PERMISSIONS), IJBTokens(TOKENS));
-        CodexAuditGapSucker clone =
-            CodexAuditGapSucker(payable(address(LibClone.cloneDeterministic(address(singleton), salt))));
+    function _createSucker(bytes32 salt) internal returns (DeprecatedDestinationSucker) {
+        DeprecatedDestinationSucker singleton =
+            new DeprecatedDestinationSucker(IJBDirectory(DIRECTORY), IJBPermissions(PERMISSIONS), IJBTokens(TOKENS));
+        DeprecatedDestinationSucker clone =
+            DeprecatedDestinationSucker(payable(address(LibClone.cloneDeterministic(address(singleton), salt))));
         clone.initialize(PROJECT_ID);
         return clone;
     }

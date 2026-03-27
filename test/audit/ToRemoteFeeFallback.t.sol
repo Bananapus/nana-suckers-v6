@@ -26,7 +26,7 @@ import "../../src/interfaces/IOPStandardBridge.sol";
 // forge-lint: disable-next-line(unaliased-plain-import)
 import "../../src/structs/JBRemoteToken.sol";
 
-contract CodexOptimismFeeHarness is JBOptimismSucker {
+contract OptimismFeeHarness is JBOptimismSucker {
     constructor(
         JBOptimismSuckerDeployer deployer,
         IJBDirectory directory,
@@ -49,14 +49,14 @@ contract CodexOptimismFeeHarness is JBOptimismSucker {
     }
 }
 
-contract CodexToRemoteFeeFallbackDoSTest is Test {
+contract ToRemoteFeeFallbackTest is Test {
     address internal constant DIRECTORY = address(0x1000);
     address internal constant PERMISSIONS = address(0x2000);
     address internal constant TOKENS = address(0x3000);
     address internal constant REGISTRY = address(0x4000);
     address internal constant FEE_TERMINAL = address(0x5000);
 
-    CodexOptimismFeeHarness internal sucker;
+    OptimismFeeHarness internal sucker;
 
     function setUp() public {
         JBOptimismSuckerDeployer deployer = new JBOptimismSuckerDeployer({
@@ -71,7 +71,7 @@ contract CodexToRemoteFeeFallbackDoSTest is Test {
             messenger: IOPMessenger(address(0xB0B)), bridge: IOPStandardBridge(address(0xCAFE))
         });
 
-        CodexOptimismFeeHarness singleton = new CodexOptimismFeeHarness({
+        OptimismFeeHarness singleton = new OptimismFeeHarness({
             deployer: deployer,
             directory: IJBDirectory(DIRECTORY),
             permissions: IJBPermissions(PERMISSIONS),
@@ -81,25 +81,27 @@ contract CodexToRemoteFeeFallbackDoSTest is Test {
 
         sucker =
         // forge-lint: disable-next-line(unsafe-typecast)
-        CodexOptimismFeeHarness(payable(LibClone.cloneDeterministic(address(singleton), bytes32("op_fee_dos"))));
+        OptimismFeeHarness(payable(LibClone.cloneDeterministic(address(singleton), bytes32("op_fee_dos"))));
         sucker.initialize(1);
         sucker.seedOutbox(JBConstants.NATIVE_TOKEN, bytes32(uint256(uint160(JBConstants.NATIVE_TOKEN))));
 
         vm.mockCall(REGISTRY, abi.encodeCall(IJBSuckerRegistry.toRemoteFee, ()), abi.encode(uint256(1)));
     }
 
-    function test_toRemoteRevertsIfFeeTerminalIsMissing() external {
+    function test_toRemoteSucceedsIfFeeTerminalIsMissing() external {
         vm.mockCall(
             DIRECTORY,
             abi.encodeCall(IJBDirectory.primaryTerminalOf, (1, JBConstants.NATIVE_TOKEN)),
             abi.encode(IJBTerminal(address(0)))
         );
+        vm.mockCall(address(0xB0B), abi.encodeWithSelector(IOPMessenger.sendMessage.selector), abi.encode());
 
-        vm.expectRevert(abi.encodeWithSelector(JBSucker.JBSucker_UnexpectedMsgValue.selector, 1));
+        // Fee ETH stays in the contract; bridge proceeds without revert.
         sucker.toRemote{value: 1}(JBConstants.NATIVE_TOKEN);
+        assertEq(address(sucker).balance, 1, "fee ETH retained in contract when terminal missing");
     }
 
-    function test_toRemoteRevertsIfFeeTerminalPayReverts() external {
+    function test_toRemoteSucceedsIfFeeTerminalPayReverts() external {
         vm.mockCall(
             DIRECTORY,
             abi.encodeCall(IJBDirectory.primaryTerminalOf, (1, JBConstants.NATIVE_TOKEN)),
@@ -108,9 +110,11 @@ contract CodexToRemoteFeeFallbackDoSTest is Test {
         vm.mockCallRevert(
             FEE_TERMINAL, abi.encodeWithSelector(IJBTerminal.pay.selector), bytes("fee terminal reverted")
         );
+        vm.mockCall(address(0xB0B), abi.encodeWithSelector(IOPMessenger.sendMessage.selector), abi.encode());
 
-        vm.expectRevert(abi.encodeWithSelector(JBSucker.JBSucker_UnexpectedMsgValue.selector, 1));
+        // Fee ETH stays in the contract; bridge proceeds without revert.
         sucker.toRemote{value: 1}(JBConstants.NATIVE_TOKEN);
+        assertEq(address(sucker).balance, 1, "fee ETH retained in contract when pay reverts");
     }
 
     function test_toRemoteSucceedsIfFeeTerminalAcceptsPayment() external {
