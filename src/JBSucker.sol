@@ -475,10 +475,11 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     /// @param root The merkle root, token, and amount being received.
     function fromRemote(JBMessageRoot calldata root) external payable {
         // Make sure that the message came from our peer.
-        // Safe to use _msgSender() here: bridge messengers never use ERC2771 meta-transactions,
-        // so this always resolves to msg.sender.
-        if (!_isRemotePeer(_msgSender())) {
-            revert JBSucker_NotPeer(_toBytes32(_msgSender()));
+        // Use msg.sender (not _msgSender()) because bridge messengers never use ERC2771 meta-transactions.
+        // Using _msgSender() would allow a trusted forwarder to spoof the bridge messenger address via the
+        // ERC-2771 calldata suffix.
+        if (!_isRemotePeer(msg.sender)) {
+            revert JBSucker_NotPeer(_toBytes32(msg.sender));
         }
 
         // Validate the message version to reject incompatible messages.

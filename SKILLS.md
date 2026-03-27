@@ -158,6 +158,8 @@ Cross-chain token and fund bridging for Juicebox V6 projects, using merkle trees
 - `toRemote` fee payment is best-effort: if the fee project has no native token terminal or `terminal.pay()` reverts, `toRemote` proceeds without collecting the fee. The caller still receives project tokens from the fee payment when it succeeds.
 - `JBCCIPSucker` transport payment refund uses a low-level `call` that does NOT revert on failure. If the refund fails (e.g., caller is a non-payable contract), the excess ETH is permanently stuck. The `TransportPaymentRefundFailed` event provides observability.
 - The sucker has an unrestricted `receive()` function -- it must accept ETH from bridges, WETH unwrapping, and terminal cash-outs. Excess ETH increases `amountToAddToBalanceOf` for the project (not a double-spend risk).
+- `fromRemote()` validates the peer using `msg.sender`, not `_msgSender()`. Using `_msgSender()` would allow a trusted ERC-2771 forwarder to spoof the bridge peer address. Never use a meta-tx forwarder as a relay for `fromRemote` calls.
+- `ccipReceive()` validates the CCIP router using `msg.sender`, not `_msgSender()`, for the same reason. A trusted forwarder could append the router address via the ERC-2771 calldata suffix and fully control the `Any2EVMMessage` struct.
 
 ### CRITICAL: NATIVE_TOKEN Mismatch on Non-ETH Chains
 

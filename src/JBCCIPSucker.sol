@@ -129,8 +129,10 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
     /// malformed message would lose the bridged tokens with no recovery path. A revert keeps tokens in the
     /// CCIP router where they can be retried or recovered.
     function ccipReceive(Client.Any2EVMMessage calldata any2EvmMessage) external override {
-        // only calls from the set router are accepted.
-        if (_msgSender() != address(CCIP_ROUTER)) revert JBSucker_NotPeer(_toBytes32(_msgSender()));
+        // Use msg.sender (not _msgSender()) because the CCIP router never uses ERC2771 meta-transactions.
+        // Using _msgSender() would allow a trusted forwarder to spoof the router address via the
+        // ERC-2771 calldata suffix.
+        if (msg.sender != address(CCIP_ROUTER)) revert JBSucker_NotPeer(_toBytes32(msg.sender));
 
         // Decode the message root from the peer
         JBMessageRoot memory root = abi.decode(any2EvmMessage.data, (JBMessageRoot));
