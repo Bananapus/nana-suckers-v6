@@ -53,6 +53,8 @@ library CCIPHelper {
     address public constant AVA_WETH = 0xB31f66AA3C1e785363F0875A1B74E27b85FD66c7;
     address public constant BNB_WETH = 0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c;
     address public constant BASE_WETH = 0x4200000000000000000000000000000000000006;
+    address public constant OP_SEP_WETH = 0x4200000000000000000000000000000000000006;
+    address public constant BASE_SEP_WETH = 0x4200000000000000000000000000000000000006;
 
     function routerOfChain(uint256 _chainId) internal pure returns (address router) {
         if (_chainId == ETH_ID) {
@@ -129,6 +131,10 @@ library CCIPHelper {
             return ETH_SEP_WETH;
         } else if (_chainId == ARB_SEP_ID) {
             return ARB_SEP_WETH;
+        } else if (_chainId == OP_SEP_ID) {
+            return OP_SEP_WETH;
+        } else if (_chainId == BASE_SEP_ID) {
+            return BASE_SEP_WETH;
         } else {
             revert CCIPHelper_UnsupportedChain(_chainId);
         }

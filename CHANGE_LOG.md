@@ -166,6 +166,7 @@ In v5, `JBSucker.initialize()` used `msg.sender` to set the `deployer` field. In
 | `JBSucker` | `JBSucker_AmountExceedsUint128(uint256 amount)` | Thrown when `terminalTokenAmount` or `projectTokenCount` exceeds `uint128` in `_insertIntoTree`. Guards against overflow for SVM/Solana compatibility. |
 | `JBSucker` | `JBSucker_InvalidMessageVersion(uint8 received, uint8 expected)` | Thrown in `fromRemote` when the message version does not match `MESSAGE_VERSION`. Prevents processing incompatible messages. |
 | `JBSucker` | `JBSucker_NothingToSend()` | Thrown in `toRemote()` when the outbox has zero balance and no unsent claims. Prevents unnecessary bridge calls. |
+| `JBSucker` | `JBSucker_IndexOutOfRange(uint256 index)` | Thrown in `_validate()` and `_validateForEmergencyExit()` when the leaf index exceeds the tree depth (`>= 2^32`). Prevents wasted gas on impossible proofs. |
 | `CCIPHelper` | `CCIPHelper_UnsupportedChain(uint256 chainId)` | Replaces bare `revert("Unsupported chain")` strings with a typed error. |
 | `JBSuckerRegistry` | `JBSuckerRegistry_FeeExceedsMax(uint256 fee, uint256 max)` | Thrown when `setToRemoteFee` is called with a fee exceeding `MAX_TO_REMOTE_FEE`. |
 
@@ -463,3 +464,21 @@ The `Deploy.s.sol` script's `_optimismSucker()`, `_baseSucker()`, `_arbitrumSuck
 The `JBSucker.toRemote()` fee payment has a best-effort pattern: if the fee terminal is missing or the `pay()` call reverts, the transaction should proceed without the fee. Previously, the catch block and no-terminal branch reset `transportPayment = msg.value`, restoring the fee amount into the transport payment. This caused zero-cost bridges (OP, Base, Celo, Arbitrum L2->L1) to revert with `JBSucker_UnexpectedMsgValue` because they check `if (transportPayment != 0) revert`.
 
 **Fix**: On fee payment failure, `transportPayment` is no longer overwritten. It stays at `msg.value - _toRemoteFee` (which is 0 when the caller sends exactly the fee amount). The fee ETH is retained by the sucker contract rather than being added back to the transport payment. This preserves bridge compatibility for all zero-cost bridge implementations.
+
+### 9.3 Index Bounds Check in `_validate` and `_validateForEmergencyExit`
+
+`_validate()` and `_validateForEmergencyExit()` did not check whether the leaf `index` exceeded the tree depth (`2^32 - 1`). While the merkle proof verification would still fail for out-of-range indices (since no valid proof exists), the missing check allowed unnecessary gas consumption and unclear revert messages.
+
+**Fix**: Both functions now revert with `JBSucker_IndexOutOfRange(index)` if `index >= (1 << _TREE_DEPTH)`. This is a new custom error added to `JBSucker`.
+
+### 9.4 Missing `wethOfChain` Entries for OP Sepolia and Base Sepolia
+
+`CCIPHelper.wethOfChain()` did not have entries for `OP_SEP_ID` (Optimism Sepolia) or `BASE_SEP_ID` (Base Sepolia), causing CCIP sucker deployments on those testnets to revert with `CCIPHelper_UnsupportedChain`.
+
+**Fix**: Added `OP_SEP_WETH` and `BASE_SEP_WETH` constants (`0x4200000000000000000000000000000000000006`) and corresponding branches in `wethOfChain()`.
+
+### 9.5 NatSpec Fix for Salt Encoding
+
+The NatSpec comment on `JBSucker.peer()` incorrectly described the deployer's salt computation as `keccak256(abi.encode(_msgSender(), salt))`. The actual code in `JBSuckerDeployer.createForSender()` uses `keccak256(abi.encodePacked(_msgSender(), salt))`.
+
+**Fix**: Updated the NatSpec to say `abi.encodePacked` to match the implementation.
