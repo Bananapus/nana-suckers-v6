@@ -109,11 +109,23 @@ contract JBExample is JBPermissioned, IJBExample {
     //*********************************************************************//
 
     //*********************************************************************//
+    // -------------------- private stored properties -------------------- //
+    //*********************************************************************//
+
+    //*********************************************************************//
+    // ------------------- transient stored properties ------------------- //
+    //*********************************************************************//
+
+    //*********************************************************************//
     // -------------------------- constructor ---------------------------- //
     //*********************************************************************//
 
     //*********************************************************************//
     // ---------------------------- modifiers ---------------------------- //
+    //*********************************************************************//
+
+    //*********************************************************************//
+    // ------------------------- receive / fallback ---------------------- //
     //*********************************************************************//
 
     //*********************************************************************//
@@ -130,6 +142,10 @@ contract JBExample is JBPermissioned, IJBExample {
 
     //*********************************************************************//
     // ----------------------- public transactions ----------------------- //
+    //*********************************************************************//
+
+    //*********************************************************************//
+    // ---------------------- internal transactions ---------------------- //
     //*********************************************************************//
 
     //*********************************************************************//
@@ -155,15 +171,23 @@ contract JBExample is JBPermissioned, IJBExample {
 6. Internal immutable stored properties
 7. Public stored properties
 8. Internal stored properties
-9. Constructor
-10. Modifiers
-11. External transactions
-12. External views
-13. Public views
-14. Public transactions
-15. Internal helpers
-16. Internal views
-17. Private helpers
+9. Private stored properties
+10. Transient stored properties
+11. Constructor
+12. Modifiers
+13. Receive / fallback
+14. External transactions
+15. External views
+16. Public views
+17. Public transactions
+18. Internal transactions
+19. Internal helpers
+20. Internal views
+21. Private helpers
+
+Use these additional section labels where they better match the contents of the block:
+- `internal functions` is accepted as equivalent to `internal helpers`
+- `events` and `structs` are acceptable in specialized contracts that define them explicitly
 
 Functions are alphabetized within each section.
 
@@ -216,7 +240,7 @@ interface IJBExample is IJBBase {
 | Public/external function | `camelCase` | `cashOutTokensOf` |
 | Internal/private function | `_camelCase` | `_processFee` |
 | Internal storage | `_camelCase` | `_accountingContextForTokenOf` |
-| Function parameter | `camelCase` | `projectId`, `cashOutCount` |
+| Function parameter | `camelCase` (no underscores) | `projectId`, `cashOutCount` |
 
 ## NatSpec
 
@@ -294,9 +318,7 @@ _transferOwnership(address(0), 0);
 
 Single-argument calls use positional style: `_burn(amount)`.
 
-This also applies to `new` constructor calls, struct literals, and inherited/library calls (e.g., OZ `_mint`, `_safeMint`, `safeTransfer`, `allowance`, `Clones.cloneDeterministic`).
-
-**Exception:** Inherited constructor calls in the modifier position (`constructor(...) Parent(a, b)`) do not support named arguments in Solidity — positional style is required there.
+This also applies to constructor calls, struct literals, and inherited/library calls (e.g., OZ `_mint`, `_safeMint`, `safeTransfer`, `allowance`, `Clones.cloneDeterministic`).
 
 Named argument keys must use **camelCase** — never underscores. If a function's parameter names use underscores, rename them to camelCase first.
 
@@ -586,7 +608,3 @@ CI checks formatting via `forge fmt --check`.
 ### Contract Size Checks
 
 CI runs `forge build --sizes` to catch contracts approaching the 24KB limit. When the repo's default `optimizer_runs` differs from what you want for size checking, use `FOUNDRY_PROFILE=ci_sizes forge build --sizes` with a `[profile.ci_sizes]` section in `foundry.toml`.
-
-## Repo-Specific Deviations
-
-- **Multi-chain `[rpc_endpoints]`** — 7 endpoints vs standard 1
