@@ -2,48 +2,60 @@
 
 ## Who This Repo Serves
 
-- project teams offering cross-chain mobility for their token holders
-- holders moving exposure from one chain to another
-- operators managing bridge lifecycle, token mappings, and emergency controls
+- projects that want canonical cross-chain movement of project-token positions
+- operators deploying and registering sucker pairs on supported bridge families
+- users bridging a project position from one chain to another
+- teams responsible for bridge fees, token mappings, deprecation, and emergency controls
 
 ## Journey 1: Launch A Cross-Chain Sucker Pair For A Project
 
-**Starting state:** the project exists on the relevant chains and the team knows which bridge family fits that chain pair.
+**Starting state:** the project exists on multiple chains or plans to, and the team has chosen the bridge family it trusts.
 
-**Success:** holders can use registry-tracked sucker deployments to move supported project exposure between chains.
-
-**Flow**
-1. Deploy the appropriate bridge-specific suckers through an allowed deployer and track them in `JBSuckerRegistry`.
-2. Verify the peer relationships and chain pairing the registry now reports.
-3. Configure token mappings for the chain pair.
-4. Verify the lifecycle controls before exposing the bridge publicly.
-
-**Bridge choice matters:** OP-stack, Arbitrum, CCIP, and chain-specific variants do not share identical transport assumptions.
-
-## Journey 2: Bridge From One Chain To Another
-
-**Starting state:** the bridge pair is live and the token the user wants to move is mapped.
-
-**Success:** the user exits on the source chain and receives the corresponding position on the destination chain.
+**Success:** paired suckers are deployed, registered, and ready to transport claims between the chains they serve.
 
 **Flow**
-1. On the source chain, call `prepare(...)` to burn or redeem into the bridgeable claim and append it to the outbox tree.
-2. Relay the current root to the peer chain with `toRemote(...)`.
-3. On the destination chain, call `claim(...)` with the proof against the imported inbox root.
-4. The destination sucker verifies the claim and mints or releases the remote-side representation.
+1. Choose the chain-specific sucker implementation and deployer, such as Arbitrum, OP Stack, Celo, or CCIP.
+2. Configure token mappings, bridge counterparties, and per-project registry state in `JBSuckerRegistry`.
+3. Deploy the pair so each side knows its remote peer and expected transport assumptions.
+4. Frontends and operators can now reason about the bridge as a known project surface instead of ad hoc per-transfer logic.
 
-## Journey 3: Operate The Bridge Safely Over Time
+## Journey 2: Bridge A Position From One Chain To Another
 
-**Starting state:** the bridge is live and real users depend on it.
+**Starting state:** a user holds project-token exposure on the source chain and wants the corresponding position on the destination chain.
 
-**Success:** operators can respond to changing risk without corrupting prior claims.
+**Success:** the source position becomes a claim, the claim is relayed, and the destination position is minted after proof verification.
 
 **Flow**
-1. Disable token mappings when an asset should stop being bridgeable.
-2. Deprecate a sucker when the bridge path should shut down for new use.
-3. Use emergency or recovery paths if root ordering or transport failures leave claims temporarily stuck.
-4. Communicate bridge-family-specific downtime or economic risk clearly, because transport liveness is not the same as asset safety.
+1. The user calls `prepare` on the source-chain sucker to burn or lock the relevant local position into a claimable leaf.
+2. The source sucker appends that leaf into its Merkle outbox tree.
+3. Someone relays the new root to the remote chain using `toRemote`.
+4. The claimant proves inclusion against the remote inbox tree and receives the recreated project-token position there.
+
+**Failure cases that matter:** wrong token mappings, transport-layer fee shortages, root ordering mistakes, and assuming the bridge is generic ERC-20 transport when it is really project-position transport.
+
+## Journey 3: Map Treasury Assets And Project Tokens Correctly Across Chains
+
+**Starting state:** the project supports multiple assets or wrappers across chains and wants users to bridge without silent economic mismatch.
+
+**Success:** the remote claim recreates the intended exposure instead of a superficially similar but economically different asset.
+
+**Flow**
+1. Configure remote token metadata and mapping with the sucker pair.
+2. Make sure the destination chain can mint or settle the project-token representation the bridge expects.
+3. Audit chain-specific native-asset handling, especially on Celo or other non-identical environments.
+
+## Journey 4: Operate The Bridge Safely Over Time
+
+**Starting state:** the bridge is live and now needs operational stewardship rather than just deployment.
+
+**Success:** fee policy, deprecation, trusted counterparties, and emergency paths remain coherent as conditions change.
+
+**Flow**
+1. Use `JBSuckerRegistry` to manage deployer allowlists and shared operational config.
+2. Watch fee fallback paths and transport assumptions because delivery failure is part of the intended threat model.
+3. Use deprecation or emergency surfaces when a bridge family or remote destination should no longer be used.
 
 ## Hand-Offs
 
-- Use [nana-omnichain-deployers-v6](../nana-omnichain-deployers-v6/USER_JOURNEYS.md) or [revnet-core-v6](../revnet-core-v6/USER_JOURNEYS.md) when suckers are part of a larger deployment flow rather than a standalone bridge setup.
+- Use [nana-omnichain-deployers-v6](../nana-omnichain-deployers-v6/USER_JOURNEYS.md) when a project wants suckers packaged into its launch flow instead of deployed separately.
+- Use [nana-core-v6](../nana-core-v6/USER_JOURNEYS.md) or [revnet-core-v6](../revnet-core-v6/USER_JOURNEYS.md) for the treasury and runtime project behavior that suckers transport across chains.
