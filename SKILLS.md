@@ -109,6 +109,7 @@ Cross-chain token and fund bridging for Juicebox V6 projects, using merkle trees
 | `JBSucker_Deprecated` | `JBSucker` | `prepare` or `toRemote` called when sucker is `SENDING_DISABLED` or `DEPRECATED` |
 | `JBSucker_DeprecationTimestampTooSoon` | `JBSucker` | `setDeprecation` timestamp is less than `_maxMessagingDelay()` in the future |
 | `JBSucker_ExpectedMsgValue` | `JBSucker` | `toRemote` called without required `msg.value` for transport payment |
+| `JBSucker_IndexOutOfRange` | `JBSucker` | Leaf index exceeds tree depth (`>= 2^32`) in `_validate` or `_validateForEmergencyExit` |
 | `JBSucker_InsufficientBalance` | `JBSucker` | Emergency hatch exit amount exceeds outbox balance |
 | `JBSucker_InsufficientMsgValue` | `JBSucker` | `msg.value` is less than the `toRemoteFee` |
 | `JBSucker_InvalidMessageVersion` | `JBSucker` | `fromRemote` receives a message with wrong `MESSAGE_VERSION` |
