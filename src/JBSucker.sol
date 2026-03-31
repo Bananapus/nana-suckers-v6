@@ -68,10 +68,10 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     error JBSucker_TokenAlreadyMapped(address localToken, bytes32 mappedTo);
     error JBSucker_TokenHasInvalidEmergencyHatchState(address token);
     error JBSucker_TokenNotMapped(address token);
+    error JBSucker_IndexOutOfRange(uint256 index);
     error JBSucker_UnexpectedMsgValue(uint256 value);
     error JBSucker_ZeroBeneficiary();
     error JBSucker_ZeroERC20Token();
-    error JBSucker_IndexOutOfRange(uint256 index);
 
     //*********************************************************************//
     // ------------------------- public constants ------------------------ //
