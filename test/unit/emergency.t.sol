@@ -35,6 +35,9 @@ contract SuckerEmergencyTest is Test {
 
     /// @notice Ensures that if a sucker is deprecated and a claim is valid that a user can withdraw their deposit.
     function testEmergencyExitWhenDeprecated(bool setAsDeprecated, bool isValidClaim, JBClaim memory claim) external {
+        // Bound index to valid tree range (< 2^32).
+        claim.leaf.index = bound(claim.leaf.index, 0, type(uint32).max);
+
         uint256 projectId = 1;
         TestSucker sucker = _createTestSucker(projectId, "");
 
@@ -84,6 +87,9 @@ contract SuckerEmergencyTest is Test {
 
     /// @notice Ensures that if a sucker is send disabled and a claim is valid that a user can withdraw their deposit.
     function testEmergencyExitWhenSendingDisabled(bool sendDisabled, bool isValidClaim, JBClaim memory claim) external {
+        // Bound index to valid tree range (< 2^32).
+        claim.leaf.index = bound(claim.leaf.index, 0, type(uint32).max);
+
         uint256 projectId = 1;
         TestSucker sucker = _createTestSucker(projectId, "");
 
@@ -139,6 +145,9 @@ contract SuckerEmergencyTest is Test {
     )
         external
     {
+        // Bound index to valid tree range (< 2^32).
+        claim.leaf.index = bound(claim.leaf.index, 0, type(uint32).max);
+
         uint256 projectId = 1;
         TestSucker sucker = _createTestSucker(projectId, "");
 

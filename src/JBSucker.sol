@@ -71,6 +71,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     error JBSucker_UnexpectedMsgValue(uint256 value);
     error JBSucker_ZeroBeneficiary();
     error JBSucker_ZeroERC20Token();
+    error JBSucker_IndexOutOfRange(uint256 index);
 
     //*********************************************************************//
     // ------------------------- public constants ------------------------ //
@@ -227,7 +228,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
 
     /// @notice The peer sucker on the remote chain, as a bytes32 for cross-VM compatibility.
     /// @dev Defaults to `_toBytes32(address(this))`, assuming deterministic cross-chain deployment via CREATE2. The
-    /// deployer (`JBSuckerDeployer`) uses `salt = keccak256(abi.encode(_msgSender(), salt))` to ensure
+    /// deployer (`JBSuckerDeployer`) uses `salt = keccak256(abi.encodePacked(_msgSender(), salt))` to ensure
     /// sender-specific determinism. This assumption breaks if CREATE2 conditions differ across chains (e.g.,
     /// different factory nonces, different init code, or different deployer addresses). In such cases, subclasses
     /// must override this function to return the correct peer address (e.g., a Solana program/PDA address for
@@ -1115,6 +1116,9 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     )
         internal
     {
+        // Ensure the index is within tree bounds (max 2^TREE_DEPTH - 1).
+        if (index >= (1 << _TREE_DEPTH)) revert JBSucker_IndexOutOfRange(index);
+
         // Make sure the leaf has not already been executed.
         if (_executedFor[terminalToken].get(index)) {
             revert JBSucker_LeafAlreadyExecuted(terminalToken, index);
@@ -1201,6 +1205,9 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     )
         internal
     {
+        // Ensure the index is within tree bounds (max 2^TREE_DEPTH - 1).
+        if (index >= (1 << _TREE_DEPTH)) revert JBSucker_IndexOutOfRange(index);
+
         // Make sure that the emergencyHatch is enabled for the token.
         JBSuckerState deprecationState = state();
         if (
