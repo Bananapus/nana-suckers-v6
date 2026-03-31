@@ -55,6 +55,17 @@
 2. Watch fee fallback paths and transport assumptions because delivery failure is part of the intended threat model.
 3. Use deprecation or emergency surfaces when a bridge family or remote destination should no longer be used.
 
+## Journey 5: Recover Value Through The Emergency Hatch When Normal Delivery Breaks
+
+**Starting state:** a claim cannot complete through the normal inbox or remote-delivery path.
+
+**Success:** users can recover through the explicit emergency mechanism without double-spending the same claim.
+
+**Flow**
+1. Enable or enter the emergency mode the sucker pair exposes for the affected path.
+2. Use `exitThroughEmergencyHatch(...)` with the relevant claim data.
+3. Treat emergency execution slots as distinct state that still must not allow the same economic position to be claimed twice.
+
 ## Hand-Offs
 
 - Use [nana-omnichain-deployers-v6](../nana-omnichain-deployers-v6/USER_JOURNEYS.md) when a project wants suckers packaged into its launch flow instead of deployed separately.
