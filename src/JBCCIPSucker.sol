@@ -203,6 +203,7 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
     /// @param token The token to bridge the outbox tree for.
     /// @param remoteToken Information about the remote token being bridged to.
     // forge-lint: disable-next-line(mixed-case-function)
+    // slither-disable-next-line calls-loop
     function _sendRootOverAMB(
         uint256 transportPayment,
         uint256,

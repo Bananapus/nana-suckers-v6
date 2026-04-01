@@ -28,6 +28,8 @@ Admin privileges and their scope in nana-suckers-v6.
 - **Scope:** Can map or disable local-to-remote token pairs on a specific sucker.
 - **Permission ID:** `JBPermissionIds.MAP_SUCKER_TOKEN`
 
+For existing-project deployments, this permission is part of the same operational path as `DEPLOY_SUCKERS`: the registry deploys the sucker and then immediately calls `mapTokens` on it. If the project delegates deployment without arranging mapping authority for the registry, the single deployment transaction will revert during configuration.
+
 ### Safety Admin (delegated role)
 
 - **How assigned:** Granted `SUCKER_SAFETY` permission by the project owner via `JBPermissions`.
@@ -56,7 +58,7 @@ Admin privileges and their scope in nana-suckers-v6.
 | `allowSuckerDeployers(deployers)` | Registry Owner | N/A (`onlyOwner`) | Global | Batch version: adds multiple deployer contracts to the allowlist. |
 | `removeSuckerDeployer(deployer)` | Registry Owner | N/A (`onlyOwner`) | Global | Removes a deployer contract from the allowlist, preventing future sucker deployments through it. |
 | `setToRemoteFee(fee)` | Registry Owner | N/A (`onlyOwner`) | Global | Sets the `toRemoteFee` applied to all suckers. The fee must be <= `MAX_TO_REMOTE_FEE` (0.001 ether). Emits `ToRemoteFeeChanged`. |
-| `deploySuckersFor(projectId, salt, configs)` | Project Owner | `DEPLOY_SUCKERS` | Per-project | Deploys one or more suckers for a project using allowlisted deployers. Hashes salt with `_msgSender()` (which equals `msg.sender` for direct calls, or the relayed sender for ERC-2771 meta-transactions) for deterministic cross-chain addresses. Also calls `mapTokens` on each newly created sucker. |
+| `deploySuckersFor(projectId, salt, configs)` | Project Owner | `DEPLOY_SUCKERS` | Per-project | Deploys one or more suckers for a project using allowlisted deployers. Hashes salt with `_msgSender()` (which equals `msg.sender` for direct calls, or the relayed sender for ERC-2771 meta-transactions) for deterministic cross-chain addresses. Also calls `mapTokens` on each newly created sucker, so the registry must be able to satisfy the corresponding `MAP_SUCKER_TOKEN` checks for the project. |
 | `removeDeprecatedSucker(projectId, sucker)` | Anyone | None | Per-project | Removes a fully `DEPRECATED` sucker from the registry. Permissionless but only succeeds if the sucker is in the `DEPRECATED` state. |
 
 ### JBSucker

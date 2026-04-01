@@ -76,6 +76,7 @@ contract JBCeloSucker is JBOptimismSucker {
     /// and adds native ETH to the project's balance.
     /// @param token The terminal token to add to the project's balance.
     /// @param amount The amount of terminal tokens to add to the project's balance.
+    // slither-disable-next-line calls-loop
     function _addToBalance(address token, uint256 amount) internal override {
         if (token == address(WRAPPED_NATIVE)) {
             // Check addable amount against WETH balance before unwrapping.
@@ -119,6 +120,7 @@ contract JBCeloSucker is JBOptimismSucker {
     /// @param token The token to bridge the outbox tree for.
     /// @param remoteToken Information about the remote token being bridged to.
     // forge-lint: disable-next-line(mixed-case-function)
+    // slither-disable-next-line calls-loop
     function _sendRootOverAMB(
         uint256 transportPayment,
         uint256 index,

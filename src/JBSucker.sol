@@ -682,6 +682,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     /// `transportPayment = msg.value - fee`, which is critical for zero-cost bridges (OP, Base, Celo, Arb L2->L1)
     /// that revert on non-zero transport payment. The fee amount is typically small (max 0.001 ETH).
     /// @param token The terminal token being bridged.
+    // slither-disable-next-line reentrancy-events
     function toRemote(address token) external payable override {
         JBRemoteToken memory remoteToken = _remoteTokenFor[token];
 

@@ -187,6 +187,8 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
 
     /// @notice Deploy one or more suckers for the specified project.
     /// @dev The caller must be the project's owner or have `JBPermissionIds.DEPLOY_SUCKERS` from the project's owner.
+    /// Each newly created sucker is immediately configured by calling `mapTokens`, so successful execution also
+    /// depends on this registry being authorized to perform `MAP_SUCKER_TOKEN` for the project.
     /// @param projectId The ID of the project to deploy suckers for.
     /// @param salt The salt used to deploy the contract. For the suckers to be peers, this must be the same value on
     /// each chain where suckers are deployed.
@@ -209,7 +211,9 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
         suckers = new address[](configurations.length);
 
         // Calculate the salt using the sender's address and the provided `salt`.
-        // This means that for suckers to be peers, the sender has to be the same on each chain.
+        // This is an intentional part of the same-address peer invariant: if projects deploy suckers from
+        // different sender addresses on different chains, the resulting sucker addresses will differ and the
+        // default peer symmetry assumption will not hold.
         salt = keccak256(abi.encode(_msgSender(), salt));
 
         // Iterate through the configurations and deploy the suckers.

@@ -2,6 +2,8 @@
 
 Cross-chain bridging for Juicebox V6 projects. Suckers let users cash out project tokens on one chain, move the backing funds across a bridge, and mint the same number of project tokens on another chain -- all via merkle-tree-based claims and chain-specific bridges.
 
+The codebase includes multiple bridge variants, but the canonical deployment and discovery tooling in this repo is narrower than the full runtime surface. Treat the deployment scripts and helper libraries as the source of truth for what is operationally supported today.
+
 _If you're having trouble understanding this contract, take a look at the [core protocol contracts](https://github.com/Bananapus/nana-core-v6) and the [documentation](https://docs.juicebox.money/) first. If you have questions, reach out on [Discord](https://discord.com/invite/ErQYmth4dS)._
 
 ## What are Suckers?
@@ -64,7 +66,7 @@ graph TD;
 | [`JBBaseSucker`](src/JBBaseSucker.sol) | Thin wrapper around `JBOptimismSucker` with Base chain IDs (Ethereum 1 <-> Base 8453, Sepolia 11155111 <-> Base Sepolia 84532). |
 | [`JBCeloSucker`](src/JBCeloSucker.sol) | Extends `JBOptimismSucker` for Celo (OP Stack, custom gas token CELO). Wraps native ETH → WETH before bridging as ERC-20. Unwraps received WETH → native ETH via `_addToBalance` override. Removes `NATIVE_TOKEN → NATIVE_TOKEN` restriction. Sends messenger messages with `nativeValue = 0` (Celo's native token is CELO, not ETH). |
 | [`JBArbitrumSucker`](src/JBArbitrumSucker.sol) | Extends `JBSucker`. Bridges via Arbitrum Inbox + Gateway Router. Uses `unsafeCreateRetryableTicket` for L1->L2 (to avoid address aliasing of refund address) and `ArbSys.sendTxToL1` for L2->L1. Requires `msg.value` for L1->L2 transport payment. |
-| [`JBSuckerRegistry`](src/JBSuckerRegistry.sol) | Tracks all suckers per project. Manages deployer allowlist (owner-only). Entry point for `deploySuckersFor`. Can remove deprecated suckers via `removeDeprecatedSucker`. Owns the global `toRemoteFee` (ETH fee in wei, capped at `MAX_TO_REMOTE_FEE` = 0.001 ether), adjustable by the registry owner via `setToRemoteFee()`. All sucker clones read this fee from the registry. |
+| [`JBSuckerRegistry`](src/JBSuckerRegistry.sol) | Tracks all suckers per project. Manages deployer allowlist (owner-only). Entry point for `deploySuckersFor`. Can remove deprecated suckers via `removeDeprecatedSucker`. Owns the global `toRemoteFee` (ETH fee in wei, capped at `MAX_TO_REMOTE_FEE` = 0.001 ether), adjustable by the registry owner via `setToRemoteFee()`. All sucker clones read this fee from the registry. Existing-project deployments are deploy-and-map operations, so the registry also needs to be arranged as an authorized `MAP_SUCKER_TOKEN` operator for those projects. |
 | [`JBSuckerDeployer`](src/JBSuckerDeployer.sol) | Abstract base deployer. Clones a singleton sucker via `LibClone.cloneDeterministic` and initializes it. Two-phase setup: `setChainSpecificConstants` then `configureSingleton`. |
 | [`JBCCIPSuckerDeployer`](src/deployers/JBCCIPSuckerDeployer.sol) | Deployer for `JBCCIPSucker`. Stores CCIP router, remote chain ID, and CCIP chain selector. |
 | [`JBOptimismSuckerDeployer`](src/deployers/JBOptimismSuckerDeployer.sol) | Deployer for `JBOptimismSucker`. Stores OP Messenger and OP Bridge addresses. |
