@@ -103,17 +103,7 @@ contract CodexFeeIrrecoverableHarness is JBSucker {
 contract CodexTerminalStub {
     uint256 public totalReceived;
 
-    function addToBalanceOf(
-        uint256,
-        address,
-        uint256 amount,
-        bool,
-        string calldata,
-        bytes calldata
-    )
-        external
-        payable
-    {
+    function addToBalanceOf(uint256, address, uint256 amount, bool, string calldata, bytes calldata) external payable {
         totalReceived += amount;
     }
 }
@@ -204,7 +194,40 @@ contract CodexToRemoteFeeIrrecoverableTest is Test {
                     projectTokenCount: 1,
                     terminalTokenAmount: 1
                 }),
-                proof: [bytes32(0), bytes32(0), bytes32(0), bytes32(0), bytes32(0), bytes32(0), bytes32(0), bytes32(0), bytes32(0), bytes32(0), bytes32(0), bytes32(0), bytes32(0), bytes32(0), bytes32(0), bytes32(0), bytes32(0), bytes32(0), bytes32(0), bytes32(0), bytes32(0), bytes32(0), bytes32(0), bytes32(0), bytes32(0), bytes32(0), bytes32(0), bytes32(0), bytes32(0), bytes32(0), bytes32(0), bytes32(0)]
+                proof: [
+                    bytes32(0),
+                    bytes32(0),
+                    bytes32(0),
+                    bytes32(0),
+                    bytes32(0),
+                    bytes32(0),
+                    bytes32(0),
+                    bytes32(0),
+                    bytes32(0),
+                    bytes32(0),
+                    bytes32(0),
+                    bytes32(0),
+                    bytes32(0),
+                    bytes32(0),
+                    bytes32(0),
+                    bytes32(0),
+                    bytes32(0),
+                    bytes32(0),
+                    bytes32(0),
+                    bytes32(0),
+                    bytes32(0),
+                    bytes32(0),
+                    bytes32(0),
+                    bytes32(0),
+                    bytes32(0),
+                    bytes32(0),
+                    bytes32(0),
+                    bytes32(0),
+                    bytes32(0),
+                    bytes32(0),
+                    bytes32(0),
+                    bytes32(0)
+                ]
             })
         );
 
