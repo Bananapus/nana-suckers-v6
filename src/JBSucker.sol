@@ -682,7 +682,6 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     /// `transportPayment = msg.value - fee`, which is critical for zero-cost bridges (OP, Base, Celo, Arb L2->L1)
     /// that revert on non-zero transport payment. The fee amount is typically small (max 0.001 ETH).
     /// @param token The terminal token being bridged.
-    // slither-disable-next-line reentrancy-events
     function toRemote(address token) external payable override {
         JBRemoteToken memory remoteToken = _remoteTokenFor[token];
 
@@ -713,7 +712,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         // transportPayment.
         IJBTerminal terminal = DIRECTORY.primaryTerminalOf({projectId: FEE_PROJECT_ID, token: JBConstants.NATIVE_TOKEN});
         if (address(terminal) != address(0)) {
-            // slither-disable-next-line unused-return
+            // slither-disable-next-line unused-return,reentrancy-events
             try terminal.pay{value: _toRemoteFee}({
                 projectId: FEE_PROJECT_ID,
                 token: JBConstants.NATIVE_TOKEN,
@@ -727,12 +726,12 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
             ) {}
                 catch {
                 // Fee payment failed — fee ETH stays in this contract, transportPayment unchanged.
-                // The retained ETH is recoverable: it increases `amountToAddToBalanceOf(NATIVE_TOKEN)`,
-                // so the next `claim(NATIVE_TOKEN)` call will sweep it into the project's terminal balance.
+                // There is no dedicated sweep path for this retained ETH. This is an accepted tradeoff
+                // to avoid DoS on zero-cost bridges that revert on non-zero transport payment.
             }
         }
         // If no terminal exists, fee ETH stays in this contract. transportPayment is already correct.
-        // Same recovery path applies: retained fee ETH flows to the project via `claim`.
+        // This retained ETH is an accepted stuck-funds edge case; later `claim` calls do not sweep it.
 
         // Send the merkle root to the remote chain.
         _sendRoot({transportPayment: transportPayment, token: token, remoteToken: remoteToken});

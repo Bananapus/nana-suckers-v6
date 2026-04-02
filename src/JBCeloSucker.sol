@@ -76,7 +76,6 @@ contract JBCeloSucker is JBOptimismSucker {
     /// and adds native ETH to the project's balance.
     /// @param token The terminal token to add to the project's balance.
     /// @param amount The amount of terminal tokens to add to the project's balance.
-    // slither-disable-next-line calls-loop
     function _addToBalance(address token, uint256 amount) internal override {
         if (token == address(WRAPPED_NATIVE)) {
             // Check addable amount against WETH balance before unwrapping.
@@ -88,9 +87,11 @@ contract JBCeloSucker is JBOptimismSucker {
             uint256 _projectId = projectId();
 
             // Unwrap WETH → native ETH.
+            // slither-disable-next-line calls-loop
             WRAPPED_NATIVE.withdraw(amount);
 
             // Get the project's primary terminal for native token.
+            // slither-disable-next-line calls-loop
             IJBTerminal terminal = DIRECTORY.primaryTerminalOf({projectId: _projectId, token: JBConstants.NATIVE_TOKEN});
 
             if (address(terminal) == address(0)) {
@@ -98,7 +99,7 @@ contract JBCeloSucker is JBOptimismSucker {
             }
 
             // Add native ETH to the project's balance.
-            // slither-disable-next-line arbitrary-send-eth
+            // slither-disable-next-line arbitrary-send-eth,calls-loop
             terminal.addToBalanceOf{value: amount}({
                 projectId: _projectId,
                 token: JBConstants.NATIVE_TOKEN,
@@ -120,7 +121,6 @@ contract JBCeloSucker is JBOptimismSucker {
     /// @param token The token to bridge the outbox tree for.
     /// @param remoteToken Information about the remote token being bridged to.
     // forge-lint: disable-next-line(mixed-case-function)
-    // slither-disable-next-line calls-loop
     function _sendRootOverAMB(
         uint256 transportPayment,
         uint256 index,
@@ -142,7 +142,7 @@ contract JBCeloSucker is JBOptimismSucker {
         if (amount != 0) {
             if (token == JBConstants.NATIVE_TOKEN) {
                 // Wrap native ETH → WETH so it can be bridged as ERC-20.
-                // slither-disable-next-line arbitrary-send-eth
+                // slither-disable-next-line arbitrary-send-eth,calls-loop
                 WRAPPED_NATIVE.deposit{value: amount}();
 
                 // Approve the bridge to spend the WETH.
