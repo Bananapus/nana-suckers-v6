@@ -114,3 +114,7 @@ The registry owner can adjust `toRemoteFee` via `JBSuckerRegistry.setToRemoteFee
 ### 10.4 Fee is paid to the protocol project, not the sucker's project
 
 The fee is paid to `FEE_PROJECT_ID` (the protocol project), not to the sucker's own `projectId()`. The protocol project always has a native token terminal, ensuring reliable fee collection. The sucker's project does not directly benefit from the anti-spam fee.
+
+### 10.5 `mapTokens` does not refund ETH on enable-only batches
+
+`mapTokens()` only uses `msg.value` when one or more mappings are being disabled and need transport payment for the final root flush. If every mapping in the batch is enable-only, `numberToDisable == 0`, each `_mapToken` call receives `transportPaymentValue == 0`, and any ETH sent with the transaction is not used or refunded. This is already documented inline in `JBSucker.sol`; operators should treat it as a known payable-interface footgun and avoid sending ETH on enable-only calls.
