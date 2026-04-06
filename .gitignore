@@ -20,6 +20,8 @@ publish.sh
 
 .claude/
 
+assets/
+
 # Audit/nemesis output
 .audit/
 .audit-logs/

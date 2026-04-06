@@ -1,8 +1,20 @@
-# RISKS.md -- nana-suckers-v6
+# Suckers Risk Register
 
-Forward-looking risk catalog for the JBSucker cross-chain bridging system.
+This file focuses on the bridge-like risks in the sucker system: merkle-root progression, token mapping, cross-chain consistency, and the explicit non-atomicity of source burn and destination mint.
 
----
+## How to use this file
+
+- Read `Priority risks` first; they summarize the bridge failure modes with real user-fund implications.
+- Use the detailed sections for merkle, fee, emergency, and deprecation reasoning.
+- Treat `Accepted Behaviors` as explicit tradeoffs in the bridge model, not oversights.
+
+## Priority risks
+
+| Priority | Risk | Why it matters | Primary controls |
+|----------|------|----------------|------------------|
+| P0 | Out-of-order or asymmetric cross-chain state | If roots or peer suckers do not progress symmetrically, claims can become unavailable or one-way only. | Nonce checks, peer verification, and emergency hatch recovery. |
+| P0 | Bad token mapping or registry trust | Incorrect local or remote token mapping can mint or route the wrong asset across chains. | Strict mapping controls, deploy-time review, and registry or operator scrutiny. |
+| P1 | Non-atomic bridge semantics | Users can experience delays, skipped roots, or recovery flows because burn and mint are not one atomic operation. | Explicit user and operator docs, emergency procedures, and monitoring of bridge liveness. |
 
 ## 1. Trust Assumptions
 
@@ -46,7 +58,7 @@ Forward-looking risk catalog for the JBSucker cross-chain bridging system.
 
 ## 5. Fee Collection Risks
 
-- **Best-effort fee collection.** `toRemoteFee` is a centralized storage variable on `JBSuckerRegistry` (ETH, in wei) — uniform across all suckers and all tokens, non-bypassable by integrators. It is paid into `FEE_PROJECT_ID` (typically project ID 1) via `terminal.pay()`. If the fee project has no primary terminal for `NATIVE_TOKEN`, or if `terminal.pay()` reverts for any reason, `toRemote()` silently proceeds without collecting the fee. This means fee collection is best-effort — it can fail if the fee project's terminal is misconfigured, paused, or removed — but the fee amount cannot be set to 0 by users calling `toRemote()`.
+- **Best-effort fee collection.** `toRemoteFee` is a centralized storage variable on `JBSuckerRegistry` (ETH, in wei) — uniform across all suckers and all tokens, non-bypassable by integrators. It is paid into `FEE_PROJECT_ID` (typically project ID 1) via `terminal.pay()`. If the fee project has no primary terminal for `NATIVE_TOKEN`, or if `terminal.pay()` reverts for any reason, `toRemote()` still proceeds, but the fee ETH is retained by the sucker contract and later becomes sweepable through the normal claim path. Fee collection is therefore best-effort at the protocol-fee destination even though users still supply the fee amount.
 - **Renounced registry ownership risk.** If the registry owner calls `renounceOwnership()`, `setToRemoteFee()` becomes permanently uncallable and the fee is frozen at its current value across all suckers. This is a deliberate trade-off: it allows the registry owner to credibly commit to a fee level, but eliminates the ability to respond to future ETH price changes. The fee is still capped at `MAX_TO_REMOTE_FEE`, so the maximum downside is bounded.
 - **Immutable fee project.** `FEE_PROJECT_ID` is set at construction and cannot be changed. If the fee project is abandoned or its terminal removed, there is no way to redirect fees without deploying new suckers.
 - **Cross-reference: sucker registration path.** Suckers are deployed via `JBSuckerRegistry.deploySuckersFor`, which requires `DEPLOY_SUCKERS` permission from the project owner. The registry's `deploy` function uses `CREATE2` with a deployer-specific salt. The sucker's `peer()` address is deterministic — a misconfigured peer means the sucker accepts messages from the wrong remote address. See [nana-omnichain-deployers-v6 RISKS.md](../nana-omnichain-deployers-v6/RISKS.md) for deployer-level risks.
@@ -113,8 +125,8 @@ The registry owner can adjust `toRemoteFee` via `JBSuckerRegistry.setToRemoteFee
 
 ### 10.4 Fee is paid to the protocol project, not the sucker's project
 
-The fee is paid to `FEE_PROJECT_ID` (the protocol project), not to the sucker's own `projectId()`. The protocol project always has a native token terminal, ensuring reliable fee collection. The sucker's project does not directly benefit from the anti-spam fee.
+The fee is paid to `FEE_PROJECT_ID` (the protocol project), not to the sucker's own `projectId()`. This centralizes fee collection, but it is still only best-effort: if the fee project's native terminal is missing or its `pay` call reverts, the fee ETH stays in the sucker contract and is later recoverable through the normal claim path. The sucker's project does not directly benefit from the anti-spam fee.
 
 ### 10.5 `mapTokens` does not refund ETH on enable-only batches
 
-`mapTokens()` only uses `msg.value` when one or more mappings are being disabled and need transport payment for the final root flush. If every mapping in the batch is enable-only, `numberToDisable == 0`, each `_mapToken` call receives `transportPaymentValue == 0`, and any ETH sent with the transaction is not used or refunded. This is already documented inline in `JBSucker.sol`; operators should treat it as a known payable-interface footgun and avoid sending ETH on enable-only calls.
+`mapTokens()` only uses `msg.value` when one or more mappings are being disabled and need transport payment for the final root flush. If every mapping in the batch is enable-only, `numberToDisable == 0`, each `_mapToken` call receives `transportPaymentValue == 0`, and any ETH sent with the transaction is not used or refunded. Operators should avoid sending ETH on enable-only calls.
