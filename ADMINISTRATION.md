@@ -2,6 +2,35 @@
 
 Admin privileges and their scope in nana-suckers-v6.
 
+## At A Glance
+
+| Item | Details |
+|------|---------|
+| Scope | Cross-chain bridge deployment, token mapping, deprecation, emergency hatch controls, and layer-specific bridge configurator setup. |
+| Operators | Registry owner, project owners and delegates, sucker deployers, token mappers, safety admins, deprecation admins, and one-time bridge configurators. |
+| Highest-risk actions | Mapping the wrong remote token, enabling an emergency hatch, setting deprecation, or misconfiguring bridge singletons and chain constants. |
+| Recovery posture | The normal recovery path is to deploy or registry-enable a new sucker/deployer and migrate traffic; several safety actions are intentionally irreversible. |
+
+## Routine Operations
+
+- Allow only the sucker deployer implementations you are prepared to support operationally on the registry side.
+- Map remote tokens carefully and early, before outbox activity makes mistakes harder to unwind.
+- Use deprecation timestamps to create a safe runway for shutdown rather than trying to disable a bridge abruptly.
+- Treat emergency hatch activation as a last-resort safety action when the normal bridge path is no longer trustworthy.
+- Verify one-time deployer configuration (`configureSingleton`, `setChainSpecificConstants`) before using a deployer in production.
+
+## One-Way Or High-Risk Actions
+
+- `enableEmergencyHatchFor` is irreversible for the affected token mapping.
+- Once a sucker reaches `SENDING_DISABLED` or `DEPRECATED`, the lifecycle cannot be reversed.
+- Deployer singleton and chain-specific constant configuration are one-time setup operations.
+- A bad token mapping can strand users or route liquidity to the wrong remote asset.
+
+## Recovery Notes
+
+- If a bridge path is unhealthy, prefer deprecating the affected sucker and standing up a replacement rather than forcing traffic through a degraded route.
+- If a token is emergency-hatched, users recover through the documented exit flow; you cannot simply re-enable the old path afterward.
+
 ## Roles
 
 ### Registry Owner
@@ -56,17 +85,17 @@ Admin privileges and their scope in nana-suckers-v6.
 | `allowSuckerDeployers(deployers)` | Registry Owner | N/A (`onlyOwner`) | Global | Batch version: adds multiple deployer contracts to the allowlist. |
 | `removeSuckerDeployer(deployer)` | Registry Owner | N/A (`onlyOwner`) | Global | Removes a deployer contract from the allowlist, preventing future sucker deployments through it. |
 | `setToRemoteFee(fee)` | Registry Owner | N/A (`onlyOwner`) | Global | Sets the `toRemoteFee` applied to all suckers. The fee must be <= `MAX_TO_REMOTE_FEE` (0.001 ether). Emits `ToRemoteFeeChanged`. |
-| `deploySuckersFor(projectId, salt, configs)` | Project Owner | `DEPLOY_SUCKERS` | Per-project | Deploys one or more suckers for a project using allowlisted deployers. Hashes salt with `_msgSender()` (which equals `msg.sender` for direct calls, or the relayed sender for ERC-2771 meta-transactions) for deterministic cross-chain addresses. Also calls `mapTokens` on each newly created sucker. |
+| `deploySuckersFor(projectId, salt, configs)` | Project owner or delegate | `DEPLOY_SUCKERS` | Per-project | Deploys one or more suckers for a project using allowlisted deployers. Hashes salt with `_msgSender()` (which equals `msg.sender` for direct calls, or the relayed sender for ERC-2771 meta-transactions) for deterministic cross-chain addresses. Also calls `mapTokens` on each newly created sucker. |
 | `removeDeprecatedSucker(projectId, sucker)` | Anyone | None | Per-project | Removes a fully `DEPRECATED` sucker from the registry. Permissionless but only succeeds if the sucker is in the `DEPRECATED` state. |
 
 ### JBSucker
 
 | Function | Required Role | Permission ID | Scope | What It Does |
 |----------|--------------|---------------|-------|--------------|
-| `mapToken(map)` | Project Owner | `MAP_SUCKER_TOKEN` | Per-sucker | Maps a local terminal token to a remote token, enabling bridging. Setting `remoteToken` to `bytes32(0)` disables bridging and sends a final root to flush remaining outbox entries. |
-| `mapTokens(maps)` | Project Owner | `MAP_SUCKER_TOKEN` | Per-sucker | Batch version: maps multiple local-to-remote token pairs. Each mapping requires the same permission. |
-| `enableEmergencyHatchFor(tokens)` | Project Owner | `SUCKER_SAFETY` | Per-sucker | Opens the emergency hatch for specified tokens (irreversible). Sets `emergencyHatch = true` and `enabled = false` on each token's remote mapping. Allows users to exit through the outbox on the chain they deposited on. |
-| `setDeprecation(timestamp)` | Project Owner | `SET_SUCKER_DEPRECATION` | Per-sucker | Sets the timestamp after which the sucker becomes fully deprecated. Must be at least `_maxMessagingDelay()` (14 days) in the future. Set to `0` to cancel a pending deprecation. Reverts if already in `SENDING_DISABLED` or `DEPRECATED` state. |
+| `mapToken(map)` | Project owner or delegate | `MAP_SUCKER_TOKEN` | Per-sucker | Maps a local terminal token to a remote token, enabling bridging. Setting `remoteToken` to `bytes32(0)` disables bridging and sends a final root to flush remaining outbox entries. |
+| `mapTokens(maps)` | Project owner or delegate | `MAP_SUCKER_TOKEN` | Per-sucker | Batch version: maps multiple local-to-remote token pairs. Each mapping requires the same permission. |
+| `enableEmergencyHatchFor(tokens)` | Project owner or delegate | `SUCKER_SAFETY` | Per-sucker | Opens the emergency hatch for specified tokens (irreversible). Sets `emergencyHatch = true` and `enabled = false` on each token's remote mapping. Allows users to exit through the outbox on the chain they deposited on. |
+| `setDeprecation(timestamp)` | Project owner or delegate | `SET_SUCKER_DEPRECATION` | Per-sucker | Sets the timestamp after which the sucker becomes fully deprecated. Must be at least `_maxMessagingDelay()` (14 days) in the future. Set to `0` to cancel a pending deprecation. Reverts if already in `SENDING_DISABLED` or `DEPRECATED` state. |
 
 ### JBSuckerDeployer (base and all subclasses)
 
