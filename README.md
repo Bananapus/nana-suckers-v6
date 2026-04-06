@@ -5,6 +5,8 @@
 Docs: <https://docs.juicebox.money>
 Architecture: [ARCHITECTURE.md](./ARCHITECTURE.md)
 
+The codebase includes multiple bridge variants, but the canonical deployment and discovery tooling in this repo is narrower than the full runtime surface. Treat the deployment scripts and helper libraries as the source of truth for what is operationally supported today.
+
 ## Overview
 
 Suckers bridge a project by tracking claims in append-only Merkle trees:
@@ -45,10 +47,25 @@ That means every bridge path has two trust surfaces:
 
 The shortest useful reading order is:
 
-1. `JBSucker`
-2. `JBSuckerRegistry`
-3. the chain-specific sucker implementation you actually deploy
-4. the corresponding deployer
+| Contract | Description |
+|----------|-------------|
+| [`JBSucker`](src/JBSucker.sol) | Abstract base. Manages outbox/inbox merkle trees, `prepare`/`toRemote`/`claim` lifecycle, token mapping, deprecation, and emergency hatch. Deployed as clones via `Initializable`. Uses `ERC2771Context` for meta-transactions. Has immutable `FEE_PROJECT_ID` (typically project ID 1) and immutable `REGISTRY` reference. Reads the `toRemoteFee` from the registry via `REGISTRY.toRemoteFee()` on each `toRemote()` call. |
+| [`JBCCIPSucker`](src/JBCCIPSucker.sol) | Extends `JBSucker`. Bridges via Chainlink CCIP (`ccipSend`/`ccipReceive`). Supports any CCIP-connected chain pair. Wraps native ETH to WETH before bridging (CCIP only transports ERC-20s) and unwraps on the receiving end. Can map `NATIVE_TOKEN` to ERC-20 addresses on the remote chain (unlike OP/Arbitrum suckers). |
+| [`JBOptimismSucker`](src/JBOptimismSucker.sol) | Extends `JBSucker`. Bridges via OP Standard Bridge + OP Messenger. No `msg.value` required for transport. |
+| [`JBBaseSucker`](src/JBBaseSucker.sol) | Thin wrapper around `JBOptimismSucker` with Base chain IDs (Ethereum 1 <-> Base 8453, Sepolia 11155111 <-> Base Sepolia 84532). |
+| [`JBCeloSucker`](src/JBCeloSucker.sol) | Extends `JBOptimismSucker` for Celo (OP Stack, custom gas token CELO). Wraps native ETH → WETH before bridging as ERC-20. Unwraps received WETH → native ETH via `_addToBalance` override. Removes `NATIVE_TOKEN → NATIVE_TOKEN` restriction. Sends messenger messages with `nativeValue = 0` (Celo's native token is CELO, not ETH). |
+| [`JBArbitrumSucker`](src/JBArbitrumSucker.sol) | Extends `JBSucker`. Bridges via Arbitrum Inbox + Gateway Router. Uses `unsafeCreateRetryableTicket` for L1->L2 (to avoid address aliasing of refund address) and `ArbSys.sendTxToL1` for L2->L1. Requires `msg.value` for L1->L2 transport payment. |
+| [`JBSuckerRegistry`](src/JBSuckerRegistry.sol) | Tracks all suckers per project. Manages deployer allowlist (owner-only). Entry point for `deploySuckersFor`. Can remove deprecated suckers via `removeDeprecatedSucker`. Owns the global `toRemoteFee` (ETH fee in wei, capped at `MAX_TO_REMOTE_FEE` = 0.001 ether), adjustable by the registry owner via `setToRemoteFee()`. All sucker clones read this fee from the registry. Existing-project deployments are deploy-and-map operations, so the registry also needs to be arranged as an authorized `MAP_SUCKER_TOKEN` operator for those projects. |
+| [`JBSuckerDeployer`](src/JBSuckerDeployer.sol) | Abstract base deployer. Clones a singleton sucker via `LibClone.cloneDeterministic` and initializes it. Two-phase setup: `setChainSpecificConstants` then `configureSingleton`. |
+| [`JBCCIPSuckerDeployer`](src/deployers/JBCCIPSuckerDeployer.sol) | Deployer for `JBCCIPSucker`. Stores CCIP router, remote chain ID, and CCIP chain selector. |
+| [`JBOptimismSuckerDeployer`](src/deployers/JBOptimismSuckerDeployer.sol) | Deployer for `JBOptimismSucker`. Stores OP Messenger and OP Bridge addresses. |
+| [`JBBaseSuckerDeployer`](src/deployers/JBBaseSuckerDeployer.sol) | Thin wrapper around `JBOptimismSuckerDeployer` for Base. |
+| [`JBCeloSuckerDeployer`](src/deployers/JBCeloSuckerDeployer.sol) | Deployer for `JBCeloSucker`. Extends `JBOptimismSuckerDeployer` with `wrappedNative` (`IWrappedNativeToken`) storage for the local chain's WETH address. |
+| [`JBArbitrumSuckerDeployer`](src/deployers/JBArbitrumSuckerDeployer.sol) | Deployer for `JBArbitrumSucker`. Stores Arbitrum Inbox, Gateway Router, and layer (`JBLayer.L1` or `JBLayer.L2`). |
+| [`MerkleLib`](src/utils/MerkleLib.sol) | Incremental merkle tree (depth 32, max ~4 billion leaves, modeled on eth2 deposit contract). Used for outbox/inbox trees. Gas-optimized with inline assembly for `root()` and `branchRoot()`. |
+| [`CCIPHelper`](src/libraries/CCIPHelper.sol) | CCIP router addresses, chain selectors, and WETH addresses per chain. Covers Ethereum, Optimism, Arbitrum, Base, Polygon, Avalanche, and BNB Chain (mainnet and testnets). |
+| [`ARBAddresses`](src/libraries/ARBAddresses.sol) | Arbitrum bridge contract addresses (Inbox, Gateway Router) for mainnet and Sepolia. |
+| [`ARBChains`](src/libraries/ARBChains.sol) | Arbitrum chain ID constants. |
 
 ## Read These Files First
 

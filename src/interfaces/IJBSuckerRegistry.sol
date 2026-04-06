@@ -91,6 +91,8 @@ interface IJBSuckerRegistry {
     function allowSuckerDeployers(address[] calldata deployers) external;
 
     /// @notice Deploy one or more suckers for the specified project.
+    /// @dev This call also applies each configuration's token mappings on the deployed suckers. Projects using this
+    /// path need the registry to be able to satisfy the corresponding `MAP_SUCKER_TOKEN` checks.
     /// @param projectId The ID of the project to deploy suckers for.
     /// @param salt The salt used for deterministic deployment.
     /// @param configurations The deployer configs to use.

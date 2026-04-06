@@ -131,12 +131,13 @@ contract DeployScript is Script, Sphinx {
         _arbitrumSucker();
         _ccipSucker();
 
-        if (!registryAlreadyDeployed) {
-            // Before transferring ownership to JBDAO we approve the deployers.
-            if (PRE_APPROVED_DEPLOYERS.length != 0) {
-                REGISTRY.allowSuckerDeployers(PRE_APPROVED_DEPLOYERS);
-            }
+        // Synchronize any deployers discovered or resumed during this run into the registry as long as the
+        // current safe still controls it. This keeps partial-deployment recovery idempotent.
+        if (PRE_APPROVED_DEPLOYERS.length != 0 && Ownable(address(REGISTRY)).owner() == safeAddress()) {
+            REGISTRY.allowSuckerDeployers(PRE_APPROVED_DEPLOYERS);
+        }
 
+        if (!registryAlreadyDeployed) {
             // Check what safe this is, if this is the same one as the fee-project owner, then we do not need to
             // transfer. If its not then we transfer to the fee-project safe.
             // NOTE: If this is ran after the configuration of the fee-project, this would transfer it to the
