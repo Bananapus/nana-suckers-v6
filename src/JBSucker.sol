@@ -1065,7 +1065,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
 
         // Update the numberOfClaimsSent to the current count of the tree.
         // This is used as in the fallback to allow users to withdraw locally if the bridge is reverting.
-        outbox.numberOfClaimsSent = count;
+        outbox.numberOfClaimsSent = uint192(count);
         uint256 index = count - 1;
 
         // Emit an event for the relayers to watch for.

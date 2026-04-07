@@ -139,7 +139,7 @@ contract AuditGapSucker is JBSucker {
     }
 
     function test_setNumberOfClaimsSent(address token, uint256 count) external {
-        _outboxOf[token].numberOfClaimsSent = count;
+        _outboxOf[token].numberOfClaimsSent = uint192(count);
     }
 
     function test_getNumberOfClaimsSent(address token) external view returns (uint256) {
