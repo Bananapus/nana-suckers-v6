@@ -302,10 +302,17 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     )
         internal
         pure
-        returns (bytes32)
+        returns (bytes32 hash)
     {
+        // All three arguments are 32 bytes — hash from free memory to avoid abi.encode allocation overhead.
         // forge-lint: disable-next-line(asm-keccak256)
-        return keccak256(abi.encode(projectTokenCount, terminalTokenAmount, beneficiary));
+        assembly {
+            let ptr := mload(0x40)
+            mstore(ptr, projectTokenCount)
+            mstore(add(ptr, 0x20), terminalTokenAmount)
+            mstore(add(ptr, 0x40), beneficiary)
+            hash := keccak256(ptr, 0x60)
+        }
     }
 
     /// @dev ERC-2771 specifies the context as being a single address (20 bytes).
@@ -365,8 +372,11 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     /// claim).
     function claim(JBClaim[] calldata claims) external override {
         // Claim each.
-        for (uint256 i; i < claims.length; i++) {
+        for (uint256 i; i < claims.length;) {
             claim(claims[i]);
+            unchecked {
+                ++i;
+            }
         }
     }
 
@@ -416,10 +426,13 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         });
 
         // Enable the emergency hatch for each token.
-        for (uint256 i; i < tokens.length; i++) {
+        for (uint256 i; i < tokens.length;) {
             // We have an invariant where if emergencyHatch is true, enabled should be false.
             _remoteTokenFor[tokens[i]].enabled = false;
             _remoteTokenFor[tokens[i]].emergencyHatch = true;
+            unchecked {
+                ++i;
+            }
         }
 
         emit EmergencyHatchOpened(tokens, _msgSender());
@@ -545,17 +558,23 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         // Note: if all mappings are enable-only (no disables), `numberToDisable` stays 0 and `transportPaymentValue`
         // is set to 0 for each call. Any ETH sent with the transaction is not used or refunded — callers should
         // not send ETH when only enabling mappings (no root flush is needed).
-        for (uint256 h; h < maps.length; h++) {
+        for (uint256 h; h < maps.length;) {
             JBOutboxTree storage _outbox = _outboxOf[maps[h].localToken];
             if (maps[h].remoteToken == bytes32(0) && _outbox.numberOfClaimsSent != _outbox.tree.count) {
                 numberToDisable++;
             }
+            unchecked {
+                ++h;
+            }
         }
 
         // Perform each token mapping.
-        for (uint256 i; i < maps.length; i++) {
+        for (uint256 i; i < maps.length;) {
             // slither-disable-next-line msg-value-loop
             _mapToken({map: maps[i], transportPaymentValue: numberToDisable > 0 ? msg.value / numberToDisable : 0});
+            unchecked {
+                ++i;
+            }
         }
 
         // Refund any remainder from integer division so dust wei isn't stuck in the contract.
@@ -759,17 +778,15 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     /// @notice Adds funds to the projects balance.
     /// @param token The terminal token to add to the project's balance.
     /// @param amount The amount of terminal tokens to add to the project's balance.
-    function _addToBalance(address token, uint256 amount) internal virtual {
+    /// @param _projectId The cached project ID to avoid redundant storage reads.
+    function _addToBalance(address token, uint256 amount, uint256 _projectId) internal virtual {
         // Make sure that the current `amountToAddToBalance` is greater than or equal to the amount being added.
         uint256 addableAmount = amountToAddToBalanceOf(token);
         if (amount > addableAmount) {
             revert JBSucker_InsufficientBalance(amount, addableAmount);
         }
 
-        uint256 _projectId = projectId();
-
         // Get the project's primary terminal for the token.
-        // slither
         // slither-disable-next-line calls-loop
         IJBTerminal terminal = DIRECTORY.primaryTerminalOf({projectId: _projectId, token: token});
 
@@ -813,12 +830,12 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     )
         internal
     {
+        uint256 _projectId = projectId();
+
         // Add the cashed out funds to the project's balance.
         if (terminalTokenAmount != 0) {
-            _addToBalance({token: terminalToken, amount: terminalTokenAmount});
+            _addToBalance({token: terminalToken, amount: terminalTokenAmount, _projectId: _projectId});
         }
-
-        uint256 _projectId = projectId();
 
         // Cast the bytes32 beneficiary to an EVM address for the local mint.
         address beneficiaryAddress = _toAddress(beneficiary);
@@ -865,18 +882,15 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         // Get the outbox in storage.
         JBOutboxTree storage outbox = _outboxOf[token];
 
-        // Create a new tree based on the outbox tree for the terminal token with the hash inserted.
-        MerkleLib.Tree memory tree = outbox.tree.insert(hashed);
-
-        // Update the outbox tree and balance for the terminal token.
-        outbox.tree = tree;
+        // Insert the hash directly into the storage-backed tree — writes only the changed branch slot and count.
+        outbox.tree.insert(hashed);
         outbox.balance += terminalTokenAmount;
 
         emit InsertToOutboxTree({
             beneficiary: beneficiary,
             token: token,
             hashed: hashed,
-            index: tree.count - 1, // Subtract 1 since we want the 0-based index.
+            index: outbox.tree.count - 1, // Subtract 1 since we want the 0-based index.
             root: outbox.tree.root(),
             projectTokenCount: projectTokenCount,
             terminalTokenAmount: terminalTokenAmount,

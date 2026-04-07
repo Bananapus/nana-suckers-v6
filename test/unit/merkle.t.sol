@@ -174,7 +174,7 @@ contract MerkleUnitTest is JBSucker, Test {
 
     /// @dev Override _addToBalance to be a no-op for merkle proof testing.
     /// These tests focus on merkle tree proof validation, not token balance mechanics.
-    function _addToBalance(address, uint256) internal override {}
+    function _addToBalance(address, uint256, uint256) internal override {}
 
     function _isRemotePeer(address) internal view virtual override returns (bool valid) {
         return false;

@@ -314,5 +314,5 @@ contract TestSucker is JBSucker {
 
     /// @dev Override _addToBalance to be a no-op for fuzz testing.
     /// These tests focus on emergency exit state machine behavior, not token balance mechanics.
-    function _addToBalance(address, uint256) internal override {}
+    function _addToBalance(address, uint256, uint256) internal override {}
 }

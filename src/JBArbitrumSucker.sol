@@ -190,6 +190,9 @@ contract JBArbitrumSucker is JBSucker, IJBArbitrumSucker {
     function _toL1(address token, uint256 amount, bytes memory data, JBRemoteToken memory remoteToken) internal {
         uint256 nativeValue;
 
+        // Cache peer address to avoid redundant calls.
+        address peerAddress = _toAddress(peer());
+
         // If the token is an ERC-20, bridge it to the peer.
         // If the amount is `0` then we do not need to bridge any ERC20.
         if (token != JBConstants.NATIVE_TOKEN && amount != 0) {
@@ -200,7 +203,7 @@ contract JBArbitrumSucker is JBSucker, IJBArbitrumSucker {
             // slither-disable-next-line calls-loop,unused-return
             IArbL2GatewayRouter(address(GATEWAYROUTER))
                 .outboundTransfer({
-                    l1Token: _toAddress(remoteToken.addr), to: _toAddress(peer()), amount: amount, data: bytes("")
+                    l1Token: _toAddress(remoteToken.addr), to: peerAddress, amount: amount, data: bytes("")
                 });
         } else {
             // Otherwise, the token is the native token, and the amount will be sent as `msg.value`.
@@ -209,9 +212,8 @@ contract JBArbitrumSucker is JBSucker, IJBArbitrumSucker {
 
         // Send the message to the peer with the reclaimed ETH.
         // Address `100` is the ArbSys precompile address.
-        // Convert bytes32 peer to address at the Arbitrum API boundary.
         // slither-disable-next-line calls-loop,unused-return
-        ArbSys(address(100)).sendTxToL1{value: nativeValue}({destination: _toAddress(peer()), data: data});
+        ArbSys(address(100)).sendTxToL1{value: nativeValue}({destination: peerAddress, data: data});
     }
 
     /// @notice Bridge the `token` and data to the remote L2 chain.
