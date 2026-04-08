@@ -120,13 +120,16 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
         pairs = new JBSuckersPair[](suckers.length);
 
         // Populate the array of pairs.
-        for (uint256 i; i < suckers.length; i++) {
+        for (uint256 i; i < suckers.length;) {
             // Get the sucker being iterated over.
             IJBSucker sucker = IJBSucker(suckers[i]);
 
             // slither-disable-next-line calls-loop
             pairs[i] =
                 JBSuckersPair({local: address(sucker), remote: sucker.peer(), remoteChainId: sucker.peerChainId()});
+            unchecked {
+                ++i;
+            }
         }
     }
 
@@ -174,14 +177,20 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
     /// @dev Can only be called by this contract's owner (initially project ID 1, or JuiceboxDAO).
     /// @param deployers The address of the deployer to add.
     function allowSuckerDeployers(address[] calldata deployers) public override onlyOwner {
+        // Cache _msgSender() to avoid redundant calls in the loop.
+        address sender = _msgSender();
+
         // Iterate through the deployers and allow them.
-        for (uint256 i; i < deployers.length; i++) {
+        for (uint256 i; i < deployers.length;) {
             // Get the deployer being iterated over.
             address deployer = deployers[i];
 
             // Allow the deployer.
             suckerDeployerIsAllowed[deployer] = true;
-            emit SuckerDeployerAllowed({deployer: deployer, caller: _msgSender()});
+            emit SuckerDeployerAllowed({deployer: deployer, caller: sender});
+            unchecked {
+                ++i;
+            }
         }
     }
 
@@ -210,14 +219,17 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
         // Create an array to store the suckers as they are deployed.
         suckers = new address[](configurations.length);
 
+        // Cache _msgSender() to avoid redundant calls in the loop.
+        address sender = _msgSender();
+
         // Calculate the salt using the sender's address and the provided `salt`.
         // This is an intentional part of the same-address peer invariant: if projects deploy suckers from
         // different sender addresses on different chains, the resulting sucker addresses will differ and the
         // default peer symmetry assumption will not hold.
-        salt = keccak256(abi.encode(_msgSender(), salt));
+        salt = keccak256(abi.encode(sender, salt));
 
         // Iterate through the configurations and deploy the suckers.
-        for (uint256 i; i < configurations.length; i++) {
+        for (uint256 i; i < configurations.length;) {
             // Get the configuration being iterated over.
             JBSuckerDeployerConfig memory configuration = configurations[i];
 
@@ -239,8 +251,11 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
             // slither-disable-next-line reentrancy-events,calls-loop
             sucker.mapTokens(configuration.mappings);
             emit SuckerDeployedFor({
-                projectId: projectId, sucker: address(sucker), configuration: configuration, caller: _msgSender()
+                projectId: projectId, sucker: address(sucker), configuration: configuration, caller: sender
             });
+            unchecked {
+                ++i;
+            }
         }
     }
 

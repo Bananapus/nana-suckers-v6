@@ -147,7 +147,7 @@ contract DeepAttackSucker is JBSucker {
     }
 
     function test_setNumberOfClaimsSent(address token, uint256 count) external {
-        _outboxOf[token].numberOfClaimsSent = count;
+        _outboxOf[token].numberOfClaimsSent = uint192(count);
     }
 
     function test_getInboxRoot(address token) external view returns (bytes32) {

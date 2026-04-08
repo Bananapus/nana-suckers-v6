@@ -76,7 +76,8 @@ contract JBCeloSucker is JBOptimismSucker {
     /// and adds native ETH to the project's balance.
     /// @param token The terminal token to add to the project's balance.
     /// @param amount The amount of terminal tokens to add to the project's balance.
-    function _addToBalance(address token, uint256 amount) internal override {
+    /// @param projectId The cached project ID to avoid redundant storage reads.
+    function _addToBalance(address token, uint256 amount, uint256 projectId) internal override {
         if (token == address(WRAPPED_NATIVE)) {
             // Check addable amount against WETH balance before unwrapping.
             uint256 addableAmount = amountToAddToBalanceOf(token);
@@ -84,24 +85,22 @@ contract JBCeloSucker is JBOptimismSucker {
                 revert JBSucker_InsufficientBalance(amount, addableAmount);
             }
 
-            uint256 _projectId = projectId();
-
             // Unwrap WETH → native ETH.
             // slither-disable-next-line calls-loop
             WRAPPED_NATIVE.withdraw(amount);
 
             // Get the project's primary terminal for native token.
             // slither-disable-next-line calls-loop
-            IJBTerminal terminal = DIRECTORY.primaryTerminalOf({projectId: _projectId, token: JBConstants.NATIVE_TOKEN});
+            IJBTerminal terminal = DIRECTORY.primaryTerminalOf({projectId: projectId, token: JBConstants.NATIVE_TOKEN});
 
             if (address(terminal) == address(0)) {
-                revert JBSucker_NoTerminalForToken(_projectId, JBConstants.NATIVE_TOKEN);
+                revert JBSucker_NoTerminalForToken(projectId, JBConstants.NATIVE_TOKEN);
             }
 
             // Add native ETH to the project's balance.
             // slither-disable-next-line arbitrary-send-eth,calls-loop
             terminal.addToBalanceOf{value: amount}({
-                projectId: _projectId,
+                projectId: projectId,
                 token: JBConstants.NATIVE_TOKEN,
                 amount: amount,
                 shouldReturnHeldFees: false,
@@ -109,7 +108,7 @@ contract JBCeloSucker is JBOptimismSucker {
                 metadata: ""
             });
         } else {
-            super._addToBalance({token: token, amount: amount});
+            super._addToBalance({token: token, amount: amount, projectId: projectId});
         }
     }
 
@@ -139,42 +138,33 @@ contract JBCeloSucker is JBOptimismSucker {
             revert JBSucker_UnexpectedMsgValue(transportPayment);
         }
 
+        // Cache peer address to avoid redundant calls.
+        address peerAddress = _toAddress(peer());
+
         if (amount != 0) {
+            // Determine the local token to bridge — native ETH is wrapped to WETH first.
+            address bridgeToken = token;
             if (token == JBConstants.NATIVE_TOKEN) {
                 // Wrap native ETH → WETH so it can be bridged as ERC-20.
                 // slither-disable-next-line arbitrary-send-eth,calls-loop
                 WRAPPED_NATIVE.deposit{value: amount}();
-
-                // Approve the bridge to spend the WETH.
-                SafeERC20.forceApprove({
-                    token: IERC20(address(WRAPPED_NATIVE)), spender: address(OPBRIDGE), value: amount
-                });
-
-                // Bridge WETH as ERC-20.
-                // slither-disable-next-line reentrancy-events,calls-loop
-                OPBRIDGE.bridgeERC20To({
-                    localToken: address(WRAPPED_NATIVE),
-                    remoteToken: _toAddress(remoteToken.addr),
-                    to: _toAddress(peer()),
-                    amount: amount,
-                    minGasLimit: remoteToken.minGas,
-                    extraData: bytes("")
-                });
-            } else {
-                // ERC-20 token — bridge directly.
-                // slither-disable-next-line reentrancy-events
-                SafeERC20.forceApprove({token: IERC20(token), spender: address(OPBRIDGE), value: amount});
-
-                // slither-disable-next-line reentrancy-events,calls-loop
-                OPBRIDGE.bridgeERC20To({
-                    localToken: token,
-                    remoteToken: _toAddress(remoteToken.addr),
-                    to: _toAddress(peer()),
-                    amount: amount,
-                    minGasLimit: remoteToken.minGas,
-                    extraData: bytes("")
-                });
+                bridgeToken = address(WRAPPED_NATIVE);
             }
+
+            // Approve the bridge to spend the token.
+            // slither-disable-next-line reentrancy-events
+            SafeERC20.forceApprove({token: IERC20(bridgeToken), spender: address(OPBRIDGE), value: amount});
+
+            // Bridge the ERC-20 token to the peer.
+            // slither-disable-next-line reentrancy-events,calls-loop
+            OPBRIDGE.bridgeERC20To({
+                localToken: bridgeToken,
+                remoteToken: _toAddress(remoteToken.addr),
+                to: peerAddress,
+                amount: amount,
+                minGasLimit: remoteToken.minGas,
+                extraData: bytes("")
+            });
         }
 
         // Send the messenger message with nativeValue = 0.
@@ -182,7 +172,7 @@ contract JBCeloSucker is JBOptimismSucker {
         // On L1, the ETH was already wrapped and bridged as ERC-20 above.
         // slither-disable-next-line reentrancy-events,calls-loop
         OPMESSENGER.sendMessage({
-            target: _toAddress(peer()),
+            target: peerAddress,
             message: abi.encodeCall(JBSucker.fromRemote, (message)),
             gasLimit: MESSENGER_BASE_GAS_LIMIT
         });

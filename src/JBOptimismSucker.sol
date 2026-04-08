@@ -108,6 +108,9 @@ contract JBOptimismSucker is JBSucker, IJBOptimismSucker {
             revert JBSucker_UnexpectedMsgValue(transportPayment);
         }
 
+        // Cache peer address to avoid redundant calls.
+        address peerAddress = _toAddress(peer());
+
         // If the token is an ERC20, bridge it to the peer.
         // If the amount is `0` then we do not need to bridge any ERC20.
         if (token != JBConstants.NATIVE_TOKEN && amount != 0) {
@@ -120,7 +123,7 @@ contract JBOptimismSucker is JBSucker, IJBOptimismSucker {
             OPBRIDGE.bridgeERC20To({
                 localToken: token,
                 remoteToken: _toAddress(remoteToken.addr),
-                to: _toAddress(peer()),
+                to: peerAddress,
                 amount: amount,
                 minGasLimit: remoteToken.minGas,
                 extraData: bytes("")
@@ -131,10 +134,9 @@ contract JBOptimismSucker is JBSucker, IJBOptimismSucker {
         }
 
         // Send the message to the peer with the reclaimed ETH.
-        // Convert bytes32 peer to address at the OP Messenger API boundary.
         // slither-disable-next-line arbitrary-send-eth,reentrancy-events,calls-loop
         OPMESSENGER.sendMessage{value: nativeValue}({
-            target: _toAddress(peer()),
+            target: peerAddress,
             message: abi.encodeCall(JBSucker.fromRemote, (message)),
             gasLimit: MESSENGER_BASE_GAS_LIMIT
         });

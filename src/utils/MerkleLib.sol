@@ -80,14 +80,15 @@ library MerkleLib {
     //*********************************************************************//
 
     /**
-     * @notice Inserts a given node (leaf) into merkle tree. Operates on an in-memory tree and
-     * returns an updated version of that tree.
+     * @notice Inserts a given node (leaf) into the merkle tree in storage.
+     * @dev Operates directly on storage, writing only the single branch entry that changes (plus count).
+     * This avoids the 33-slot memory round-trip of the previous memory-based approach.
      * @dev Reverts if the tree is already full.
+     * @param tree The storage reference to the tree.
      * @param node Element to insert into tree.
-     * @return Tree Updated tree.
      *
      */
-    function insert(Tree memory tree, bytes32 node) internal pure returns (Tree memory) {
+    function insert(Tree storage tree, bytes32 node) internal {
         // Update tree.count to increase the current count by 1 since we'll be including a new node.
         uint256 size = ++tree.count;
         if (size > MAX_LEAVES) revert MerkleLib_InsertTreeIsFull();
@@ -101,10 +102,16 @@ library MerkleLib {
                 // If i > 0, then this node will be a hash of the original node with every layer up
                 // until layer `i`.
                 tree.branch[i] = node;
-                return tree;
+                return;
             }
             // If the size is not yet odd, we hash the current index in the tree branch with the node.
-            node = keccak256(abi.encodePacked(tree.branch[i], node));
+            // Use assembly to hash directly from scratch space, avoiding abi.encodePacked allocation.
+            bytes32 branchVal = tree.branch[i];
+            assembly {
+                mstore(0x00, branchVal)
+                mstore(0x20, node)
+                node := keccak256(0x00, 0x40)
+            }
             size >>= 1; // Cut size in half (statement equivalent to: `size /= 2`).
 
             unchecked {

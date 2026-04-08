@@ -62,7 +62,7 @@ The shortest useful reading order is:
 | [`JBBaseSuckerDeployer`](src/deployers/JBBaseSuckerDeployer.sol) | Thin wrapper around `JBOptimismSuckerDeployer` for Base. |
 | [`JBCeloSuckerDeployer`](src/deployers/JBCeloSuckerDeployer.sol) | Deployer for `JBCeloSucker`. Extends `JBOptimismSuckerDeployer` with `wrappedNative` (`IWrappedNativeToken`) storage for the local chain's WETH address. |
 | [`JBArbitrumSuckerDeployer`](src/deployers/JBArbitrumSuckerDeployer.sol) | Deployer for `JBArbitrumSucker`. Stores Arbitrum Inbox, Gateway Router, and layer (`JBLayer.L1` or `JBLayer.L2`). |
-| [`MerkleLib`](src/utils/MerkleLib.sol) | Incremental merkle tree (depth 32, max ~4 billion leaves, modeled on eth2 deposit contract). Used for outbox/inbox trees. Gas-optimized with inline assembly for `root()` and `branchRoot()`. |
+| [`MerkleLib`](src/utils/MerkleLib.sol) | Incremental merkle tree (depth 32, max ~4 billion leaves, modeled on eth2 deposit contract). Used for outbox/inbox trees. `insert` and `root` operate directly on `Tree storage` (not memory copies) to avoid redundant SLOAD/SSTORE round-trips. Gas-optimized with inline assembly for `root()` and `branchRoot()`. |
 | [`CCIPHelper`](src/libraries/CCIPHelper.sol) | CCIP router addresses, chain selectors, and WETH addresses per chain. Covers Ethereum, Optimism, Arbitrum, Base, Polygon, Avalanche, and BNB Chain (mainnet and testnets). |
 | [`ARBAddresses`](src/libraries/ARBAddresses.sol) | Arbitrum bridge contract addresses (Inbox, Gateway Router) for mainnet and Sepolia. |
 | [`ARBChains`](src/libraries/ARBChains.sol) | Arbitrum chain ID constants. |
