@@ -76,7 +76,8 @@ contract JBCeloSucker is JBOptimismSucker {
     /// and adds native ETH to the project's balance.
     /// @param token The terminal token to add to the project's balance.
     /// @param amount The amount of terminal tokens to add to the project's balance.
-    function _addToBalance(address token, uint256 amount, uint256 _projectId) internal override {
+    /// @param projectId The cached project ID to avoid redundant storage reads.
+    function _addToBalance(address token, uint256 amount, uint256 projectId) internal override {
         if (token == address(WRAPPED_NATIVE)) {
             // Check addable amount against WETH balance before unwrapping.
             uint256 addableAmount = amountToAddToBalanceOf(token);
@@ -90,16 +91,16 @@ contract JBCeloSucker is JBOptimismSucker {
 
             // Get the project's primary terminal for native token.
             // slither-disable-next-line calls-loop
-            IJBTerminal terminal = DIRECTORY.primaryTerminalOf({projectId: _projectId, token: JBConstants.NATIVE_TOKEN});
+            IJBTerminal terminal = DIRECTORY.primaryTerminalOf({projectId: projectId, token: JBConstants.NATIVE_TOKEN});
 
             if (address(terminal) == address(0)) {
-                revert JBSucker_NoTerminalForToken(_projectId, JBConstants.NATIVE_TOKEN);
+                revert JBSucker_NoTerminalForToken(projectId, JBConstants.NATIVE_TOKEN);
             }
 
             // Add native ETH to the project's balance.
             // slither-disable-next-line arbitrary-send-eth,calls-loop
             terminal.addToBalanceOf{value: amount}({
-                projectId: _projectId,
+                projectId: projectId,
                 token: JBConstants.NATIVE_TOKEN,
                 amount: amount,
                 shouldReturnHeldFees: false,
@@ -107,7 +108,7 @@ contract JBCeloSucker is JBOptimismSucker {
                 metadata: ""
             });
         } else {
-            super._addToBalance({token: token, amount: amount, _projectId: _projectId});
+            super._addToBalance({token: token, amount: amount, projectId: projectId});
         }
     }
 

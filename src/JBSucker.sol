@@ -789,8 +789,8 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     /// @notice Adds funds to the projects balance.
     /// @param token The terminal token to add to the project's balance.
     /// @param amount The amount of terminal tokens to add to the project's balance.
-    /// @param _projectId The cached project ID to avoid redundant storage reads.
-    function _addToBalance(address token, uint256 amount, uint256 _projectId) internal virtual {
+    /// @param projectId The cached project ID to avoid redundant storage reads.
+    function _addToBalance(address token, uint256 amount, uint256 projectId) internal virtual {
         // Make sure that the current `amountToAddToBalance` is greater than or equal to the amount being added.
         uint256 addableAmount = amountToAddToBalanceOf(token);
         if (amount > addableAmount) {
@@ -799,10 +799,10 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
 
         // Get the project's primary terminal for the token.
         // slither-disable-next-line calls-loop
-        IJBTerminal terminal = DIRECTORY.primaryTerminalOf({projectId: _projectId, token: token});
+        IJBTerminal terminal = DIRECTORY.primaryTerminalOf({projectId: projectId, token: token});
 
         // slither-disable-next-line incorrect-equality
-        if (address(terminal) == address(0)) revert JBSucker_NoTerminalForToken(_projectId, token);
+        if (address(terminal) == address(0)) revert JBSucker_NoTerminalForToken(projectId, token);
 
         // Perform the `addToBalance`.
         if (token != JBConstants.NATIVE_TOKEN) {
@@ -813,7 +813,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
 
             // slither-disable-next-line calls-loop
             terminal.addToBalanceOf({
-                projectId: _projectId, token: token, amount: amount, shouldReturnHeldFees: false, memo: "", metadata: ""
+                projectId: projectId, token: token, amount: amount, shouldReturnHeldFees: false, memo: "", metadata: ""
             });
 
             // Sanity check: make sure we transfer the full amount.
@@ -823,7 +823,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
             // If the token is the native token, use `msg.value`.
             // slither-disable-next-line arbitrary-send-eth,calls-loop
             terminal.addToBalanceOf{value: amount}({
-                projectId: _projectId, token: token, amount: amount, shouldReturnHeldFees: false, memo: "", metadata: ""
+                projectId: projectId, token: token, amount: amount, shouldReturnHeldFees: false, memo: "", metadata: ""
             });
         }
     }
@@ -841,11 +841,11 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     )
         internal
     {
-        uint256 _projectId = projectId();
+        uint256 cachedProjectId = projectId();
 
         // Add the cashed out funds to the project's balance.
         if (terminalTokenAmount != 0) {
-            _addToBalance({token: terminalToken, amount: terminalTokenAmount, _projectId: _projectId});
+            _addToBalance({token: terminalToken, amount: terminalTokenAmount, projectId: cachedProjectId});
         }
 
         // Cast the bytes32 beneficiary to an EVM address for the local mint.
@@ -858,9 +858,9 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         //
         // Mint the project tokens for the beneficiary.
         // slither-disable-next-line calls-loop,unused-return
-        IJBController(address(DIRECTORY.controllerOf(_projectId)))
+        IJBController(address(DIRECTORY.controllerOf(cachedProjectId)))
             .mintTokensOf({
-                projectId: _projectId,
+                projectId: cachedProjectId,
                 tokenCount: projectTokenAmount,
                 beneficiary: beneficiaryAddress,
                 memo: "",
