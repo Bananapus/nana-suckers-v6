@@ -199,6 +199,11 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
     //*********************************************************************//
 
     /// @notice Uses CCIP to send the root and assets over the bridge to the peer.
+    /// @dev CCIP transport payment refund failures emit a `TransportPaymentRefundFailed` event by design rather
+    /// than reverting. After `ccipSend` commits the bridge message and transfers tokens, reverting the transaction
+    /// would leave the CCIP message in-flight with no corresponding on-chain state update — the tokens would be
+    /// gone, the merkle root never processed, and the outbox inconsistent. Emitting an event preserves
+    /// observability while preventing a single failed refund from blocking the entire bridge operation.
     /// @param transportPayment the amount of `msg.value` that is going to get paid for sending this message.
     /// @param token The token to bridge the outbox tree for.
     /// @param remoteToken Information about the remote token being bridged to.

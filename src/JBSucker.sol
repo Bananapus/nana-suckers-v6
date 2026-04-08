@@ -65,6 +65,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     error JBSucker_NoTerminalForToken(uint256 projectId, address token);
     error JBSucker_NotPeer(bytes32 caller);
     error JBSucker_NothingToSend();
+    error JBSucker_RefundFailed();
     error JBSucker_TokenAlreadyMapped(address localToken, bytes32 mappedTo);
     error JBSucker_TokenHasInvalidEmergencyHatchState(address token);
     error JBSucker_TokenNotMapped(address token);
@@ -556,8 +557,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
 
         // Loop over the number of mappings and increase numberToDisable to correctly set transportPaymentValue.
         // Note: if all mappings are enable-only (no disables), `numberToDisable` stays 0 and `transportPaymentValue`
-        // is set to 0 for each call. Any ETH sent with the transaction is not used or refunded — callers should
-        // not send ETH when only enabling mappings (no root flush is needed).
+        // is set to 0 for each call. Any ETH sent with the transaction is refunded after the second loop.
         for (uint256 h; h < maps.length;) {
             JBOutboxTree storage _outbox = _outboxOf[maps[h].localToken];
             if (maps[h].remoteToken == bytes32(0) && _outbox.numberOfClaimsSent != _outbox.tree.count) {
@@ -577,8 +577,14 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
             }
         }
 
-        // Refund any remainder from integer division so dust wei isn't stuck in the contract.
-        if (numberToDisable > 0) {
+        // If no tokens were disabled, the full `msg.value` is unused — refund it.
+        if (numberToDisable == 0) {
+            if (msg.value > 0) {
+                (bool _ok,) = _msgSender().call{value: msg.value}("");
+                if (!_ok) revert JBSucker_RefundFailed();
+            }
+        } else {
+            // Refund any remainder from integer division so dust wei isn't stuck in the contract.
             uint256 remainder = msg.value % numberToDisable;
             if (remainder > 0) {
                 // Best-effort refund — don't revert if caller can't accept ETH.
@@ -700,6 +706,11 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     /// (not added back to `transportPayment`) to avoid reverting the entire transaction. This preserves
     /// `transportPayment = msg.value - fee`, which is critical for zero-cost bridges (OP, Base, Celo, Arb L2->L1)
     /// that revert on non-zero transport payment. The fee amount is typically small (max 0.001 ETH).
+    /// @dev Retained fee ETH is absorbed by future native token claims. Because `amountToAddToBalanceOf` computes
+    /// `_balanceOf(token, address(this)) - _outboxOf[token].balance`, any extra ETH in the contract (including
+    /// retained fees) increases the claimable amount and will be forwarded to the project's terminal via
+    /// `_addToBalance` when the next native token claim is processed. This is by design — reverting on fee
+    /// failure would block all bridging.
     /// @param token The terminal token being bridged.
     function toRemote(address token) external payable override {
         JBRemoteToken memory remoteToken = _remoteTokenFor[token];
@@ -750,7 +761,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
             }
         }
         // If no terminal exists, fee ETH stays in this contract. transportPayment is already correct.
-        // This retained ETH is an accepted stuck-funds edge case; later `claim` calls do not sweep it.
+        // This retained ETH is absorbed by future native token claims via `amountToAddToBalanceOf`.
 
         // Send the merkle root to the remote chain.
         _sendRoot({transportPayment: transportPayment, token: token, remoteToken: remoteToken});
