@@ -149,19 +149,26 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
             revert JBSucker_NotPeer(_toBytes32(origin));
         }
 
-        // Unwrap WETH → ETH if needed (applies to both message types).
-        _unwrapReceivedTokens(any2EvmMessage);
-
-        // Discriminate message type. New format: abi.encode(uint8 type, bytes payload).
-        // For backward compatibility with in-flight messages, try new format first, fall back to old.
+        // Discriminate message type BEFORE unwrapping. The unwrap decision depends on whether
+        // the decoded local token is NATIVE_TOKEN. Unconditionally unwrapping first would destroy
+        // the ERC-20 balance when the local claim token IS the wrapped-native ERC-20 (e.g., WETH),
+        // making claims permanently unclaimable (NM-001 / SI-001 / FF-001).
         bytes memory data = any2EvmMessage.data;
         (uint8 messageType, bytes memory payload) = _decodeTypedMessage(data);
 
         if (messageType == _CCIP_MSG_TYPE_ROOT) {
             JBMessageRoot memory root = abi.decode(payload, (JBMessageRoot));
+            // Only unwrap when the local claim token is NATIVE_TOKEN, not when it's the WETH ERC-20.
+            if (_toAddress(root.token) == JBConstants.NATIVE_TOKEN) {
+                _unwrapReceivedTokens(any2EvmMessage);
+            }
             this.fromRemote(root);
         } else if (messageType == _CCIP_MSG_TYPE_PAY) {
             JBPayRemoteMessage memory payMsg = abi.decode(payload, (JBPayRemoteMessage));
+            // Only unwrap when the local terminal token is NATIVE_TOKEN.
+            if (_toAddress(payMsg.token) == JBConstants.NATIVE_TOKEN) {
+                _unwrapReceivedTokens(any2EvmMessage);
+            }
             this.payFromRemote(payMsg);
         } else {
             revert JBCCIPSucker_UnknownMessageType(messageType);
