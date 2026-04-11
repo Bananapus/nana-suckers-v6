@@ -9,6 +9,7 @@ import "../../src/JBSucker.sol";
 import {LibClone} from "solady/src/utils/LibClone.sol";
 import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import {IJBSuckerRegistry} from "../../src/interfaces/IJBSuckerRegistry.sol";
+import {JBPayRemoteMessage} from "../../src/structs/JBPayRemoteMessage.sol";
 
 /// @notice mapTokens msg.value dust from integer division.
 /// When `msg.value / numberToDisable` has a remainder, the dust wei must be refunded to the caller.
@@ -229,4 +230,12 @@ contract MapTokensDustSucker is JBSucker {
     function test_setOutboxTreeCount(address token, uint256 count) external {
         _outboxOf[token].tree.count = count;
     }
+
+    function _sendPayOverAMB(
+        uint256,
+        address,
+        uint256,
+        JBRemoteToken memory,
+        JBPayRemoteMessage memory
+    ) internal override {}
 }

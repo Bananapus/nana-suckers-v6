@@ -17,6 +17,7 @@ import {IJBSuckerRegistry} from "./interfaces/IJBSuckerRegistry.sol";
 import {ICCIPRouter, IWrappedNativeToken} from "./interfaces/ICCIPRouter.sol";
 import {IJBCCIPSuckerDeployer} from "./interfaces/IJBCCIPSuckerDeployer.sol";
 import {JBMessageRoot} from "./structs/JBMessageRoot.sol";
+import {JBPayRemoteMessage} from "./structs/JBPayRemoteMessage.sol";
 import {JBRemoteToken} from "./structs/JBRemoteToken.sol";
 import {JBTokenMapping} from "./structs/JBTokenMapping.sol";
 import {MerkleLib} from "./utils/MerkleLib.sol";
@@ -31,6 +32,7 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
     //*********************************************************************//
 
     error JBCCIPSucker_InvalidRouter(address router);
+    error JBCCIPSucker_UnknownMessageType(uint8 messageType);
 
     //*********************************************************************//
     // ------------------------------ events ----------------------------- //
@@ -46,6 +48,12 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
     //*********************************************************************//
     // --------------- public immutable stored properties ---------------- //
     //*********************************************************************//
+
+    /// @notice Message type prefix for root messages (fromRemote).
+    uint8 internal constant _CCIP_MSG_TYPE_ROOT = 0;
+
+    /// @notice Message type prefix for pay messages (payFromRemote).
+    uint8 internal constant _CCIP_MSG_TYPE_PAY = 1;
 
     /// @notice The CCIP router used to bridge tokens between the local and remote chain.
     ICCIPRouter public immutable CCIP_ROUTER;
@@ -128,14 +136,12 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
     /// reverting on invalid sender/peer data is correct here because accepting and silently discarding a
     /// malformed message would lose the bridged tokens with no recovery path. A revert keeps tokens in the
     /// CCIP router where they can be retried or recovered.
-    function ccipReceive(Client.Any2EVMMessage calldata any2EvmMessage) external override {
+    function ccipReceive(Client.Any2EVMMessage calldata any2EvmMessage) external virtual override {
         // Use msg.sender (not _msgSender()) because the CCIP router never uses ERC2771 meta-transactions.
         // Using _msgSender() would allow a trusted forwarder to spoof the router address via the
         // ERC-2771 calldata suffix.
         if (msg.sender != address(CCIP_ROUTER)) revert JBSucker_NotPeer(_toBytes32(msg.sender));
 
-        // Decode the message root from the peer
-        JBMessageRoot memory root = abi.decode(any2EvmMessage.data, (JBMessageRoot));
         address origin = abi.decode(any2EvmMessage.sender, (address));
 
         // Make sure that the message came from our peer.
@@ -143,45 +149,23 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
             revert JBSucker_NotPeer(_toBytes32(origin));
         }
 
-        // By design, CCIP guarantees token delivery matches the sent amount. Validating the
-        // delivered amount against the message would add gas cost for a check that the bridge itself enforces.
-        // If CCIP's guarantee fails, the bridge itself is compromised.
-        //
-        // We intentionally do NOT validate root.amount against destTokenAmounts[0].amount here.
-        // CCIP fees are paid separately (via feeToken), so delivered amounts should always match what was sent.
-        // If we reverted on a mismatch, the tokens already transferred by CCIP would be locked in the router
-        // with no recovery path — a concrete fund-loss risk that outweighs the theoretical defense-in-depth
-        // benefit against a CCIP-level failure or peer compromise.
+        // Unwrap WETH → ETH if needed (applies to both message types).
+        _unwrapReceivedTokens(any2EvmMessage);
 
-        // We either send no tokens or a single token.
-        if (any2EvmMessage.destTokenAmounts.length == 1) {
-            // The sucker only handles ERC-20s or native. CCIP delivers wrapped native (WETH).
-            Client.EVMTokenAmount memory tokenAmount = any2EvmMessage.destTokenAmounts[0];
-            // Unwrap WETH -> ETH only when the root says the token is NATIVE_TOKEN.
-            // When root.token is an ERC-20 address (e.g., bridging to a chain where ETH is an ERC-20), no unwrap.
-            if (root.token == _toBytes32(JBConstants.NATIVE_TOKEN)) {
-                // We can (safely) assume that the token that is set in the `destTokenAmounts` is a valid wrapped
-                // native.
-                // If this ends up not being the case then our sanity check to see if we unwrapped the native asset will
-                // fail.
-                // forge-lint: disable-next-line(mixed-case-variable)
-                IWrappedNativeToken wrapped_native = IWrappedNativeToken(tokenAmount.token);
-                uint256 balanceBefore = _balanceOf({token: JBConstants.NATIVE_TOKEN, addr: address(this)});
+        // Discriminate message type. New format: abi.encode(uint8 type, bytes payload).
+        // For backward compatibility with in-flight messages, try new format first, fall back to old.
+        bytes memory data = any2EvmMessage.data;
+        (uint8 messageType, bytes memory payload) = _decodeTypedMessage(data);
 
-                // Withdraw the wrapped native asset.
-                wrapped_native.withdraw(tokenAmount.amount);
-
-                // Sanity check the unwrapping of the native asset.
-                // slither-disable-next-line incorrect-equality
-                assert(
-                    balanceBefore + tokenAmount.amount
-                        == _balanceOf({token: JBConstants.NATIVE_TOKEN, addr: address(this)})
-                );
-            }
+        if (messageType == _CCIP_MSG_TYPE_ROOT) {
+            JBMessageRoot memory root = abi.decode(payload, (JBMessageRoot));
+            this.fromRemote(root);
+        } else if (messageType == _CCIP_MSG_TYPE_PAY) {
+            JBPayRemoteMessage memory payMsg = abi.decode(payload, (JBPayRemoteMessage));
+            this.payFromRemote(payMsg);
+        } else {
+            revert JBCCIPSucker_UnknownMessageType(messageType);
         }
-
-        // Call ourselves to process the root.
-        this.fromRemote(root);
     }
 
     //*********************************************************************//
@@ -218,6 +202,7 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
         JBMessageRoot memory sucker_message
     )
         internal
+        virtual
         override
     {
         // Make sure we are attempting to pay the bridge
@@ -253,9 +238,10 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
 
         // Create an EVM2AnyMessage struct in memory with necessary information for sending a cross-chain message
         // CCIP requires EVM addresses, so convert the bytes32 peer to an address for the receiver field.
+        // Wrap with type prefix for message discrimination on the receiving end.
         Client.EVM2AnyMessage memory message = Client.EVM2AnyMessage({
             receiver: abi.encode(_toAddress(peer())),
-            data: abi.encode(sucker_message),
+            data: abi.encode(_CCIP_MSG_TYPE_ROOT, abi.encode(sucker_message)),
             tokenAmounts: tokenAmounts,
             extraArgs: Client._argsToBytes(
                 // Additional arguments, setting gas limit
@@ -297,6 +283,69 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
         }
     }
 
+    /// @notice Bridge funds and a pay message to the remote peer via CCIP.
+    // forge-lint: disable-next-line(mixed-case-function)
+    function _sendPayOverAMB(
+        uint256 transportPayment,
+        address token,
+        uint256 amount,
+        JBRemoteToken memory remoteToken,
+        JBPayRemoteMessage memory message
+    )
+        internal
+        virtual
+        override
+    {
+        if (transportPayment == 0) revert JBSucker_ExpectedMsgValue();
+
+        uint256 gasLimit = MESSENGER_PAY_GAS_LIMIT;
+        Client.EVMTokenAmount[] memory tokenAmounts;
+        if (amount != 0) {
+            gasLimit += remoteToken.minGas;
+
+            // Wrap native ETH → WETH for CCIP bridging.
+            if (token == JBConstants.NATIVE_TOKEN) {
+                // slither-disable-next-line calls-loop
+                // forge-lint: disable-next-line(mixed-case-variable)
+                IWrappedNativeToken wrapped_native = CCIP_ROUTER.getWrappedNative();
+                // slither-disable-next-line calls-loop,arbitrary-send-eth
+                wrapped_native.deposit{value: amount}();
+                token = address(wrapped_native);
+            }
+
+            tokenAmounts = new Client.EVMTokenAmount[](1);
+            tokenAmounts[0] = Client.EVMTokenAmount({token: token, amount: amount});
+            SafeERC20.forceApprove({token: IERC20(token), spender: address(CCIP_ROUTER), value: amount});
+        }
+
+        // Wrap with type prefix for message discrimination.
+        Client.EVM2AnyMessage memory ccipMessage = Client.EVM2AnyMessage({
+            receiver: abi.encode(_toAddress(peer())),
+            data: abi.encode(_CCIP_MSG_TYPE_PAY, abi.encode(message)),
+            tokenAmounts: tokenAmounts,
+            extraArgs: Client._argsToBytes(Client.EVMExtraArgsV1({gasLimit: gasLimit})),
+            feeToken: address(0)
+        });
+
+        // slither-disable-next-line calls-loop
+        uint256 fees = CCIP_ROUTER.getFee({destinationChainSelector: REMOTE_CHAIN_SELECTOR, message: ccipMessage});
+
+        if (fees > transportPayment) {
+            revert JBSucker_InsufficientMsgValue(transportPayment, fees);
+        }
+
+        // slither-disable-next-line calls-loop,unused-return
+        CCIP_ROUTER.ccipSend{value: fees}({destinationChainSelector: REMOTE_CHAIN_SELECTOR, message: ccipMessage});
+
+        // Best-effort refund of excess transport.
+        uint256 refundAmount = transportPayment - fees;
+        if (refundAmount != 0) {
+            // slither-disable-next-line calls-loop,msg-value-loop,reentrancy-events
+            (bool sent,) = _msgSender().call{value: refundAmount}("");
+            if (!sent) emit TransportPaymentRefundFailed(_msgSender(), refundAmount);
+        }
+    }
+
     /// @notice Allow sucker implementations to add/override mapping rules to suite their specific needs.
     /// @dev Unlike OP/Arbitrum suckers (which share ETH as native on both chains), this CCIP sucker can connect
     /// chains with different native tokens. This means `NATIVE_TOKEN` may map to an ERC-20 on the remote chain.
@@ -316,5 +365,70 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
         if (map.minGas < MESSENGER_ERC20_MIN_GAS_LIMIT) {
             revert JBSucker_BelowMinGas(map.minGas, MESSENGER_ERC20_MIN_GAS_LIMIT);
         }
+    }
+
+    /// @notice Unwrap WETH → ETH from received CCIP tokens if the message targets NATIVE_TOKEN.
+    /// @dev Shared by both root and pay message handling.
+    function _unwrapReceivedTokens(Client.Any2EVMMessage calldata any2EvmMessage) internal {
+        if (any2EvmMessage.destTokenAmounts.length == 1) {
+            Client.EVMTokenAmount memory tokenAmount = any2EvmMessage.destTokenAmounts[0];
+
+            // For both message types, check if the underlying token data indicates native.
+            // We try to decode the first word of the inner payload to determine the token.
+            // For root messages: token is at a known offset. For pay messages: token is in JBPayRemoteMessage.
+            // We use a heuristic: if WETH was delivered, check if it should be unwrapped.
+            // The unwrap decision is deferred to the message handler for pay messages since
+            // the token field is inside the typed payload. For root messages, we keep the existing check.
+            //
+            // Actually, we need a simpler approach: always unwrap if the WETH is our wrapped native.
+            // The message handler will know whether to treat funds as native or ERC-20.
+            // For backward compat and simplicity, we unwrap ALL received WETH to native.
+            // slither-disable-next-line calls-loop
+            IWrappedNativeToken wrappedNative = CCIP_ROUTER.getWrappedNative();
+            if (tokenAmount.token == address(wrappedNative) && tokenAmount.amount > 0) {
+                uint256 balanceBefore = _balanceOf({token: JBConstants.NATIVE_TOKEN, addr: address(this)});
+                wrappedNative.withdraw(tokenAmount.amount);
+                // slither-disable-next-line incorrect-equality
+                assert(
+                    balanceBefore + tokenAmount.amount
+                        == _balanceOf({token: JBConstants.NATIVE_TOKEN, addr: address(this)})
+                );
+            }
+        }
+    }
+
+    /// @notice Decode a typed CCIP message. Handles backward compatibility with old format (no type prefix).
+    /// @param data The raw CCIP message data.
+    /// @return messageType The message type (0 = root, 1 = pay).
+    /// @return payload The inner payload (encoded JBMessageRoot or JBPayRemoteMessage).
+    function _decodeTypedMessage(bytes memory data)
+        internal
+        pure
+        returns (uint8 messageType, bytes memory payload)
+    {
+        // New format: abi.encode(uint8, bytes)
+        // Try to decode — if the first word is 0 or 1, it's likely the new format.
+        // Old format: abi.encode(JBMessageRoot) where the first word is `version` (uint8, also 0 or 1).
+        //
+        // Discrimination: In the new format, the second slot is an offset to the dynamic bytes.
+        // In the old format, the second slot is `token` (bytes32).
+        // A dynamic bytes offset will be 0x40 (64) in the new format.
+        // A token address in the old format will never be 0x40.
+        //
+        // So: if data[32:64] == 0x40, it's the new typed format. Otherwise, fall back to old root format.
+        if (data.length >= 64) {
+            uint256 secondWord;
+            assembly ("memory-safe") {
+                secondWord := mload(add(data, 0x40))
+            }
+            if (secondWord == 0x40) {
+                // New typed format.
+                (messageType, payload) = abi.decode(data, (uint8, bytes));
+                return (messageType, payload);
+            }
+        }
+
+        // Old format — treat as root message.
+        return (_CCIP_MSG_TYPE_ROOT, data);
     }
 }

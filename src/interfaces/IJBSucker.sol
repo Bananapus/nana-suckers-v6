@@ -8,6 +8,7 @@ import {IJBTokens} from "@bananapus/core-v6/src/interfaces/IJBTokens.sol";
 import {JBClaim} from "../structs/JBClaim.sol";
 import {JBInboxTreeRoot} from "../structs/JBInboxTreeRoot.sol";
 import {JBOutboxTree} from "../structs/JBOutboxTree.sol";
+import {JBPayRemoteMessage} from "../structs/JBPayRemoteMessage.sol";
 import {JBRemoteToken} from "../structs/JBRemoteToken.sol";
 import {JBSuckerState} from "../enums/JBSuckerState.sol";
 import {JBTokenMapping} from "../structs/JBTokenMapping.sol";
@@ -66,6 +67,36 @@ interface IJBSucker is IERC165 {
     /// @param nonce The nonce assigned to this root message.
     /// @param caller The address that initiated the send.
     event RootToRemote(bytes32 indexed root, address indexed token, uint256 index, uint64 nonce, address caller);
+
+    /// @notice Emitted when a user initiates a cross-chain payment via `payRemote`.
+    /// @param beneficiary The beneficiary on the source chain who will receive project tokens.
+    /// @param token The terminal token being bridged.
+    /// @param amount The amount of terminal tokens being bridged.
+    /// @param returnTransport The budget for the return bridge hop.
+    /// @param caller The address that initiated the payment.
+    event PayRemote(
+        bytes32 indexed beneficiary,
+        address indexed token,
+        uint256 amount,
+        uint256 returnTransport,
+        address caller
+    );
+
+    /// @notice Emitted when a cross-chain payment is executed on the destination chain via `payFromRemote`.
+    /// @param beneficiary The beneficiary on the source chain who will receive project tokens.
+    /// @param token The terminal token used to pay the project.
+    /// @param amountPaid The amount of terminal tokens paid to the project.
+    /// @param projectTokensReceived The number of project tokens received from the payment.
+    /// @param terminalTokensReclaimed The amount of terminal tokens reclaimed from the cash out.
+    /// @param caller The address that executed the payment (the bridge messenger).
+    event PayFromRemote(
+        bytes32 indexed beneficiary,
+        address indexed token,
+        uint256 amountPaid,
+        uint256 projectTokensReceived,
+        uint256 terminalTokensReclaimed,
+        address caller
+    );
 
     /// @notice Emitted when a received inbox root is rejected because its nonce is stale.
     /// @param token The terminal token address.
@@ -170,4 +201,28 @@ interface IJBSucker is IERC165 {
     /// @notice Send the outbox tree root and bridged assets to the remote peer.
     /// @param token The terminal token to bridge.
     function toRemote(address token) external payable;
+
+    /// @notice Pay a project on the remote chain from the local chain.
+    /// @dev Bridges funds to the remote chain where the sucker pays the project, cashes out at 0% tax,
+    /// inserts the resulting tokens into the outbox tree, and auto-triggers the return bridge.
+    /// @param token The local terminal token to bridge.
+    /// @param amount The amount of terminal tokens to pay.
+    /// @param beneficiary The beneficiary on the local chain who will receive project tokens (bytes32 for cross-VM).
+    /// @param minTokensOut Minimum project tokens from the pay step (slippage protection).
+    /// @param metadata Metadata forwarded to `terminal.pay()` for hooks.
+    function payRemote(
+        address token,
+        uint256 amount,
+        bytes32 beneficiary,
+        uint256 minTokensOut,
+        bytes calldata metadata
+    )
+        external
+        payable;
+
+    /// @notice Execute a cross-chain payment on behalf of a remote user. Called by the bridge messenger.
+    /// @dev Only callable by the remote peer via the bridge. Pays the project, cashes out, inserts into
+    /// the outbox tree, and attempts to auto-trigger the return bridge.
+    /// @param message The payment message from the remote chain.
+    function payFromRemote(JBPayRemoteMessage calldata message) external payable;
 }

@@ -21,6 +21,7 @@ import {JBClaim} from "../src/structs/JBClaim.sol";
 import {JBLeaf} from "../src/structs/JBLeaf.sol";
 import {JBInboxTreeRoot} from "../src/structs/JBInboxTreeRoot.sol";
 import {JBMessageRoot} from "../src/structs/JBMessageRoot.sol";
+import {JBPayRemoteMessage} from "../src/structs/JBPayRemoteMessage.sol";
 import {JBRemoteToken} from "../src/structs/JBRemoteToken.sol";
 import {MerkleLib} from "../src/utils/MerkleLib.sol";
 
@@ -126,6 +127,14 @@ contract AttackTestSucker is JBSucker {
     function test_setRemoteToken(address localToken, JBRemoteToken memory remoteToken) external {
         _remoteTokenFor[localToken] = remoteToken;
     }
+
+    function _sendPayOverAMB(
+        uint256,
+        address,
+        uint256,
+        JBRemoteToken memory,
+        JBPayRemoteMessage memory
+    ) internal override {}
 }
 
 /// @title SuckerAttacks

@@ -19,6 +19,7 @@ import "../../src/structs/JBClaim.sol";
 import "../../src/structs/JBInboxTreeRoot.sol";
 import "../../src/structs/JBLeaf.sol";
 import "../../src/structs/JBMessageRoot.sol";
+import "../../src/structs/JBPayRemoteMessage.sol";
 import "../../src/structs/JBRemoteToken.sol";
 import "../../src/utils/MerkleLib.sol";
 
@@ -98,6 +99,14 @@ contract CodexFeeIrrecoverableHarness is JBSucker {
     function test_skipNextProofCheck() external {
         _skipNextProofCheck = true;
     }
+
+    function _sendPayOverAMB(
+        uint256,
+        address,
+        uint256,
+        JBRemoteToken memory,
+        JBPayRemoteMessage memory
+    ) internal override {}
 }
 
 contract CodexTerminalStub {

@@ -16,6 +16,7 @@ import {IJBSuckerRegistry} from "../../src/interfaces/IJBSuckerRegistry.sol";
 import {JBSuckerState} from "../../src/enums/JBSuckerState.sol";
 import {JBInboxTreeRoot} from "../../src/structs/JBInboxTreeRoot.sol";
 import {JBMessageRoot} from "../../src/structs/JBMessageRoot.sol";
+import {JBPayRemoteMessage} from "../../src/structs/JBPayRemoteMessage.sol";
 import {JBRemoteToken} from "../../src/structs/JBRemoteToken.sol";
 import {MerkleLib} from "../../src/utils/MerkleLib.sol";
 
@@ -81,6 +82,14 @@ contract DeprecatedDestinationSucker is JBSucker {
     function test_getInboxRoot(address token) external view returns (bytes32) {
         return _inboxOf[token].root;
     }
+
+    function _sendPayOverAMB(
+        uint256,
+        address,
+        uint256,
+        JBRemoteToken memory,
+        JBPayRemoteMessage memory
+    ) internal override {}
 }
 
 contract DeprecatedSuckerDestinationTest is Test {

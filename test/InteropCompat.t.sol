@@ -15,6 +15,7 @@ import "../src/JBSucker.sol";
 import {IJBSuckerRegistry} from "../src/interfaces/IJBSuckerRegistry.sol";
 import {JBInboxTreeRoot} from "../src/structs/JBInboxTreeRoot.sol";
 import {JBMessageRoot} from "../src/structs/JBMessageRoot.sol";
+import {JBPayRemoteMessage} from "../src/structs/JBPayRemoteMessage.sol";
 import {JBRemoteToken} from "../src/structs/JBRemoteToken.sol";
 import {MerkleLib} from "../src/utils/MerkleLib.sol";
 
@@ -53,6 +54,14 @@ contract InteropTestSucker is JBSucker {
     function peerChainId() external pure override returns (uint256) {
         return 1;
     }
+
+    function _sendPayOverAMB(
+        uint256,
+        address,
+        uint256,
+        JBRemoteToken memory,
+        JBPayRemoteMessage memory
+    ) internal override {}
 
     // --- Exposed internals ---
 
