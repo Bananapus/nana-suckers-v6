@@ -66,6 +66,21 @@
 2. Use `exitThroughEmergencyHatch(...)` with the relevant claim data.
 3. Treat emergency execution slots as distinct state that still must not allow the same economic position to be claimed twice.
 
+## Journey 6: Pay A Project Cross-Chain Via payRemote
+
+**Starting state:** a user on Chain A wants to pay a project that lives on Chain B and receive project tokens back on Chain A.
+
+**Success:** funds bridge to Chain B, the project gets paid, and the user claims project tokens on Chain A without manually orchestrating multiple bridge transactions.
+
+**Flow**
+1. The user calls `payRemote` on the source-chain sucker with the token, amount, beneficiary, slippage protection, and any hook metadata (e.g. 721 tier selections).
+2. The sucker bridges the funds and a `JBPayRemoteMessage` to the destination chain.
+3. On the destination chain, `payFromRemote` pays the project with the sucker as beneficiary, injects relay-beneficiary metadata so hooks see the real user, then cashes out the received project tokens at 0% tax.
+4. The resulting position is inserted into the outbox tree and the return bridge is auto-triggered.
+5. The user claims their project tokens on the source chain through the normal inbox proof flow.
+
+**Failure cases that matter:** insufficient transport budget for the return hop (outbox entry still exists for manual `toRemote` later), slippage on the pay step, relay-beneficiary metadata not being recognized by downstream hooks, and CCIP message type discrimination for in-flight messages during upgrade.
+
 ## Hand-Offs
 
 - Use [nana-omnichain-deployers-v6](../nana-omnichain-deployers-v6/USER_JOURNEYS.md) when a project wants suckers packaged into its launch flow instead of deployed separately.
