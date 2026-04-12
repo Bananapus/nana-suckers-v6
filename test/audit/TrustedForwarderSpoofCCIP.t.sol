@@ -85,7 +85,8 @@ contract TrustedForwarderSpoofCCIPTest is Test {
             version: 1,
             token: bytes32(uint256(uint160(TOKEN))),
             amount: 0,
-            remoteRoot: JBInboxTreeRoot({nonce: 1, root: forgedRoot})
+            remoteRoot: JBInboxTreeRoot({nonce: 1, root: forgedRoot}),
+            sourceTotalSupply: 0
         });
 
         // Build a crafted CCIP message with attacker-controlled sender and chain selector.

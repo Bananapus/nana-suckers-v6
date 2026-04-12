@@ -190,7 +190,8 @@ contract SuckerAttacks is Test {
             version: 1,
             token: bytes32(uint256(uint160(JBConstants.NATIVE_TOKEN))),
             amount: 1 ether,
-            remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(123))})
+            remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(123))}),
+            sourceTotalSupply: 0
         });
 
         // Non-peer calling fromRemote should revert
@@ -214,7 +215,8 @@ contract SuckerAttacks is Test {
             version: 1,
             token: bytes32(uint256(uint160(JBConstants.NATIVE_TOKEN))),
             amount: 1 ether,
-            remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(456))})
+            remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(456))}),
+            sourceTotalSupply: 0
         });
 
         vm.prank(wrongSender);
@@ -236,7 +238,8 @@ contract SuckerAttacks is Test {
             version: 1,
             token: bytes32(uint256(uint160(JBConstants.NATIVE_TOKEN))),
             amount: 0,
-            remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(789))})
+            remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(789))}),
+            sourceTotalSupply: 0
         });
 
         // Other sucker calling fromRemote should be rejected
@@ -263,7 +266,8 @@ contract SuckerAttacks is Test {
                 version: 1,
                 token: bytes32(uint256(uint160(JBConstants.NATIVE_TOKEN))),
                 amount: 0,
-                remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(0)})
+                remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(0)}),
+                sourceTotalSupply: 0
             });
 
             vm.expectRevert();

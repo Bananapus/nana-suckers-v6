@@ -142,7 +142,8 @@ contract DeprecatedSuckerDestinationTest is Test {
             amount: 1 ether,
             remoteRoot: JBInboxTreeRoot({
                 nonce: source.test_getOutboxNonce(TOKEN), root: source.test_getOutboxRoot(TOKEN)
-            })
+            }),
+            sourceTotalSupply: 0
         });
 
         vm.prank(address(destination));

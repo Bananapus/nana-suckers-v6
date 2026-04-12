@@ -94,7 +94,8 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     uint32 constant _TREE_DEPTH = 32;
 
     /// @notice The message format version. Used to reject incompatible messages from remote chains.
-    uint8 public constant MESSAGE_VERSION = 1;
+    /// @dev Bumped to 2 to include `sourceTotalSupply` in bridge messages for cross-chain tax supply tracking.
+    uint8 public constant MESSAGE_VERSION = 2;
 
     //*********************************************************************//
     // --------------- public immutable stored properties ---------------- //
@@ -118,6 +119,11 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
 
     /// @notice The address of this contract's deployer.
     address public override deployer;
+
+    /// @notice The last known total token supply on the peer chain, updated each time a bridge message is received.
+    /// @dev Used by data hooks to compute `taxTotalSupply = localSupply + sum(peerChainTotalSupply)` across all
+    /// suckers, preventing cash out tax bypass on chains where a holder dominates the local supply.
+    uint256 public peerChainTotalSupply;
 
     //*********************************************************************//
     // --------------------- private stored properties ------------------- //
@@ -522,6 +528,13 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         if (root.remoteRoot.nonce > inbox.nonce) {
             inbox.nonce = root.remoteRoot.nonce;
             inbox.root = root.remoteRoot.root;
+
+            // Update the peer chain's known total supply for cross-chain tax calculations.
+            // Only update if the message includes supply info (non-zero) to be safe with edge cases.
+            if (root.sourceTotalSupply != 0) {
+                peerChainTotalSupply = root.sourceTotalSupply;
+            }
+
             emit NewInboxTreeRoot({
                 token: localToken, nonce: root.remoteRoot.nonce, root: root.remoteRoot.root, caller: _msgSender()
             });
@@ -1092,12 +1105,28 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         // Emit an event for the relayers to watch for.
         emit RootToRemote({root: root, token: token, index: index, nonce: nonce, caller: _msgSender()});
 
-        // Build the message to be send.
+        // Get the current local total supply (including reserved tokens) to include in the bridge message.
+        // The peer chain uses this to track cross-chain supply for cash out tax calculations.
+        uint256 localTotalSupply;
+        {
+            uint256 _projectId = projectId();
+            // slither-disable-next-line calls-loop
+            try IJBController(address(DIRECTORY.controllerOf(_projectId))).totalTokenSupplyWithReservedTokensOf(
+                _projectId
+            ) returns (uint256 supply) {
+                localTotalSupply = supply;
+            } catch {
+                // If the controller call fails, send 0 — the peer will keep its last known value.
+            }
+        }
+
+        // Build the message to be sent.
         JBMessageRoot memory message = JBMessageRoot({
             version: MESSAGE_VERSION,
             token: remoteToken.addr,
             amount: amount,
-            remoteRoot: JBInboxTreeRoot({nonce: nonce, root: root})
+            remoteRoot: JBInboxTreeRoot({nonce: nonce, root: root}),
+            sourceTotalSupply: localTotalSupply
         });
 
         // Execute the chain/sucker specific logic for transferring the assets and communicating the root.
