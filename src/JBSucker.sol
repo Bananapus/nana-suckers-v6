@@ -127,7 +127,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
 
     /// @notice The last known total surplus (balance) on the peer chain, updated each time a bridge message is
     /// received.
-    /// @dev Used by data hooks to compute `effectiveSurplus = localSurplus + sum(peerChainBalance)` across all
+    /// @dev Used by data hooks to compute `effectiveSurplusValue = localSurplus + sum(peerChainBalance)` across all
     /// suckers, preventing disproportionate reclaim when tokens bridge away but surplus stays.
     uint256 public peerChainBalance;
 

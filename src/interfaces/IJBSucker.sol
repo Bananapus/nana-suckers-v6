@@ -131,7 +131,7 @@ interface IJBSucker is IERC165 {
 
     /// @notice The last known total surplus (balance) on the peer chain, updated each time a bridge message is
     /// received.
-    /// @dev Used by data hooks to compute `effectiveSurplus = localSurplus + sum(peerChainBalance)` across all
+    /// @dev Used by data hooks to compute `effectiveSurplusValue = localSurplus + sum(peerChainBalance)` across all
     /// suckers, preventing disproportionate reclaim when tokens bridge away but surplus stays.
     /// @return The peer chain's total surplus.
     function peerChainBalance() external view returns (uint256);
