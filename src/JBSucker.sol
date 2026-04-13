@@ -121,9 +121,15 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     address public override deployer;
 
     /// @notice The last known total token supply on the peer chain, updated each time a bridge message is received.
-    /// @dev Used by data hooks to compute `taxTotalSupply = localSupply + sum(peerChainTotalSupply)` across all
+    /// @dev Used by data hooks to compute `effectiveTotalSupply = localSupply + sum(peerChainTotalSupply)` across all
     /// suckers, preventing cash out tax bypass on chains where a holder dominates the local supply.
     uint256 public peerChainTotalSupply;
+
+    /// @notice The last known total surplus (balance) on the peer chain, updated each time a bridge message is
+    /// received.
+    /// @dev Used by data hooks to compute `taxSurplus = localSurplus + sum(peerChainBalance)` across all
+    /// suckers, preventing disproportionate reclaim when tokens bridge away but surplus stays.
+    uint256 public peerChainBalance;
 
     //*********************************************************************//
     // --------------------- private stored properties ------------------- //
@@ -534,6 +540,10 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
             if (root.sourceTotalSupply != 0) {
                 peerChainTotalSupply = root.sourceTotalSupply;
             }
+
+            // Update the peer chain's known surplus for cross-chain proportional reclaim calculations.
+            // Always update (zero is a valid surplus value — it means the peer chain has no surplus).
+            peerChainBalance = root.sourceBalance;
 
             emit NewInboxTreeRoot({
                 token: localToken, nonce: root.remoteRoot.nonce, root: root.remoteRoot.root, caller: _msgSender()
@@ -1105,9 +1115,11 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         // Emit an event for the relayers to watch for.
         emit RootToRemote({root: root, token: token, index: index, nonce: nonce, caller: _msgSender()});
 
-        // Get the current local total supply (including reserved tokens) to include in the bridge message.
-        // The peer chain uses this to track cross-chain supply for cash out tax calculations.
+        // Get the current local total supply (including reserved tokens) and local surplus to include in the
+        // bridge message. The peer chain uses these to track cross-chain supply and surplus for cash out
+        // calculations.
         uint256 localTotalSupply;
+        uint256 localSurplus;
         {
             uint256 _projectId = projectId();
             // slither-disable-next-line calls-loop
@@ -1118,6 +1130,22 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
             } catch {
                 // If the controller call fails, send 0 — the peer will keep its last known value.
             }
+
+            // Sum surplus across all terminals for this project.
+            IJBTerminal[] memory terminals = DIRECTORY.terminalsOf(_projectId);
+            for (uint256 i; i < terminals.length;) {
+                // slither-disable-next-line calls-loop
+                try terminals[i].currentSurplusOf(
+                    _projectId, new address[](0), 18, uint32(uint160(JBConstants.NATIVE_TOKEN))
+                ) returns (uint256 terminalSurplus) {
+                    localSurplus += terminalSurplus;
+                } catch {
+                    // If a terminal call fails, skip it — underestimates surplus (safe direction).
+                }
+                unchecked {
+                    ++i;
+                }
+            }
         }
 
         // Build the message to be sent.
@@ -1126,7 +1154,8 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
             token: remoteToken.addr,
             amount: amount,
             remoteRoot: JBInboxTreeRoot({nonce: nonce, root: root}),
-            sourceTotalSupply: localTotalSupply
+            sourceTotalSupply: localTotalSupply,
+            sourceBalance: localSurplus
         });
 
         // Execute the chain/sucker specific logic for transferring the assets and communicating the root.

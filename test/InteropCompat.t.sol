@@ -427,7 +427,8 @@ contract InteropCompat is Test {
             token: bytes32(uint256(0xAABBCCDD)),
             amount: 1000e18,
             remoteRoot: JBInboxTreeRoot({nonce: 42, root: bytes32(uint256(0x1234))}),
-            sourceTotalSupply: 0
+            sourceTotalSupply: 0,
+            sourceBalance: 0
         });
 
         bytes memory encoded = abi.encode(msg_);
@@ -480,7 +481,8 @@ contract InteropCompat is Test {
             token: bytes32(0),
             amount: type(uint128).max,
             remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(0)}),
-            sourceTotalSupply: 0
+            sourceTotalSupply: 0,
+            sourceBalance: 0
         });
 
         bytes memory encoded = abi.encode(msg_);

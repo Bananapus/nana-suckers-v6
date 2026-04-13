@@ -288,7 +288,8 @@ contract SuckerDeepAttacks is Test {
             token: bytes32(uint256(uint160(TOKEN))),
             amount: 1 ether,
             remoteRoot: JBInboxTreeRoot({nonce: 5, root: bytes32(uint256(0xbeef))}),
-            sourceTotalSupply: 0
+            sourceTotalSupply: 0,
+            sourceBalance: 0
         });
 
         vm.prank(address(sucker)); // peer = address(this) for clones
@@ -308,7 +309,8 @@ contract SuckerDeepAttacks is Test {
             token: bytes32(uint256(uint160(TOKEN))),
             amount: 1 ether,
             remoteRoot: JBInboxTreeRoot({nonce: 3, root: bytes32(uint256(0xbeef))}),
-            sourceTotalSupply: 0
+            sourceTotalSupply: 0,
+            sourceBalance: 0
         });
 
         vm.prank(address(sucker));
@@ -327,7 +329,8 @@ contract SuckerDeepAttacks is Test {
             token: bytes32(uint256(uint160(TOKEN))),
             amount: 1 ether,
             remoteRoot: JBInboxTreeRoot({nonce: 5, root: bytes32(uint256(0xbbb))}),
-            sourceTotalSupply: 0
+            sourceTotalSupply: 0,
+            sourceBalance: 0
         });
 
         vm.prank(address(sucker));
@@ -350,7 +353,8 @@ contract SuckerDeepAttacks is Test {
             token: bytes32(uint256(uint160(TOKEN))),
             amount: 1 ether,
             remoteRoot: JBInboxTreeRoot({nonce: 2, root: bytes32(uint256(0xbbbb))}),
-            sourceTotalSupply: 0
+            sourceTotalSupply: 0,
+            sourceBalance: 0
         });
 
         // Roots are accepted in DEPRECATED state to prevent stranding tokens that were sent
@@ -379,7 +383,8 @@ contract SuckerDeepAttacks is Test {
             token: bytes32(uint256(uint160(TOKEN))),
             amount: 1 ether,
             remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(0xabc))}),
-            sourceTotalSupply: 0
+            sourceTotalSupply: 0,
+            sourceBalance: 0
         });
 
         vm.prank(address(sucker));
@@ -1467,7 +1472,8 @@ contract SuckerDeepAttacks is Test {
             token: bytes32(uint256(uint160(TOKEN))),
             amount: 1 ether,
             remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(0xbeef))}),
-            sourceTotalSupply: 0
+            sourceTotalSupply: 0,
+            sourceBalance: 0
         });
 
         vm.expectRevert(
@@ -1484,7 +1490,8 @@ contract SuckerDeepAttacks is Test {
             token: bytes32(uint256(uint160(TOKEN))),
             amount: 1 ether,
             remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(0xbeef))}),
-            sourceTotalSupply: 0
+            sourceTotalSupply: 0,
+            sourceBalance: 0
         });
 
         vm.expectRevert(
@@ -1501,7 +1508,8 @@ contract SuckerDeepAttacks is Test {
             token: bytes32(uint256(uint160(TOKEN))),
             amount: 0,
             remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(0xbeef))}),
-            sourceTotalSupply: 0
+            sourceTotalSupply: 0,
+            sourceBalance: 0
         });
 
         vm.prank(address(sucker));
@@ -1525,7 +1533,8 @@ contract SuckerDeepAttacks is Test {
             token: bytes32(uint256(uint160(TOKEN))),
             amount: 1 ether,
             remoteRoot: JBInboxTreeRoot({nonce: 3, root: bytes32(uint256(0xbeef))}),
-            sourceTotalSupply: 0
+            sourceTotalSupply: 0,
+            sourceBalance: 0
         });
 
         vm.expectEmit(true, false, false, true, address(sucker));
@@ -1656,7 +1665,8 @@ contract SuckerDeepAttacks is Test {
             token: bytes32(uint256(uint160(TOKEN))),
             amount: 1 ether,
             remoteRoot: JBInboxTreeRoot({nonce: 5, root: bytes32(uint256(0xbeef))}),
-            sourceTotalSupply: 0
+            sourceTotalSupply: 0,
+            sourceBalance: 0
         });
 
         vm.expectEmit(true, false, false, true, address(sucker));

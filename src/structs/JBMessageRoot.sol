@@ -10,6 +10,8 @@ import {JBInboxTreeRoot} from "./JBInboxTreeRoot.sol";
 /// @custom:member remoteRoot The root of the merkle tree.
 /// @custom:member sourceTotalSupply The total token supply (including reserved tokens) on the source chain at the
 /// time the message was sent. Used by the receiving chain to track cross-chain supply for cash out tax calculations.
+/// @custom:member sourceBalance The total surplus across all terminals on the source chain at the time the message
+/// was sent. Used by the receiving chain to track cross-chain surplus for proportional reclaim calculations.
 // forge-lint: disable-next-line(pascal-case-struct)
 struct JBMessageRoot {
     uint8 version;
@@ -17,4 +19,5 @@ struct JBMessageRoot {
     uint256 amount;
     JBInboxTreeRoot remoteRoot;
     uint256 sourceTotalSupply;
+    uint256 sourceBalance;
 }

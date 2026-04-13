@@ -90,7 +90,8 @@ contract TrustedForwarderSpoofTest is Test {
             token: bytes32(uint256(uint160(TOKEN))),
             amount: 0,
             remoteRoot: JBInboxTreeRoot({nonce: 1, root: forgedRoot}),
-            sourceTotalSupply: 0
+            sourceTotalSupply: 0,
+            sourceBalance: 0
         });
 
         // Build the spoofed ERC-2771 calldata: real `fromRemote` encoding + 20-byte suffix

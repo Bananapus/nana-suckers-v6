@@ -124,10 +124,17 @@ interface IJBSucker is IERC165 {
     function peerChainId() external view returns (uint256 chainId);
 
     /// @notice The last known total token supply on the peer chain, updated each time a bridge message is received.
-    /// @dev Used by data hooks to compute `taxTotalSupply = localSupply + sum(peerChainTotalSupply)` across all
+    /// @dev Used by data hooks to compute `effectiveTotalSupply = localSupply + sum(peerChainTotalSupply)` across all
     /// suckers, preventing cash out tax bypass on chains where a holder dominates the local supply.
     /// @return The peer chain's total supply.
     function peerChainTotalSupply() external view returns (uint256);
+
+    /// @notice The last known total surplus (balance) on the peer chain, updated each time a bridge message is
+    /// received.
+    /// @dev Used by data hooks to compute `taxSurplus = localSurplus + sum(peerChainBalance)` across all
+    /// suckers, preventing disproportionate reclaim when tokens bridge away but surplus stays.
+    /// @return The peer chain's total surplus.
+    function peerChainBalance() external view returns (uint256);
 
     /// @notice The ID of the project on the local chain that this sucker is associated with.
     /// @return The project ID.
