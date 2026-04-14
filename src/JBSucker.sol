@@ -1195,39 +1195,79 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         if (remoteToken.addr == bytes32(0)) revert JBSucker_TokenNotMapped(token);
 
         // Make sure that the sucker still allows sending new messaged.
-        JBSuckerState deprecationState = state();
-        if (deprecationState == JBSuckerState.DEPRECATED || deprecationState == JBSuckerState.SENDING_DISABLED) {
-            revert JBSucker_Deprecated();
+        {
+            JBSuckerState deprecationState = state();
+            if (deprecationState == JBSuckerState.DEPRECATED || deprecationState == JBSuckerState.SENDING_DISABLED) {
+                revert JBSucker_Deprecated();
+            }
         }
 
-        // Get the outbox in storage.
-        JBOutboxTree storage outbox = _outboxOf[token];
+        // Drain the outbox: read balance/nonce/root, clear balance, advance nonce and numberOfClaimsSent.
+        uint256 amount;
+        uint64 nonce;
+        bytes32 root;
+        uint256 index;
+        {
+            JBOutboxTree storage outbox = _outboxOf[token];
 
-        // If the outbox tree is empty (no `prepare()` calls have been made), there is nothing to send.
-        // This prevents an arithmetic underflow when computing `count - 1` below.
-        uint256 count = outbox.tree.count;
-        if (count == 0) return;
+            // If the outbox tree is empty (no `prepare()` calls have been made), there is nothing to send.
+            // This prevents an arithmetic underflow when computing `count - 1` below.
+            uint256 count = outbox.tree.count;
+            if (count == 0) return;
 
-        // Get the amount to send and then clear it from the outbox tree.
-        // By design, `amountToAddToBalanceOf` is transiently inflated after this deletion because the
-        // contract's token balance has not yet been transferred to the bridge. This inflation is scoped
-        // within this transaction — `_sendRootOverAMB` (called below) transfers the tokens to the bridge
-        // before the tx completes, settling the balance. This is inherent to the two-phase bridge model.
-        uint256 amount = outbox.balance;
-        delete outbox.balance;
+            // Get the amount to send and then clear it from the outbox tree.
+            // By design, `amountToAddToBalanceOf` is transiently inflated after this deletion because the
+            // contract's token balance has not yet been transferred to the bridge. This inflation is scoped
+            // within this transaction — `_sendRootOverAMB` (called below) transfers the tokens to the bridge
+            // before the tx completes, settling the balance. This is inherent to the two-phase bridge model.
+            amount = outbox.balance;
+            delete outbox.balance;
 
-        // Increment the outbox tree's nonce.
-        uint64 nonce = ++outbox.nonce;
-        bytes32 root = outbox.tree.root();
+            // Increment the outbox tree's nonce.
+            nonce = ++outbox.nonce;
+            root = outbox.tree.root();
 
-        // Update the numberOfClaimsSent to the current count of the tree.
-        // This is used as in the fallback to allow users to withdraw locally if the bridge is reverting.
-        outbox.numberOfClaimsSent = uint192(count);
-        uint256 index = count - 1;
+            // Update the numberOfClaimsSent to the current count of the tree.
+            // This is used as in the fallback to allow users to withdraw locally if the bridge is reverting.
+            outbox.numberOfClaimsSent = uint192(count);
+            index = count - 1;
+        }
 
         // Emit an event for the relayers to watch for.
         emit RootToRemote({root: root, token: token, index: index, nonce: nonce, caller: _msgSender()});
 
+        // Build the snapshot message and send it over the bridge.
+        _buildSnapshotAndSend({
+            transportPayment: transportPayment,
+            token: token,
+            remoteToken: remoteToken,
+            amount: amount,
+            nonce: nonce,
+            root: root,
+            index: index
+        });
+    }
+
+    /// @notice Builds the cross-chain snapshot message and sends it over the bridge.
+    /// @dev Extracted from `_sendRoot` to keep the stack depth under the legacy EVM limit.
+    /// @param transportPayment The amount of `msg.value` that is going to get paid for sending this message.
+    /// @param token The terminal token being bridged.
+    /// @param remoteToken The remote token which the terminal token is mapped to.
+    /// @param amount The amount of terminal tokens being bridged.
+    /// @param nonce The outbox nonce for this send.
+    /// @param root The merkle root of the outbox tree.
+    /// @param index The index of the most recent message that is part of the root.
+    function _buildSnapshotAndSend(
+        uint256 transportPayment,
+        address token,
+        JBRemoteToken memory remoteToken,
+        uint256 amount,
+        uint64 nonce,
+        bytes32 root,
+        uint256 index
+    )
+        private
+    {
         // Get the current local total supply (including reserved tokens) and the ETH-denominated aggregate
         // surplus/balance to include in the bridge message. The peer chain uses these to track cross-chain supply,
         // surplus, and balance for cash out and data hook calculations.
@@ -1254,28 +1294,26 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
             (ethSurplus, ethBalance) = _buildETHAggregate(_projectId);
         }
 
-        // Build the message to be sent. Surplus and balance are denominated in _ETH_CURRENCY at _ETH_DECIMALS.
-        JBMessageRoot memory message = JBMessageRoot({
-            version: MESSAGE_VERSION,
-            token: remoteToken.addr,
-            amount: amount,
-            remoteRoot: JBInboxTreeRoot({nonce: nonce, root: root}),
-            sourceTotalSupply: localTotalSupply,
-            sourceCurrency: _ETH_CURRENCY,
-            sourceDecimals: _ETH_DECIMALS,
-            sourceSurplus: ethSurplus,
-            sourceBalance: ethBalance,
-            snapshotNonce: ++_snapshotNonce
-        });
-
-        // Execute the chain/sucker specific logic for transferring the assets and communicating the root.
+        // Build the message and send over the bridge. Surplus and balance are denominated in _ETH_CURRENCY at
+        // _ETH_DECIMALS.
         _sendRootOverAMB({
             transportPayment: transportPayment,
             index: index,
             token: token,
             amount: amount,
             remoteToken: remoteToken,
-            message: message
+            message: JBMessageRoot({
+                version: MESSAGE_VERSION,
+                token: remoteToken.addr,
+                amount: amount,
+                remoteRoot: JBInboxTreeRoot({nonce: nonce, root: root}),
+                sourceTotalSupply: localTotalSupply,
+                sourceCurrency: _ETH_CURRENCY,
+                sourceDecimals: _ETH_DECIMALS,
+                sourceSurplus: ethSurplus,
+                sourceBalance: ethBalance,
+                snapshotNonce: ++_snapshotNonce
+            })
         });
     }
 
