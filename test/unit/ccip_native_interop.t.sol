@@ -337,8 +337,8 @@ contract CCIPNativeInteropTest is Test {
             amount: bridgeAmount,
             remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(0xdead))}),
             sourceTotalSupply: 0,
-                sourceCurrency: 0,
-                sourceDecimals: 0,
+            sourceCurrency: 0,
+            sourceDecimals: 0,
             sourceSurplus: 0,
             sourceBalance: 0
         });
@@ -378,8 +378,8 @@ contract CCIPNativeInteropTest is Test {
             amount: bridgeAmount,
             remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(0xbeef))}),
             sourceTotalSupply: 0,
-                sourceCurrency: 0,
-                sourceDecimals: 0,
+            sourceCurrency: 0,
+            sourceDecimals: 0,
             sourceSurplus: 0,
             sourceBalance: 0
         });
@@ -428,8 +428,8 @@ contract CCIPNativeInteropTest is Test {
             amount: amount,
             remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(0xdead))}),
             sourceTotalSupply: 0,
-                sourceCurrency: 0,
-                sourceDecimals: 0,
+            sourceCurrency: 0,
+            sourceDecimals: 0,
             sourceSurplus: 0,
             sourceBalance: 0
         });
@@ -488,8 +488,8 @@ contract CCIPNativeInteropTest is Test {
             amount: 1 ether,
             remoteRoot: JBInboxTreeRoot({nonce: 1, root: outboxRoot}),
             sourceTotalSupply: 0,
-                sourceCurrency: 0,
-                sourceDecimals: 0,
+            sourceCurrency: 0,
+            sourceDecimals: 0,
             sourceSurplus: 0,
             sourceBalance: 0
         });
@@ -529,8 +529,8 @@ contract CCIPNativeInteropTest is Test {
             amount: bridgeAmount,
             remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(0xcafe))}),
             sourceTotalSupply: 0,
-                sourceCurrency: 0,
-                sourceDecimals: 0,
+            sourceCurrency: 0,
+            sourceDecimals: 0,
             sourceSurplus: 0,
             sourceBalance: 0
         });
@@ -602,8 +602,8 @@ contract CCIPNativeInteropTest is Test {
             amount: bridgeAmount,
             remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(0xaaa))}),
             sourceTotalSupply: 0,
-                sourceCurrency: 0,
-                sourceDecimals: 0,
+            sourceCurrency: 0,
+            sourceDecimals: 0,
             sourceSurplus: 0,
             sourceBalance: 0
         });
@@ -630,8 +630,8 @@ contract CCIPNativeInteropTest is Test {
             amount: bridgeAmount,
             remoteRoot: JBInboxTreeRoot({nonce: 2, root: bytes32(uint256(0xbbb))}),
             sourceTotalSupply: 0,
-                sourceCurrency: 0,
-                sourceDecimals: 0,
+            sourceCurrency: 0,
+            sourceDecimals: 0,
             sourceSurplus: 0,
             sourceBalance: 0
         });

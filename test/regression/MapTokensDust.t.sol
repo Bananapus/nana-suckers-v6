@@ -47,11 +47,7 @@ contract MapTokensDustTest is Test {
         vm.mockCall(PERMISSIONS, abi.encodeWithSelector(IJBPermissions.hasPermission.selector), abi.encode(true));
 
         // Mock DIRECTORY.terminalsOf() so _buildETHAggregate() in _sendRoot() doesn't revert.
-        vm.mockCall(
-            DIRECTORY,
-            abi.encodeCall(IJBDirectory.terminalsOf, (projectId)),
-            abi.encode(new IJBTerminal[](0))
-        );
+        vm.mockCall(DIRECTORY, abi.encodeCall(IJBDirectory.terminalsOf, (projectId)), abi.encode(new IJBTerminal[](0)));
     }
 
     /// @notice When mapTokens disables multiple tokens and msg.value is not evenly divisible,

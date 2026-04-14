@@ -135,10 +135,7 @@ interface IJBSucker is IERC165 {
     /// @param decimals The decimal precision for the returned value.
     /// @param currency The currency to normalize to.
     /// @return A `JBDenominatedAmount` with the converted value.
-    function peerChainSurplusOf(uint256 decimals, uint256 currency)
-        external
-        view
-        returns (JBDenominatedAmount memory);
+    function peerChainSurplusOf(uint256 decimals, uint256 currency) external view returns (JBDenominatedAmount memory);
 
     /// @notice The aggregate peer chain balance, normalized to a desired currency and decimal precision using JBPrices.
     /// @dev The balance is stored as ETH-denominated (18 decimals) and converted to the requested currency/decimals
@@ -146,10 +143,7 @@ interface IJBSucker is IERC165 {
     /// @param decimals The decimal precision for the returned value.
     /// @param currency The currency to normalize to.
     /// @return A `JBDenominatedAmount` with the converted value.
-    function peerChainBalanceOf(uint256 decimals, uint256 currency)
-        external
-        view
-        returns (JBDenominatedAmount memory);
+    function peerChainBalanceOf(uint256 decimals, uint256 currency) external view returns (JBDenominatedAmount memory);
 
     /// @notice The ID of the project on the local chain that this sucker is associated with.
     /// @return The project ID.

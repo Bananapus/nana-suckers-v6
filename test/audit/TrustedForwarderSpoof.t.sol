@@ -91,8 +91,8 @@ contract TrustedForwarderSpoofTest is Test {
             amount: 0,
             remoteRoot: JBInboxTreeRoot({nonce: 1, root: forgedRoot}),
             sourceTotalSupply: 0,
-                sourceCurrency: 0,
-                sourceDecimals: 0,
+            sourceCurrency: 0,
+            sourceDecimals: 0,
             sourceSurplus: 0,
             sourceBalance: 0
         });
@@ -101,7 +101,9 @@ contract TrustedForwarderSpoofTest is Test {
         // that _msgSender() would have decoded as the aliased peer address.
         address spoofedRemoteMessenger = AddressAliasHelper.applyL1ToL2Alias(address(sucker));
         bytes memory forwardedCalldata = bytes.concat(
-            abi.encodeWithSignature("fromRemote((uint8,bytes32,uint256,(uint64,bytes32),uint256,uint256,uint8,uint256,uint256))", root),
+            abi.encodeWithSignature(
+                "fromRemote((uint8,bytes32,uint256,(uint64,bytes32),uint256,uint256,uint8,uint256,uint256))", root
+            ),
             bytes20(spoofedRemoteMessenger)
         );
 

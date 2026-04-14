@@ -153,9 +153,7 @@ contract CodexToRemoteFeeIrrecoverableTest is Test {
             abi.encode(uint256(1))
         );
         vm.mockCall(
-            CONTROLLER,
-            abi.encodeCall(IERC165.supportsInterface, (type(IJBController).interfaceId)),
-            abi.encode(true)
+            CONTROLLER, abi.encodeCall(IERC165.supportsInterface, (type(IJBController).interfaceId)), abi.encode(true)
         );
         vm.mockCall(
             CONTROLLER,
@@ -165,11 +163,7 @@ contract CodexToRemoteFeeIrrecoverableTest is Test {
         vm.mockCall(REGISTRY, abi.encodeCall(IJBSuckerRegistry.toRemoteFee, ()), abi.encode(FEE));
 
         // Mock DIRECTORY.terminalsOf() so _buildETHAggregate() in _sendRoot() doesn't revert.
-        vm.mockCall(
-            DIRECTORY,
-            abi.encodeCall(IJBDirectory.terminalsOf, (PROJECT_ID)),
-            abi.encode(new IJBTerminal[](0))
-        );
+        vm.mockCall(DIRECTORY, abi.encodeCall(IJBDirectory.terminalsOf, (PROJECT_ID)), abi.encode(new IJBTerminal[](0)));
     }
 
     function test_feeEthRemainsStuckAfterLaterNativeClaim() external {

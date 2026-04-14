@@ -130,11 +130,7 @@ contract CCIPRefundTest is Test {
         vm.mockCall(address(1), abi.encodeCall(IJBSuckerRegistry.toRemoteFee, ()), abi.encode(uint256(0)));
 
         // Mock DIRECTORY.terminalsOf() so _buildETHAggregate() in _sendRoot() doesn't revert.
-        vm.mockCall(
-            DIRECTORY,
-            abi.encodeCall(IJBDirectory.terminalsOf, (PROJECT_ID)),
-            abi.encode(new IJBTerminal[](0))
-        );
+        vm.mockCall(DIRECTORY, abi.encodeCall(IJBDirectory.terminalsOf, (PROJECT_ID)), abi.encode(new IJBTerminal[](0)));
 
         // Put code at MOCK_ROUTER so etch works.
         vm.etch(MOCK_ROUTER, bytes("0x1"));

@@ -19,7 +19,6 @@ import {JBInboxTreeRoot} from "../../src/structs/JBInboxTreeRoot.sol";
 import {JBLeaf} from "../../src/structs/JBLeaf.sol";
 import {JBMessageRoot} from "../../src/structs/JBMessageRoot.sol";
 
-
 contract CodexMockWETH {
     mapping(address => uint256) public balanceOf;
 
@@ -163,8 +162,8 @@ contract CodexCCIPWrappedNativeMisunwrapTest is Test {
                 })
             }),
             sourceTotalSupply: 0,
-                sourceCurrency: 0,
-                sourceDecimals: 0,
+            sourceCurrency: 0,
+            sourceDecimals: 0,
             sourceSurplus: 0,
             sourceBalance: 0
         });

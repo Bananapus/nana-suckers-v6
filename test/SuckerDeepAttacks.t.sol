@@ -220,9 +220,7 @@ contract SuckerDeepAttacks is Test {
         vm.mockCall(PROJECT, abi.encodeCall(IERC721.ownerOf, (PROJECT_ID)), abi.encode(address(this)));
         vm.mockCall(DIRECTORY, abi.encodeCall(IJBDirectory.controllerOf, (PROJECT_ID)), abi.encode(CONTROLLER));
         vm.mockCall(
-            CONTROLLER,
-            abi.encodeCall(IERC165.supportsInterface, (type(IJBController).interfaceId)),
-            abi.encode(true)
+            CONTROLLER, abi.encodeCall(IERC165.supportsInterface, (type(IJBController).interfaceId)), abi.encode(true)
         );
         vm.mockCall(
             CONTROLLER,
@@ -238,11 +236,7 @@ contract SuckerDeepAttacks is Test {
         vm.mockCall(TERMINAL, abi.encodeWithSelector(IJBTerminal.pay.selector), abi.encode(uint256(0)));
 
         // Mock DIRECTORY.terminalsOf() so _buildETHAggregate() in _sendRoot() doesn't revert.
-        vm.mockCall(
-            DIRECTORY,
-            abi.encodeCall(IJBDirectory.terminalsOf, (PROJECT_ID)),
-            abi.encode(new IJBTerminal[](0))
-        );
+        vm.mockCall(DIRECTORY, abi.encodeCall(IJBDirectory.terminalsOf, (PROJECT_ID)), abi.encode(new IJBTerminal[](0)));
     }
 
     function _createTestSucker(uint256 projectId, bytes32 salt) internal returns (DeepAttackSucker) {
@@ -307,8 +301,8 @@ contract SuckerDeepAttacks is Test {
             amount: 1 ether,
             remoteRoot: JBInboxTreeRoot({nonce: 5, root: bytes32(uint256(0xbeef))}),
             sourceTotalSupply: 0,
-                sourceCurrency: 0,
-                sourceDecimals: 0,
+            sourceCurrency: 0,
+            sourceDecimals: 0,
             sourceSurplus: 0,
             sourceBalance: 0
         });
@@ -331,8 +325,8 @@ contract SuckerDeepAttacks is Test {
             amount: 1 ether,
             remoteRoot: JBInboxTreeRoot({nonce: 3, root: bytes32(uint256(0xbeef))}),
             sourceTotalSupply: 0,
-                sourceCurrency: 0,
-                sourceDecimals: 0,
+            sourceCurrency: 0,
+            sourceDecimals: 0,
             sourceSurplus: 0,
             sourceBalance: 0
         });
@@ -354,8 +348,8 @@ contract SuckerDeepAttacks is Test {
             amount: 1 ether,
             remoteRoot: JBInboxTreeRoot({nonce: 5, root: bytes32(uint256(0xbbb))}),
             sourceTotalSupply: 0,
-                sourceCurrency: 0,
-                sourceDecimals: 0,
+            sourceCurrency: 0,
+            sourceDecimals: 0,
             sourceSurplus: 0,
             sourceBalance: 0
         });
@@ -381,8 +375,8 @@ contract SuckerDeepAttacks is Test {
             amount: 1 ether,
             remoteRoot: JBInboxTreeRoot({nonce: 2, root: bytes32(uint256(0xbbbb))}),
             sourceTotalSupply: 0,
-                sourceCurrency: 0,
-                sourceDecimals: 0,
+            sourceCurrency: 0,
+            sourceDecimals: 0,
             sourceSurplus: 0,
             sourceBalance: 0
         });
@@ -414,8 +408,8 @@ contract SuckerDeepAttacks is Test {
             amount: 1 ether,
             remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(0xabc))}),
             sourceTotalSupply: 0,
-                sourceCurrency: 0,
-                sourceDecimals: 0,
+            sourceCurrency: 0,
+            sourceDecimals: 0,
             sourceSurplus: 0,
             sourceBalance: 0
         });
@@ -1511,8 +1505,8 @@ contract SuckerDeepAttacks is Test {
             amount: 1 ether,
             remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(0xbeef))}),
             sourceTotalSupply: 0,
-                sourceCurrency: 0,
-                sourceDecimals: 0,
+            sourceCurrency: 0,
+            sourceDecimals: 0,
             sourceSurplus: 0,
             sourceBalance: 0
         });
@@ -1532,8 +1526,8 @@ contract SuckerDeepAttacks is Test {
             amount: 1 ether,
             remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(0xbeef))}),
             sourceTotalSupply: 0,
-                sourceCurrency: 0,
-                sourceDecimals: 0,
+            sourceCurrency: 0,
+            sourceDecimals: 0,
             sourceSurplus: 0,
             sourceBalance: 0
         });
@@ -1553,8 +1547,8 @@ contract SuckerDeepAttacks is Test {
             amount: 0,
             remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(0xbeef))}),
             sourceTotalSupply: 0,
-                sourceCurrency: 0,
-                sourceDecimals: 0,
+            sourceCurrency: 0,
+            sourceDecimals: 0,
             sourceSurplus: 0,
             sourceBalance: 0
         });
@@ -1581,8 +1575,8 @@ contract SuckerDeepAttacks is Test {
             amount: 1 ether,
             remoteRoot: JBInboxTreeRoot({nonce: 3, root: bytes32(uint256(0xbeef))}),
             sourceTotalSupply: 0,
-                sourceCurrency: 0,
-                sourceDecimals: 0,
+            sourceCurrency: 0,
+            sourceDecimals: 0,
             sourceSurplus: 0,
             sourceBalance: 0
         });
@@ -1716,8 +1710,8 @@ contract SuckerDeepAttacks is Test {
             amount: 1 ether,
             remoteRoot: JBInboxTreeRoot({nonce: 5, root: bytes32(uint256(0xbeef))}),
             sourceTotalSupply: 0,
-                sourceCurrency: 0,
-                sourceDecimals: 0,
+            sourceCurrency: 0,
+            sourceDecimals: 0,
             sourceSurplus: 0,
             sourceBalance: 0
         });

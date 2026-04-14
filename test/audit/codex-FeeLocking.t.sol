@@ -32,7 +32,15 @@ contract TerminalSink {
         totalReceived += amount;
     }
 
-    function pay(uint256, address, uint256 amount, address, uint256, string calldata, bytes calldata)
+    function pay(
+        uint256,
+        address,
+        uint256 amount,
+        address,
+        uint256,
+        string calldata,
+        bytes calldata
+    )
         external
         payable
         returns (uint256)
@@ -120,12 +128,16 @@ contract ZeroCostBridgeSuckerHarness is JBSucker {
         _insertIntoTree(projectTokenCount, token, terminalTokenAmount, beneficiary);
     }
 
-    function test_handleClaim(address token, uint256 terminalTokenAmount, uint256 projectTokenAmount, address beneficiary)
+    function test_handleClaim(
+        address token,
+        uint256 terminalTokenAmount,
+        uint256 projectTokenAmount,
+        address beneficiary
+    )
         external
     {
         _handleClaim(token, terminalTokenAmount, projectTokenAmount, bytes32(uint256(uint160(beneficiary))));
     }
-
 }
 
 contract CCIPSuckerHarness is JBCCIPSucker {
@@ -159,7 +171,12 @@ contract CCIPSuckerHarness is JBCCIPSucker {
         _insertIntoTree(projectTokenCount, token, terminalTokenAmount, beneficiary);
     }
 
-    function test_handleClaim(address token, uint256 terminalTokenAmount, uint256 projectTokenAmount, address beneficiary)
+    function test_handleClaim(
+        address token,
+        uint256 terminalTokenAmount,
+        uint256 projectTokenAmount,
+        address beneficiary
+    )
         external
     {
         _handleClaim(token, terminalTokenAmount, projectTokenAmount, bytes32(uint256(uint160(beneficiary))));
@@ -209,11 +226,7 @@ contract CodexFeeLockingTest is Test {
         );
 
         // Mock DIRECTORY.terminalsOf() so _buildETHAggregate() in _sendRoot() doesn't revert.
-        vm.mockCall(
-            DIRECTORY,
-            abi.encodeCall(IJBDirectory.terminalsOf, (PROJECT_ID)),
-            abi.encode(new IJBTerminal[](0))
-        );
+        vm.mockCall(DIRECTORY, abi.encodeCall(IJBDirectory.terminalsOf, (PROJECT_ID)), abi.encode(new IJBTerminal[](0)));
     }
 
     function test_failedToRemoteFeePayment_staysLockedAfterLaterNativeClaim() public {
@@ -241,10 +254,7 @@ contract CodexFeeLockingTest is Test {
         sucker.test_setRemoteToken(
             ERC20_TOKEN,
             JBRemoteToken({
-                enabled: true,
-                emergencyHatch: false,
-                minGas: 200_000,
-                addr: bytes32(uint256(uint160(REMOTE_TOKEN)))
+                enabled: true, emergencyHatch: false, minGas: 200_000, addr: bytes32(uint256(uint160(REMOTE_TOKEN)))
             })
         );
         sucker.test_insertIntoTree(1, ERC20_TOKEN, 0, bytes32(uint256(uint160(address(this)))));
@@ -255,18 +265,12 @@ contract CodexFeeLockingTest is Test {
         vm.deal(address(sucker), address(sucker).balance + NATIVE_CLAIM_AMOUNT);
         sucker.test_handleClaim(JBConstants.NATIVE_TOKEN, NATIVE_CLAIM_AMOUNT, 1, address(this));
 
-        assertEq(
-            address(sucker).balance,
-            TO_REMOTE_FEE,
-            "later native claims do not absorb the failed protocol fee"
-        );
+        assertEq(address(sucker).balance, TO_REMOTE_FEE, "later native claims do not absorb the failed protocol fee");
     }
 
     function test_failedCcipRefund_staysLockedAfterLaterNativeClaim() public {
         address mockDeployer = address(0x3001);
-        vm.mockCall(
-            mockDeployer, abi.encodeCall(IJBCCIPSuckerDeployer.ccipRemoteChainId, ()), abi.encode(uint256(137))
-        );
+        vm.mockCall(mockDeployer, abi.encodeCall(IJBCCIPSuckerDeployer.ccipRemoteChainId, ()), abi.encode(uint256(137)));
         vm.mockCall(
             mockDeployer,
             abi.encodeCall(IJBCCIPSuckerDeployer.ccipRemoteChainSelector, ()),
@@ -302,10 +306,7 @@ contract CodexFeeLockingTest is Test {
         sucker.test_setRemoteToken(
             ERC20_TOKEN,
             JBRemoteToken({
-                enabled: true,
-                emergencyHatch: false,
-                minGas: 200_000,
-                addr: bytes32(uint256(uint160(REMOTE_TOKEN)))
+                enabled: true, emergencyHatch: false, minGas: 200_000, addr: bytes32(uint256(uint160(REMOTE_TOKEN)))
             })
         );
         sucker.test_insertIntoTree(1, ERC20_TOKEN, 0, bytes32(uint256(uint160(address(this)))));

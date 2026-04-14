@@ -433,8 +433,8 @@ contract InteropCompat is Test {
             amount: 1000e18,
             remoteRoot: JBInboxTreeRoot({nonce: 42, root: bytes32(uint256(0x1234))}),
             sourceTotalSupply: 0,
-                sourceCurrency: 0,
-                sourceDecimals: 0,
+            sourceCurrency: 0,
+            sourceDecimals: 0,
             sourceSurplus: 0,
             sourceBalance: 0
         });
@@ -491,8 +491,8 @@ contract InteropCompat is Test {
             amount: type(uint128).max,
             remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(0)}),
             sourceTotalSupply: 0,
-                sourceCurrency: 0,
-                sourceDecimals: 0,
+            sourceCurrency: 0,
+            sourceDecimals: 0,
             sourceSurplus: 0,
             sourceBalance: 0
         });

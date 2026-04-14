@@ -192,8 +192,8 @@ contract SuckerAttacks is Test {
             amount: 1 ether,
             remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(123))}),
             sourceTotalSupply: 0,
-                sourceCurrency: 0,
-                sourceDecimals: 0,
+            sourceCurrency: 0,
+            sourceDecimals: 0,
             sourceSurplus: 0,
             sourceBalance: 0
         });
@@ -221,8 +221,8 @@ contract SuckerAttacks is Test {
             amount: 1 ether,
             remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(456))}),
             sourceTotalSupply: 0,
-                sourceCurrency: 0,
-                sourceDecimals: 0,
+            sourceCurrency: 0,
+            sourceDecimals: 0,
             sourceSurplus: 0,
             sourceBalance: 0
         });
@@ -248,8 +248,8 @@ contract SuckerAttacks is Test {
             amount: 0,
             remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(789))}),
             sourceTotalSupply: 0,
-                sourceCurrency: 0,
-                sourceDecimals: 0,
+            sourceCurrency: 0,
+            sourceDecimals: 0,
             sourceSurplus: 0,
             sourceBalance: 0
         });
@@ -283,7 +283,7 @@ contract SuckerAttacks is Test {
                 sourceCurrency: 0,
                 sourceDecimals: 0,
                 sourceSurplus: 0,
-            sourceBalance: 0
+                sourceBalance: 0
             });
 
             vm.expectRevert();

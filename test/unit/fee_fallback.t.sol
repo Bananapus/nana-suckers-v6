@@ -132,9 +132,7 @@ contract FeeFallbackTest is Test {
         vm.mockCall(PROJECT, abi.encodeCall(IERC721.ownerOf, (PROJECT_ID)), abi.encode(address(this)));
         vm.mockCall(DIRECTORY, abi.encodeCall(IJBDirectory.controllerOf, (PROJECT_ID)), abi.encode(CONTROLLER));
         vm.mockCall(
-            CONTROLLER,
-            abi.encodeCall(IERC165.supportsInterface, (type(IJBController).interfaceId)),
-            abi.encode(true)
+            CONTROLLER, abi.encodeCall(IERC165.supportsInterface, (type(IJBController).interfaceId)), abi.encode(true)
         );
         vm.mockCall(
             CONTROLLER,
@@ -146,11 +144,7 @@ contract FeeFallbackTest is Test {
         vm.mockCall(REGISTRY, abi.encodeCall(IJBSuckerRegistry.toRemoteFee, ()), abi.encode(TO_REMOTE_FEE));
 
         // Mock DIRECTORY.terminalsOf() so _buildETHAggregate() in _sendRoot() doesn't revert.
-        vm.mockCall(
-            DIRECTORY,
-            abi.encodeCall(IJBDirectory.terminalsOf, (PROJECT_ID)),
-            abi.encode(new IJBTerminal[](0))
-        );
+        vm.mockCall(DIRECTORY, abi.encodeCall(IJBDirectory.terminalsOf, (PROJECT_ID)), abi.encode(new IJBTerminal[](0)));
     }
 
     /// @notice toRemote() with msg.value == fee, no fee terminal, zero-cost bridge.

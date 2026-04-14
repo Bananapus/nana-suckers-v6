@@ -91,11 +91,7 @@ contract ToRemoteFeeFallbackTest is Test {
         vm.mockCall(DIRECTORY, abi.encodeCall(IJBDirectory.controllerOf, (uint256(1))), abi.encode(address(0)));
 
         // Mock DIRECTORY.terminalsOf() so _buildETHAggregate() in _sendRoot() doesn't revert.
-        vm.mockCall(
-            DIRECTORY,
-            abi.encodeCall(IJBDirectory.terminalsOf, (uint256(1))),
-            abi.encode(new IJBTerminal[](0))
-        );
+        vm.mockCall(DIRECTORY, abi.encodeCall(IJBDirectory.terminalsOf, (uint256(1))), abi.encode(new IJBTerminal[](0)));
     }
 
     function test_toRemoteSucceedsIfFeeTerminalIsMissing() external {

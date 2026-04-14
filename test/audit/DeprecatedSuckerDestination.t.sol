@@ -110,11 +110,7 @@ contract DeprecatedSuckerDestinationTest is Test {
         vm.mockCall(TERMINAL, abi.encodeWithSelector(IJBTerminal.pay.selector), abi.encode(uint256(0)));
 
         // Mock DIRECTORY.terminalsOf() so _buildETHAggregate() in _sendRoot() doesn't revert.
-        vm.mockCall(
-            DIRECTORY,
-            abi.encodeCall(IJBDirectory.terminalsOf, (PROJECT_ID)),
-            abi.encode(new IJBTerminal[](0))
-        );
+        vm.mockCall(DIRECTORY, abi.encodeCall(IJBDirectory.terminalsOf, (PROJECT_ID)), abi.encode(new IJBTerminal[](0)));
 
         source = _createSucker("codex-source");
         destination = _createSucker("codex-destination");
@@ -152,8 +148,8 @@ contract DeprecatedSuckerDestinationTest is Test {
                 nonce: source.test_getOutboxNonce(TOKEN), root: source.test_getOutboxRoot(TOKEN)
             }),
             sourceTotalSupply: 0,
-                sourceCurrency: 0,
-                sourceDecimals: 0,
+            sourceCurrency: 0,
+            sourceDecimals: 0,
             sourceSurplus: 0,
             sourceBalance: 0
         });

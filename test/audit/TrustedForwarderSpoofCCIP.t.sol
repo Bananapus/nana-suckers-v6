@@ -87,8 +87,8 @@ contract TrustedForwarderSpoofCCIPTest is Test {
             amount: 0,
             remoteRoot: JBInboxTreeRoot({nonce: 1, root: forgedRoot}),
             sourceTotalSupply: 0,
-                sourceCurrency: 0,
-                sourceDecimals: 0,
+            sourceCurrency: 0,
+            sourceDecimals: 0,
             sourceSurplus: 0,
             sourceBalance: 0
         });

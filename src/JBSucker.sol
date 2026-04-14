@@ -16,6 +16,7 @@ import {JBAccountingContext} from "@bananapus/core-v6/src/structs/JBAccountingCo
 import {JBConstants} from "@bananapus/core-v6/src/libraries/JBConstants.sol";
 import {JBCurrencyIds} from "@bananapus/core-v6/src/libraries/JBCurrencyIds.sol";
 import {JBFixedPointNumber} from "@bananapus/core-v6/src/libraries/JBFixedPointNumber.sol";
+import {mulDiv} from "@prb/math/src/Common.sol";
 import {JBPermissionIds} from "@bananapus/permission-ids-v6/src/JBPermissionIds.sol";
 import {ERC2771Context} from "@openzeppelin/contracts/metatx/ERC2771Context.sol";
 import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
@@ -272,11 +273,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     /// @param decimals The decimal precision for the returned value.
     /// @param currency The currency to normalize to (e.g. `uint256(uint160(JBConstants.NATIVE_TOKEN))` for ETH).
     /// @return A `JBDenominatedAmount` with the converted value.
-    function peerChainBalanceOf(uint256 decimals, uint256 currency)
-        external
-        view
-        returns (JBDenominatedAmount memory)
-    {
+    function peerChainBalanceOf(uint256 decimals, uint256 currency) external view returns (JBDenominatedAmount memory) {
         return JBDenominatedAmount({
             value: _convertPeerValue({source: _peerChainBalance, decimals: decimals, currency: currency}),
             currency: uint32(currency),
@@ -289,11 +286,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     /// @param decimals The decimal precision for the returned value.
     /// @param currency The currency to normalize to (e.g. `uint256(uint160(JBConstants.NATIVE_TOKEN))` for ETH).
     /// @return A `JBDenominatedAmount` with the converted value.
-    function peerChainSurplusOf(uint256 decimals, uint256 currency)
-        external
-        view
-        returns (JBDenominatedAmount memory)
-    {
+    function peerChainSurplusOf(uint256 decimals, uint256 currency) external view returns (JBDenominatedAmount memory) {
         return JBDenominatedAmount({
             value: _convertPeerValue({source: _peerChainSurplus, decimals: decimals, currency: currency}),
             currency: uint32(currency),
@@ -385,11 +378,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     /// @return ethSurplus The total surplus denominated in ETH at 18 decimals.
     /// @return ethBalance The total balance denominated in ETH at 18 decimals.
     // forge-lint: disable-next-line(mixed-case-function)
-    function _buildETHAggregate(uint256 _projectId)
-        internal
-        view
-        returns (uint256 ethSurplus, uint256 ethBalance)
-    {
+    function _buildETHAggregate(uint256 _projectId) internal view returns (uint256 ethSurplus, uint256 ethBalance) {
         IJBTerminal[] memory terminals = DIRECTORY.terminalsOf(_projectId);
         uint256 numTerminals = terminals.length;
         if (numTerminals == 0) return (0, 0);
@@ -399,7 +388,9 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         // slither-disable-next-line calls-loop
         try terminals[0].currentSurplusOf({
             projectId: _projectId, tokens: new address[](0), decimals: _ETH_DECIMALS, currency: uint32(_ETH_CURRENCY)
-        }) returns (uint256 surplus) {
+        }) returns (
+            uint256 surplus
+        ) {
             ethSurplus = surplus;
         } catch {
             // If surplus computation fails, leave as 0 (safe underestimate).
@@ -419,9 +410,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         // Aggregate balance from each terminal, converting each token to ETH.
         for (uint256 i; i < numTerminals;) {
             // slither-disable-next-line calls-loop
-            try terminals[i].accountingContextsOf(_projectId) returns (
-                JBAccountingContext[] memory contexts
-            ) {
+            try terminals[i].accountingContextsOf(_projectId) returns (JBAccountingContext[] memory contexts) {
                 for (uint256 j; j < contexts.length;) {
                     address tkn = contexts[j].token;
                     uint8 dec = contexts[j].decimals;
@@ -429,21 +418,28 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
 
                     // Get the raw balance for this token from this terminal's store.
                     // slither-disable-next-line calls-loop
-                    try IJBMultiTerminal(address(terminals[i])).STORE().balanceOf({
-                        terminal: address(terminals[i]), projectId: _projectId, token: tkn
-                    }) returns (uint256 bal) {
+                    try IJBMultiTerminal(address(terminals[i])).STORE()
+                        .balanceOf({terminal: address(terminals[i]), projectId: _projectId, token: tkn}) returns (
+                        uint256 bal
+                    ) {
                         if (bal != 0) {
                             if (tokenCurrency == uint32(_ETH_CURRENCY)) {
                                 // Already ETH — just adjust decimals to 18.
-                                ethBalance +=
-                                    JBFixedPointNumber.adjustDecimals({value: bal, decimals: dec, targetDecimals: _ETH_DECIMALS});
+                                ethBalance += JBFixedPointNumber.adjustDecimals({
+                                    value: bal, decimals: dec, targetDecimals: _ETH_DECIMALS
+                                });
                             } else {
                                 // Convert to ETH via the price oracle.
                                 // slither-disable-next-line calls-loop
                                 try prices.pricePerUnitOf({
-                                    projectId: _projectId, pricingCurrency: tokenCurrency, unitCurrency: uint32(_ETH_CURRENCY), decimals: _ETH_DECIMALS
-                                }) returns (uint256 price) {
-                                    ethBalance += (bal * price) / (10 ** dec);
+                                    projectId: _projectId,
+                                    pricingCurrency: tokenCurrency,
+                                    unitCurrency: uint32(_ETH_CURRENCY),
+                                    decimals: _ETH_DECIMALS
+                                }) returns (
+                                    uint256 price
+                                ) {
+                                    ethBalance += mulDiv(bal, price, 10 ** dec);
                                 } catch {
                                     // Skip tokens without a price feed — underestimate (safe direction).
                                 }
@@ -492,8 +488,9 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
 
         if (source.currency == uint32(currency)) {
             // Same currency — just adjust decimals.
-            converted =
-                JBFixedPointNumber.adjustDecimals({value: source.value, decimals: source.decimals, targetDecimals: decimals});
+            converted = JBFixedPointNumber.adjustDecimals({
+                value: source.value, decimals: source.decimals, targetDecimals: decimals
+            });
         } else {
             // Different currency — convert via the price oracle on the first terminal's store.
             uint256 _projectId = projectId();
@@ -508,9 +505,14 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
                 IJBPrices prices = store.PRICES();
                 // slither-disable-next-line calls-loop
                 try prices.pricePerUnitOf({
-                    projectId: _projectId, pricingCurrency: source.currency, unitCurrency: uint32(currency), decimals: uint8(decimals)
-                }) returns (uint256 price) {
-                    converted = (source.value * price) / (10 ** source.decimals);
+                    projectId: _projectId,
+                    pricingCurrency: source.currency,
+                    unitCurrency: uint32(currency),
+                    decimals: uint8(decimals)
+                }) returns (
+                    uint256 price
+                ) {
+                    converted = mulDiv(source.value, price, 10 ** source.decimals);
                 } catch {
                     // No price feed — return 0 (safe underestimate).
                 }
@@ -730,14 +732,10 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
 
             // Store the surplus and balance snapshots from the source chain.
             _peerChainSurplus = JBDenominatedAmount({
-                value: root.sourceSurplus,
-                currency: uint32(root.sourceCurrency),
-                decimals: root.sourceDecimals
+                value: root.sourceSurplus, currency: uint32(root.sourceCurrency), decimals: root.sourceDecimals
             });
             _peerChainBalance = JBDenominatedAmount({
-                value: root.sourceBalance,
-                currency: uint32(root.sourceCurrency),
-                decimals: root.sourceDecimals
+                value: root.sourceBalance, currency: uint32(root.sourceCurrency), decimals: root.sourceDecimals
             });
 
             emit NewInboxTreeRoot({
@@ -1538,5 +1536,4 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
             leaves: leaves
         });
     }
-
 }
