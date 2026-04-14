@@ -16,6 +16,8 @@ library CCIPHelper {
     address public constant BNB_ROUTER = 0x34B03Cb9086d7D758AC55af71584F81A598759FE;
     address public constant BASE_ROUTER = 0x881e3A65B4d4a04dD529061dd0071cf975F58bCD;
     address public constant BASE_SEP_ROUTER = 0xD3b06cEbF099CE7DA4AcCf578aaebFDBd6e88a93;
+    address public constant TEMPO_ROUTER = 0xa132F089492CcE5f1D79483a9e4552f37266ed01;
+    address public constant TEMPO_MOD_ROUTER = 0xD3e53cCEE3688aAEE5C9118ef5Fe24EB423aa56F;
 
     /// @notice The respective chain ids per network
     uint256 public constant ETH_ID = 1;
@@ -29,6 +31,8 @@ library CCIPHelper {
     uint256 public constant BNB_ID = 56;
     uint256 public constant BASE_ID = 8453;
     uint256 public constant BASE_SEP_ID = 84_532;
+    uint256 public constant TEMPO_ID = 4217;
+    uint256 public constant TEMPO_MOD_ID = 42_431;
 
     /// @notice The chain selector per network
     uint64 public constant ETH_SEL = 5_009_297_550_715_157_269;
@@ -42,6 +46,8 @@ library CCIPHelper {
     uint64 public constant BNB_SEL = 11_344_663_589_394_136_015;
     uint64 public constant BASE_SEL = 15_971_525_489_660_198_786;
     uint64 public constant BASE_SEP_SEL = 10_344_971_235_874_465_080;
+    uint64 public constant TEMPO_SEL = 7_281_642_695_469_137_430;
+    uint64 public constant TEMPO_MOD_SEL = 8_457_817_439_310_187_923;
 
     /// @notice The WETH address of each chain
     address public constant ETH_WETH = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
@@ -55,6 +61,8 @@ library CCIPHelper {
     address public constant BASE_WETH = 0x4200000000000000000000000000000000000006;
     address public constant OP_SEP_WETH = 0x4200000000000000000000000000000000000006;
     address public constant BASE_SEP_WETH = 0x4200000000000000000000000000000000000006;
+    address public constant TEMPO_WETH = 0xC5D538C96D6FEE7E6DFE7248B32898087b22ba79;
+    address public constant TEMPO_MOD_WETH = 0xbb2D3310E4232085d432A2e04b2Ac09c46F634E4;
 
     function routerOfChain(uint256 _chainId) internal pure returns (address router) {
         if (_chainId == ETH_ID) {
@@ -79,6 +87,10 @@ library CCIPHelper {
             return OP_SEP_ROUTER;
         } else if (_chainId == BASE_SEP_ID) {
             return BASE_SEP_ROUTER;
+        } else if (_chainId == TEMPO_ID) {
+            return TEMPO_ROUTER;
+        } else if (_chainId == TEMPO_MOD_ID) {
+            return TEMPO_MOD_ROUTER;
         } else {
             revert CCIPHelper_UnsupportedChain(_chainId);
         }
@@ -107,6 +119,10 @@ library CCIPHelper {
             return OP_SEP_SEL;
         } else if (_chainId == BASE_SEP_ID) {
             return BASE_SEP_SEL;
+        } else if (_chainId == TEMPO_ID) {
+            return TEMPO_SEL;
+        } else if (_chainId == TEMPO_MOD_ID) {
+            return TEMPO_MOD_SEL;
         } else {
             revert CCIPHelper_UnsupportedChain(_chainId);
         }
@@ -135,6 +151,10 @@ library CCIPHelper {
             return OP_SEP_WETH;
         } else if (_chainId == BASE_SEP_ID) {
             return BASE_SEP_WETH;
+        } else if (_chainId == TEMPO_ID) {
+            return TEMPO_WETH;
+        } else if (_chainId == TEMPO_MOD_ID) {
+            return TEMPO_MOD_WETH;
         } else {
             revert CCIPHelper_UnsupportedChain(_chainId);
         }

@@ -52,6 +52,8 @@ contract DeployScript is Script, Sphinx {
     bytes32 ARB_OP_SALT = "_SUCKER_ARB_OP_V6_";
     // forge-lint: disable-next-line(mixed-case-variable)
     bytes32 OP_BASE_SALT = "_SUCKER_OP_BASE_V6_";
+    // forge-lint: disable-next-line(mixed-case-variable)
+    bytes32 TEMPO_SALT = "_SUCKER_ETH_TEMPO_V6_";
 
     // forge-lint: disable-next-line(mixed-case-variable)
     IJBSuckerRegistry REGISTRY;
@@ -62,8 +64,8 @@ contract DeployScript is Script, Sphinx {
     function configureSphinx() public override {
         // TODO: Update to contain JB Emergency Developers
         sphinxConfig.projectName = "nana-suckers-v6";
-        sphinxConfig.mainnets = ["ethereum", "optimism", "base", "arbitrum"];
-        sphinxConfig.testnets = ["ethereum_sepolia", "optimism_sepolia", "base_sepolia", "arbitrum_sepolia"];
+        sphinxConfig.mainnets = ["ethereum", "optimism", "base", "arbitrum", "tempo"];
+        sphinxConfig.testnets = ["ethereum_sepolia", "optimism_sepolia", "base_sepolia", "arbitrum_sepolia", "tempo_moderato"];
     }
 
     function run() public {
@@ -580,6 +582,16 @@ contract DeployScript is Script, Sphinx {
                     })
                 )
             );
+
+            // Tempo
+            PRE_APPROVED_DEPLOYERS.push(
+                address(
+                    _deployCCIPSuckerFor({
+                        salt: TEMPO_SALT,
+                        remoteChainId: block.chainid == 1 ? CCIPHelper.TEMPO_ID : CCIPHelper.TEMPO_MOD_ID
+                    })
+                )
+            );
         }
 
         // Check if we should do the L2 portion.
@@ -674,6 +686,19 @@ contract DeployScript is Script, Sphinx {
                     _deployCCIPSuckerFor({
                         salt: ARB_BASE_SALT,
                         remoteChainId: block.chainid == 8453 ? CCIPHelper.ARB_ID : CCIPHelper.ARB_SEP_ID
+                    })
+                )
+            );
+        }
+
+        // Tempo / Tempo Moderato.
+        if (block.chainid == 4217 || block.chainid == 42_431) {
+            // Tempo -> ETH.
+            PRE_APPROVED_DEPLOYERS.push(
+                address(
+                    _deployCCIPSuckerFor({
+                        salt: TEMPO_SALT,
+                        remoteChainId: block.chainid == 4217 ? CCIPHelper.ETH_ID : CCIPHelper.ETH_SEP_ID
                     })
                 )
             );

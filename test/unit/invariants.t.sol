@@ -22,6 +22,7 @@ import {JBInboxTreeRoot} from "../../src/structs/JBInboxTreeRoot.sol";
 import {JBMessageRoot} from "../../src/structs/JBMessageRoot.sol";
 import {JBRemoteToken} from "../../src/structs/JBRemoteToken.sol";
 import {IJBSuckerRegistry} from "../../src/interfaces/IJBSuckerRegistry.sol";
+import {JBPayRemoteMessage} from "../../src/structs/JBPayRemoteMessage.sol";
 import {MerkleLib} from "../../src/utils/MerkleLib.sol";
 
 /// @notice Test sucker with exposed helpers for invariant testing.
@@ -152,6 +153,14 @@ contract InvariantSucker is JBSucker {
         address emergencyExitAddress = address(bytes20(keccak256(abi.encode(terminalToken))));
         return _executedFor[emergencyExitAddress].get(index);
     }
+
+    function _sendPayOverAMB(
+        uint256,
+        address,
+        uint256,
+        JBRemoteToken memory,
+        JBPayRemoteMessage memory
+    ) internal override {}
 }
 
 /// @title SuckerHandler
@@ -353,6 +362,9 @@ contract SuckerInvariantsTest is Test {
         vm.label(CONTROLLER, "MOCK_CONTROLLER");
         vm.label(PROJECT, "MOCK_PROJECT");
         vm.label(TERMINAL, "MOCK_TERMINAL");
+
+        // Mock PROJECTS() so the constructor can cache the immutable.
+        vm.mockCall(DIRECTORY, abi.encodeCall(IJBDirectory.PROJECTS, ()), abi.encode(PROJECT));
 
         InvariantSucker singleton =
             new InvariantSucker(IJBDirectory(DIRECTORY), IJBPermissions(PERMISSIONS), IJBTokens(TOKENS), FORWARDER);

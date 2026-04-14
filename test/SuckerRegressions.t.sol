@@ -9,6 +9,7 @@ import {IJBDirectory} from "@bananapus/core-v6/src/interfaces/IJBDirectory.sol";
 import {IJBPermissions} from "@bananapus/core-v6/src/interfaces/IJBPermissions.sol";
 import {IJBTerminal} from "@bananapus/core-v6/src/interfaces/IJBTerminal.sol";
 import {IJBTokens} from "@bananapus/core-v6/src/interfaces/IJBTokens.sol";
+import {IERC165} from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
 import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import {LibClone} from "solady/src/utils/LibClone.sol";
 
@@ -19,6 +20,7 @@ import {IJBSuckerRegistry} from "../src/interfaces/IJBSuckerRegistry.sol";
 import {JBClaim} from "../src/structs/JBClaim.sol";
 import {JBLeaf} from "../src/structs/JBLeaf.sol";
 import {JBMessageRoot} from "../src/structs/JBMessageRoot.sol";
+import {JBPayRemoteMessage} from "../src/structs/JBPayRemoteMessage.sol";
 import {JBRemoteToken} from "../src/structs/JBRemoteToken.sol";
 import {IJBSuckerExtended} from "../src/interfaces/IJBSuckerExtended.sol";
 import {MerkleLib} from "../src/utils/MerkleLib.sol";
@@ -118,6 +120,14 @@ contract RegressionSucker is JBSucker {
     function test_resetSendRootOverAMBCalled() external {
         sendRootOverAMBCalled = false;
     }
+
+    function _sendPayOverAMB(
+        uint256,
+        address,
+        uint256,
+        JBRemoteToken memory,
+        JBPayRemoteMessage memory
+    ) internal override {}
 }
 
 /// @title SuckerRegressionsTest
@@ -146,12 +156,20 @@ contract SuckerRegressionsTest is Test {
         vm.label(PROJECT, "MOCK_PROJECT");
         vm.label(TERMINAL, "MOCK_TERMINAL");
 
-        sucker = _createSucker("sucker_salt");
-
-        // Common mocks.
+        // Mock PROJECTS() so the constructor can cache the immutable.
         vm.mockCall(DIRECTORY, abi.encodeCall(IJBDirectory.PROJECTS, ()), abi.encode(PROJECT));
+
+        sucker = _createSucker("sucker_salt");
         vm.mockCall(PROJECT, abi.encodeCall(IERC721.ownerOf, (PROJECT_ID)), abi.encode(address(this)));
         vm.mockCall(DIRECTORY, abi.encodeCall(IJBDirectory.controllerOf, (PROJECT_ID)), abi.encode(CONTROLLER));
+        vm.mockCall(
+            CONTROLLER, abi.encodeCall(IERC165.supportsInterface, (type(IJBController).interfaceId)), abi.encode(true)
+        );
+        vm.mockCall(
+            CONTROLLER,
+            abi.encodeCall(IJBController.totalTokenSupplyWithReservedTokensOf, (PROJECT_ID)),
+            abi.encode(uint256(0))
+        );
         vm.mockCall(
             DIRECTORY, abi.encodeCall(IJBDirectory.primaryTerminalOf, (PROJECT_ID, TOKEN)), abi.encode(TERMINAL)
         );
@@ -162,6 +180,9 @@ contract SuckerRegressionsTest is Test {
 
         // Mock the registry's toRemoteFee() to return 0 (registry is address(1) with no code).
         vm.mockCall(address(1), abi.encodeCall(IJBSuckerRegistry.toRemoteFee, ()), abi.encode(uint256(0)));
+
+        // Mock DIRECTORY.terminalsOf() so _buildETHAggregate() in _sendRoot() doesn't revert.
+        vm.mockCall(DIRECTORY, abi.encodeCall(IJBDirectory.terminalsOf, (PROJECT_ID)), abi.encode(new IJBTerminal[](0)));
     }
 
     // =========================================================================

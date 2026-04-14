@@ -14,6 +14,15 @@ import {JBOptimismSucker} from "../../src/JBOptimismSucker.sol";
 import {JBLeaf} from "../../src/structs/JBLeaf.sol";
 import {JBClaim} from "../../src/structs/JBClaim.sol";
 import {IJBSuckerRegistry} from "../../src/interfaces/IJBSuckerRegistry.sol";
+import {JBPayRemoteMessage} from "../../src/structs/JBPayRemoteMessage.sol";
+import {IJBProjects} from "@bananapus/core-v6/src/interfaces/IJBProjects.sol";
+
+/// @dev Minimal mock directory that returns a mock PROJECTS address.
+contract MockDirectory {
+    function PROJECTS() external pure returns (IJBProjects) {
+        return IJBProjects(address(1000));
+    }
+}
 
 contract MerkleUnitTest is JBSucker, Test {
     using MerkleLib for MerkleLib.Tree;
@@ -21,21 +30,15 @@ contract MerkleUnitTest is JBSucker, Test {
     bytes32[32] _proof;
 
     constructor()
-        // OPMessenger(address(500)),
-        // OPStandardBridge(address(550)),
         JBSucker(
-            IJBDirectory(address(600)),
+            IJBDirectory(address(new MockDirectory())),
             IJBPermissions(address(800)),
             IJBTokens(address(700)),
             1,
             IJBSuckerRegistry(address(this)),
             address(0)
         )
-        // self.initialize(.NATIVE_TOKEN, JBConstants.NATIVE_TOKEN, JBConstants.NATIVE_TOKEN)
-
-    {
-        // initialize({peer: address(this), projectId: 1});
-    }
+    {}
 
     function setUp() public {
         // Insert some items into the queue
@@ -193,14 +196,26 @@ contract MerkleUnitTest is JBSucker, Test {
         virtual
         override
     {}
+
+    function _sendPayOverAMB(
+        uint256,
+        address,
+        uint256,
+        JBRemoteToken memory,
+        JBPayRemoteMessage memory
+    ) internal override {}
+
     function peerChainId() external view override returns (uint256 chainId) {}
 }
 
 contract DeployerUnitTest is Test {
     function testDoesntRevert() public {
+        MockDirectory mockDir = new MockDirectory();
+        IJBDirectory dir = IJBDirectory(address(mockDir));
+
         // Deploy the deployer.
         JBOptimismSuckerDeployer _deployer = new JBOptimismSuckerDeployer(
-            IJBDirectory(address(0)), IJBPermissions(address(0)), IJBTokens(address(0)), address(this), address(0)
+            dir, IJBPermissions(address(0)), IJBTokens(address(0)), address(this), address(0)
         );
 
         // Configure the chain specific contstants.
@@ -209,7 +224,7 @@ contract DeployerUnitTest is Test {
         // Deploy the singleton.
         JBOptimismSucker _sucker = new JBOptimismSucker(
             _deployer,
-            IJBDirectory(address(0)),
+            dir,
             IJBPermissions(address(0)),
             IJBTokens(address(0)),
             1,

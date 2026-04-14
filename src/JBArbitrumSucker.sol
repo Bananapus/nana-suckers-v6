@@ -24,6 +24,7 @@ import {IArbL2GatewayRouter} from "./interfaces/IArbL2GatewayRouter.sol";
 import {IJBArbitrumSucker} from "./interfaces/IJBArbitrumSucker.sol";
 import {ARBChains} from "./libraries/ARBChains.sol";
 import {JBMessageRoot} from "./structs/JBMessageRoot.sol";
+import {JBPayRemoteMessage} from "./structs/JBPayRemoteMessage.sol";
 import {JBRemoteToken} from "./structs/JBRemoteToken.sol";
 import {MerkleLib} from "./utils/MerkleLib.sol";
 
@@ -98,7 +99,7 @@ contract JBArbitrumSucker is JBSucker, IJBArbitrumSucker {
     /// @return valid A flag if the sender is a valid representative of the remote peer.
     function _isRemotePeer(address sender) internal view override returns (bool) {
         // Convert the bytes32 peer to an address for comparison with EVM bridge contracts.
-        address peerAddress = _toAddress(peer());
+        address peerAddress = _peerAddress();
 
         // If we are the L1 peer,
         if (LAYER == JBLayer.L1) {
@@ -125,7 +126,7 @@ contract JBArbitrumSucker is JBSucker, IJBArbitrumSucker {
     )
         internal
     {
-        address peerAddress = _toAddress(peer());
+        address peerAddress = _peerAddress();
         // slither-disable-next-line unused-return,calls-loop
         ARBINBOX.unsafeCreateRetryableTicket{value: callTransportCost + nativeValue}({
             to: peerAddress,
@@ -137,6 +138,14 @@ contract JBArbitrumSucker is JBSucker, IJBArbitrumSucker {
             maxFeePerGas: maxFeePerGas,
             data: data
         });
+    }
+
+    /// @notice Approves the Arbitrum gateway to spend `amount` of `token`.
+    /// @param token The ERC-20 token to approve.
+    /// @param amount The amount to approve.
+    function _approveGateway(address token, uint256 amount) internal {
+        // slither-disable-next-line calls-loop
+        SafeERC20.forceApprove({token: IERC20(token), spender: GATEWAYROUTER.getGateway(token), value: amount});
     }
 
     /// @notice Uses the L1/L2 gateway to send the root and assets over the bridge to the peer.
@@ -191,13 +200,12 @@ contract JBArbitrumSucker is JBSucker, IJBArbitrumSucker {
         uint256 nativeValue;
 
         // Cache peer address to avoid redundant calls.
-        address peerAddress = _toAddress(peer());
+        address peerAddress = _peerAddress();
 
         // If the token is an ERC-20, bridge it to the peer.
         // If the amount is `0` then we do not need to bridge any ERC20.
         if (token != JBConstants.NATIVE_TOKEN && amount != 0) {
-            // slither-disable-next-line calls-loop
-            SafeERC20.forceApprove({token: IERC20(token), spender: GATEWAYROUTER.getGateway(token), value: amount});
+            _approveGateway({token: token, amount: amount});
 
             // Convert bytes32 types to address at the Arbitrum bridge API boundary.
             // slither-disable-next-line calls-loop,unused-return
@@ -274,8 +282,7 @@ contract JBArbitrumSucker is JBSucker, IJBArbitrumSucker {
             }
 
             // Approve the tokens to be bridged.
-            // slither-disable-next-line calls-loop
-            SafeERC20.forceApprove({token: IERC20(token), spender: GATEWAYROUTER.getGateway(token), value: amount});
+            _approveGateway({token: token, amount: amount});
 
             // Perform the ERC-20 bridge transfer. Convert bytes32 peer to address at the Arbitrum bridge API boundary.
             // slither-disable-start out-of-order-retryable
@@ -283,7 +290,7 @@ contract JBArbitrumSucker is JBSucker, IJBArbitrumSucker {
             IArbL1GatewayRouter(address(GATEWAYROUTER)).outboundTransferCustomRefund{value: tokenTransportCost}({
                 token: token,
                 refundTo: _msgSender(),
-                to: _toAddress(peer()),
+                to: _peerAddress(),
                 amount: amount,
                 maxGas: remoteToken.minGas,
                 gasPriceBid: maxFeePerGas,
@@ -317,5 +324,167 @@ contract JBArbitrumSucker is JBSucker, IJBArbitrumSucker {
             data: data
         });
         // slither-disable-end out-of-order-retryable
+    }
+
+    /// @notice Bridge funds and a pay message to the remote peer via the Arbitrum bridge.
+    /// @dev L1→L2: retryable ticket with l2CallValue = returnTransport so it's available for the return sendRoot.
+    /// L2→L1: via ArbSys (free). Return L1→L2 requires transport (paid by manual `toRemote()` on L1).
+    // forge-lint: disable-next-line(mixed-case-function)
+    function _sendPayOverAMB(
+        uint256 transportPayment,
+        address token,
+        uint256 amount,
+        JBRemoteToken memory remoteToken,
+        JBPayRemoteMessage memory message
+    )
+        internal
+        override
+    {
+        bytes memory data = abi.encodeCall(JBSucker.payFromRemote, (message));
+
+        // slither-disable-start out-of-order-retryable
+        if (LAYER == JBLayer.L1) {
+            // L1→L2 requires transport payment for retryable tickets.
+            if (transportPayment == 0) revert JBSucker_ExpectedMsgValue();
+            _payToL2({
+                token: token,
+                transportPayment: transportPayment,
+                amount: amount,
+                returnTransport: message.returnTransport,
+                data: data,
+                remoteToken: remoteToken
+            });
+        } else {
+            // L2→L1 via ArbSys is free.
+            if (transportPayment != 0) revert JBSucker_UnexpectedMsgValue(transportPayment);
+            _payToL1({token: token, amount: amount, data: data, remoteToken: remoteToken});
+        }
+        // slither-disable-end out-of-order-retryable
+    }
+
+    /// @notice Bridge pay message to L1 from L2 (free via ArbSys).
+    function _payToL1(address token, uint256 amount, bytes memory data, JBRemoteToken memory remoteToken) internal {
+        uint256 nativeValue;
+        address peerAddress = _toAddress(peer());
+
+        if (token != JBConstants.NATIVE_TOKEN && amount != 0) {
+            // slither-disable-next-line calls-loop
+            SafeERC20.forceApprove({token: IERC20(token), spender: GATEWAYROUTER.getGateway(token), value: amount});
+            // slither-disable-next-line calls-loop,unused-return
+            IArbL2GatewayRouter(address(GATEWAYROUTER)).outboundTransfer({
+                l1Token: _toAddress(remoteToken.addr),
+                to: peerAddress,
+                amount: amount,
+                data: bytes("")
+            });
+        } else {
+            nativeValue = amount;
+        }
+
+        // slither-disable-next-line calls-loop,unused-return
+        ArbSys(address(100)).sendTxToL1{value: nativeValue}({destination: peerAddress, data: data});
+    }
+
+    /// @notice Bridge pay message to L2 from L1 (requires retryable ticket).
+    /// @dev l2CallValue = returnTransport so the return `_sendRoot` has ETH for gas on L2.
+    function _payToL2(
+        address token,
+        uint256 transportPayment,
+        uint256 amount,
+        uint256 returnTransport,
+        bytes memory data,
+        JBRemoteToken memory remoteToken
+    )
+        internal
+    {
+        uint256 maxFeePerGas = block.basefee;
+        uint256 callTransportCost;
+        uint256 maxSubmissionCost;
+
+        // slither-disable-next-line calls-loop
+        maxSubmissionCost =
+            ARBINBOX.calculateRetryableSubmissionFee({dataLength: data.length, baseFee: maxFeePerGas});
+        callTransportCost = maxSubmissionCost + (MESSENGER_PAY_GAS_LIMIT * maxFeePerGas);
+
+        if (token != JBConstants.NATIVE_TOKEN && amount != 0) {
+            callTransportCost = _payToL2BridgeERC20({
+                token: token,
+                transportPayment: transportPayment,
+                amount: amount,
+                callTransportCost: callTransportCost,
+                maxFeePerGas: maxFeePerGas,
+                remoteToken: remoteToken
+            });
+        } else {
+            if (transportPayment < callTransportCost) {
+                revert JBArbitrumSucker_NotEnoughGas(transportPayment, callTransportCost);
+            }
+            callTransportCost = transportPayment;
+        }
+
+        // Create retryable ticket with l2CallValue = returnTransport (for return bridge gas).
+        uint256 nativeValue = (token == JBConstants.NATIVE_TOKEN ? amount : 0) + returnTransport;
+        // slither-disable-next-line calls-loop,unused-return
+        _createRetryableTicket({
+            callTransportCost: callTransportCost,
+            nativeValue: nativeValue,
+            maxSubmissionCost: maxSubmissionCost,
+            maxFeePerGas: maxFeePerGas,
+            data: data
+        });
+    }
+
+    /// @notice Bridge ERC-20 tokens to L2 as part of _payToL2. Separated to avoid stack-too-deep.
+    /// @return updatedCallTransportCost The updated call transport cost after ERC-20 bridging.
+    function _payToL2BridgeERC20(
+        address token,
+        uint256 transportPayment,
+        uint256 amount,
+        uint256 callTransportCost,
+        uint256 maxFeePerGas,
+        JBRemoteToken memory remoteToken
+    )
+        internal
+        returns (uint256 updatedCallTransportCost)
+    {
+        // slither-disable-next-line calls-loop
+        uint256 maxSubmissionCostERC20 =
+            ARBINBOX.calculateRetryableSubmissionFee({dataLength: 96, baseFee: maxFeePerGas});
+        uint256 tokenTransportCost = maxSubmissionCostERC20 + (remoteToken.minGas * maxFeePerGas);
+
+        if (transportPayment < callTransportCost + tokenTransportCost) {
+            revert JBArbitrumSucker_NotEnoughGas(transportPayment, callTransportCost + tokenTransportCost);
+        }
+
+        uint256 transportPaymentRemainder = (transportPayment - callTransportCost - tokenTransportCost) / 2;
+        tokenTransportCost += transportPaymentRemainder;
+        updatedCallTransportCost = callTransportCost + transportPaymentRemainder;
+
+        // slither-disable-next-line calls-loop
+        SafeERC20.forceApprove({token: IERC20(token), spender: GATEWAYROUTER.getGateway(token), value: amount});
+        // slither-disable-start out-of-order-retryable
+        // slither-disable-next-line calls-loop,unused-return
+        IArbL1GatewayRouter(address(GATEWAYROUTER)).outboundTransferCustomRefund{value: tokenTransportCost}({
+            token: token,
+            refundTo: _msgSender(),
+            to: _toAddress(peer()),
+            amount: amount,
+            maxGas: remoteToken.minGas,
+            gasPriceBid: maxFeePerGas,
+            data: bytes(abi.encode(maxSubmissionCostERC20, bytes("")))
+        });
+        // slither-disable-end out-of-order-retryable
+    }
+
+    /// @notice Split transport budget for Arbitrum.
+    /// @dev L1→L2: all budget goes to hop1 (return L2→L1 is free via ArbSys).
+    /// L2→L1: both are 0 since L2→L1 is free; return L1→L2 handled by manual `toRemote()`.
+    function _splitTransportBudget(uint256 budget) internal view override returns (uint256 hop1, uint256 returnTrip) {
+        if (LAYER == JBLayer.L1) {
+            // L1→L2: caller pays for outbound retryable ticket. Return (L2→L1) is free.
+            return (budget, 0);
+        }
+        // L2→L1: free via ArbSys. Return L1→L2 needs manual toRemote().
+        return (0, 0);
     }
 }

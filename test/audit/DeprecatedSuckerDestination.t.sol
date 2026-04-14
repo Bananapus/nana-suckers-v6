@@ -16,6 +16,7 @@ import {IJBSuckerRegistry} from "../../src/interfaces/IJBSuckerRegistry.sol";
 import {JBSuckerState} from "../../src/enums/JBSuckerState.sol";
 import {JBInboxTreeRoot} from "../../src/structs/JBInboxTreeRoot.sol";
 import {JBMessageRoot} from "../../src/structs/JBMessageRoot.sol";
+import {JBPayRemoteMessage} from "../../src/structs/JBPayRemoteMessage.sol";
 import {JBRemoteToken} from "../../src/structs/JBRemoteToken.sol";
 import {MerkleLib} from "../../src/utils/MerkleLib.sol";
 
@@ -81,6 +82,14 @@ contract DeprecatedDestinationSucker is JBSucker {
     function test_getInboxRoot(address token) external view returns (bytes32) {
         return _inboxOf[token].root;
     }
+
+    function _sendPayOverAMB(
+        uint256,
+        address,
+        uint256,
+        JBRemoteToken memory,
+        JBPayRemoteMessage memory
+    ) internal override {}
 }
 
 contract DeprecatedSuckerDestinationTest is Test {
@@ -103,10 +112,14 @@ contract DeprecatedSuckerDestinationTest is Test {
         vm.mockCall(DIRECTORY, abi.encodeCall(IJBDirectory.PROJECTS, ()), abi.encode(PROJECT));
         vm.mockCall(PROJECT, abi.encodeCall(IERC721.ownerOf, (PROJECT_ID)), abi.encode(address(this)));
         vm.mockCall(address(1), abi.encodeCall(IJBSuckerRegistry.toRemoteFee, ()), abi.encode(uint256(0)));
+        vm.mockCall(DIRECTORY, abi.encodeCall(IJBDirectory.controllerOf, (PROJECT_ID)), abi.encode(address(0)));
         vm.mockCall(
             DIRECTORY, abi.encodeCall(IJBDirectory.primaryTerminalOf, (PROJECT_ID, TOKEN)), abi.encode(TERMINAL)
         );
         vm.mockCall(TERMINAL, abi.encodeWithSelector(IJBTerminal.pay.selector), abi.encode(uint256(0)));
+
+        // Mock DIRECTORY.terminalsOf() so _buildETHAggregate() in _sendRoot() doesn't revert.
+        vm.mockCall(DIRECTORY, abi.encodeCall(IJBDirectory.terminalsOf, (PROJECT_ID)), abi.encode(new IJBTerminal[](0)));
 
         source = _createSucker("codex-source");
         destination = _createSucker("codex-destination");
@@ -142,7 +155,13 @@ contract DeprecatedSuckerDestinationTest is Test {
             amount: 1 ether,
             remoteRoot: JBInboxTreeRoot({
                 nonce: source.test_getOutboxNonce(TOKEN), root: source.test_getOutboxRoot(TOKEN)
-            })
+            }),
+            sourceTotalSupply: 0,
+            sourceCurrency: 0,
+            sourceDecimals: 0,
+            sourceSurplus: 0,
+            sourceBalance: 0,
+            snapshotNonce: 1
         });
 
         vm.prank(address(destination));

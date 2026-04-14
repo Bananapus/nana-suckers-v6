@@ -21,6 +21,7 @@ import {JBClaim} from "../src/structs/JBClaim.sol";
 import {JBLeaf} from "../src/structs/JBLeaf.sol";
 import {JBInboxTreeRoot} from "../src/structs/JBInboxTreeRoot.sol";
 import {JBMessageRoot} from "../src/structs/JBMessageRoot.sol";
+import {JBPayRemoteMessage} from "../src/structs/JBPayRemoteMessage.sol";
 import {JBRemoteToken} from "../src/structs/JBRemoteToken.sol";
 import {MerkleLib} from "../src/utils/MerkleLib.sol";
 
@@ -126,6 +127,14 @@ contract AttackTestSucker is JBSucker {
     function test_setRemoteToken(address localToken, JBRemoteToken memory remoteToken) external {
         _remoteTokenFor[localToken] = remoteToken;
     }
+
+    function _sendPayOverAMB(
+        uint256,
+        address,
+        uint256,
+        JBRemoteToken memory,
+        JBPayRemoteMessage memory
+    ) internal override {}
 }
 
 /// @title SuckerAttacks
@@ -155,10 +164,10 @@ contract SuckerAttacks is Test {
         vm.label(PROJECT, "MOCK_PROJECT");
         vm.label(TERMINAL, "MOCK_TERMINAL");
 
-        sucker = _createTestSucker(PROJECT_ID, "attack_salt");
-
-        // Mock directory
+        // Mock PROJECTS() so the constructor can cache the immutable.
         vm.mockCall(DIRECTORY, abi.encodeCall(IJBDirectory.PROJECTS, ()), abi.encode(PROJECT));
+
+        sucker = _createTestSucker(PROJECT_ID, "attack_salt");
         vm.mockCall(PROJECT, abi.encodeCall(IERC721.ownerOf, (PROJECT_ID)), abi.encode(address(this)));
         vm.mockCall(DIRECTORY, abi.encodeCall(IJBDirectory.controllerOf, (PROJECT_ID)), abi.encode(CONTROLLER));
         vm.mockCall(
@@ -190,7 +199,13 @@ contract SuckerAttacks is Test {
             version: 1,
             token: bytes32(uint256(uint160(JBConstants.NATIVE_TOKEN))),
             amount: 1 ether,
-            remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(123))})
+            remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(123))}),
+            sourceTotalSupply: 0,
+            sourceCurrency: 0,
+            sourceDecimals: 0,
+            sourceSurplus: 0,
+            sourceBalance: 0,
+            snapshotNonce: 1
         });
 
         // Non-peer calling fromRemote should revert
@@ -214,7 +229,13 @@ contract SuckerAttacks is Test {
             version: 1,
             token: bytes32(uint256(uint160(JBConstants.NATIVE_TOKEN))),
             amount: 1 ether,
-            remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(456))})
+            remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(456))}),
+            sourceTotalSupply: 0,
+            sourceCurrency: 0,
+            sourceDecimals: 0,
+            sourceSurplus: 0,
+            sourceBalance: 0,
+            snapshotNonce: 1
         });
 
         vm.prank(wrongSender);
@@ -236,7 +257,13 @@ contract SuckerAttacks is Test {
             version: 1,
             token: bytes32(uint256(uint160(JBConstants.NATIVE_TOKEN))),
             amount: 0,
-            remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(789))})
+            remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(789))}),
+            sourceTotalSupply: 0,
+            sourceCurrency: 0,
+            sourceDecimals: 0,
+            sourceSurplus: 0,
+            sourceBalance: 0,
+            snapshotNonce: 1
         });
 
         // Other sucker calling fromRemote should be rejected
@@ -263,7 +290,13 @@ contract SuckerAttacks is Test {
                 version: 1,
                 token: bytes32(uint256(uint160(JBConstants.NATIVE_TOKEN))),
                 amount: 0,
-                remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(0)})
+                remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(0)}),
+                sourceTotalSupply: 0,
+                sourceCurrency: 0,
+                sourceDecimals: 0,
+                sourceSurplus: 0,
+                sourceBalance: 0,
+                snapshotNonce: 1
             });
 
             vm.expectRevert();

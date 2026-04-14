@@ -3,11 +3,13 @@ pragma solidity ^0.8.0;
 
 import {IERC165} from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
 import {IJBDirectory} from "@bananapus/core-v6/src/interfaces/IJBDirectory.sol";
+import {IJBProjects} from "@bananapus/core-v6/src/interfaces/IJBProjects.sol";
 import {IJBTokens} from "@bananapus/core-v6/src/interfaces/IJBTokens.sol";
-
 import {JBClaim} from "../structs/JBClaim.sol";
+import {JBDenominatedAmount} from "../structs/JBDenominatedAmount.sol";
 import {JBInboxTreeRoot} from "../structs/JBInboxTreeRoot.sol";
 import {JBOutboxTree} from "../structs/JBOutboxTree.sol";
+import {JBPayRemoteMessage} from "../structs/JBPayRemoteMessage.sol";
 import {JBRemoteToken} from "../structs/JBRemoteToken.sol";
 import {JBSuckerState} from "../enums/JBSuckerState.sol";
 import {JBTokenMapping} from "../structs/JBTokenMapping.sol";
@@ -67,6 +69,36 @@ interface IJBSucker is IERC165 {
     /// @param caller The address that initiated the send.
     event RootToRemote(bytes32 indexed root, address indexed token, uint256 index, uint64 nonce, address caller);
 
+    /// @notice Emitted when a user initiates a cross-chain payment via `payRemote`.
+    /// @param beneficiary The beneficiary on the source chain who will receive project tokens.
+    /// @param token The terminal token being bridged.
+    /// @param amount The amount of terminal tokens being bridged.
+    /// @param returnTransport The budget for the return bridge hop.
+    /// @param caller The address that initiated the payment.
+    event PayRemote(
+        bytes32 indexed beneficiary,
+        address indexed token,
+        uint256 amount,
+        uint256 returnTransport,
+        address caller
+    );
+
+    /// @notice Emitted when a cross-chain payment is executed on the destination chain via `payFromRemote`.
+    /// @param beneficiary The beneficiary on the source chain who will receive project tokens.
+    /// @param token The terminal token used to pay the project.
+    /// @param amountPaid The amount of terminal tokens paid to the project.
+    /// @param projectTokensReceived The number of project tokens received from the payment.
+    /// @param terminalTokensReclaimed The amount of terminal tokens reclaimed from the cash out.
+    /// @param caller The address that executed the payment (the bridge messenger).
+    event PayFromRemote(
+        bytes32 indexed beneficiary,
+        address indexed token,
+        uint256 amountPaid,
+        uint256 projectTokensReceived,
+        uint256 terminalTokensReclaimed,
+        address caller
+    );
+
     /// @notice Emitted when a received inbox root is rejected because its nonce is stale.
     /// @param token The terminal token address.
     /// @param receivedNonce The nonce of the rejected root.
@@ -86,6 +118,10 @@ interface IJBSucker is IERC165 {
     /// @notice The minimum gas required for bridging ERC-20 tokens.
     /// @return The ERC-20 minimum gas limit.
     function MESSENGER_ERC20_MIN_GAS_LIMIT() external view returns (uint32);
+
+    /// @notice The project registry (ERC-721 ownership).
+    /// @return The projects contract.
+    function PROJECTS() external view returns (IJBProjects);
 
     /// @notice The token registry.
     /// @return The tokens contract.
@@ -122,6 +158,28 @@ interface IJBSucker is IERC165 {
     /// @notice The chain ID of the remote peer.
     /// @return chainId The remote chain ID.
     function peerChainId() external view returns (uint256 chainId);
+
+    /// @notice The last known total token supply on the peer chain, updated each time a bridge message is received.
+    /// @dev Used by data hooks to compute `effectiveTotalSupply = localSupply + sum(peerChainTotalSupply)` across all
+    /// suckers, preventing cash out tax bypass on chains where a holder dominates the local supply.
+    /// @return The peer chain's total supply.
+    function peerChainTotalSupply() external view returns (uint256);
+
+    /// @notice The aggregate peer chain balance, normalized to a desired currency and decimal precision using JBPrices.
+    /// @dev The balance is stored as ETH-denominated (18 decimals) and converted to the requested currency/decimals
+    /// using the local JBPrices oracle.
+    /// @param decimals The decimal precision for the returned value.
+    /// @param currency The currency to normalize to.
+    /// @return A `JBDenominatedAmount` with the converted value.
+    function peerChainBalanceOf(uint256 decimals, uint256 currency) external view returns (JBDenominatedAmount memory);
+
+    /// @notice The aggregate peer chain surplus, normalized to a desired currency and decimal precision using JBPrices.
+    /// @dev The surplus is stored as ETH-denominated (18 decimals) and converted to the requested currency/decimals
+    /// using the local JBPrices oracle.
+    /// @param decimals The decimal precision for the returned value.
+    /// @param currency The currency to normalize to.
+    /// @return A `JBDenominatedAmount` with the converted value.
+    function peerChainSurplusOf(uint256 decimals, uint256 currency) external view returns (JBDenominatedAmount memory);
 
     /// @notice The ID of the project on the local chain that this sucker is associated with.
     /// @return The project ID.
@@ -170,4 +228,28 @@ interface IJBSucker is IERC165 {
     /// @notice Send the outbox tree root and bridged assets to the remote peer.
     /// @param token The terminal token to bridge.
     function toRemote(address token) external payable;
+
+    /// @notice Pay a project on the remote chain from the local chain.
+    /// @dev Bridges funds to the remote chain where the sucker pays the project, cashes out at 0% tax,
+    /// inserts the resulting tokens into the outbox tree, and auto-triggers the return bridge.
+    /// @param token The local terminal token to bridge.
+    /// @param amount The amount of terminal tokens to pay.
+    /// @param beneficiary The beneficiary on the local chain who will receive project tokens (bytes32 for cross-VM).
+    /// @param minTokensOut Minimum project tokens from the pay step (slippage protection).
+    /// @param metadata Metadata forwarded to `terminal.pay()` for hooks.
+    function payRemote(
+        address token,
+        uint256 amount,
+        bytes32 beneficiary,
+        uint256 minTokensOut,
+        bytes calldata metadata
+    )
+        external
+        payable;
+
+    /// @notice Execute a cross-chain payment on behalf of a remote user. Called by the bridge messenger.
+    /// @dev Only callable by the remote peer via the bridge. Pays the project, cashes out, inserts into
+    /// the outbox tree, and attempts to auto-trigger the return bridge.
+    /// @param message The payment message from the remote chain.
+    function payFromRemote(JBPayRemoteMessage calldata message) external payable;
 }

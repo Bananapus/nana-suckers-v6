@@ -5,11 +5,19 @@ import {JBPermissioned} from "@bananapus/core-v6/src/abstract/JBPermissioned.sol
 import {IJBCashOutTerminal} from "@bananapus/core-v6/src/interfaces/IJBCashOutTerminal.sol";
 import {IJBController} from "@bananapus/core-v6/src/interfaces/IJBController.sol";
 import {IJBDirectory} from "@bananapus/core-v6/src/interfaces/IJBDirectory.sol";
+import {IJBMultiTerminal} from "@bananapus/core-v6/src/interfaces/IJBMultiTerminal.sol";
 import {IJBPermissions} from "@bananapus/core-v6/src/interfaces/IJBPermissions.sol";
+import {IJBProjects} from "@bananapus/core-v6/src/interfaces/IJBProjects.sol";
 import {IJBPermissioned} from "@bananapus/core-v6/src/interfaces/IJBPermissioned.sol";
+import {IJBPrices} from "@bananapus/core-v6/src/interfaces/IJBPrices.sol";
 import {IJBTerminal} from "@bananapus/core-v6/src/interfaces/IJBTerminal.sol";
+import {IJBTerminalStore} from "@bananapus/core-v6/src/interfaces/IJBTerminalStore.sol";
 import {IJBTokens} from "@bananapus/core-v6/src/interfaces/IJBTokens.sol";
+import {JBAccountingContext} from "@bananapus/core-v6/src/structs/JBAccountingContext.sol";
 import {JBConstants} from "@bananapus/core-v6/src/libraries/JBConstants.sol";
+import {JBCurrencyIds} from "@bananapus/core-v6/src/libraries/JBCurrencyIds.sol";
+import {JBFixedPointNumber} from "@bananapus/core-v6/src/libraries/JBFixedPointNumber.sol";
+import {mulDiv} from "@prb/math/src/Common.sol";
 import {JBPermissionIds} from "@bananapus/permission-ids-v6/src/JBPermissionIds.sol";
 import {ERC2771Context} from "@openzeppelin/contracts/metatx/ERC2771Context.sol";
 import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
@@ -19,16 +27,22 @@ import {Context} from "@openzeppelin/contracts/utils/Context.sol";
 import {ERC165, IERC165} from "@openzeppelin/contracts/utils/introspection/ERC165.sol";
 import {BitMaps} from "@openzeppelin/contracts/utils/structs/BitMaps.sol";
 
+import {JBMetadataResolver} from "@bananapus/core-v6/src/libraries/JBMetadataResolver.sol";
+
 import {JBSuckerState} from "./enums/JBSuckerState.sol";
 import {IJBSucker} from "./interfaces/IJBSucker.sol";
 import {IJBSuckerExtended} from "./interfaces/IJBSuckerExtended.sol";
 import {IJBSuckerRegistry} from "./interfaces/IJBSuckerRegistry.sol";
+import {JBRelayBeneficiary} from "./libraries/JBRelayBeneficiary.sol";
 import {JBClaim} from "./structs/JBClaim.sol";
+import {JBDenominatedAmount} from "./structs/JBDenominatedAmount.sol";
 import {JBInboxTreeRoot} from "./structs/JBInboxTreeRoot.sol";
 import {JBMessageRoot} from "./structs/JBMessageRoot.sol";
 import {JBOutboxTree} from "./structs/JBOutboxTree.sol";
+import {JBPayRemoteMessage} from "./structs/JBPayRemoteMessage.sol";
 import {JBRemoteToken} from "./structs/JBRemoteToken.sol";
 import {JBTokenMapping} from "./structs/JBTokenMapping.sol";
+import {JBSuckerLib} from "./libraries/JBSuckerLib.sol";
 import {MerkleLib} from "./utils/MerkleLib.sol";
 
 /// @notice An abstract contract for bridging a Juicebox project's tokens and the corresponding funds to and from a
@@ -56,6 +70,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     error JBSucker_Deprecated();
     error JBSucker_DeprecationTimestampTooSoon(uint256 givenTime, uint256 minimumTime);
     error JBSucker_ExpectedMsgValue();
+    error JBSucker_IndexOutOfRange(uint256 index);
     error JBSucker_InsufficientBalance(uint256 amount, uint256 balance);
     error JBSucker_InsufficientMsgValue(uint256 received, uint256 expected);
     error JBSucker_InvalidMessageVersion(uint8 received, uint8 expected);
@@ -69,7 +84,6 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     error JBSucker_TokenAlreadyMapped(address localToken, bytes32 mappedTo);
     error JBSucker_TokenHasInvalidEmergencyHatchState(address token);
     error JBSucker_TokenNotMapped(address token);
-    error JBSucker_IndexOutOfRange(uint256 index);
     error JBSucker_UnexpectedMsgValue(uint256 value);
     error JBSucker_ZeroBeneficiary();
     error JBSucker_ZeroERC20Token();
@@ -86,15 +100,26 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     /// (successfully/safely) perform a transfer on the remote chain.
     uint32 public constant override MESSENGER_ERC20_MIN_GAS_LIMIT = 200_000;
 
+    /// @notice The gas limit for `payFromRemote` cross-chain calls. Higher than `MESSENGER_BASE_GAS_LIMIT`
+    /// because `payFromRemote` performs pay + cashout + insertIntoTree + sendRoot in a single call.
+    uint32 public constant MESSENGER_PAY_GAS_LIMIT = 1_000_000;
+
+    /// @notice The message format version. Used to reject incompatible messages from remote chains.
+    uint8 public constant MESSAGE_VERSION = 1;
+
     //*********************************************************************//
     // ------------------------- internal constants ----------------------- //
     //*********************************************************************//
 
-    /// @notice The depth of the merkle tree used to store the outbox and inbox.
-    uint32 constant _TREE_DEPTH = 32;
+    /// @notice The currency used for cross-chain surplus/balance normalization: ETH (native token).
+    /// @dev Bridge messages always carry surplus and balance denominated in this currency at `_ETH_DECIMALS` precision.
+    uint256 internal constant _ETH_CURRENCY = JBCurrencyIds.ETH;
 
-    /// @notice The message format version. Used to reject incompatible messages from remote chains.
-    uint8 public constant MESSAGE_VERSION = 1;
+    /// @notice The decimal precision used for cross-chain surplus/balance normalization: 18.
+    uint8 internal constant _ETH_DECIMALS = 18;
+
+    /// @notice The depth of the merkle tree used to store the outbox and inbox.
+    uint32 internal constant _TREE_DEPTH = 32;
 
     //*********************************************************************//
     // --------------- public immutable stored properties ---------------- //
@@ -102,6 +127,9 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
 
     /// @notice The directory of terminals and controllers for projects.
     IJBDirectory public immutable override DIRECTORY;
+
+    /// @notice The project registry (ERC-721 ownership).
+    IJBProjects public immutable override PROJECTS;
 
     /// @notice The project ID that receives the `toRemoteFee` payment. Typically the protocol project (ID 1).
     uint256 public immutable FEE_PROJECT_ID;
@@ -119,19 +147,17 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     /// @notice The address of this contract's deployer.
     address public override deployer;
 
-    //*********************************************************************//
-    // --------------------- private stored properties ------------------- //
-    //*********************************************************************//
-
-    /// @notice The timestamp after which the sucker is entirely deprecated.
-    uint256 internal deprecatedAfter;
-
-    /// @notice The ID of the project (on the local chain) that this sucker is associated with.
-    uint256 private _localProjectId;
+    /// @notice The last known total token supply on the peer chain, updated each time a bridge message is received.
+    /// @dev Used by data hooks to compute `effectiveTotalSupply = localSupply + sum(peerChainTotalSupply)` across all
+    /// suckers, preventing cash out tax bypass on chains where a holder dominates the local supply.
+    uint256 public peerChainTotalSupply;
 
     //*********************************************************************//
     // -------------------- internal stored properties ------------------- //
     //*********************************************************************//
+
+    /// @notice The timestamp after which the sucker is entirely deprecated.
+    uint256 internal deprecatedAfter;
 
     /// @notice Tracks whether individual leaves in a given token's merkle tree have been executed (to prevent
     /// double-spending).
@@ -150,6 +176,27 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     /// @notice Information about the token on the remote chain that the given token on the local chain is mapped to.
     /// @custom:param token The local terminal token to get the remote token for.
     mapping(address token => JBRemoteToken remoteToken) internal _remoteTokenFor;
+
+    //*********************************************************************//
+    // -------------------- private stored properties -------------------- //
+    //*********************************************************************//
+
+    /// @notice The ID of the project (on the local chain) that this sucker is associated with.
+    uint256 private _localProjectId;
+
+    /// @notice The last known project-wide surplus on the peer chain. Updated each time a bridge message is received.
+    /// @dev The `currency` and `decimals` fields describe the denomination; `value` is the surplus amount.
+    JBDenominatedAmount private _peerChainSurplus;
+
+    /// @notice The last known total recorded balance on the peer chain. Updated each time a bridge message is received.
+    /// @dev The `currency` and `decimals` fields describe the denomination; `value` is the balance amount.
+    JBDenominatedAmount private _peerChainBalance;
+
+    /// @notice Outbound project-wide snapshot counter. Incremented each time `_sendRoot` is called.
+    uint64 private _snapshotNonce;
+
+    /// @notice The highest snapshot nonce received from the peer chain. Used to reject stale shared-state updates.
+    uint64 private _peerSnapshotNonce;
 
     //*********************************************************************//
     // ---------------------------- constructor -------------------------- //
@@ -172,6 +219,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         JBPermissioned(permissions)
     {
         DIRECTORY = directory;
+        PROJECTS = directory.PROJECTS();
         TOKENS = tokens;
         FEE_PROJECT_ID = feeProjectId;
         REGISTRY = registry;
@@ -184,185 +232,19 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     }
 
     //*********************************************************************//
-    // ------------------------ external views --------------------------- //
+    // ---------------------------- receive  ----------------------------- //
     //*********************************************************************//
 
-    /// @notice The outstanding amount of tokens to be added to the project's balance by `claim`.
-    /// @param token The local terminal token to get the amount to add to balance for.
-    function amountToAddToBalanceOf(address token) public view override returns (uint256) {
-        // Get the amount that is in this sucker to be bridged.
-        return _balanceOf({token: token, addr: address(this)}) - _outboxOf[token].balance;
-    }
-
-    /// @notice The inbox merkle tree root for a given token.
-    /// @param token The local terminal token to get the inbox for.
-    function inboxOf(address token) external view returns (JBInboxTreeRoot memory) {
-        return _inboxOf[token];
-    }
-
-    /// @notice Checks whether the specified token is mapped to a remote token.
-    /// @param token The terminal token to check.
-    /// @return A boolean which is `true` if the token is mapped to a remote token and `false` if it is not.
-    function isMapped(address token) external view override returns (bool) {
-        return _remoteTokenFor[token].addr != bytes32(0);
-    }
-
-    /// @notice Information about the token on the remote chain that the given token on the local chain is mapped to.
-    /// @param token The local terminal token to get the remote token for.
-    function outboxOf(address token) external view returns (JBOutboxTree memory) {
-        return _outboxOf[token];
-    }
-
-    /// @notice Returns the chain on which the peer is located.
-    /// @return chain ID of the peer.
-    function peerChainId() external view virtual returns (uint256);
-
-    /// @notice Information about the token on the remote chain that the given token on the local chain is mapped to.
-    /// @param token The local terminal token to get the remote token for.
-    function remoteTokenFor(address token) external view returns (JBRemoteToken memory) {
-        return _remoteTokenFor[token];
-    }
-
-    //*********************************************************************//
-    // ------------------------- public views ---------------------------- //
-    //*********************************************************************//
-
-    /// @notice The peer sucker on the remote chain, as a bytes32 for cross-VM compatibility.
-    /// @dev Defaults to `_toBytes32(address(this))`, assuming deterministic cross-chain deployment via CREATE2. The
-    /// deployer (`JBSuckerDeployer`) uses `salt = keccak256(abi.encodePacked(_msgSender(), salt))` to ensure
-    /// sender-specific determinism. This assumption breaks if CREATE2 conditions differ across chains (e.g.,
-    /// different factory nonces, different init code, or different deployer addresses). In such cases, subclasses
-    /// must override this function to return the correct peer address (e.g., a Solana program/PDA address for
-    /// EVM-SVM deployments). Note that overriding `peer()` is fully supported by the sucker implementation and
-    /// off-chain infrastructure, but for revnets it breaks the assumption of matching configurations on both
-    /// chains -- for this reason the default same-address behavior is preferred.
-    function peer() public view virtual returns (bytes32) {
-        return _toBytes32(address(this));
-    }
-
-    /// @notice The ID of the project (on the local chain) that this sucker is associated with.
-    function projectId() public view returns (uint256) {
-        return _localProjectId;
-    }
-
-    /// @notice Reports the deprecation state of the sucker.
-    /// @return state The current deprecation state
-    function state() public view override returns (JBSuckerState) {
-        uint256 _deprecatedAfter = deprecatedAfter;
-
-        // The sucker is fully functional, no deprecation has been set yet.
-        if (_deprecatedAfter == 0) {
-            return JBSuckerState.ENABLED;
-        }
-
-        // The sucker will soon be considered deprecated, this functions only as a warning to users.
-        if (block.timestamp < _deprecatedAfter - _maxMessagingDelay()) {
-            return JBSuckerState.DEPRECATION_PENDING;
-        }
-
-        // The sucker will no longer send new roots to the pair, but it will accept new incoming roots.
-        // Additionally it will let users exit here now that we can no longer send roots/tokens.
-        if (block.timestamp < _deprecatedAfter) {
-            return JBSuckerState.SENDING_DISABLED;
-        }
-
-        // The sucker is now in the final state of deprecation. It will no longer allow new roots.
-        return JBSuckerState.DEPRECATED;
-    }
-
-    function supportsInterface(bytes4 interfaceId) public view virtual override(ERC165, IERC165) returns (bool) {
-        return interfaceId == type(IJBSuckerExtended).interfaceId || interfaceId == type(IJBSucker).interfaceId
-            || interfaceId == type(IJBPermissioned).interfaceId || super.supportsInterface(interfaceId);
-    }
-
-    //*********************************************************************//
-    // ------------------------ internal views --------------------------- //
-    //*********************************************************************//
-
-    /// @notice Helper to get the `addr`'s balance for a given `token`.
-    /// @param token The token to get the balance for.
-    /// @param addr The address to get the `token` balance of.
-    /// @return balance The address' `token` balance.
-    function _balanceOf(address token, address addr) internal view returns (uint256 balance) {
-        if (token == JBConstants.NATIVE_TOKEN) {
-            return addr.balance;
-        }
-
-        // slither-disable-next-line calls-loop
-        return IERC20(token).balanceOf(addr);
-    }
-
-    /// @notice Builds a hash as they are stored in the merkle tree.
-    /// @param projectTokenCount The number of project tokens being cashed out.
-    /// @param terminalTokenAmount The amount of terminal tokens being reclaimed by the cash out.
-    /// @param beneficiary The beneficiary which will receive the project tokens (bytes32 for cross-VM compatibility).
-    function _buildTreeHash(
-        uint256 projectTokenCount,
-        uint256 terminalTokenAmount,
-        bytes32 beneficiary
-    )
-        internal
-        pure
-        returns (bytes32 hash)
-    {
-        // All three arguments are 32 bytes — hash from free memory to avoid abi.encode allocation overhead.
-        // forge-lint: disable-next-line(asm-keccak256)
-        assembly {
-            let ptr := mload(0x40)
-            mstore(ptr, projectTokenCount)
-            mstore(add(ptr, 0x20), terminalTokenAmount)
-            mstore(add(ptr, 0x40), beneficiary)
-            hash := keccak256(ptr, 0x60)
-        }
-    }
-
-    /// @dev ERC-2771 specifies the context as being a single address (20 bytes).
-    function _contextSuffixLength() internal view virtual override(ERC2771Context, Context) returns (uint256) {
-        return ERC2771Context._contextSuffixLength();
-    }
-
-    /// @notice The calldata. Preferred to use over `msg.data`.
-    /// @return calldata The `msg.data` of this call.
-    function _msgData() internal view override(ERC2771Context, Context) returns (bytes calldata) {
-        return ERC2771Context._msgData();
-    }
-
-    /// @notice The message's sender. Preferred to use over `msg.sender`.
-    /// @return sender The address which sent this call.
-    function _msgSender() internal view override(ERC2771Context, Context) returns (address sender) {
-        return ERC2771Context._msgSender();
-    }
-
-    /// @notice Convert a bytes32 remote address to a local EVM address.
-    /// @param remote The bytes32 representation of the address.
-    /// @return The EVM address (lower 20 bytes).
-    function _toAddress(bytes32 remote) internal pure returns (address) {
-        return address(uint160(uint256(remote)));
-    }
-
-    /// @notice Convert an EVM address to a bytes32 remote address.
-    /// @param addr The EVM address.
-    /// @return The bytes32 representation (left-padded with zeros).
-    function _toBytes32(address addr) internal pure returns (bytes32) {
-        return bytes32(uint256(uint160(addr)));
-    }
-
-    /// @notice Allow sucker implementations to add/override mapping rules to suite their specific needs.
-    function _validateTokenMapping(JBTokenMapping calldata map) internal pure virtual {
-        bool isNative = map.localToken == JBConstants.NATIVE_TOKEN;
-
-        // If the token being mapped is the native token, the `remoteToken` must also be the native token.
-        // The native token can also be mapped to the 0 address, which is used to disable native token bridging.
-        if (isNative && map.remoteToken != _toBytes32(JBConstants.NATIVE_TOKEN) && map.remoteToken != bytes32(0)) {
-            revert JBSucker_InvalidNativeRemoteAddress(map.remoteToken);
-        }
-
-        // Enforce a reasonable minimum gas limit for bridging. A minimum which is too low could lead to the loss of
-        // funds.
-        if (map.minGas < MESSENGER_ERC20_MIN_GAS_LIMIT && !isNative) {
-            revert JBSucker_BelowMinGas(map.minGas, MESSENGER_ERC20_MIN_GAS_LIMIT);
-        }
-    }
+    /// @notice Accepts incoming native token (ETH) transfers.
+    /// @dev This receive function is intentionally unrestricted. It must accept ETH from multiple sources:
+    /// - Bridge contracts (e.g., Optimism's StandardBridge, Arbitrum's gateway) delivering bridged native tokens.
+    /// - WETH contracts during unwrapping (e.g., CCIP sucker unwraps WETH via `withdraw()` which sends ETH here).
+    /// - Terminals returning native tokens during `cashOutTokensOf` (backing asset pulls).
+    /// @dev Restricting this to known senders would risk breaking bridge integrations, as bridge contracts may change
+    /// addresses or use proxy patterns. The sucker's accounting (`_outboxOf[token].balance` and
+    /// `amountToAddToBalanceOf`) already tracks expected native token amounts, so excess ETH sent here does not
+    /// create a double-spend risk -- it would simply increase the amount to add to balance for the project.
+    receive() external payable virtual {}
 
     //*********************************************************************//
     // --------------------- external transactions ----------------------- //
@@ -421,9 +303,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         uint256 _projectId = projectId();
 
         _requirePermissionFrom({
-            account: DIRECTORY.PROJECTS().ownerOf(_projectId),
-            projectId: _projectId,
-            permissionId: JBPermissionIds.SUCKER_SAFETY
+            account: PROJECTS.ownerOf(_projectId), projectId: _projectId, permissionId: JBPermissionIds.SUCKER_SAFETY
         });
 
         // Enable the emergency hatch for each token.
@@ -499,7 +379,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
 
         // Validate the message version to reject incompatible messages.
         if (root.version != MESSAGE_VERSION) {
-            revert JBSucker_InvalidMessageVersion(root.version, MESSAGE_VERSION);
+            revert JBSucker_InvalidMessageVersion({received: root.version, expected: MESSAGE_VERSION});
         }
 
         // By design, this function accepts roots for unmapped tokens. Claims against those roots will
@@ -512,6 +392,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         // Get the inbox in storage.
         JBInboxTreeRoot storage inbox = _inboxOf[localToken];
 
+        // --- Token-local inbox update (gated by per-token nonce) ---
         // Nonce gaps in received messages are expected when messages are processed out of order or retried. The
         // sucker processes each root independently — skipped nonces don't cause data loss, they just mean some
         // messages arrived before others.
@@ -522,6 +403,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         if (root.remoteRoot.nonce > inbox.nonce) {
             inbox.nonce = root.remoteRoot.nonce;
             inbox.root = root.remoteRoot.root;
+
             emit NewInboxTreeRoot({
                 token: localToken, nonce: root.remoteRoot.nonce, root: root.remoteRoot.root, caller: _msgSender()
             });
@@ -530,22 +412,25 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
             // This aids off-chain monitoring in detecting out-of-order or duplicate deliveries.
             emit StaleRootRejected({token: localToken, receivedNonce: root.remoteRoot.nonce, currentNonce: inbox.nonce});
         }
-    }
 
-    /// @notice Initializes the sucker with the project ID and peer address.
-    /// @param _projectId The ID of the project (on the local chain) that this sucker is associated with.
-    function initialize(uint256 _projectId) public initializer {
-        // slither-disable-next-line missing-zero-check
-        _localProjectId = _projectId;
-        deployer = _msgSender();
-    }
+        // --- Project-wide shared state update (gated by snapshot nonce) ---
+        // The snapshot nonce is a project-wide counter independent of per-token outbox nonces.
+        // This prevents a staler per-token message from rolling back shared state (surplus, balance, supply)
+        // that was already updated by a fresher message for a different token.
+        if (root.snapshotNonce > _peerSnapshotNonce) {
+            _peerSnapshotNonce = root.snapshotNonce;
 
-    /// @notice Map an ERC-20 token on the local chain to an ERC-20 token on the remote chain, allowing that token to be
-    /// bridged.
-    /// @param map The local and remote terminal token addresses to map, and minimum amount/gas limits for bridging
-    /// them.
-    function mapToken(JBTokenMapping calldata map) public payable override {
-        _mapToken({map: map, transportPaymentValue: msg.value});
+            // Update unconditionally — a legitimate zero supply must clear phantom cached supply.
+            peerChainTotalSupply = root.sourceTotalSupply;
+
+            // Store the surplus and balance snapshots from the source chain.
+            _peerChainSurplus = JBDenominatedAmount({
+                value: root.sourceSurplus, currency: uint32(root.sourceCurrency), decimals: root.sourceDecimals
+            });
+            _peerChainBalance = JBDenominatedAmount({
+                value: root.sourceBalance, currency: uint32(root.sourceCurrency), decimals: root.sourceDecimals
+            });
+        }
     }
 
     /// @notice Map multiple ERC-20 tokens on the local chain to ERC-20 tokens on the remote chain, allowing those
@@ -678,7 +563,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
 
         // The caller must be the project owner or have the `SET_SUCKER_DEPRECATION` permission from them.
         _requirePermissionFrom({
-            account: DIRECTORY.PROJECTS().ownerOf(_projectId),
+            account: PROJECTS.ownerOf(_projectId),
             projectId: _projectId,
             permissionId: JBPermissionIds.SET_SUCKER_DEPRECATION
         });
@@ -690,7 +575,9 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
 
         // The deprecation can be entirely disabled *or* it has to be later than the earliest possible time.
         if (timestamp != 0 && timestamp < nextEarliestDeprecationTime) {
-            revert JBSucker_DeprecationTimestampTooSoon(timestamp, nextEarliestDeprecationTime);
+            revert JBSucker_DeprecationTimestampTooSoon({
+                givenTime: timestamp, minimumTime: nextEarliestDeprecationTime
+            });
         }
 
         deprecatedAfter = timestamp;
@@ -731,7 +618,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
 
         // Deduct the fee from msg.value, paying it into the fee project.
         if (msg.value < _toRemoteFee) {
-            revert JBSucker_InsufficientMsgValue(msg.value, _toRemoteFee);
+            revert JBSucker_InsufficientMsgValue({received: msg.value, expected: _toRemoteFee});
         }
         uint256 transportPayment = msg.value - _toRemoteFee;
 
@@ -740,7 +627,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         // NOTE: On failure, the fee ETH is retained by this contract (not added back to transportPayment)
         // to avoid DoS on zero-cost bridges (OP, Base, Celo, Arbitrum L2→L1) that revert on non-zero
         // transportPayment.
-        IJBTerminal terminal = DIRECTORY.primaryTerminalOf({projectId: FEE_PROJECT_ID, token: JBConstants.NATIVE_TOKEN});
+        IJBTerminal terminal = _primaryTerminalOf({forProjectId: FEE_PROJECT_ID, token: JBConstants.NATIVE_TOKEN});
         if (address(terminal) != address(0)) {
             // slither-disable-next-line unused-return,reentrancy-events
             try terminal.pay{value: _toRemoteFee}({
@@ -767,20 +654,319 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         _sendRoot({transportPayment: transportPayment, token: token, remoteToken: remoteToken});
     }
 
+    /// @notice Pay a project on the remote chain. Bridges funds to the remote sucker which pays the project,
+    /// cashes out at 0% tax (sucker privilege), inserts project tokens into the outbox tree, and auto-triggers
+    /// the return bridge so the beneficiary can claim on the local chain.
+    /// @param token The local terminal token to bridge.
+    /// @param amount The amount of terminal tokens to pay.
+    /// @param beneficiary The beneficiary on the local chain (bytes32 for cross-VM compatibility).
+    /// @param minTokensOut Minimum project tokens from the pay step (slippage protection).
+    /// @param metadata Metadata forwarded to `terminal.pay()` for hooks on the remote chain.
+    function payRemote(
+        address token,
+        uint256 amount,
+        bytes32 beneficiary,
+        uint256 minTokensOut,
+        bytes calldata metadata
+    )
+        external
+        payable
+        override
+    {
+        // Validate inputs.
+        if (beneficiary == bytes32(0)) revert JBSucker_ZeroBeneficiary();
+        if (amount == 0) revert JBSucker_InsufficientBalance(0, 0);
+
+        // Guard against amounts that would overflow uint128 on SVM.
+        if (amount > type(uint128).max) revert JBSucker_AmountExceedsUint128(amount);
+
+        // Make sure the token is mapped.
+        JBRemoteToken memory remoteToken = _remoteTokenFor[token];
+        if (!remoteToken.enabled) revert JBSucker_TokenNotMapped(token);
+
+        // Make sure the sucker is not deprecated.
+        JBSuckerState deprecationState = state();
+        if (deprecationState == JBSuckerState.DEPRECATED || deprecationState == JBSuckerState.SENDING_DISABLED) {
+            revert JBSucker_Deprecated();
+        }
+
+        // Determine transport budget.
+        uint256 transportBudget;
+        if (token == JBConstants.NATIVE_TOKEN) {
+            // For native: msg.value must cover amount + transport.
+            if (msg.value < amount) revert JBSucker_InsufficientMsgValue(msg.value, amount);
+            transportBudget = msg.value - amount;
+        } else {
+            // For ERC-20: pull tokens, msg.value is entirely transport budget.
+            IERC20(token).safeTransferFrom(_msgSender(), address(this), amount);
+            transportBudget = msg.value;
+        }
+
+        // Split transport between the outbound hop and the return trip.
+        (uint256 hop1, uint256 returnTransport) = _splitTransportBudget(transportBudget);
+
+        // Build the pay message.
+        JBPayRemoteMessage memory message = JBPayRemoteMessage({
+            token: remoteToken.addr,
+            amount: amount,
+            returnTransport: returnTransport,
+            beneficiary: beneficiary,
+            minTokensOut: minTokensOut,
+            metadata: metadata
+        });
+
+        emit PayRemote({
+            beneficiary: beneficiary,
+            token: token,
+            amount: amount,
+            returnTransport: returnTransport,
+            caller: _msgSender()
+        });
+
+        // Bridge the funds and message to the remote chain.
+        _sendPayOverAMB({
+            transportPayment: hop1,
+            token: token,
+            amount: amount,
+            remoteToken: remoteToken,
+            message: message
+        });
+    }
+
+    /// @notice Execute a cross-chain payment on behalf of a remote user.
+    /// @dev Only callable by the remote peer via the bridge messenger.
+    /// @dev Flow: pay project → receive tokens → cash out at 0% tax → insert into outbox → auto-trigger return.
+    /// @param message The payment message from the remote chain.
+    function payFromRemote(JBPayRemoteMessage calldata message) external payable {
+        // Authenticate: only the remote peer can call this.
+        if (!_isRemotePeer(msg.sender)) revert JBSucker_NotPeer(_toBytes32(msg.sender));
+
+        uint256 _projectId = projectId();
+        address token = _toAddress(message.token);
+
+        // Get the terminal for this token.
+        IJBTerminal terminal = DIRECTORY.primaryTerminalOf({projectId: _projectId, token: token});
+        if (address(terminal) == address(0)) revert JBSucker_NoTerminalForToken(_projectId, token);
+
+        // Inject the relay beneficiary into the metadata so hooks see the real user.
+        bytes memory payMetadata = JBMetadataResolver.addToMetadata(
+            message.metadata,
+            JBRelayBeneficiary.ID,
+            abi.encode(_toAddress(message.beneficiary))
+        );
+
+        // Pay the project with this sucker as beneficiary (so we receive project tokens).
+        uint256 nativePayValue = token == JBConstants.NATIVE_TOKEN ? message.amount : 0;
+        if (token != JBConstants.NATIVE_TOKEN) {
+            SafeERC20.forceApprove(IERC20(token), address(terminal), message.amount);
+        }
+        uint256 projectTokensReceived = terminal.pay{value: nativePayValue}({
+            projectId: _projectId,
+            token: token,
+            amount: message.amount,
+            beneficiary: address(this),
+            minReturnedTokens: message.minTokensOut,
+            memo: "",
+            metadata: payMetadata
+        });
+
+        // Cash out the project tokens at 0% tax (sucker privilege via data hook).
+        IJBCashOutTerminal cashOutTerminal = IJBCashOutTerminal(address(terminal));
+        uint256 terminalTokensReclaimed = cashOutTerminal.cashOutTokensOf({
+            holder: address(this),
+            projectId: _projectId,
+            cashOutCount: projectTokensReceived,
+            tokenToReclaim: token,
+            minTokensReclaimed: 0,
+            beneficiary: payable(address(this)),
+            metadata: bytes("")
+        });
+
+        emit PayFromRemote({
+            beneficiary: message.beneficiary,
+            token: token,
+            amountPaid: message.amount,
+            projectTokensReceived: projectTokensReceived,
+            terminalTokensReclaimed: terminalTokensReclaimed,
+            caller: _msgSender()
+        });
+
+        // Insert the project tokens into the outbox tree for return bridging.
+        _insertIntoTree({
+            projectTokenCount: projectTokensReceived,
+            token: token,
+            terminalTokenAmount: terminalTokensReclaimed,
+            beneficiary: message.beneficiary
+        });
+
+        // Auto-trigger the return bridge. Best-effort: if return transport is insufficient,
+        // the outbox entry still exists for manual `toRemote()` later.
+        JBRemoteToken memory returnRemoteToken = _remoteTokenFor[token];
+        if (returnRemoteToken.addr != bytes32(0)) {
+            try this.sendRootFromPayRemote({
+                transportPayment: message.returnTransport,
+                token: token,
+                remoteToken: returnRemoteToken
+            }) {} catch {}
+        }
+    }
+
+    /// @notice External wrapper for `_sendRoot` used by `payFromRemote` in a try/catch pattern.
+    /// @dev This is external so it can be called via `this.sendRootFromPayRemote()` in a try/catch.
+    /// Only callable by this contract itself.
+    /// @param transportPayment The transport payment for the return bridge.
+    /// @param token The terminal token to bridge.
+    /// @param remoteToken The remote token info.
+    function sendRootFromPayRemote(
+        uint256 transportPayment,
+        address token,
+        JBRemoteToken memory remoteToken
+    )
+        external
+        payable
+    {
+        // Only callable by this contract itself (from payFromRemote's try/catch).
+        if (msg.sender != address(this)) revert JBSucker_NotPeer(_toBytes32(msg.sender));
+        _sendRoot({transportPayment: transportPayment, token: token, remoteToken: remoteToken});
+    }
+
     //*********************************************************************//
-    // ---------------------------- receive  ----------------------------- //
+    // ------------------------ external views --------------------------- //
     //*********************************************************************//
 
-    /// @notice Accepts incoming native token (ETH) transfers.
-    /// @dev This receive function is intentionally unrestricted. It must accept ETH from multiple sources:
-    /// - Bridge contracts (e.g., Optimism's StandardBridge, Arbitrum's gateway) delivering bridged native tokens.
-    /// - WETH contracts during unwrapping (e.g., CCIP sucker unwraps WETH via `withdraw()` which sends ETH here).
-    /// - Terminals returning native tokens during `cashOutTokensOf` (backing asset pulls).
-    /// @dev Restricting this to known senders would risk breaking bridge integrations, as bridge contracts may change
-    /// addresses or use proxy patterns. The sucker's accounting (`_outboxOf[token].balance` and
-    /// `amountToAddToBalanceOf`) already tracks expected native token amounts, so excess ETH sent here does not
-    /// create a double-spend risk -- it would simply increase the amount to add to balance for the project.
-    receive() external payable {}
+    /// @notice The inbox merkle tree root for a given token.
+    /// @param token The local terminal token to get the inbox for.
+    function inboxOf(address token) external view returns (JBInboxTreeRoot memory) {
+        return _inboxOf[token];
+    }
+
+    /// @notice Checks whether the specified token is mapped to a remote token.
+    /// @param token The terminal token to check.
+    /// @return A boolean which is `true` if the token is mapped to a remote token and `false` if it is not.
+    function isMapped(address token) external view override returns (bool) {
+        return _remoteTokenFor[token].addr != bytes32(0);
+    }
+
+    /// @notice Information about the token on the remote chain that the given token on the local chain is mapped to.
+    /// @param token The local terminal token to get the remote token for.
+    function outboxOf(address token) external view returns (JBOutboxTree memory) {
+        return _outboxOf[token];
+    }
+
+    /// @notice Returns the chain on which the peer is located.
+    /// @return chain ID of the peer.
+    function peerChainId() external view virtual returns (uint256);
+
+    /// @notice The peer chain balance, converted from the source denomination to the requested currency and decimal
+    /// precision using the local JBPrices oracle.
+    /// @param decimals The decimal precision for the returned value.
+    /// @param currency The currency to normalize to (e.g. `uint256(uint160(JBConstants.NATIVE_TOKEN))` for ETH).
+    /// @return A `JBDenominatedAmount` with the converted value.
+    function peerChainBalanceOf(uint256 decimals, uint256 currency) external view returns (JBDenominatedAmount memory) {
+        return JBDenominatedAmount({
+            value: _convertPeerValue({source: _peerChainBalance, decimals: decimals, currency: currency}),
+            currency: uint32(currency),
+            decimals: uint8(decimals)
+        });
+    }
+
+    /// @notice The peer chain surplus, converted from the source denomination to the requested currency and decimal
+    /// precision using the local JBPrices oracle.
+    /// @param decimals The decimal precision for the returned value.
+    /// @param currency The currency to normalize to (e.g. `uint256(uint160(JBConstants.NATIVE_TOKEN))` for ETH).
+    /// @return A `JBDenominatedAmount` with the converted value.
+    function peerChainSurplusOf(uint256 decimals, uint256 currency) external view returns (JBDenominatedAmount memory) {
+        return JBDenominatedAmount({
+            value: _convertPeerValue({source: _peerChainSurplus, decimals: decimals, currency: currency}),
+            currency: uint32(currency),
+            decimals: uint8(decimals)
+        });
+    }
+
+    /// @notice Information about the token on the remote chain that the given token on the local chain is mapped to.
+    /// @param token The local terminal token to get the remote token for.
+    function remoteTokenFor(address token) external view returns (JBRemoteToken memory) {
+        return _remoteTokenFor[token];
+    }
+
+    //*********************************************************************//
+    // ------------------------- public views ---------------------------- //
+    //*********************************************************************//
+
+    /// @notice The outstanding amount of tokens to be added to the project's balance by `claim`.
+    /// @param token The local terminal token to get the amount to add to balance for.
+    function amountToAddToBalanceOf(address token) public view override returns (uint256) {
+        // Get the amount that is in this sucker to be bridged.
+        return _balanceOf({token: token, addr: address(this)}) - _outboxOf[token].balance;
+    }
+
+    /// @notice The peer sucker on the remote chain, as a bytes32 for cross-VM compatibility.
+    /// @dev Defaults to `_toBytes32(address(this))`, assuming deterministic cross-chain deployment via CREATE2. The
+    /// deployer (`JBSuckerDeployer`) uses `salt = keccak256(abi.encodePacked(_msgSender(), salt))` to ensure
+    /// sender-specific determinism. This assumption breaks if CREATE2 conditions differ across chains (e.g.,
+    /// different factory nonces, different init code, or different deployer addresses). In such cases, subclasses
+    /// must override this function to return the correct peer address (e.g., a Solana program/PDA address for
+    /// EVM-SVM deployments). Note that overriding `peer()` is fully supported by the sucker implementation and
+    /// off-chain infrastructure, but for revnets it breaks the assumption of matching configurations on both
+    /// chains -- for this reason the default same-address behavior is preferred.
+    function peer() public view virtual returns (bytes32) {
+        return _toBytes32(address(this));
+    }
+
+    /// @notice The ID of the project (on the local chain) that this sucker is associated with.
+    function projectId() public view returns (uint256) {
+        return _localProjectId;
+    }
+
+    /// @notice Reports the deprecation state of the sucker.
+    /// @return state The current deprecation state
+    function state() public view override returns (JBSuckerState) {
+        uint256 _deprecatedAfter = deprecatedAfter;
+
+        // The sucker is fully functional, no deprecation has been set yet.
+        if (_deprecatedAfter == 0) {
+            return JBSuckerState.ENABLED;
+        }
+
+        // The sucker will soon be considered deprecated, this functions only as a warning to users.
+        if (block.timestamp < _deprecatedAfter - _maxMessagingDelay()) {
+            return JBSuckerState.DEPRECATION_PENDING;
+        }
+
+        // The sucker will no longer send new roots to the pair, but it will accept new incoming roots.
+        // Additionally it will let users exit here now that we can no longer send roots/tokens.
+        if (block.timestamp < _deprecatedAfter) {
+            return JBSuckerState.SENDING_DISABLED;
+        }
+
+        // The sucker is now in the final state of deprecation. It will no longer allow new roots.
+        return JBSuckerState.DEPRECATED;
+    }
+
+    function supportsInterface(bytes4 interfaceId) public view virtual override(ERC165, IERC165) returns (bool) {
+        return interfaceId == type(IJBSuckerExtended).interfaceId || interfaceId == type(IJBSucker).interfaceId
+            || interfaceId == type(IJBPermissioned).interfaceId || super.supportsInterface(interfaceId);
+    }
+
+    //*********************************************************************//
+    // ----------------------- public transactions ----------------------- //
+    //*********************************************************************//
+
+    /// @notice Initializes the sucker with the project ID and peer address.
+    /// @param _projectId The ID of the project (on the local chain) that this sucker is associated with.
+    function initialize(uint256 _projectId) public initializer {
+        // slither-disable-next-line missing-zero-check
+        _localProjectId = _projectId;
+        deployer = _msgSender();
+    }
+
+    /// @notice Map an ERC-20 token on the local chain to an ERC-20 token on the remote chain, allowing that token to be
+    /// bridged.
+    /// @param map The local and remote terminal token addresses to map, and minimum amount/gas limits for bridging
+    /// them.
+    function mapToken(JBTokenMapping calldata map) public payable override {
+        _mapToken({map: map, transportPaymentValue: msg.value});
+    }
 
     //*********************************************************************//
     // --------------------- internal transactions ----------------------- //
@@ -794,15 +980,17 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         // Make sure that the current `amountToAddToBalance` is greater than or equal to the amount being added.
         uint256 addableAmount = amountToAddToBalanceOf(token);
         if (amount > addableAmount) {
-            revert JBSucker_InsufficientBalance(amount, addableAmount);
+            revert JBSucker_InsufficientBalance({amount: amount, balance: addableAmount});
         }
 
         // Get the project's primary terminal for the token.
         // slither-disable-next-line calls-loop
-        IJBTerminal terminal = DIRECTORY.primaryTerminalOf({projectId: cachedProjectId, token: token});
+        IJBTerminal terminal = _primaryTerminalOf({forProjectId: cachedProjectId, token: token});
 
         // slither-disable-next-line incorrect-equality
-        if (address(terminal) == address(0)) revert JBSucker_NoTerminalForToken(cachedProjectId, token);
+        if (address(terminal) == address(0)) {
+            revert JBSucker_NoTerminalForToken({projectId: cachedProjectId, token: token});
+        }
 
         // Perform the `addToBalance`.
         if (token != JBConstants.NATIVE_TOKEN) {
@@ -951,9 +1139,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
 
         // slither-disable-next-line calls-loop
         _requirePermissionFrom({
-            account: DIRECTORY.PROJECTS().ownerOf(_projectId),
-            projectId: _projectId,
-            permissionId: JBPermissionIds.MAP_SUCKER_TOKEN
+            account: PROJECTS.ownerOf(_projectId), projectId: _projectId, permissionId: JBPermissionIds.MAP_SUCKER_TOKEN
         });
 
         // Make sure that the token does not get remapped to another remote token.
@@ -964,7 +1150,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
             currentMapping.addr != bytes32(0) && currentMapping.addr != map.remoteToken && map.remoteToken != bytes32(0)
                 && _outboxOf[token].tree.count != 0
         ) {
-            revert JBSucker_TokenAlreadyMapped(token, currentMapping.addr);
+            revert JBSucker_TokenAlreadyMapped({localToken: token, mappedTo: currentMapping.addr});
         }
 
         // No inbox guard needed here. Token remapping only affects the outbound (sending) path —
@@ -1022,11 +1208,11 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
 
         // Get the project's primary terminal for `token`. We will cash out from this terminal.
         IJBCashOutTerminal terminal =
-            IJBCashOutTerminal(address(DIRECTORY.primaryTerminalOf({projectId: _projectId, token: token})));
+            IJBCashOutTerminal(address(_primaryTerminalOf({forProjectId: _projectId, token: token})));
 
         // If the project doesn't have a primary terminal for `token`, revert.
         if (address(terminal) == address(0)) {
-            revert JBSucker_NoTerminalForToken(_projectId, token);
+            revert JBSucker_NoTerminalForToken({projectId: _projectId, token: token});
         }
 
         // Cash out the tokens.
@@ -1059,55 +1245,56 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         if (remoteToken.addr == bytes32(0)) revert JBSucker_TokenNotMapped(token);
 
         // Make sure that the sucker still allows sending new messaged.
-        JBSuckerState deprecationState = state();
-        if (deprecationState == JBSuckerState.DEPRECATED || deprecationState == JBSuckerState.SENDING_DISABLED) {
-            revert JBSucker_Deprecated();
+        {
+            JBSuckerState deprecationState = state();
+            if (deprecationState == JBSuckerState.DEPRECATED || deprecationState == JBSuckerState.SENDING_DISABLED) {
+                revert JBSucker_Deprecated();
+            }
         }
 
-        // Get the outbox in storage.
-        JBOutboxTree storage outbox = _outboxOf[token];
+        // Drain the outbox: read balance/nonce/root, clear balance, advance nonce and numberOfClaimsSent.
+        uint256 amount;
+        uint64 nonce;
+        bytes32 root;
+        uint256 index;
+        {
+            JBOutboxTree storage outbox = _outboxOf[token];
 
-        // If the outbox tree is empty (no `prepare()` calls have been made), there is nothing to send.
-        // This prevents an arithmetic underflow when computing `count - 1` below.
-        uint256 count = outbox.tree.count;
-        if (count == 0) return;
+            // If the outbox tree is empty (no `prepare()` calls have been made), there is nothing to send.
+            // This prevents an arithmetic underflow when computing `count - 1` below.
+            uint256 count = outbox.tree.count;
+            if (count == 0) return;
 
-        // Get the amount to send and then clear it from the outbox tree.
-        // By design, `amountToAddToBalanceOf` is transiently inflated after this deletion because the
-        // contract's token balance has not yet been transferred to the bridge. This inflation is scoped
-        // within this transaction — `_sendRootOverAMB` (called below) transfers the tokens to the bridge
-        // before the tx completes, settling the balance. This is inherent to the two-phase bridge model.
-        uint256 amount = outbox.balance;
-        delete outbox.balance;
+            // Get the amount to send and then clear it from the outbox tree.
+            // By design, `amountToAddToBalanceOf` is transiently inflated after this deletion because the
+            // contract's token balance has not yet been transferred to the bridge. This inflation is scoped
+            // within this transaction — `_sendRootOverAMB` (called below) transfers the tokens to the bridge
+            // before the tx completes, settling the balance. This is inherent to the two-phase bridge model.
+            amount = outbox.balance;
+            delete outbox.balance;
 
-        // Increment the outbox tree's nonce.
-        uint64 nonce = ++outbox.nonce;
-        bytes32 root = outbox.tree.root();
+            // Increment the outbox tree's nonce.
+            nonce = ++outbox.nonce;
+            root = outbox.tree.root();
 
-        // Update the numberOfClaimsSent to the current count of the tree.
-        // This is used as in the fallback to allow users to withdraw locally if the bridge is reverting.
-        outbox.numberOfClaimsSent = uint192(count);
-        uint256 index = count - 1;
+            // Update the numberOfClaimsSent to the current count of the tree.
+            // This is used as in the fallback to allow users to withdraw locally if the bridge is reverting.
+            outbox.numberOfClaimsSent = uint192(count);
+            index = count - 1;
+        }
 
         // Emit an event for the relayers to watch for.
         emit RootToRemote({root: root, token: token, index: index, nonce: nonce, caller: _msgSender()});
 
-        // Build the message to be send.
-        JBMessageRoot memory message = JBMessageRoot({
-            version: MESSAGE_VERSION,
-            token: remoteToken.addr,
-            amount: amount,
-            remoteRoot: JBInboxTreeRoot({nonce: nonce, root: root})
-        });
-
-        // Execute the chain/sucker specific logic for transferring the assets and communicating the root.
-        _sendRootOverAMB({
+        // Build the snapshot message and send it over the bridge.
+        _buildSnapshotAndSend({
             transportPayment: transportPayment,
-            index: index,
             token: token,
-            amount: amount,
             remoteToken: remoteToken,
-            message: message
+            amount: amount,
+            nonce: nonce,
+            root: root,
+            index: index
         });
     }
 
@@ -1130,6 +1317,35 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     )
         internal
         virtual;
+
+    /// @notice Performs the logic to send a pay message and tokens to the peer over the AMB.
+    /// @dev This is chain/sucker/bridge specific logic, analogous to `_sendRootOverAMB`.
+    /// @param transportPayment The amount of `msg.value` for sending this message.
+    /// @param token The terminal token being bridged.
+    /// @param amount The amount of terminal tokens being bridged.
+    /// @param remoteToken The remote token which the terminal token is mapped to.
+    /// @param message The pay remote message to send.
+    // forge-lint: disable-next-line(mixed-case-function)
+    function _sendPayOverAMB(
+        uint256 transportPayment,
+        address token,
+        uint256 amount,
+        JBRemoteToken memory remoteToken,
+        JBPayRemoteMessage memory message
+    )
+        internal
+        virtual;
+
+    /// @notice Split a transport budget between the outbound hop and the return trip.
+    /// @dev Override in bridge implementations where one or both directions are free.
+    /// Default splits evenly.
+    /// @param budget The total transport budget.
+    /// @return hop1 The budget for the outbound hop.
+    /// @return returnTrip The budget for the return trip.
+    function _splitTransportBudget(uint256 budget) internal virtual returns (uint256 hop1, uint256 returnTrip) {
+        hop1 = budget / 2;
+        returnTrip = budget - hop1;
+    }
 
     /// @notice Validates a leaf as being in the inbox merkle tree and registers the leaf as executed (to prevent
     /// double-spending).
@@ -1156,7 +1372,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
 
         // Make sure the leaf has not already been executed.
         if (_executedFor[terminalToken].get(index)) {
-            revert JBSucker_LeafAlreadyExecuted(terminalToken, index);
+            revert JBSucker_LeafAlreadyExecuted({token: terminalToken, index: index});
         }
 
         // Register the leaf as executed to prevent double-spending.
@@ -1199,7 +1415,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
 
         // Compare to the current root, Revert if they do not match.
         if (root != expectedRoot) {
-            revert JBSucker_InvalidProof(root, expectedRoot);
+            revert JBSucker_InvalidProof({root: root, inboxRoot: expectedRoot});
         }
     }
 
@@ -1259,7 +1475,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         // A count of 0 means that no root has ever been send for this token, so everyone can claim.
         JBOutboxTree storage outboxOfToken = _outboxOf[terminalToken];
         if (outboxOfToken.numberOfClaimsSent != 0 && outboxOfToken.numberOfClaimsSent - 1 >= index) {
-            revert JBSucker_LeafAlreadyExecuted(terminalToken, index);
+            revert JBSucker_LeafAlreadyExecuted({token: terminalToken, index: index});
         }
 
         {
@@ -1271,7 +1487,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
 
             // Make sure the leaf has not already been executed.
             if (_executedFor[emergencyExitAddress].get(index)) {
-                revert JBSucker_LeafAlreadyExecuted(terminalToken, index);
+                revert JBSucker_LeafAlreadyExecuted({token: terminalToken, index: index});
             }
 
             // Register the leaf as executed to prevent double-spending.
@@ -1287,6 +1503,221 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
             beneficiary: beneficiary,
             index: index,
             leaves: leaves
+        });
+    }
+
+    //*********************************************************************//
+    // ------------------------- internal views -------------------------- //
+    //*********************************************************************//
+
+    /// @notice Helper to get the `addr`'s balance for a given `token`.
+    /// @param token The token to get the balance for.
+    /// @param addr The address to get the `token` balance of.
+    /// @return balance The address' `token` balance.
+    function _balanceOf(address token, address addr) internal view returns (uint256 balance) {
+        if (token == JBConstants.NATIVE_TOKEN) {
+            return addr.balance;
+        }
+
+        // slither-disable-next-line calls-loop
+        return IERC20(token).balanceOf(addr);
+    }
+
+    /// @notice Build ETH-denominated aggregate surplus and balance across all terminals for the project.
+    /// @dev Delegates to `JBSuckerLib.buildETHAggregate` (deployed library, called via DELEGATECALL) to reduce
+    /// child contract bytecode.
+    /// @param _projectId The project ID to build the aggregate for.
+    /// @return ethSurplus The total surplus denominated in ETH at 18 decimals.
+    /// @return ethBalance The total balance denominated in ETH at 18 decimals.
+    // forge-lint: disable-next-line(mixed-case-function)
+    function _buildETHAggregate(uint256 _projectId) internal view returns (uint256 ethSurplus, uint256 ethBalance) {
+        (ethSurplus, ethBalance) = JBSuckerLib.buildETHAggregate({directory: DIRECTORY, projectId: _projectId});
+    }
+
+    /// @notice Builds a hash as they are stored in the merkle tree.
+    /// @param projectTokenCount The number of project tokens being cashed out.
+    /// @param terminalTokenAmount The amount of terminal tokens being reclaimed by the cash out.
+    /// @param beneficiary The beneficiary which will receive the project tokens (bytes32 for cross-VM compatibility).
+    function _buildTreeHash(
+        uint256 projectTokenCount,
+        uint256 terminalTokenAmount,
+        bytes32 beneficiary
+    )
+        internal
+        pure
+        returns (bytes32 hash)
+    {
+        // All three arguments are 32 bytes — hash from free memory to avoid abi.encode allocation overhead.
+        // forge-lint: disable-next-line(asm-keccak256)
+        assembly {
+            let ptr := mload(0x40)
+            mstore(ptr, projectTokenCount)
+            mstore(add(ptr, 0x20), terminalTokenAmount)
+            mstore(add(ptr, 0x40), beneficiary)
+            hash := keccak256(ptr, 0x60)
+        }
+    }
+
+    /// @dev ERC-2771 specifies the context as being a single address (20 bytes).
+    function _contextSuffixLength() internal view virtual override(ERC2771Context, Context) returns (uint256) {
+        return ERC2771Context._contextSuffixLength();
+    }
+
+    /// @notice Convert a peer chain snapshot value to the requested currency and decimal precision.
+    /// @dev Delegates to `JBSuckerLib.convertPeerValue` (deployed library, called via DELEGATECALL) to reduce
+    /// child contract bytecode.
+    /// @param source The peer chain snapshot containing value, currency, and decimals.
+    /// @param decimals The target decimal precision.
+    /// @param currency The target currency (e.g. `uint256(uint160(JBConstants.NATIVE_TOKEN))` for ETH).
+    /// @return converted The converted value.
+    function _convertPeerValue(
+        JBDenominatedAmount memory source,
+        uint256 decimals,
+        uint256 currency
+    )
+        internal
+        view
+        returns (uint256 converted)
+    {
+        converted = JBSuckerLib.convertPeerValue({
+            directory: DIRECTORY, projectId: projectId(), source: source, decimals: decimals, currency: currency
+        });
+    }
+
+    /// @notice The calldata. Preferred to use over `msg.data`.
+    /// @return calldata The `msg.data` of this call.
+    function _msgData() internal view override(ERC2771Context, Context) returns (bytes calldata) {
+        return ERC2771Context._msgData();
+    }
+
+    /// @notice The message's sender. Preferred to use over `msg.sender`.
+    /// @return sender The address which sent this call.
+    function _msgSender() internal view override(ERC2771Context, Context) returns (address sender) {
+        return ERC2771Context._msgSender();
+    }
+
+    /// @notice Returns the peer address as an EVM address.
+    /// @return The peer address.
+    function _peerAddress() internal view returns (address) {
+        return _toAddress(peer());
+    }
+
+    /// @notice Looks up the primary terminal for a project/token pair via the directory.
+    /// @param forProjectId The project ID.
+    /// @param token The token address.
+    /// @return The primary terminal.
+    function _primaryTerminalOf(uint256 forProjectId, address token) internal view returns (IJBTerminal) {
+        return DIRECTORY.primaryTerminalOf({projectId: forProjectId, token: token});
+    }
+
+    /// @notice Returns all terminals for a project.
+    /// @param forProjectId The project ID.
+    /// @return The terminals.
+    function _terminalsOf(uint256 forProjectId) internal view returns (IJBTerminal[] memory) {
+        return DIRECTORY.terminalsOf(forProjectId);
+    }
+
+    /// @notice Convert a bytes32 remote address to a local EVM address.
+    /// @param remote The bytes32 representation of the address.
+    /// @return The EVM address (lower 20 bytes).
+    function _toAddress(bytes32 remote) internal pure returns (address) {
+        return address(uint160(uint256(remote)));
+    }
+
+    /// @notice Convert an EVM address to a bytes32 remote address.
+    /// @param addr The EVM address.
+    /// @return The bytes32 representation (left-padded with zeros).
+    function _toBytes32(address addr) internal pure returns (bytes32) {
+        return bytes32(uint256(uint160(addr)));
+    }
+
+    /// @notice Allow sucker implementations to add/override mapping rules to suite their specific needs.
+    function _validateTokenMapping(JBTokenMapping calldata map) internal pure virtual {
+        bool isNative = map.localToken == JBConstants.NATIVE_TOKEN;
+
+        // If the token being mapped is the native token, the `remoteToken` must also be the native token.
+        // The native token can also be mapped to the 0 address, which is used to disable native token bridging.
+        if (isNative && map.remoteToken != _toBytes32(JBConstants.NATIVE_TOKEN) && map.remoteToken != bytes32(0)) {
+            revert JBSucker_InvalidNativeRemoteAddress(map.remoteToken);
+        }
+
+        // Enforce a reasonable minimum gas limit for bridging. A minimum which is too low could lead to the loss of
+        // funds.
+        if (map.minGas < MESSENGER_ERC20_MIN_GAS_LIMIT && !isNative) {
+            revert JBSucker_BelowMinGas({minGas: map.minGas, minGasLimit: MESSENGER_ERC20_MIN_GAS_LIMIT});
+        }
+    }
+
+    //*********************************************************************//
+    // ------------------------- private helpers ------------------------- //
+    //*********************************************************************//
+
+    /// @notice Builds the cross-chain snapshot message and sends it over the bridge.
+    /// @dev Extracted from `_sendRoot` to keep the stack depth under the legacy EVM limit.
+    /// @param transportPayment The amount of `msg.value` that is going to get paid for sending this message.
+    /// @param token The terminal token being bridged.
+    /// @param remoteToken The remote token which the terminal token is mapped to.
+    /// @param amount The amount of terminal tokens being bridged.
+    /// @param nonce The outbox nonce for this send.
+    /// @param root The merkle root of the outbox tree.
+    /// @param index The index of the most recent message that is part of the root.
+    function _buildSnapshotAndSend(
+        uint256 transportPayment,
+        address token,
+        JBRemoteToken memory remoteToken,
+        uint256 amount,
+        uint64 nonce,
+        bytes32 root,
+        uint256 index
+    )
+        private
+    {
+        // Get the current local total supply (including reserved tokens) and the ETH-denominated aggregate
+        // surplus/balance to include in the bridge message. The peer chain uses these to track cross-chain supply,
+        // surplus, and balance for cash out and data hook calculations.
+        uint256 localTotalSupply;
+        uint256 ethSurplus;
+        uint256 ethBalance;
+        {
+            uint256 _projectId = projectId();
+            // Get the controller and verify it implements IJBController via ERC165 before querying supply.
+            // slither-disable-next-line calls-loop
+            try DIRECTORY.controllerOf(_projectId) returns (IERC165 controllerIERC165) {
+                if (address(controllerIERC165) != address(0)) {
+                    // slither-disable-next-line calls-loop
+                    try controllerIERC165.supportsInterface(type(IJBController).interfaceId) returns (bool supported) {
+                        if (supported) {
+                            // slither-disable-next-line calls-loop
+                            localTotalSupply = IJBController(address(controllerIERC165))
+                                .totalTokenSupplyWithReservedTokensOf(_projectId);
+                        }
+                    } catch {}
+                }
+            } catch {}
+
+            (ethSurplus, ethBalance) = _buildETHAggregate(_projectId);
+        }
+
+        // Build the message and send over the bridge. Surplus and balance are denominated in _ETH_CURRENCY at
+        // _ETH_DECIMALS.
+        _sendRootOverAMB({
+            transportPayment: transportPayment,
+            index: index,
+            token: token,
+            amount: amount,
+            remoteToken: remoteToken,
+            message: JBMessageRoot({
+                version: MESSAGE_VERSION,
+                token: remoteToken.addr,
+                amount: amount,
+                remoteRoot: JBInboxTreeRoot({nonce: nonce, root: root}),
+                sourceTotalSupply: localTotalSupply,
+                sourceCurrency: _ETH_CURRENCY,
+                sourceDecimals: _ETH_DECIMALS,
+                sourceSurplus: ethSurplus,
+                sourceBalance: ethBalance,
+                snapshotNonce: ++_snapshotNonce
+            })
         });
     }
 }

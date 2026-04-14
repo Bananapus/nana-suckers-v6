@@ -15,6 +15,7 @@ import {JBCeloSuckerDeployer} from "./deployers/JBCeloSuckerDeployer.sol";
 import {IJBSuckerRegistry} from "./interfaces/IJBSuckerRegistry.sol";
 import {IWrappedNativeToken} from "./interfaces/IWrappedNativeToken.sol";
 import {JBMessageRoot} from "./structs/JBMessageRoot.sol";
+import {JBPayRemoteMessage} from "./structs/JBPayRemoteMessage.sol";
 import {JBRemoteToken} from "./structs/JBRemoteToken.sol";
 import {JBTokenMapping} from "./structs/JBTokenMapping.sol";
 
@@ -188,5 +189,54 @@ contract JBCeloSucker is JBOptimismSucker {
         if (map.minGas < MESSENGER_ERC20_MIN_GAS_LIMIT) {
             revert JBSucker_BelowMinGas(map.minGas, MESSENGER_ERC20_MIN_GAS_LIMIT);
         }
+    }
+
+    /// @notice Bridge funds and a pay message to the remote peer via the OP bridge (Celo variant).
+    /// @dev Wraps native ETH → WETH before bridging as ERC-20. Messenger always sends with nativeValue = 0
+    /// because Celo's gas token is CELO, not ETH.
+    // forge-lint: disable-next-line(mixed-case-function)
+    function _sendPayOverAMB(
+        uint256 transportPayment,
+        address token,
+        uint256 amount,
+        JBRemoteToken memory remoteToken,
+        JBPayRemoteMessage memory message
+    )
+        internal
+        override
+    {
+        // OP bridge is free — revert if transport payment is provided.
+        if (transportPayment != 0) revert JBSucker_UnexpectedMsgValue(transportPayment);
+
+        address peerAddress = _toAddress(peer());
+
+        if (amount != 0) {
+            // Wrap native ETH → WETH so it can be bridged as ERC-20.
+            address bridgeToken = token;
+            if (token == JBConstants.NATIVE_TOKEN) {
+                // slither-disable-next-line arbitrary-send-eth,calls-loop
+                WRAPPED_NATIVE.deposit{value: amount}();
+                bridgeToken = address(WRAPPED_NATIVE);
+            }
+
+            SafeERC20.forceApprove({token: IERC20(bridgeToken), spender: address(OPBRIDGE), value: amount});
+            // slither-disable-next-line reentrancy-events,calls-loop
+            OPBRIDGE.bridgeERC20To({
+                localToken: bridgeToken,
+                remoteToken: _toAddress(remoteToken.addr),
+                to: peerAddress,
+                amount: amount,
+                minGasLimit: remoteToken.minGas,
+                extraData: bytes("")
+            });
+        }
+
+        // Send the pay message with nativeValue = 0 (Celo's gas token is CELO, not ETH).
+        // slither-disable-next-line reentrancy-events,calls-loop
+        OPMESSENGER.sendMessage({
+            target: peerAddress,
+            message: abi.encodeCall(JBSucker.payFromRemote, (message)),
+            gasLimit: MESSENGER_PAY_GAS_LIMIT
+        });
     }
 }
