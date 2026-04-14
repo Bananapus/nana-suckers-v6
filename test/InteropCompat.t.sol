@@ -155,6 +155,9 @@ contract InteropCompat is Test {
     InteropTestSucker sucker;
 
     function setUp() public {
+        // Mock DIRECTORY.PROJECTS() so the JBSucker constructor can initialize the PROJECTS immutable.
+        vm.mockCall(DIRECTORY, abi.encodeCall(IJBDirectory.PROJECTS, ()), abi.encode(address(0)));
+
         InteropTestSucker singleton =
             new InteropTestSucker(IJBDirectory(DIRECTORY), IJBPermissions(PERMISSIONS), IJBTokens(TOKENS), FORWARDER);
 
@@ -424,52 +427,65 @@ contract InteropCompat is Test {
 
     /// @notice Verify abi.encode(JBMessageRoot) layout matches SVM's expected field positions.
     /// @dev SVM MessageRoot: { version: u8, token: [u8;32], amount: u128, nonce: u64, root: [u8;32] }
-    ///      EVM abi.encode packs each field into 32-byte slots:
-    ///      Slot 0: version (uint8, right-aligned in 32 bytes)
-    ///      Slot 1: token (bytes32)
-    ///      Slot 2: amount (uint256)
-    ///      Slot 3: remoteRoot.nonce (uint64, right-aligned in 32 bytes)
-    ///      Slot 4: remoteRoot.root (bytes32)
+    ///      EVM abi.encode packs each field into 32-byte slots (all static, no offset pointer):
+    ///      Slot 0 (offset 32): version (uint8, right-aligned in 32 bytes)
+    ///      Slot 1 (offset 64): token (bytes32)
+    ///      Slot 2 (offset 96): amount (uint256)
+    ///      Slot 3 (offset 128): remoteRoot.nonce (uint64, right-aligned in 32 bytes)
+    ///      Slot 4 (offset 160): remoteRoot.root (bytes32)
+    ///      Slot 5 (offset 192): sourceTotalSupply (uint256)
+    ///      Slot 6 (offset 224): sourceCurrency (uint256)
+    ///      Slot 7 (offset 256): sourceDecimals (uint8, right-aligned in 32 bytes)
+    ///      Slot 8 (offset 288): sourceSurplus (uint256)
+    ///      Slot 9 (offset 320): sourceBalance (uint256)
+    ///      Slot 10 (offset 352): snapshotNonce (uint64, right-aligned in 32 bytes)
     function test_messageRoot_encoding() public pure {
         JBMessageRoot memory msg_ = JBMessageRoot({
             version: 1,
             token: bytes32(uint256(0xAABBCCDD)),
             amount: 1000e18,
-            remoteRoot: JBInboxTreeRoot({nonce: 42, root: bytes32(uint256(0x1234))})
+            remoteRoot: JBInboxTreeRoot({nonce: 42, root: bytes32(uint256(0x1234))}),
+            sourceTotalSupply: 0,
+            sourceCurrency: 0,
+            sourceDecimals: 0,
+            sourceSurplus: 0,
+            sourceBalance: 0,
+            snapshotNonce: 1
         });
 
         bytes memory encoded = abi.encode(msg_);
 
-        // Each field is 32 bytes in abi.encode
-        // Slot 0: version
+        // The struct is all-static (no dynamic arrays), so abi.encode produces a fixed-size tuple.
+        // Offset 32 accounts for the Solidity memory bytes length prefix.
+        // Slot 0 (offset 32): version
         uint8 decodedVersion;
         assembly {
             decodedVersion := mload(add(encoded, 32))
         }
         assertEq(decodedVersion, 1, "Version mismatch");
 
-        // Slot 1: token
+        // Slot 1 (offset 64): token
         bytes32 decodedToken;
         assembly {
             decodedToken := mload(add(encoded, 64))
         }
         assertEq(decodedToken, bytes32(uint256(0xAABBCCDD)), "Token mismatch");
 
-        // Slot 2: amount
+        // Slot 2 (offset 96): amount
         uint256 decodedAmount;
         assembly {
             decodedAmount := mload(add(encoded, 96))
         }
         assertEq(decodedAmount, 1000e18, "Amount mismatch");
 
-        // Slot 3: nonce (part of JBInboxTreeRoot)
+        // Slot 3 (offset 128): nonce (part of JBInboxTreeRoot)
         uint64 decodedNonce;
         assembly {
             decodedNonce := mload(add(encoded, 128))
         }
         assertEq(decodedNonce, 42, "Nonce mismatch");
 
-        // Slot 4: root (part of JBInboxTreeRoot)
+        // Slot 4 (offset 160): root (part of JBInboxTreeRoot)
         bytes32 decodedRoot;
         assembly {
             decodedRoot := mload(add(encoded, 160))
@@ -487,10 +503,17 @@ contract InteropCompat is Test {
             version: 1,
             token: bytes32(0),
             amount: type(uint128).max,
-            remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(0)})
+            remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(0)}),
+            sourceTotalSupply: 0,
+            sourceCurrency: 0,
+            sourceDecimals: 0,
+            sourceSurplus: 0,
+            sourceBalance: 0,
+            snapshotNonce: 1
         });
 
         bytes memory encoded = abi.encode(msg_);
+        // All-static tuple: slot 2 (amount) at offset 96 (32 length prefix + 2*32).
         uint256 decodedAmount;
         assembly {
             decodedAmount := mload(add(encoded, 96))

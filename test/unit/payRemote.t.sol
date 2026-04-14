@@ -61,6 +61,9 @@ contract PayRemoteTest is Test {
         vm.label(CONTROLLER, "MOCK_CONTROLLER");
         vm.label(PROJECT, "MOCK_PROJECT");
 
+        // Mock DIRECTORY.PROJECTS() so the JBSucker constructor succeeds.
+        vm.mockCall(DIRECTORY, abi.encodeCall(IJBDirectory.PROJECTS, ()), abi.encode(PROJECT));
+
         // Deploy the singleton.
         PayRemoteTestSucker singleton = new PayRemoteTestSucker(
             IJBDirectory(DIRECTORY), IJBPermissions(PERMISSIONS), IJBTokens(TOKENS), FORWARDER

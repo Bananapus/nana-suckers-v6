@@ -11,6 +11,7 @@ import {IJBTerminal} from "@bananapus/core-v6/src/interfaces/IJBTerminal.sol";
 import {IJBTokens} from "@bananapus/core-v6/src/interfaces/IJBTokens.sol";
 import {JBConstants} from "@bananapus/core-v6/src/libraries/JBConstants.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {IERC165} from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
 import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import {IJBSuckerRegistry} from "../src/interfaces/IJBSuckerRegistry.sol";
 import {JBSuckerRegistry} from "../src/JBSuckerRegistry.sol";
@@ -221,12 +222,20 @@ contract SuckerDeepAttacks is Test {
         vm.label(TERMINAL, "MOCK_TERMINAL");
         vm.label(MOCK_REGISTRY, "MOCK_REGISTRY");
 
-        sucker = _createTestSucker(PROJECT_ID, "deep_attack_salt");
-
-        // Mock directory
+        // Mock PROJECTS() so the constructor can cache the immutable.
         vm.mockCall(DIRECTORY, abi.encodeCall(IJBDirectory.PROJECTS, ()), abi.encode(PROJECT));
+
+        sucker = _createTestSucker(PROJECT_ID, "deep_attack_salt");
         vm.mockCall(PROJECT, abi.encodeCall(IERC721.ownerOf, (PROJECT_ID)), abi.encode(address(this)));
         vm.mockCall(DIRECTORY, abi.encodeCall(IJBDirectory.controllerOf, (PROJECT_ID)), abi.encode(CONTROLLER));
+        vm.mockCall(
+            CONTROLLER, abi.encodeCall(IERC165.supportsInterface, (type(IJBController).interfaceId)), abi.encode(true)
+        );
+        vm.mockCall(
+            CONTROLLER,
+            abi.encodeCall(IJBController.totalTokenSupplyWithReservedTokensOf, (PROJECT_ID)),
+            abi.encode(uint256(0))
+        );
         vm.mockCall(
             DIRECTORY, abi.encodeCall(IJBDirectory.primaryTerminalOf, (PROJECT_ID, TOKEN)), abi.encode(TERMINAL)
         );
@@ -234,6 +243,9 @@ contract SuckerDeepAttacks is Test {
         vm.mockCall(TERMINAL, abi.encodeWithSelector(IJBTerminal.addToBalanceOf.selector), abi.encode());
         // Mock terminal.pay so the toRemote fee payment try-catch doesn't revert on ABI decode of empty return data.
         vm.mockCall(TERMINAL, abi.encodeWithSelector(IJBTerminal.pay.selector), abi.encode(uint256(0)));
+
+        // Mock DIRECTORY.terminalsOf() so _buildETHAggregate() in _sendRoot() doesn't revert.
+        vm.mockCall(DIRECTORY, abi.encodeCall(IJBDirectory.terminalsOf, (PROJECT_ID)), abi.encode(new IJBTerminal[](0)));
     }
 
     function _createTestSucker(uint256 projectId, bytes32 salt) internal returns (DeepAttackSucker) {
@@ -296,7 +308,13 @@ contract SuckerDeepAttacks is Test {
             version: 1,
             token: bytes32(uint256(uint160(TOKEN))),
             amount: 1 ether,
-            remoteRoot: JBInboxTreeRoot({nonce: 5, root: bytes32(uint256(0xbeef))})
+            remoteRoot: JBInboxTreeRoot({nonce: 5, root: bytes32(uint256(0xbeef))}),
+            sourceTotalSupply: 0,
+            sourceCurrency: 0,
+            sourceDecimals: 0,
+            sourceSurplus: 0,
+            sourceBalance: 0,
+            snapshotNonce: 1
         });
 
         vm.prank(address(sucker)); // peer = address(this) for clones
@@ -315,7 +333,13 @@ contract SuckerDeepAttacks is Test {
             version: 1,
             token: bytes32(uint256(uint160(TOKEN))),
             amount: 1 ether,
-            remoteRoot: JBInboxTreeRoot({nonce: 3, root: bytes32(uint256(0xbeef))})
+            remoteRoot: JBInboxTreeRoot({nonce: 3, root: bytes32(uint256(0xbeef))}),
+            sourceTotalSupply: 0,
+            sourceCurrency: 0,
+            sourceDecimals: 0,
+            sourceSurplus: 0,
+            sourceBalance: 0,
+            snapshotNonce: 1
         });
 
         vm.prank(address(sucker));
@@ -333,7 +357,13 @@ contract SuckerDeepAttacks is Test {
             version: 1,
             token: bytes32(uint256(uint160(TOKEN))),
             amount: 1 ether,
-            remoteRoot: JBInboxTreeRoot({nonce: 5, root: bytes32(uint256(0xbbb))})
+            remoteRoot: JBInboxTreeRoot({nonce: 5, root: bytes32(uint256(0xbbb))}),
+            sourceTotalSupply: 0,
+            sourceCurrency: 0,
+            sourceDecimals: 0,
+            sourceSurplus: 0,
+            sourceBalance: 0,
+            snapshotNonce: 1
         });
 
         vm.prank(address(sucker));
@@ -355,7 +385,13 @@ contract SuckerDeepAttacks is Test {
             version: 1,
             token: bytes32(uint256(uint160(TOKEN))),
             amount: 1 ether,
-            remoteRoot: JBInboxTreeRoot({nonce: 2, root: bytes32(uint256(0xbbbb))})
+            remoteRoot: JBInboxTreeRoot({nonce: 2, root: bytes32(uint256(0xbbbb))}),
+            sourceTotalSupply: 0,
+            sourceCurrency: 0,
+            sourceDecimals: 0,
+            sourceSurplus: 0,
+            sourceBalance: 0,
+            snapshotNonce: 1
         });
 
         // Roots are accepted in DEPRECATED state to prevent stranding tokens that were sent
@@ -383,7 +419,13 @@ contract SuckerDeepAttacks is Test {
             version: 1,
             token: bytes32(uint256(uint160(TOKEN))),
             amount: 1 ether,
-            remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(0xabc))})
+            remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(0xabc))}),
+            sourceTotalSupply: 0,
+            sourceCurrency: 0,
+            sourceDecimals: 0,
+            sourceSurplus: 0,
+            sourceBalance: 0,
+            snapshotNonce: 1
         });
 
         vm.prank(address(sucker));
@@ -719,18 +761,23 @@ contract SuckerDeepAttacks is Test {
         assertEq(uint256(sucker.state()), uint256(JBSuckerState.ENABLED));
 
         // Set deprecation 30 days from now.
+        // NOTE: We store the timestamps in local variables BEFORE any vm.warp() calls
+        // to prevent the via-IR optimizer from re-materializing `block.timestamp + 30 days`
+        // after a warp changes block.timestamp (solc via-IR rematerialization bug).
         uint256 deprecateAt = block.timestamp + 30 days;
+        uint256 sendingDisabledAt = deprecateAt - 14 days;
+        uint256 justBeforeDeprecateAt = deprecateAt - 1;
         sucker.test_setDeprecatedAfter(deprecateAt);
 
         // Still before (deprecateAt - 14 days) → DEPRECATION_PENDING.
         assertEq(uint256(sucker.state()), uint256(JBSuckerState.DEPRECATION_PENDING));
 
         // Warp to exactly (deprecateAt - 14 days) → SENDING_DISABLED.
-        vm.warp(deprecateAt - 14 days);
+        vm.warp(sendingDisabledAt);
         assertEq(uint256(sucker.state()), uint256(JBSuckerState.SENDING_DISABLED));
 
         // Warp to just before deprecateAt → still SENDING_DISABLED.
-        vm.warp(deprecateAt - 1);
+        vm.warp(justBeforeDeprecateAt);
         assertEq(uint256(sucker.state()), uint256(JBSuckerState.SENDING_DISABLED));
 
         // Warp to exactly deprecateAt → DEPRECATED.
@@ -1470,7 +1517,13 @@ contract SuckerDeepAttacks is Test {
             version: 0, // Wrong version — current is 1
             token: bytes32(uint256(uint160(TOKEN))),
             amount: 1 ether,
-            remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(0xbeef))})
+            remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(0xbeef))}),
+            sourceTotalSupply: 0,
+            sourceCurrency: 0,
+            sourceDecimals: 0,
+            sourceSurplus: 0,
+            sourceBalance: 0,
+            snapshotNonce: 1
         });
 
         vm.expectRevert(
@@ -1486,7 +1539,13 @@ contract SuckerDeepAttacks is Test {
             version: 2, // Future version
             token: bytes32(uint256(uint160(TOKEN))),
             amount: 1 ether,
-            remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(0xbeef))})
+            remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(0xbeef))}),
+            sourceTotalSupply: 0,
+            sourceCurrency: 0,
+            sourceDecimals: 0,
+            sourceSurplus: 0,
+            sourceBalance: 0,
+            snapshotNonce: 1
         });
 
         vm.expectRevert(
@@ -1502,7 +1561,13 @@ contract SuckerDeepAttacks is Test {
             version: sucker.MESSAGE_VERSION(),
             token: bytes32(uint256(uint160(TOKEN))),
             amount: 0,
-            remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(0xbeef))})
+            remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(0xbeef))}),
+            sourceTotalSupply: 0,
+            sourceCurrency: 0,
+            sourceDecimals: 0,
+            sourceSurplus: 0,
+            sourceBalance: 0,
+            snapshotNonce: 1
         });
 
         vm.prank(address(sucker));
@@ -1525,7 +1590,13 @@ contract SuckerDeepAttacks is Test {
             version: sucker.MESSAGE_VERSION(),
             token: bytes32(uint256(uint160(TOKEN))),
             amount: 1 ether,
-            remoteRoot: JBInboxTreeRoot({nonce: 3, root: bytes32(uint256(0xbeef))})
+            remoteRoot: JBInboxTreeRoot({nonce: 3, root: bytes32(uint256(0xbeef))}),
+            sourceTotalSupply: 0,
+            sourceCurrency: 0,
+            sourceDecimals: 0,
+            sourceSurplus: 0,
+            sourceBalance: 0,
+            snapshotNonce: 1
         });
 
         vm.expectEmit(true, false, false, true, address(sucker));
@@ -1655,7 +1726,13 @@ contract SuckerDeepAttacks is Test {
             version: sucker.MESSAGE_VERSION(),
             token: bytes32(uint256(uint160(TOKEN))),
             amount: 1 ether,
-            remoteRoot: JBInboxTreeRoot({nonce: 5, root: bytes32(uint256(0xbeef))})
+            remoteRoot: JBInboxTreeRoot({nonce: 5, root: bytes32(uint256(0xbeef))}),
+            sourceTotalSupply: 0,
+            sourceCurrency: 0,
+            sourceDecimals: 0,
+            sourceSurplus: 0,
+            sourceBalance: 0,
+            snapshotNonce: 1
         });
 
         vm.expectEmit(true, false, false, true, address(sucker));

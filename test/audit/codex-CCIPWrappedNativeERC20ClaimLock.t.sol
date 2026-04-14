@@ -72,6 +72,13 @@ contract CodexCCIPWrappedNativeERC20ClaimLockTest is Test {
         vm.mockCall(MOCK_DEPLOYER, abi.encodeWithSignature("ccipRouter()"), abi.encode(MOCK_ROUTER));
         vm.mockCall(MOCK_ROUTER, abi.encodeWithSignature("getWrappedNative()"), abi.encode(address(weth)));
 
+        // Mock DIRECTORY.PROJECTS() so the JBSucker constructor succeeds.
+        vm.mockCall(
+            MOCK_DIRECTORY,
+            abi.encodeWithSignature("PROJECTS()"),
+            abi.encode(address(0x1234))
+        );
+
         JBCCIPSuckerDeployer deployer = new JBCCIPSuckerDeployer({
             directory: IJBDirectory(MOCK_DIRECTORY),
             permissions: IJBPermissions(MOCK_PERMISSIONS),
@@ -111,7 +118,13 @@ contract CodexCCIPWrappedNativeERC20ClaimLockTest is Test {
             version: 1,
             token: bytes32(uint256(uint160(address(weth)))),
             amount: amount,
-            remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(0xdead))})
+            remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(0xdead))}),
+            sourceTotalSupply: 0,
+            sourceCurrency: 0,
+            sourceDecimals: 18,
+            sourceSurplus: 0,
+            sourceBalance: 0,
+            snapshotNonce: 1
         });
 
         Client.EVMTokenAmount[] memory destTokenAmounts = new Client.EVMTokenAmount[](1);

@@ -3,9 +3,10 @@ pragma solidity ^0.8.0;
 
 import {IERC165} from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
 import {IJBDirectory} from "@bananapus/core-v6/src/interfaces/IJBDirectory.sol";
+import {IJBProjects} from "@bananapus/core-v6/src/interfaces/IJBProjects.sol";
 import {IJBTokens} from "@bananapus/core-v6/src/interfaces/IJBTokens.sol";
-
 import {JBClaim} from "../structs/JBClaim.sol";
+import {JBDenominatedAmount} from "../structs/JBDenominatedAmount.sol";
 import {JBInboxTreeRoot} from "../structs/JBInboxTreeRoot.sol";
 import {JBOutboxTree} from "../structs/JBOutboxTree.sol";
 import {JBPayRemoteMessage} from "../structs/JBPayRemoteMessage.sol";
@@ -118,6 +119,10 @@ interface IJBSucker is IERC165 {
     /// @return The ERC-20 minimum gas limit.
     function MESSENGER_ERC20_MIN_GAS_LIMIT() external view returns (uint32);
 
+    /// @notice The project registry (ERC-721 ownership).
+    /// @return The projects contract.
+    function PROJECTS() external view returns (IJBProjects);
+
     /// @notice The token registry.
     /// @return The tokens contract.
     function TOKENS() external view returns (IJBTokens);
@@ -153,6 +158,28 @@ interface IJBSucker is IERC165 {
     /// @notice The chain ID of the remote peer.
     /// @return chainId The remote chain ID.
     function peerChainId() external view returns (uint256 chainId);
+
+    /// @notice The last known total token supply on the peer chain, updated each time a bridge message is received.
+    /// @dev Used by data hooks to compute `effectiveTotalSupply = localSupply + sum(peerChainTotalSupply)` across all
+    /// suckers, preventing cash out tax bypass on chains where a holder dominates the local supply.
+    /// @return The peer chain's total supply.
+    function peerChainTotalSupply() external view returns (uint256);
+
+    /// @notice The aggregate peer chain balance, normalized to a desired currency and decimal precision using JBPrices.
+    /// @dev The balance is stored as ETH-denominated (18 decimals) and converted to the requested currency/decimals
+    /// using the local JBPrices oracle.
+    /// @param decimals The decimal precision for the returned value.
+    /// @param currency The currency to normalize to.
+    /// @return A `JBDenominatedAmount` with the converted value.
+    function peerChainBalanceOf(uint256 decimals, uint256 currency) external view returns (JBDenominatedAmount memory);
+
+    /// @notice The aggregate peer chain surplus, normalized to a desired currency and decimal precision using JBPrices.
+    /// @dev The surplus is stored as ETH-denominated (18 decimals) and converted to the requested currency/decimals
+    /// using the local JBPrices oracle.
+    /// @param decimals The decimal precision for the returned value.
+    /// @param currency The currency to normalize to.
+    /// @return A `JBDenominatedAmount` with the converted value.
+    function peerChainSurplusOf(uint256 decimals, uint256 currency) external view returns (JBDenominatedAmount memory);
 
     /// @notice The ID of the project on the local chain that this sucker is associated with.
     /// @return The project ID.

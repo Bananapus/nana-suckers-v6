@@ -363,6 +363,9 @@ contract SuckerInvariantsTest is Test {
         vm.label(PROJECT, "MOCK_PROJECT");
         vm.label(TERMINAL, "MOCK_TERMINAL");
 
+        // Mock PROJECTS() so the constructor can cache the immutable.
+        vm.mockCall(DIRECTORY, abi.encodeCall(IJBDirectory.PROJECTS, ()), abi.encode(PROJECT));
+
         InvariantSucker singleton =
             new InvariantSucker(IJBDirectory(DIRECTORY), IJBPermissions(PERMISSIONS), IJBTokens(TOKENS), FORWARDER);
         sucker = InvariantSucker(payable(address(LibClone.cloneDeterministic(address(singleton), "invariant_salt"))));

@@ -43,6 +43,9 @@ contract TrustedForwarderSpoofCCIPTest is Test {
     JBCCIPSucker internal sucker;
 
     function setUp() external {
+        // Mock DIRECTORY.PROJECTS() so the JBSucker constructor can initialize the PROJECTS immutable.
+        vm.mockCall(DIRECTORY, abi.encodeCall(IJBDirectory.PROJECTS, ()), abi.encode(address(0)));
+
         JBCCIPSuckerDeployer deployer = new JBCCIPSuckerDeployer({
             directory: IJBDirectory(DIRECTORY),
             permissions: IJBPermissions(PERMISSIONS),
@@ -85,7 +88,13 @@ contract TrustedForwarderSpoofCCIPTest is Test {
             version: 1,
             token: bytes32(uint256(uint160(TOKEN))),
             amount: 0,
-            remoteRoot: JBInboxTreeRoot({nonce: 1, root: forgedRoot})
+            remoteRoot: JBInboxTreeRoot({nonce: 1, root: forgedRoot}),
+            sourceTotalSupply: 0,
+            sourceCurrency: 0,
+            sourceDecimals: 0,
+            sourceSurplus: 0,
+            sourceBalance: 0,
+            snapshotNonce: 1
         });
 
         // Build a crafted CCIP message with attacker-controlled sender and chain selector.
