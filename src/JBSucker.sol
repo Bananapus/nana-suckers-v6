@@ -1318,7 +1318,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     /// @return ethBalance The total balance denominated in ETH at 18 decimals.
     // forge-lint: disable-next-line(mixed-case-function)
     function _buildETHAggregate(uint256 _projectId) internal view returns (uint256 ethSurplus, uint256 ethBalance) {
-        return JBSuckerLib.buildETHAggregate({directory: DIRECTORY, projectId: _projectId});
+        (ethSurplus, ethBalance) = JBSuckerLib.buildETHAggregate({directory: DIRECTORY, projectId: _projectId});
     }
 
     /// @notice Builds a hash as they are stored in the merkle tree.
@@ -1366,7 +1366,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         view
         returns (uint256 converted)
     {
-        return JBSuckerLib.convertPeerValue({
+        converted = JBSuckerLib.convertPeerValue({
             directory: DIRECTORY, projectId: projectId(), source: source, decimals: decimals, currency: currency
         });
     }
