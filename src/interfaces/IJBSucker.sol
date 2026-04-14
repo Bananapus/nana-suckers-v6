@@ -84,13 +84,13 @@ interface IJBSucker is IERC165 {
     /// @return The base gas limit.
     function MESSENGER_BASE_GAS_LIMIT() external view returns (uint32);
 
-    /// @notice The project registry (ERC-721 ownership).
-    /// @return The projects contract.
-    function PROJECTS() external view returns (IJBProjects);
-
     /// @notice The minimum gas required for bridging ERC-20 tokens.
     /// @return The ERC-20 minimum gas limit.
     function MESSENGER_ERC20_MIN_GAS_LIMIT() external view returns (uint32);
+
+    /// @notice The project registry (ERC-721 ownership).
+    /// @return The projects contract.
+    function PROJECTS() external view returns (IJBProjects);
 
     /// @notice The token registry.
     /// @return The tokens contract.
@@ -134,14 +134,6 @@ interface IJBSucker is IERC165 {
     /// @return The peer chain's total supply.
     function peerChainTotalSupply() external view returns (uint256);
 
-    /// @notice The aggregate peer chain surplus, normalized to a desired currency and decimal precision using JBPrices.
-    /// @dev The surplus is stored as ETH-denominated (18 decimals) and converted to the requested currency/decimals
-    /// using the local JBPrices oracle.
-    /// @param decimals The decimal precision for the returned value.
-    /// @param currency The currency to normalize to.
-    /// @return A `JBDenominatedAmount` with the converted value.
-    function peerChainSurplusOf(uint256 decimals, uint256 currency) external view returns (JBDenominatedAmount memory);
-
     /// @notice The aggregate peer chain balance, normalized to a desired currency and decimal precision using JBPrices.
     /// @dev The balance is stored as ETH-denominated (18 decimals) and converted to the requested currency/decimals
     /// using the local JBPrices oracle.
@@ -149,6 +141,14 @@ interface IJBSucker is IERC165 {
     /// @param currency The currency to normalize to.
     /// @return A `JBDenominatedAmount` with the converted value.
     function peerChainBalanceOf(uint256 decimals, uint256 currency) external view returns (JBDenominatedAmount memory);
+
+    /// @notice The aggregate peer chain surplus, normalized to a desired currency and decimal precision using JBPrices.
+    /// @dev The surplus is stored as ETH-denominated (18 decimals) and converted to the requested currency/decimals
+    /// using the local JBPrices oracle.
+    /// @param decimals The decimal precision for the returned value.
+    /// @param currency The currency to normalize to.
+    /// @return A `JBDenominatedAmount` with the converted value.
+    function peerChainSurplusOf(uint256 decimals, uint256 currency) external view returns (JBDenominatedAmount memory);
 
     /// @notice The ID of the project on the local chain that this sucker is associated with.
     /// @return The project ID.

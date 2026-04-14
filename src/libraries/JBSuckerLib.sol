@@ -17,8 +17,12 @@ import {JBDenominatedAmount} from "../structs/JBDenominatedAmount.sol";
 /// @dev These are `external` library functions, so they are deployed as a separate contract and called via
 /// DELEGATECALL. This avoids duplicating the bytecode in every sucker implementation.
 library JBSuckerLib {
+    // ------------------------- internal constants ----------------------- //
+
     uint256 internal constant _ETH_CURRENCY = JBCurrencyIds.ETH;
     uint8 internal constant _ETH_DECIMALS = 18;
+
+    // ------------------------- external views -------------------------- //
 
     /// @notice Build ETH-denominated aggregate surplus and balance across all terminals for a project.
     /// @param directory The JB directory to look up terminals.
@@ -34,8 +38,13 @@ library JBSuckerLib {
         view
         returns (uint256 ethSurplus, uint256 ethBalance)
     {
+        // Get all terminals registered for the project.
         IJBTerminal[] memory terminals = directory.terminalsOf(projectId);
+
+        // Get the number of terminals.
         uint256 numTerminals = terminals.length;
+
+        // If there are no terminals, return zeros.
         if (numTerminals == 0) return (0, 0);
 
         // Get the surplus denominated in ETH. currentSurplusOf aggregates across all terminals internally.
@@ -53,8 +62,10 @@ library JBSuckerLib {
         {
             // slither-disable-next-line calls-loop
             try IJBMultiTerminal(address(terminals[0])).STORE() returns (IJBTerminalStore store) {
+                // Get the price oracle from the terminal store.
                 prices = store.PRICES();
             } catch {
+                // If the store lookup fails, return surplus only with zero balance.
                 return (ethSurplus, 0);
             }
         }
@@ -63,9 +74,15 @@ library JBSuckerLib {
         for (uint256 i; i < numTerminals;) {
             // slither-disable-next-line calls-loop
             try terminals[i].accountingContextsOf(projectId) returns (JBAccountingContext[] memory contexts) {
+                // Iterate over each accounting context (token) for this terminal.
                 for (uint256 j; j < contexts.length;) {
+                    // Get the token address for this context.
                     address tkn = contexts[j].token;
+
+                    // Get the decimal precision for this token.
                     uint8 dec = contexts[j].decimals;
+
+                    // Derive the currency ID from the token address.
                     uint32 tokenCurrency = uint32(uint160(tkn));
 
                     // slither-disable-next-line calls-loop
@@ -74,11 +91,13 @@ library JBSuckerLib {
                         uint256 bal
                     ) {
                         if (bal != 0) {
+                            // If the token is already ETH-denominated, adjust decimals directly.
                             if (tokenCurrency == uint32(_ETH_CURRENCY)) {
                                 ethBalance += JBFixedPointNumber.adjustDecimals({
                                     value: bal, decimals: dec, targetDecimals: _ETH_DECIMALS
                                 });
                             } else {
+                                // Otherwise, convert the balance to ETH using the price oracle.
                                 // slither-disable-next-line calls-loop
                                 try prices.pricePerUnitOf({
                                     projectId: projectId,
@@ -123,19 +142,27 @@ library JBSuckerLib {
         view
         returns (uint256 converted)
     {
+        // Nothing to convert if the source value is zero.
         if (source.value == 0) return 0;
 
+        // If the source currency matches the target, just adjust decimals.
         if (source.currency == uint32(currency)) {
             converted = JBFixedPointNumber.adjustDecimals({
                 value: source.value, decimals: source.decimals, targetDecimals: decimals
             });
         } else {
+            // Look up terminals to access the price oracle.
             IJBTerminal[] memory terminals = directory.terminalsOf(projectId);
+
+            // If there are no terminals, return zero.
             if (terminals.length == 0) return 0;
 
             // slither-disable-next-line calls-loop
             try IJBMultiTerminal(address(terminals[0])).STORE() returns (IJBTerminalStore store) {
+                // Get the price oracle from the terminal store.
                 IJBPrices prices = store.PRICES();
+
+                // Convert using the price oracle.
                 // slither-disable-next-line calls-loop
                 try prices.pricePerUnitOf({
                     projectId: projectId,
