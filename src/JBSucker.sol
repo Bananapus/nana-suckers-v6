@@ -13,7 +13,6 @@ import {IJBTerminal} from "@bananapus/core-v6/src/interfaces/IJBTerminal.sol";
 import {IJBTerminalStore} from "@bananapus/core-v6/src/interfaces/IJBTerminalStore.sol";
 import {IJBTokens} from "@bananapus/core-v6/src/interfaces/IJBTokens.sol";
 import {JBAccountingContext} from "@bananapus/core-v6/src/structs/JBAccountingContext.sol";
-import {JBTokenAmount} from "@bananapus/core-v6/src/structs/JBTokenAmount.sol";
 import {JBConstants} from "@bananapus/core-v6/src/libraries/JBConstants.sol";
 import {JBCurrencyIds} from "@bananapus/core-v6/src/libraries/JBCurrencyIds.sol";
 import {JBFixedPointNumber} from "@bananapus/core-v6/src/libraries/JBFixedPointNumber.sol";
@@ -272,13 +271,16 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     /// precision using the local JBPrices oracle.
     /// @param decimals The decimal precision for the returned value.
     /// @param currency The currency to normalize to (e.g. `uint256(uint160(JBConstants.NATIVE_TOKEN))` for ETH).
-    /// @return A `JBTokenAmount` with the converted value.
-    function peerChainBalanceOf(uint256 decimals, uint256 currency) external view returns (JBTokenAmount memory) {
-        return JBTokenAmount({
-            token: address(uint160(currency)),
-            decimals: uint8(decimals),
+    /// @return A `JBDenominatedAmount` with the converted value.
+    function peerChainBalanceOf(uint256 decimals, uint256 currency)
+        external
+        view
+        returns (JBDenominatedAmount memory)
+    {
+        return JBDenominatedAmount({
+            value: _convertPeerValue({source: _peerChainBalance, decimals: decimals, currency: currency}),
             currency: uint32(currency),
-            value: _convertPeerValue({source: _peerChainBalance, decimals: decimals, currency: currency})
+            decimals: uint8(decimals)
         });
     }
 
@@ -286,13 +288,16 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     /// precision using the local JBPrices oracle.
     /// @param decimals The decimal precision for the returned value.
     /// @param currency The currency to normalize to (e.g. `uint256(uint160(JBConstants.NATIVE_TOKEN))` for ETH).
-    /// @return A `JBTokenAmount` with the converted value.
-    function peerChainSurplusOf(uint256 decimals, uint256 currency) external view returns (JBTokenAmount memory) {
-        return JBTokenAmount({
-            token: address(uint160(currency)),
-            decimals: uint8(decimals),
+    /// @return A `JBDenominatedAmount` with the converted value.
+    function peerChainSurplusOf(uint256 decimals, uint256 currency)
+        external
+        view
+        returns (JBDenominatedAmount memory)
+    {
+        return JBDenominatedAmount({
+            value: _convertPeerValue({source: _peerChainSurplus, decimals: decimals, currency: currency}),
             currency: uint32(currency),
-            value: _convertPeerValue({source: _peerChainSurplus, decimals: decimals, currency: currency})
+            decimals: uint8(decimals)
         });
     }
 
