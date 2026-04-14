@@ -7,6 +7,7 @@ import {IJBController} from "@bananapus/core-v6/src/interfaces/IJBController.sol
 import {IJBDirectory} from "@bananapus/core-v6/src/interfaces/IJBDirectory.sol";
 import {IJBMultiTerminal} from "@bananapus/core-v6/src/interfaces/IJBMultiTerminal.sol";
 import {IJBPermissions} from "@bananapus/core-v6/src/interfaces/IJBPermissions.sol";
+import {IJBProjects} from "@bananapus/core-v6/src/interfaces/IJBProjects.sol";
 import {IJBPermissioned} from "@bananapus/core-v6/src/interfaces/IJBPermissioned.sol";
 import {IJBPrices} from "@bananapus/core-v6/src/interfaces/IJBPrices.sol";
 import {IJBTerminal} from "@bananapus/core-v6/src/interfaces/IJBTerminal.sol";
@@ -37,6 +38,7 @@ import {JBMessageRoot} from "./structs/JBMessageRoot.sol";
 import {JBOutboxTree} from "./structs/JBOutboxTree.sol";
 import {JBRemoteToken} from "./structs/JBRemoteToken.sol";
 import {JBTokenMapping} from "./structs/JBTokenMapping.sol";
+import {JBSuckerLib} from "./libraries/JBSuckerLib.sol";
 import {MerkleLib} from "./utils/MerkleLib.sol";
 
 /// @notice An abstract contract for bridging a Juicebox project's tokens and the corresponding funds to and from a
@@ -117,6 +119,9 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
 
     /// @notice The directory of terminals and controllers for projects.
     IJBDirectory public immutable override DIRECTORY;
+
+    /// @notice The project registry (ERC-721 ownership).
+    IJBProjects public immutable override PROJECTS;
 
     /// @notice The project ID that receives the `toRemoteFee` payment. Typically the protocol project (ID 1).
     uint256 public immutable FEE_PROJECT_ID;
@@ -200,6 +205,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         JBPermissioned(permissions)
     {
         DIRECTORY = directory;
+        PROJECTS = directory.PROJECTS();
         TOKENS = tokens;
         FEE_PROJECT_ID = feeProjectId;
         REGISTRY = registry;
@@ -346,6 +352,27 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         return IERC20(token).balanceOf(addr);
     }
 
+    /// @notice Returns the peer address as an EVM address.
+    /// @return The peer address.
+    function _peerAddress() internal view returns (address) {
+        return _toAddress(peer());
+    }
+
+    /// @notice Returns all terminals for a project.
+    /// @param _projectId The project ID.
+    /// @return The terminals.
+    function _terminalsOf(uint256 _projectId) internal view returns (IJBTerminal[] memory) {
+        return DIRECTORY.terminalsOf(_projectId);
+    }
+
+    /// @notice Looks up the primary terminal for a project/token pair via the directory.
+    /// @param _projectId The project ID.
+    /// @param token The token address.
+    /// @return The primary terminal.
+    function _primaryTerminalOf(uint256 _projectId, address token) internal view returns (IJBTerminal) {
+        return DIRECTORY.primaryTerminalOf({projectId: _projectId, token: token});
+    }
+
     /// @notice Builds a hash as they are stored in the merkle tree.
     /// @param projectTokenCount The number of project tokens being cashed out.
     /// @param terminalTokenAmount The amount of terminal tokens being reclaimed by the cash out.
@@ -371,95 +398,14 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     }
 
     /// @notice Build ETH-denominated aggregate surplus and balance across all terminals for the project.
-    /// @dev Surplus: uses `currentSurplusOf` on the first terminal (which aggregates across all terminals internally),
-    /// denominated in ETH at 18 decimals. Balance: iterates each terminal's accounting contexts, converts each
-    /// token's balance to ETH via JBPrices. Tokens without price feeds are skipped (safe underestimate).
+    /// @dev Delegates to `JBSuckerLib.buildETHAggregate` (deployed library, called via DELEGATECALL) to reduce
+    /// child contract bytecode.
     /// @param _projectId The project ID to build the aggregate for.
     /// @return ethSurplus The total surplus denominated in ETH at 18 decimals.
     /// @return ethBalance The total balance denominated in ETH at 18 decimals.
     // forge-lint: disable-next-line(mixed-case-function)
     function _buildETHAggregate(uint256 _projectId) internal view returns (uint256 ethSurplus, uint256 ethBalance) {
-        IJBTerminal[] memory terminals = DIRECTORY.terminalsOf(_projectId);
-        uint256 numTerminals = terminals.length;
-        if (numTerminals == 0) return (0, 0);
-
-        // Get the surplus denominated in ETH (currency = _ETH_CURRENCY, decimals = _ETH_DECIMALS).
-        // currentSurplusOf aggregates across all terminals internally.
-        // slither-disable-next-line calls-loop
-        try terminals[0].currentSurplusOf({
-            projectId: _projectId, tokens: new address[](0), decimals: _ETH_DECIMALS, currency: uint32(_ETH_CURRENCY)
-        }) returns (
-            uint256 surplus
-        ) {
-            ethSurplus = surplus;
-        } catch {
-            // If surplus computation fails, leave as 0 (safe underestimate).
-        }
-
-        // Get a reference to JBPrices for balance conversion.
-        IJBPrices prices;
-        {
-            // slither-disable-next-line calls-loop
-            try IJBMultiTerminal(address(terminals[0])).STORE() returns (IJBTerminalStore store) {
-                prices = store.PRICES();
-            } catch {
-                return (ethSurplus, 0);
-            }
-        }
-
-        // Aggregate balance from each terminal, converting each token to ETH.
-        for (uint256 i; i < numTerminals;) {
-            // slither-disable-next-line calls-loop
-            try terminals[i].accountingContextsOf(_projectId) returns (JBAccountingContext[] memory contexts) {
-                for (uint256 j; j < contexts.length;) {
-                    address tkn = contexts[j].token;
-                    uint8 dec = contexts[j].decimals;
-                    uint32 tokenCurrency = uint32(uint160(tkn));
-
-                    // Get the raw balance for this token from this terminal's store.
-                    // slither-disable-next-line calls-loop
-                    try IJBMultiTerminal(address(terminals[i])).STORE()
-                        .balanceOf({terminal: address(terminals[i]), projectId: _projectId, token: tkn}) returns (
-                        uint256 bal
-                    ) {
-                        if (bal != 0) {
-                            if (tokenCurrency == uint32(_ETH_CURRENCY)) {
-                                // Already ETH — just adjust decimals to 18.
-                                ethBalance += JBFixedPointNumber.adjustDecimals({
-                                    value: bal, decimals: dec, targetDecimals: _ETH_DECIMALS
-                                });
-                            } else {
-                                // Convert to ETH via the price oracle.
-                                // slither-disable-next-line calls-loop
-                                try prices.pricePerUnitOf({
-                                    projectId: _projectId,
-                                    pricingCurrency: tokenCurrency,
-                                    unitCurrency: uint32(_ETH_CURRENCY),
-                                    decimals: _ETH_DECIMALS
-                                }) returns (
-                                    uint256 price
-                                ) {
-                                    ethBalance += mulDiv(bal, price, 10 ** dec);
-                                } catch {
-                                    // Skip tokens without a price feed — underestimate (safe direction).
-                                }
-                            }
-                        }
-                    } catch {
-                        // Skip terminals that don't have this token.
-                    }
-
-                    unchecked {
-                        ++j;
-                    }
-                }
-            } catch {
-                // If a terminal doesn't support accountingContextsOf, skip it.
-            }
-            unchecked {
-                ++i;
-            }
-        }
+        return JBSuckerLib.buildETHAggregate({directory: DIRECTORY, projectId: _projectId});
     }
 
     /// @dev ERC-2771 specifies the context as being a single address (20 bytes).
@@ -468,8 +414,8 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     }
 
     /// @notice Convert a peer chain snapshot value to the requested currency and decimal precision.
-    /// @dev If the target currency matches the source, adjusts decimals directly. Otherwise converts via JBPrices.
-    /// If no price feed exists, returns 0 (safe underestimate).
+    /// @dev Delegates to `JBSuckerLib.convertPeerValue` (deployed library, called via DELEGATECALL) to reduce
+    /// child contract bytecode.
     /// @param source The peer chain snapshot containing value, currency, and decimals.
     /// @param decimals The target decimal precision.
     /// @param currency The target currency (e.g. `uint256(uint160(JBConstants.NATIVE_TOKEN))` for ETH).
@@ -483,43 +429,9 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         view
         returns (uint256 converted)
     {
-        // No snapshot received yet or zero value — nothing to convert.
-        if (source.value == 0) return 0;
-
-        if (source.currency == uint32(currency)) {
-            // Same currency — just adjust decimals.
-            converted = JBFixedPointNumber.adjustDecimals({
-                value: source.value, decimals: source.decimals, targetDecimals: decimals
-            });
-        } else {
-            // Different currency — convert via the price oracle on the first terminal's store.
-            uint256 _projectId = projectId();
-            IJBTerminal[] memory terminals = DIRECTORY.terminalsOf(_projectId);
-
-            // No terminals configured — can't look up price feeds, return 0.
-            if (terminals.length == 0) return 0;
-
-            // Retrieve the price oracle from the first terminal's store.
-            // slither-disable-next-line calls-loop
-            try IJBMultiTerminal(address(terminals[0])).STORE() returns (IJBTerminalStore store) {
-                IJBPrices prices = store.PRICES();
-                // slither-disable-next-line calls-loop
-                try prices.pricePerUnitOf({
-                    projectId: _projectId,
-                    pricingCurrency: source.currency,
-                    unitCurrency: uint32(currency),
-                    decimals: uint8(decimals)
-                }) returns (
-                    uint256 price
-                ) {
-                    converted = mulDiv(source.value, price, 10 ** source.decimals);
-                } catch {
-                    // No price feed — return 0 (safe underestimate).
-                }
-            } catch {
-                // No store — return 0.
-            }
-        }
+        return JBSuckerLib.convertPeerValue({
+            directory: DIRECTORY, projectId: projectId(), source: source, decimals: decimals, currency: currency
+        });
     }
 
     /// @notice The calldata. Preferred to use over `msg.data`.
@@ -622,9 +534,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         uint256 _projectId = projectId();
 
         _requirePermissionFrom({
-            account: DIRECTORY.PROJECTS().ownerOf(_projectId),
-            projectId: _projectId,
-            permissionId: JBPermissionIds.SUCKER_SAFETY
+            account: PROJECTS.ownerOf(_projectId), projectId: _projectId, permissionId: JBPermissionIds.SUCKER_SAFETY
         });
 
         // Enable the emergency hatch for each token.
@@ -894,7 +804,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
 
         // The caller must be the project owner or have the `SET_SUCKER_DEPRECATION` permission from them.
         _requirePermissionFrom({
-            account: DIRECTORY.PROJECTS().ownerOf(_projectId),
+            account: PROJECTS.ownerOf(_projectId),
             projectId: _projectId,
             permissionId: JBPermissionIds.SET_SUCKER_DEPRECATION
         });
@@ -956,7 +866,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         // NOTE: On failure, the fee ETH is retained by this contract (not added back to transportPayment)
         // to avoid DoS on zero-cost bridges (OP, Base, Celo, Arbitrum L2→L1) that revert on non-zero
         // transportPayment.
-        IJBTerminal terminal = DIRECTORY.primaryTerminalOf({projectId: FEE_PROJECT_ID, token: JBConstants.NATIVE_TOKEN});
+        IJBTerminal terminal = _primaryTerminalOf(FEE_PROJECT_ID, JBConstants.NATIVE_TOKEN);
         if (address(terminal) != address(0)) {
             // slither-disable-next-line unused-return,reentrancy-events
             try terminal.pay{value: _toRemoteFee}({
@@ -1015,7 +925,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
 
         // Get the project's primary terminal for the token.
         // slither-disable-next-line calls-loop
-        IJBTerminal terminal = DIRECTORY.primaryTerminalOf({projectId: cachedProjectId, token: token});
+        IJBTerminal terminal = _primaryTerminalOf(cachedProjectId, token);
 
         // slither-disable-next-line incorrect-equality
         if (address(terminal) == address(0)) revert JBSucker_NoTerminalForToken(cachedProjectId, token);
@@ -1167,9 +1077,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
 
         // slither-disable-next-line calls-loop
         _requirePermissionFrom({
-            account: DIRECTORY.PROJECTS().ownerOf(_projectId),
-            projectId: _projectId,
-            permissionId: JBPermissionIds.MAP_SUCKER_TOKEN
+            account: PROJECTS.ownerOf(_projectId), projectId: _projectId, permissionId: JBPermissionIds.MAP_SUCKER_TOKEN
         });
 
         // Make sure that the token does not get remapped to another remote token.
@@ -1237,8 +1145,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         uint256 _projectId = projectId();
 
         // Get the project's primary terminal for `token`. We will cash out from this terminal.
-        IJBCashOutTerminal terminal =
-            IJBCashOutTerminal(address(DIRECTORY.primaryTerminalOf({projectId: _projectId, token: token})));
+        IJBCashOutTerminal terminal = IJBCashOutTerminal(address(_primaryTerminalOf(_projectId, token)));
 
         // If the project doesn't have a primary terminal for `token`, revert.
         if (address(terminal) == address(0)) {

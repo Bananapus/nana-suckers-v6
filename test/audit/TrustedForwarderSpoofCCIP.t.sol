@@ -43,6 +43,9 @@ contract TrustedForwarderSpoofCCIPTest is Test {
     JBCCIPSucker internal sucker;
 
     function setUp() external {
+        // Mock DIRECTORY.PROJECTS() so the JBSucker constructor can initialize the PROJECTS immutable.
+        vm.mockCall(DIRECTORY, abi.encodeCall(IJBDirectory.PROJECTS, ()), abi.encode(address(0)));
+
         JBCCIPSuckerDeployer deployer = new JBCCIPSuckerDeployer({
             directory: IJBDirectory(DIRECTORY),
             permissions: IJBPermissions(PERMISSIONS),

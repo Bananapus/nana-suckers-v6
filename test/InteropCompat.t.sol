@@ -146,6 +146,9 @@ contract InteropCompat is Test {
     InteropTestSucker sucker;
 
     function setUp() public {
+        // Mock DIRECTORY.PROJECTS() so the JBSucker constructor can initialize the PROJECTS immutable.
+        vm.mockCall(DIRECTORY, abi.encodeCall(IJBDirectory.PROJECTS, ()), abi.encode(address(0)));
+
         InteropTestSucker singleton =
             new InteropTestSucker(IJBDirectory(DIRECTORY), IJBPermissions(PERMISSIONS), IJBTokens(TOKENS), FORWARDER);
 

@@ -42,6 +42,9 @@ contract TrustedForwarderSpoofTest is Test {
     JBArbitrumSucker internal sucker;
 
     function setUp() external {
+        // Mock DIRECTORY.PROJECTS() so the JBSucker constructor can initialize the PROJECTS immutable.
+        vm.mockCall(DIRECTORY, abi.encodeCall(IJBDirectory.PROJECTS, ()), abi.encode(address(0)));
+
         JBArbitrumSuckerDeployer deployer = new JBArbitrumSuckerDeployer({
             directory: IJBDirectory(DIRECTORY),
             permissions: IJBPermissions(PERMISSIONS),

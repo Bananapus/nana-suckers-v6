@@ -112,6 +112,9 @@ contract FeeFallbackTest is Test {
     function setUp() public {
         vm.warp(100 days);
 
+        // Mock PROJECTS() so the constructor can cache the immutable.
+        vm.mockCall(DIRECTORY, abi.encodeCall(IJBDirectory.PROJECTS, ()), abi.encode(PROJECT));
+
         // Deploy singleton and clone.
         ZeroCostBridgeSucker singleton = new ZeroCostBridgeSucker(
             IJBDirectory(DIRECTORY),

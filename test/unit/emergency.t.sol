@@ -232,6 +232,9 @@ contract SuckerEmergencyTest is Test {
     }
 
     function _createTestSucker(uint256 projectId, bytes32 salt) internal returns (TestSucker) {
+        // Mock PROJECTS() so the constructor can cache the immutable.
+        vm.mockCall(DIRECTORY, abi.encodeCall(IJBDirectory.PROJECTS, ()), abi.encode(PROJECT));
+
         // Singleton.
         TestSucker singleton =
             new TestSucker(IJBDirectory(DIRECTORY), IJBPermissions(PERMISSIONS), IJBTokens(TOKENS), FORWARDER);

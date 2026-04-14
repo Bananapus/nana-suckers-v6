@@ -3,6 +3,7 @@ pragma solidity ^0.8.0;
 
 import {IERC165} from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
 import {IJBDirectory} from "@bananapus/core-v6/src/interfaces/IJBDirectory.sol";
+import {IJBProjects} from "@bananapus/core-v6/src/interfaces/IJBProjects.sol";
 import {IJBTokens} from "@bananapus/core-v6/src/interfaces/IJBTokens.sol";
 import {JBClaim} from "../structs/JBClaim.sol";
 import {JBDenominatedAmount} from "../structs/JBDenominatedAmount.sol";
@@ -82,6 +83,10 @@ interface IJBSucker is IERC165 {
     /// @notice The minimum gas required for a basic cross-chain call.
     /// @return The base gas limit.
     function MESSENGER_BASE_GAS_LIMIT() external view returns (uint32);
+
+    /// @notice The project registry (ERC-721 ownership).
+    /// @return The projects contract.
+    function PROJECTS() external view returns (IJBProjects);
 
     /// @notice The minimum gas required for bridging ERC-20 tokens.
     /// @return The ERC-20 minimum gas limit.

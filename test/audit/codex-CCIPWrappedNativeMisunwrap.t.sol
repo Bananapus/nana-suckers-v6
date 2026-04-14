@@ -91,6 +91,9 @@ contract CodexCCIPWrappedNativeMisunwrapTest is Test {
     function setUp() public {
         weth = new CodexMockWETH();
 
+        // Mock DIRECTORY.PROJECTS() so the JBSucker constructor can initialize the PROJECTS immutable.
+        vm.mockCall(DIRECTORY, abi.encodeCall(IJBDirectory.PROJECTS, ()), abi.encode(address(0)));
+
         vm.etch(ROUTER, hex"01");
         vm.mockCall(DEPLOYER, abi.encodeWithSignature("ccipRemoteChainId()"), abi.encode(uint256(2)));
         vm.mockCall(DEPLOYER, abi.encodeWithSignature("ccipRemoteChainSelector()"), abi.encode(REMOTE_CHAIN_SELECTOR));

@@ -59,6 +59,9 @@ contract ToRemoteFeeFallbackTest is Test {
     OptimismFeeHarness internal sucker;
 
     function setUp() public {
+        // Mock DIRECTORY.PROJECTS() so the JBSucker constructor can initialize the PROJECTS immutable.
+        vm.mockCall(DIRECTORY, abi.encodeCall(IJBDirectory.PROJECTS, ()), abi.encode(address(0)));
+
         JBOptimismSuckerDeployer deployer = new JBOptimismSuckerDeployer({
             directory: IJBDirectory(DIRECTORY),
             permissions: IJBPermissions(PERMISSIONS),

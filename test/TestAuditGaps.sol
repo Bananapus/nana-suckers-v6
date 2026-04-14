@@ -194,10 +194,10 @@ contract TestAuditGaps is Test {
         vm.label(CONTROLLER, "MOCK_CONTROLLER");
         vm.label(PROJECT, "MOCK_PROJECT");
 
-        sucker = _createTestSucker(PROJECT_ID, "audit_gap_salt");
-
-        // Common mocks.
+        // Mock PROJECTS() so the constructor can cache the immutable.
         vm.mockCall(DIRECTORY, abi.encodeCall(IJBDirectory.PROJECTS, ()), abi.encode(PROJECT));
+
+        sucker = _createTestSucker(PROJECT_ID, "audit_gap_salt");
         vm.mockCall(PROJECT, abi.encodeCall(IERC721.ownerOf, (PROJECT_ID)), abi.encode(address(this)));
         vm.mockCall(DIRECTORY, abi.encodeCall(IJBDirectory.controllerOf, (PROJECT_ID)), abi.encode(CONTROLLER));
         vm.mockCall(

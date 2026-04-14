@@ -92,6 +92,9 @@ contract CCIPRefundTest is Test {
     CCIPSuckerHarness sucker;
 
     function setUp() public {
+        // Mock DIRECTORY.PROJECTS() so the JBSucker constructor can initialize the PROJECTS immutable.
+        vm.mockCall(DIRECTORY, abi.encodeCall(IJBDirectory.PROJECTS, ()), abi.encode(PROJECT));
+
         // Mock the deployer interface for the constructor.
         address mockDeployer = address(0x5001);
         vm.mockCall(

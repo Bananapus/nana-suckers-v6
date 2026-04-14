@@ -213,10 +213,10 @@ contract SuckerDeepAttacks is Test {
         vm.label(TERMINAL, "MOCK_TERMINAL");
         vm.label(MOCK_REGISTRY, "MOCK_REGISTRY");
 
-        sucker = _createTestSucker(PROJECT_ID, "deep_attack_salt");
-
-        // Mock directory
+        // Mock PROJECTS() so the constructor can cache the immutable.
         vm.mockCall(DIRECTORY, abi.encodeCall(IJBDirectory.PROJECTS, ()), abi.encode(PROJECT));
+
+        sucker = _createTestSucker(PROJECT_ID, "deep_attack_salt");
         vm.mockCall(PROJECT, abi.encodeCall(IERC721.ownerOf, (PROJECT_ID)), abi.encode(address(this)));
         vm.mockCall(DIRECTORY, abi.encodeCall(IJBDirectory.controllerOf, (PROJECT_ID)), abi.encode(CONTROLLER));
         vm.mockCall(

@@ -127,6 +127,9 @@ contract CodexToRemoteFeeIrrecoverableTest is Test {
     function setUp() public {
         terminal = new CodexTerminalStub();
 
+        // Mock DIRECTORY.PROJECTS() so the JBSucker constructor can initialize the PROJECTS immutable.
+        vm.mockCall(DIRECTORY, abi.encodeCall(IJBDirectory.PROJECTS, ()), abi.encode(PROJECT));
+
         CodexFeeIrrecoverableHarness singleton = new CodexFeeIrrecoverableHarness({
             directory: IJBDirectory(DIRECTORY),
             permissions: IJBPermissions(PERMISSIONS),

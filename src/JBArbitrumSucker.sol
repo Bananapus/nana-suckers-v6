@@ -98,7 +98,7 @@ contract JBArbitrumSucker is JBSucker, IJBArbitrumSucker {
     /// @return valid A flag if the sender is a valid representative of the remote peer.
     function _isRemotePeer(address sender) internal view override returns (bool) {
         // Convert the bytes32 peer to an address for comparison with EVM bridge contracts.
-        address peerAddress = _toAddress(peer());
+        address peerAddress = _peerAddress();
 
         // If we are the L1 peer,
         if (LAYER == JBLayer.L1) {
@@ -125,7 +125,7 @@ contract JBArbitrumSucker is JBSucker, IJBArbitrumSucker {
     )
         internal
     {
-        address peerAddress = _toAddress(peer());
+        address peerAddress = _peerAddress();
         // slither-disable-next-line unused-return,calls-loop
         ARBINBOX.unsafeCreateRetryableTicket{value: callTransportCost + nativeValue}({
             to: peerAddress,
@@ -137,6 +137,12 @@ contract JBArbitrumSucker is JBSucker, IJBArbitrumSucker {
             maxFeePerGas: maxFeePerGas,
             data: data
         });
+    }
+
+    /// @notice Approves the Arbitrum gateway to spend `amount` of `token`.
+    function _approveGateway(address token, uint256 amount) internal {
+        // slither-disable-next-line calls-loop
+        SafeERC20.forceApprove({token: IERC20(token), spender: GATEWAYROUTER.getGateway(token), value: amount});
     }
 
     /// @notice Uses the L1/L2 gateway to send the root and assets over the bridge to the peer.
@@ -191,13 +197,12 @@ contract JBArbitrumSucker is JBSucker, IJBArbitrumSucker {
         uint256 nativeValue;
 
         // Cache peer address to avoid redundant calls.
-        address peerAddress = _toAddress(peer());
+        address peerAddress = _peerAddress();
 
         // If the token is an ERC-20, bridge it to the peer.
         // If the amount is `0` then we do not need to bridge any ERC20.
         if (token != JBConstants.NATIVE_TOKEN && amount != 0) {
-            // slither-disable-next-line calls-loop
-            SafeERC20.forceApprove({token: IERC20(token), spender: GATEWAYROUTER.getGateway(token), value: amount});
+            _approveGateway(token, amount);
 
             // Convert bytes32 types to address at the Arbitrum bridge API boundary.
             // slither-disable-next-line calls-loop,unused-return
@@ -274,8 +279,7 @@ contract JBArbitrumSucker is JBSucker, IJBArbitrumSucker {
             }
 
             // Approve the tokens to be bridged.
-            // slither-disable-next-line calls-loop
-            SafeERC20.forceApprove({token: IERC20(token), spender: GATEWAYROUTER.getGateway(token), value: amount});
+            _approveGateway(token, amount);
 
             // Perform the ERC-20 bridge transfer. Convert bytes32 peer to address at the Arbitrum bridge API boundary.
             // slither-disable-start out-of-order-retryable
@@ -283,7 +287,7 @@ contract JBArbitrumSucker is JBSucker, IJBArbitrumSucker {
             IArbL1GatewayRouter(address(GATEWAYROUTER)).outboundTransferCustomRefund{value: tokenTransportCost}({
                 token: token,
                 refundTo: _msgSender(),
-                to: _toAddress(peer()),
+                to: _peerAddress(),
                 amount: amount,
                 maxGas: remoteToken.minGas,
                 gasPriceBid: maxFeePerGas,
