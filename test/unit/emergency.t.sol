@@ -198,9 +198,11 @@ contract SuckerEmergencyTest is Test {
         uint40 messagingDelay = 14 days;
 
         // Use bound() instead of vm.assume() to avoid excessive fuzz rejection.
+        // Each bound's min uses `prev + messagingDelay + 1`, so we must leave enough headroom
+        // in `currentTime` to guarantee min <= max for all three successive bounds.
         uint40 maxSafe = type(uint40).max - 3 * messagingDelay;
-        currentTime = uint40(bound(currentTime, 0, maxSafe));
-        deprecateAt = uint40(bound(deprecateAt, currentTime + messagingDelay + 1, maxSafe + messagingDelay));
+        currentTime = uint40(bound(currentTime, 0, maxSafe - 2));
+        deprecateAt = uint40(bound(deprecateAt, currentTime + messagingDelay + 1, maxSafe + messagingDelay - 1));
         changeDeprecationTo =
             uint40(bound(changeDeprecationTo, deprecateAt + messagingDelay + 1, maxSafe + 2 * messagingDelay));
 

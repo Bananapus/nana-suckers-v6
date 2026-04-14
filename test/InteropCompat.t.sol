@@ -15,6 +15,7 @@ import "../src/JBSucker.sol";
 import {IJBSuckerRegistry} from "../src/interfaces/IJBSuckerRegistry.sol";
 import {JBInboxTreeRoot} from "../src/structs/JBInboxTreeRoot.sol";
 import {JBMessageRoot} from "../src/structs/JBMessageRoot.sol";
+import {JBTokenSnapshot} from "../src/structs/JBTokenSnapshot.sol";
 import {JBRemoteToken} from "../src/structs/JBRemoteToken.sol";
 import {MerkleLib} from "../src/utils/MerkleLib.sol";
 
@@ -423,72 +424,75 @@ contract InteropCompat is Test {
     ///      Slot 4: remoteRoot.root (bytes32)
     function test_messageRoot_encoding() public pure {
         JBMessageRoot memory msg_ = JBMessageRoot({
-            version: 1,
+            version: 2,
             token: bytes32(uint256(0xAABBCCDD)),
             amount: 1000e18,
             remoteRoot: JBInboxTreeRoot({nonce: 42, root: bytes32(uint256(0x1234))}),
             sourceTotalSupply: 0,
-            sourceBalance: 0
+            sourceTokens: new JBTokenSnapshot[](0)
         });
 
         bytes memory encoded = abi.encode(msg_);
 
-        // Each field is 32 bytes in abi.encode
-        // Slot 0: version
+        // The struct contains a dynamic array (sourceTokens), so abi.encode produces a dynamic tuple.
+        // The first 32 bytes (offset 32 from `encoded`) is an offset pointer to the tuple data.
+        // Actual field data starts at offset 64.
+        // Slot 0 (offset 64): version
         uint8 decodedVersion;
         assembly {
-            decodedVersion := mload(add(encoded, 32))
+            decodedVersion := mload(add(encoded, 64))
         }
-        assertEq(decodedVersion, 1, "Version mismatch");
+        assertEq(decodedVersion, 2, "Version mismatch");
 
-        // Slot 1: token
+        // Slot 1 (offset 96): token
         bytes32 decodedToken;
         assembly {
-            decodedToken := mload(add(encoded, 64))
+            decodedToken := mload(add(encoded, 96))
         }
         assertEq(decodedToken, bytes32(uint256(0xAABBCCDD)), "Token mismatch");
 
-        // Slot 2: amount
+        // Slot 2 (offset 128): amount
         uint256 decodedAmount;
         assembly {
-            decodedAmount := mload(add(encoded, 96))
+            decodedAmount := mload(add(encoded, 128))
         }
         assertEq(decodedAmount, 1000e18, "Amount mismatch");
 
-        // Slot 3: nonce (part of JBInboxTreeRoot)
+        // Slot 3 (offset 160): nonce (part of JBInboxTreeRoot)
         uint64 decodedNonce;
         assembly {
-            decodedNonce := mload(add(encoded, 128))
+            decodedNonce := mload(add(encoded, 160))
         }
         assertEq(decodedNonce, 42, "Nonce mismatch");
 
-        // Slot 4: root (part of JBInboxTreeRoot)
+        // Slot 4 (offset 192): root (part of JBInboxTreeRoot)
         bytes32 decodedRoot;
         assembly {
-            decodedRoot := mload(add(encoded, 160))
+            decodedRoot := mload(add(encoded, 192))
         }
         assertEq(decodedRoot, bytes32(uint256(0x1234)), "Root mismatch");
     }
 
     function test_messageRoot_versionConstant() public view {
-        assertEq(sucker.MESSAGE_VERSION(), 1, "MESSAGE_VERSION should be 1");
+        assertEq(sucker.MESSAGE_VERSION(), 2, "MESSAGE_VERSION should be 2");
     }
 
     function test_messageRoot_amountFitsU128() public pure {
         // Verify that amounts up to uint128.max can be encoded
         JBMessageRoot memory msg_ = JBMessageRoot({
-            version: 1,
+            version: 2,
             token: bytes32(0),
             amount: type(uint128).max,
             remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(0)}),
             sourceTotalSupply: 0,
-            sourceBalance: 0
+            sourceTokens: new JBTokenSnapshot[](0)
         });
 
         bytes memory encoded = abi.encode(msg_);
+        // Offset +32 for dynamic tuple pointer, then slot 2 (amount) at offset 128.
         uint256 decodedAmount;
         assembly {
-            decodedAmount := mload(add(encoded, 96))
+            decodedAmount := mload(add(encoded, 128))
         }
         assertEq(decodedAmount, type(uint128).max, "u128 max amount encoding mismatch");
         // SVM reads this as u128 — the upper 128 bits must be zero

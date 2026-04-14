@@ -25,6 +25,7 @@ import {JBClaim} from "../src/structs/JBClaim.sol";
 import {JBLeaf} from "../src/structs/JBLeaf.sol";
 import {JBInboxTreeRoot} from "../src/structs/JBInboxTreeRoot.sol";
 import {JBMessageRoot} from "../src/structs/JBMessageRoot.sol";
+import {JBTokenSnapshot} from "../src/structs/JBTokenSnapshot.sol";
 import {JBRemoteToken} from "../src/structs/JBRemoteToken.sol";
 import {JBTokenMapping} from "../src/structs/JBTokenMapping.sol";
 import {MerkleLib} from "../src/utils/MerkleLib.sol";
@@ -225,6 +226,13 @@ contract SuckerDeepAttacks is Test {
         vm.mockCall(TERMINAL, abi.encodeWithSelector(IJBTerminal.addToBalanceOf.selector), abi.encode());
         // Mock terminal.pay so the toRemote fee payment try-catch doesn't revert on ABI decode of empty return data.
         vm.mockCall(TERMINAL, abi.encodeWithSelector(IJBTerminal.pay.selector), abi.encode(uint256(0)));
+
+        // Mock DIRECTORY.terminalsOf() so _buildTokenSnapshots() in _sendRoot() doesn't revert.
+        vm.mockCall(
+            DIRECTORY,
+            abi.encodeCall(IJBDirectory.terminalsOf, (PROJECT_ID)),
+            abi.encode(new IJBTerminal[](0))
+        );
     }
 
     function _createTestSucker(uint256 projectId, bytes32 salt) internal returns (DeepAttackSucker) {
@@ -284,12 +292,12 @@ contract SuckerDeepAttacks is Test {
 
         // Try to deliver a root with nonce=5 (same as current).
         JBMessageRoot memory root = JBMessageRoot({
-            version: 1,
+            version: 2,
             token: bytes32(uint256(uint160(TOKEN))),
             amount: 1 ether,
             remoteRoot: JBInboxTreeRoot({nonce: 5, root: bytes32(uint256(0xbeef))}),
             sourceTotalSupply: 0,
-            sourceBalance: 0
+            sourceTokens: new JBTokenSnapshot[](0)
         });
 
         vm.prank(address(sucker)); // peer = address(this) for clones
@@ -305,12 +313,12 @@ contract SuckerDeepAttacks is Test {
         sucker.test_setInboxRoot(TOKEN, 10, bytes32(uint256(0xdead)));
 
         JBMessageRoot memory root = JBMessageRoot({
-            version: 1,
+            version: 2,
             token: bytes32(uint256(uint160(TOKEN))),
             amount: 1 ether,
             remoteRoot: JBInboxTreeRoot({nonce: 3, root: bytes32(uint256(0xbeef))}),
             sourceTotalSupply: 0,
-            sourceBalance: 0
+            sourceTokens: new JBTokenSnapshot[](0)
         });
 
         vm.prank(address(sucker));
@@ -325,12 +333,12 @@ contract SuckerDeepAttacks is Test {
         sucker.test_setInboxRoot(TOKEN, 1, bytes32(uint256(0xaaa)));
 
         JBMessageRoot memory root = JBMessageRoot({
-            version: 1,
+            version: 2,
             token: bytes32(uint256(uint160(TOKEN))),
             amount: 1 ether,
             remoteRoot: JBInboxTreeRoot({nonce: 5, root: bytes32(uint256(0xbbb))}),
             sourceTotalSupply: 0,
-            sourceBalance: 0
+            sourceTokens: new JBTokenSnapshot[](0)
         });
 
         vm.prank(address(sucker));
@@ -349,12 +357,12 @@ contract SuckerDeepAttacks is Test {
         sucker.test_setInboxRoot(TOKEN, 1, bytes32(uint256(0xaaaa)));
 
         JBMessageRoot memory root = JBMessageRoot({
-            version: 1,
+            version: 2,
             token: bytes32(uint256(uint160(TOKEN))),
             amount: 1 ether,
             remoteRoot: JBInboxTreeRoot({nonce: 2, root: bytes32(uint256(0xbbbb))}),
             sourceTotalSupply: 0,
-            sourceBalance: 0
+            sourceTokens: new JBTokenSnapshot[](0)
         });
 
         // Roots are accepted in DEPRECATED state to prevent stranding tokens that were sent
@@ -379,12 +387,12 @@ contract SuckerDeepAttacks is Test {
         assertEq(uint256(sucker.state()), uint256(JBSuckerState.SENDING_DISABLED), "Should be SENDING_DISABLED");
 
         JBMessageRoot memory root = JBMessageRoot({
-            version: 1,
+            version: 2,
             token: bytes32(uint256(uint160(TOKEN))),
             amount: 1 ether,
             remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(0xabc))}),
             sourceTotalSupply: 0,
-            sourceBalance: 0
+            sourceTokens: new JBTokenSnapshot[](0)
         });
 
         vm.prank(address(sucker));
@@ -720,18 +728,23 @@ contract SuckerDeepAttacks is Test {
         assertEq(uint256(sucker.state()), uint256(JBSuckerState.ENABLED));
 
         // Set deprecation 30 days from now.
+        // NOTE: We store the timestamps in local variables BEFORE any vm.warp() calls
+        // to prevent the via-IR optimizer from re-materializing `block.timestamp + 30 days`
+        // after a warp changes block.timestamp (solc via-IR rematerialization bug).
         uint256 deprecateAt = block.timestamp + 30 days;
+        uint256 sendingDisabledAt = deprecateAt - 14 days;
+        uint256 justBeforeDeprecateAt = deprecateAt - 1;
         sucker.test_setDeprecatedAfter(deprecateAt);
 
         // Still before (deprecateAt - 14 days) → DEPRECATION_PENDING.
         assertEq(uint256(sucker.state()), uint256(JBSuckerState.DEPRECATION_PENDING));
 
         // Warp to exactly (deprecateAt - 14 days) → SENDING_DISABLED.
-        vm.warp(deprecateAt - 14 days);
+        vm.warp(sendingDisabledAt);
         assertEq(uint256(sucker.state()), uint256(JBSuckerState.SENDING_DISABLED));
 
         // Warp to just before deprecateAt → still SENDING_DISABLED.
-        vm.warp(deprecateAt - 1);
+        vm.warp(justBeforeDeprecateAt);
         assertEq(uint256(sucker.state()), uint256(JBSuckerState.SENDING_DISABLED));
 
         // Warp to exactly deprecateAt → DEPRECATED.
@@ -1468,12 +1481,12 @@ contract SuckerDeepAttacks is Test {
     /// @notice fromRemote with wrong message version → should revert with InvalidMessageVersion.
     function test_fromRemote_wrongVersion_reverts() public {
         JBMessageRoot memory root = JBMessageRoot({
-            version: 0, // Wrong version — current is 1
+            version: 0, // Wrong version — current is 2
             token: bytes32(uint256(uint160(TOKEN))),
             amount: 1 ether,
             remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(0xbeef))}),
             sourceTotalSupply: 0,
-            sourceBalance: 0
+            sourceTokens: new JBTokenSnapshot[](0)
         });
 
         vm.expectRevert(
@@ -1486,16 +1499,16 @@ contract SuckerDeepAttacks is Test {
     /// @notice fromRemote with future message version → should revert with InvalidMessageVersion.
     function test_fromRemote_futureVersion_reverts() public {
         JBMessageRoot memory root = JBMessageRoot({
-            version: 2, // Future version
+            version: 3, // Future version
             token: bytes32(uint256(uint160(TOKEN))),
             amount: 1 ether,
             remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(0xbeef))}),
             sourceTotalSupply: 0,
-            sourceBalance: 0
+            sourceTokens: new JBTokenSnapshot[](0)
         });
 
         vm.expectRevert(
-            abi.encodeWithSelector(JBSucker.JBSucker_InvalidMessageVersion.selector, 2, sucker.MESSAGE_VERSION())
+            abi.encodeWithSelector(JBSucker.JBSucker_InvalidMessageVersion.selector, 3, sucker.MESSAGE_VERSION())
         );
         vm.prank(address(sucker));
         sucker.fromRemote(root);
@@ -1509,7 +1522,7 @@ contract SuckerDeepAttacks is Test {
             amount: 0,
             remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(0xbeef))}),
             sourceTotalSupply: 0,
-            sourceBalance: 0
+            sourceTokens: new JBTokenSnapshot[](0)
         });
 
         vm.prank(address(sucker));
@@ -1534,7 +1547,7 @@ contract SuckerDeepAttacks is Test {
             amount: 1 ether,
             remoteRoot: JBInboxTreeRoot({nonce: 3, root: bytes32(uint256(0xbeef))}),
             sourceTotalSupply: 0,
-            sourceBalance: 0
+            sourceTokens: new JBTokenSnapshot[](0)
         });
 
         vm.expectEmit(true, false, false, true, address(sucker));
@@ -1666,7 +1679,7 @@ contract SuckerDeepAttacks is Test {
             amount: 1 ether,
             remoteRoot: JBInboxTreeRoot({nonce: 5, root: bytes32(uint256(0xbeef))}),
             sourceTotalSupply: 0,
-            sourceBalance: 0
+            sourceTokens: new JBTokenSnapshot[](0)
         });
 
         vm.expectEmit(true, false, false, true, address(sucker));

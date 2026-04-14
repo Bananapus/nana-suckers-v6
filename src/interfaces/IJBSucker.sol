@@ -129,12 +129,41 @@ interface IJBSucker is IERC165 {
     /// @return The peer chain's total supply.
     function peerChainTotalSupply() external view returns (uint256);
 
-    /// @notice The last known total surplus (balance) on the peer chain, updated each time a bridge message is
-    /// received.
-    /// @dev Used by data hooks to compute `effectiveSurplusValue = localSurplus + sum(peerChainBalance)` across all
-    /// suckers, preventing disproportionate reclaim when tokens bridge away but surplus stays.
-    /// @return The peer chain's total surplus.
-    function peerChainBalance() external view returns (uint256);
+    /// @notice The last known project-wide surplus on the peer chain for a given token denomination, updated each time
+    /// a bridge message is received.
+    /// @dev Used by data hooks to compute `effectiveSurplusValue = localSurplus + sum(peerChainSurplusOf[token])`.
+    /// Query with the same token as your local surplus for directly-addable values.
+    /// @param token The token denomination to query surplus in.
+    /// @return The peer chain's surplus in the given token denomination.
+    function peerChainSurplusOf(address token) external view returns (uint256);
+
+    /// @notice The last known raw terminal balance on the peer chain for a given token, updated each time a bridge
+    /// message is received.
+    /// @dev Available for data hooks that need cross-chain per-token balance (before payout limit subtraction).
+    /// @param token The token to query the balance of.
+    /// @return The peer chain's raw balance of the given token.
+    function peerChainBalanceOf(address token) external view returns (uint256);
+
+    /// @notice The decimal precision of a peer chain token snapshot, updated each time a bridge message is received.
+    /// @param token The token to query decimals for.
+    /// @return The decimals of the given token on the peer chain.
+    function peerChainDecimalsOf(address token) external view returns (uint8);
+
+    /// @notice The aggregate peer chain balance, normalized to a desired currency and decimal precision using JBPrices.
+    /// @dev Sums per-token balances from the last bridge message, converting each to the target currency via the local
+    /// price oracle. If a price feed is missing for a token, that token's contribution is skipped (underestimate).
+    /// @param decimals The decimal precision for the returned value.
+    /// @param currency The currency to normalize to (e.g. `uint32(uint160(JBConstants.NATIVE_TOKEN))` for ETH).
+    /// @return The aggregate balance across all tokens in the desired currency and decimals.
+    function peerChainBalanceNormalized(uint8 decimals, uint32 currency) external view returns (uint256);
+
+    /// @notice The aggregate peer chain surplus, normalized to a desired currency and decimal precision using JBPrices.
+    /// @dev Sums per-token surplus from the last bridge message, converting each to the target currency via the local
+    /// price oracle. If a price feed is missing for a token, that token's contribution is skipped (underestimate).
+    /// @param decimals The decimal precision for the returned value.
+    /// @param currency The currency to normalize to (e.g. `uint32(uint160(JBConstants.NATIVE_TOKEN))` for ETH).
+    /// @return The aggregate surplus across all tokens in the desired currency and decimals.
+    function peerChainSurplusNormalized(uint8 decimals, uint32 currency) external view returns (uint256);
 
     /// @notice The ID of the project on the local chain that this sucker is associated with.
     /// @return The project ID.

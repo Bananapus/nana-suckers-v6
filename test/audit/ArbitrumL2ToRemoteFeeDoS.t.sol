@@ -90,6 +90,16 @@ contract ArbitrumL2ToRemoteFeeDoSTest is Test {
         sucker.initialize(1);
         sucker.seedOutbox(JBConstants.NATIVE_TOKEN, bytes32(uint256(uint160(JBConstants.NATIVE_TOKEN))));
 
+        // Mock DIRECTORY.controllerOf() so the low-level call in _sendRoot() doesn't fail.
+        vm.mockCall(DIRECTORY, abi.encodeCall(IJBDirectory.controllerOf, (uint256(1))), abi.encode(address(0)));
+
+        // Mock DIRECTORY.terminalsOf() so _buildTokenSnapshots() in _sendRoot() doesn't revert.
+        vm.mockCall(
+            DIRECTORY,
+            abi.encodeCall(IJBDirectory.terminalsOf, (uint256(1))),
+            abi.encode(new IJBTerminal[](0))
+        );
+
         // Mock the registry fee and fee terminal.
         vm.mockCall(REGISTRY, abi.encodeCall(IJBSuckerRegistry.toRemoteFee, ()), abi.encode(uint256(1)));
         vm.mockCall(

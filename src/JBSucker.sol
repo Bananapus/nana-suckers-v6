@@ -5,11 +5,16 @@ import {JBPermissioned} from "@bananapus/core-v6/src/abstract/JBPermissioned.sol
 import {IJBCashOutTerminal} from "@bananapus/core-v6/src/interfaces/IJBCashOutTerminal.sol";
 import {IJBController} from "@bananapus/core-v6/src/interfaces/IJBController.sol";
 import {IJBDirectory} from "@bananapus/core-v6/src/interfaces/IJBDirectory.sol";
+import {IJBMultiTerminal} from "@bananapus/core-v6/src/interfaces/IJBMultiTerminal.sol";
 import {IJBPermissions} from "@bananapus/core-v6/src/interfaces/IJBPermissions.sol";
 import {IJBPermissioned} from "@bananapus/core-v6/src/interfaces/IJBPermissioned.sol";
+import {IJBPrices} from "@bananapus/core-v6/src/interfaces/IJBPrices.sol";
 import {IJBTerminal} from "@bananapus/core-v6/src/interfaces/IJBTerminal.sol";
+import {IJBTerminalStore} from "@bananapus/core-v6/src/interfaces/IJBTerminalStore.sol";
 import {IJBTokens} from "@bananapus/core-v6/src/interfaces/IJBTokens.sol";
+import {JBAccountingContext} from "@bananapus/core-v6/src/structs/JBAccountingContext.sol";
 import {JBConstants} from "@bananapus/core-v6/src/libraries/JBConstants.sol";
+import {JBFixedPointNumber} from "@bananapus/core-v6/src/libraries/JBFixedPointNumber.sol";
 import {JBPermissionIds} from "@bananapus/permission-ids-v6/src/JBPermissionIds.sol";
 import {ERC2771Context} from "@openzeppelin/contracts/metatx/ERC2771Context.sol";
 import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
@@ -28,6 +33,7 @@ import {JBInboxTreeRoot} from "./structs/JBInboxTreeRoot.sol";
 import {JBMessageRoot} from "./structs/JBMessageRoot.sol";
 import {JBOutboxTree} from "./structs/JBOutboxTree.sol";
 import {JBRemoteToken} from "./structs/JBRemoteToken.sol";
+import {JBTokenSnapshot} from "./structs/JBTokenSnapshot.sol";
 import {JBTokenMapping} from "./structs/JBTokenMapping.sol";
 import {MerkleLib} from "./utils/MerkleLib.sol";
 
@@ -125,15 +131,26 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     /// suckers, preventing cash out tax bypass on chains where a holder dominates the local supply.
     uint256 public peerChainTotalSupply;
 
-    /// @notice The last known total surplus (balance) on the peer chain, updated each time a bridge message is
-    /// received.
-    /// @dev Used by data hooks to compute `effectiveSurplusValue = localSurplus + sum(peerChainBalance)` across all
-    /// suckers, preventing disproportionate reclaim when tokens bridge away but surplus stays.
-    uint256 public peerChainBalance;
+    /// @notice The last known project-wide surplus on the peer chain for a given token denomination, updated each time
+    /// a bridge message is received.
+    /// @dev Used by data hooks to compute `effectiveSurplusValue = localSurplus + sum(peerChainSurplusOf[token])`
+    /// across all suckers. Query with the same token as your local surplus for directly-addable values.
+    mapping(address token => uint256) public peerChainSurplusOf;
+
+    /// @notice The last known raw terminal balance on the peer chain for a given token, updated each time a bridge
+    /// message is received.
+    /// @dev Available for data hooks that need cross-chain per-token balance (before payout limit subtraction).
+    mapping(address token => uint256) public peerChainBalanceOf;
+
+    /// @notice The decimal precision of a peer chain token snapshot, updated each time a bridge message is received.
+    mapping(address token => uint8) public peerChainDecimalsOf;
 
     //*********************************************************************//
     // --------------------- private stored properties ------------------- //
     //*********************************************************************//
+
+    /// @notice Tracks which tokens have entries in the peer chain snapshot mappings, so they can be cleared on update.
+    address[] private _peerChainTokens;
 
     /// @notice The timestamp after which the sucker is entirely deprecated.
     uint256 internal deprecatedAfter;
@@ -250,6 +267,22 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     /// chains -- for this reason the default same-address behavior is preferred.
     function peer() public view virtual returns (bytes32) {
         return _toBytes32(address(this));
+    }
+
+    /// @notice The aggregate peer chain balance, normalized to a desired currency and decimal precision using JBPrices.
+    /// @param decimals The decimal precision for the returned value.
+    /// @param currency The currency to normalize to (e.g. `uint32(uint160(JBConstants.NATIVE_TOKEN))` for ETH).
+    /// @return total The aggregate balance across all tokens in the desired currency and decimals.
+    function peerChainBalanceNormalized(uint8 decimals, uint32 currency) external view returns (uint256 total) {
+        return _normalizeSnapshots({decimals: decimals, currency: currency, useBalance: true});
+    }
+
+    /// @notice The aggregate peer chain surplus, normalized to a desired currency and decimal precision using JBPrices.
+    /// @param decimals The decimal precision for the returned value.
+    /// @param currency The currency to normalize to (e.g. `uint32(uint160(JBConstants.NATIVE_TOKEN))` for ETH).
+    /// @return total The aggregate surplus across all tokens in the desired currency and decimals.
+    function peerChainSurplusNormalized(uint8 decimals, uint32 currency) external view returns (uint256 total) {
+        return _normalizeSnapshots({decimals: decimals, currency: currency, useBalance: false});
     }
 
     /// @notice The ID of the project (on the local chain) that this sucker is associated with.
@@ -541,9 +574,34 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
                 peerChainTotalSupply = root.sourceTotalSupply;
             }
 
-            // Update the peer chain's known surplus for cross-chain proportional reclaim calculations.
-            // Always update (zero is a valid surplus value — it means the peer chain has no surplus).
-            peerChainBalance = root.sourceBalance;
+            // Clear previous per-token snapshots.
+            uint256 prevTokenCount = _peerChainTokens.length;
+            for (uint256 j; j < prevTokenCount;) {
+                address t = _peerChainTokens[j];
+                delete peerChainSurplusOf[t];
+                delete peerChainBalanceOf[t];
+                delete peerChainDecimalsOf[t];
+                unchecked {
+                    ++j;
+                }
+            }
+            delete _peerChainTokens;
+
+            // Store new per-token snapshots from the bridge message.
+            uint256 numSnapshots = root.sourceTokens.length;
+            for (uint256 j; j < numSnapshots;) {
+                JBTokenSnapshot calldata snap = root.sourceTokens[j];
+                // Track tokens for future clearing. Avoid duplicates (multiple terminals with same token).
+                if (peerChainSurplusOf[snap.token] == 0 && peerChainBalanceOf[snap.token] == 0) {
+                    _peerChainTokens.push(snap.token);
+                }
+                peerChainSurplusOf[snap.token] += snap.surplus;
+                peerChainBalanceOf[snap.token] += snap.balance;
+                peerChainDecimalsOf[snap.token] = snap.decimals;
+                unchecked {
+                    ++j;
+                }
+            }
 
             emit NewInboxTreeRoot({
                 token: localToken, nonce: root.remoteRoot.nonce, root: root.remoteRoot.root, caller: _msgSender()
@@ -1115,37 +1173,30 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         // Emit an event for the relayers to watch for.
         emit RootToRemote({root: root, token: token, index: index, nonce: nonce, caller: _msgSender()});
 
-        // Get the current local total supply (including reserved tokens) and local surplus to include in the
-        // bridge message. The peer chain uses these to track cross-chain supply and surplus for cash out
-        // calculations.
+        // Get the current local total supply (including reserved tokens) and per-token snapshots of surplus and
+        // balance to include in the bridge message. The peer chain uses these to track cross-chain supply, surplus,
+        // and balance for cash out and data hook calculations.
         uint256 localTotalSupply;
-        uint256 localSurplus;
+        JBTokenSnapshot[] memory snapshots;
         {
             uint256 _projectId = projectId();
+            // Use low-level calls to safely handle non-contract addresses in the call chain.
             // slither-disable-next-line calls-loop
-            try IJBController(address(DIRECTORY.controllerOf(_projectId))).totalTokenSupplyWithReservedTokensOf(
-                _projectId
-            ) returns (uint256 supply) {
-                localTotalSupply = supply;
-            } catch {
-                // If the controller call fails, send 0 — the peer will keep its last known value.
+            (bool controllerOk, bytes memory controllerData) = address(DIRECTORY).staticcall(
+                abi.encodeCall(IJBDirectory.controllerOf, (_projectId))
+            );
+            if (controllerOk && controllerData.length >= 32) {
+                address controller = abi.decode(controllerData, (address));
+                // slither-disable-next-line calls-loop
+                (bool supplyOk, bytes memory supplyData) = controller.staticcall(
+                    abi.encodeCall(IJBController.totalTokenSupplyWithReservedTokensOf, (_projectId))
+                );
+                if (supplyOk && supplyData.length >= 32) {
+                    localTotalSupply = abi.decode(supplyData, (uint256));
+                }
             }
 
-            // Sum surplus across all terminals for this project.
-            IJBTerminal[] memory terminals = DIRECTORY.terminalsOf(_projectId);
-            for (uint256 i; i < terminals.length;) {
-                // slither-disable-next-line calls-loop
-                try terminals[i].currentSurplusOf(
-                    _projectId, new address[](0), 18, uint32(uint160(JBConstants.NATIVE_TOKEN))
-                ) returns (uint256 terminalSurplus) {
-                    localSurplus += terminalSurplus;
-                } catch {
-                    // If a terminal call fails, skip it — underestimates surplus (safe direction).
-                }
-                unchecked {
-                    ++i;
-                }
-            }
+            snapshots = _buildTokenSnapshots(_projectId);
         }
 
         // Build the message to be sent.
@@ -1155,7 +1206,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
             amount: amount,
             remoteRoot: JBInboxTreeRoot({nonce: nonce, root: root}),
             sourceTotalSupply: localTotalSupply,
-            sourceBalance: localSurplus
+            sourceTokens: snapshots
         });
 
         // Execute the chain/sucker specific logic for transferring the assets and communicating the root.
@@ -1346,5 +1397,158 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
             index: index,
             leaves: leaves
         });
+    }
+
+    /// @notice Build per-token snapshots of surplus and balance across all terminals for the project.
+    /// @dev Iterates each terminal's accounting contexts, deduplicates tokens, and aggregates balance (via
+    /// STORE.balanceOf) and surplus (via currentSurplusOf per denomination) for each unique token.
+    /// @param _projectId The project ID to build snapshots for.
+    /// @return snapshots The array of per-token snapshots.
+    function _buildTokenSnapshots(uint256 _projectId) internal view returns (JBTokenSnapshot[] memory snapshots) {
+        IJBTerminal[] memory terminals = DIRECTORY.terminalsOf(_projectId);
+        uint256 numTerminals = terminals.length;
+
+        // First pass: count unique tokens across all terminals.
+        // Use a temporary array to track unique tokens and their decimals.
+        address[] memory uniqueTokens = new address[](numTerminals * 10); // generous upper bound
+        uint8[] memory tokenDecimals = new uint8[](uniqueTokens.length);
+        uint256 uniqueCount;
+
+        for (uint256 i; i < numTerminals;) {
+            // slither-disable-next-line calls-loop
+            try terminals[i].accountingContextsOf(_projectId) returns (
+                JBAccountingContext[] memory contexts
+            ) {
+                for (uint256 j; j < contexts.length;) {
+                    address tkn = contexts[j].token;
+                    // Check if we've already seen this token.
+                    bool found;
+                    for (uint256 k; k < uniqueCount;) {
+                        if (uniqueTokens[k] == tkn) {
+                            found = true;
+                            break;
+                        }
+                        unchecked {
+                            ++k;
+                        }
+                    }
+                    if (!found) {
+                        uniqueTokens[uniqueCount] = tkn;
+                        tokenDecimals[uniqueCount] = contexts[j].decimals;
+                        unchecked {
+                            ++uniqueCount;
+                        }
+                    }
+                    unchecked {
+                        ++j;
+                    }
+                }
+            } catch {
+                // If a terminal doesn't support accountingContextsOf, skip it.
+            }
+            unchecked {
+                ++i;
+            }
+        }
+
+        // Second pass: for each unique token, aggregate balance and surplus.
+        snapshots = new JBTokenSnapshot[](uniqueCount);
+        for (uint256 i; i < uniqueCount;) {
+            address tkn = uniqueTokens[i];
+            uint8 dec = tokenDecimals[i];
+            uint256 totalBalance;
+            uint256 totalSurplus;
+
+            // Aggregate balance from each terminal's store.
+            for (uint256 j; j < numTerminals;) {
+                // slither-disable-next-line calls-loop
+                try IJBMultiTerminal(address(terminals[j])).STORE().balanceOf(
+                    address(terminals[j]), _projectId, tkn
+                ) returns (uint256 bal) {
+                    totalBalance += bal;
+                } catch {
+                    // Skip terminals that don't have this token.
+                }
+                unchecked {
+                    ++j;
+                }
+            }
+
+            // Get surplus denominated in this token across all terminals.
+            // currentSurplusOf aggregates across all terminals internally.
+            // slither-disable-next-line calls-loop
+            try terminals[0].currentSurplusOf(
+                _projectId, new address[](0), dec, uint32(uint160(tkn))
+            ) returns (uint256 surplus) {
+                totalSurplus = surplus;
+            } catch {
+                // If surplus computation fails, leave as 0 (safe underestimate).
+            }
+
+            snapshots[i] = JBTokenSnapshot({token: tkn, decimals: dec, surplus: totalSurplus, balance: totalBalance});
+            unchecked {
+                ++i;
+            }
+        }
+    }
+
+    /// @notice Normalize per-token peer chain snapshots to a single currency and decimal precision.
+    /// @dev Iterates `_peerChainTokens`, converts each value via JBPrices to the target currency.
+    /// If a price feed is missing, that token is silently skipped (underestimate, safe direction).
+    /// @param decimals The target decimal precision.
+    /// @param currency The target currency (e.g. `uint32(uint160(JBConstants.NATIVE_TOKEN))`).
+    /// @param useBalance If true, normalize balances; if false, normalize surpluses.
+    /// @return total The aggregate normalized value.
+    function _normalizeSnapshots(
+        uint8 decimals,
+        uint32 currency,
+        bool useBalance
+    )
+        internal
+        view
+        returns (uint256 total)
+    {
+        uint256 numTokens = _peerChainTokens.length;
+        if (numTokens == 0) return 0;
+
+        uint256 _projectId = projectId();
+
+        // Get a reference to JBPrices from the first terminal's store.
+        IJBPrices prices;
+        {
+            IJBTerminal[] memory terminals = DIRECTORY.terminalsOf(_projectId);
+            if (terminals.length == 0) return 0;
+            // slither-disable-next-line calls-loop
+            try IJBMultiTerminal(address(terminals[0])).STORE() returns (IJBTerminalStore store) {
+                prices = store.PRICES();
+            } catch {
+                return 0;
+            }
+        }
+
+        for (uint256 i; i < numTokens;) {
+            address tkn = _peerChainTokens[i];
+            uint256 rawValue = useBalance ? peerChainBalanceOf[tkn] : peerChainSurplusOf[tkn];
+            uint8 rawDecimals = peerChainDecimalsOf[tkn];
+            uint32 tokenCurrency = uint32(uint160(tkn));
+
+            if (rawValue != 0) {
+                if (tokenCurrency == currency) {
+                    // Same currency — just adjust decimals.
+                    total += JBFixedPointNumber.adjustDecimals(rawValue, rawDecimals, decimals);
+                } else {
+                    // Convert via price oracle.
+                    // slither-disable-next-line calls-loop
+                    try prices.pricePerUnitOf(_projectId, tokenCurrency, currency, decimals) returns (uint256 price) {
+                        total += (rawValue * price) / (10 ** rawDecimals);
+                    } catch {
+                        // Skip if no price feed — underestimate (safe direction).
+                    }
+                }
+            }
+            unchecked {
+                ++i;
+            }
+        }
     }
 }

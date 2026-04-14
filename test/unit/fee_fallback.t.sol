@@ -132,6 +132,13 @@ contract FeeFallbackTest is Test {
 
         // Mock the registry's toRemoteFee() to return a non-zero fee.
         vm.mockCall(REGISTRY, abi.encodeCall(IJBSuckerRegistry.toRemoteFee, ()), abi.encode(TO_REMOTE_FEE));
+
+        // Mock DIRECTORY.terminalsOf() so _buildTokenSnapshots() in _sendRoot() doesn't revert.
+        vm.mockCall(
+            DIRECTORY,
+            abi.encodeCall(IJBDirectory.terminalsOf, (PROJECT_ID)),
+            abi.encode(new IJBTerminal[](0))
+        );
     }
 
     /// @notice toRemote() with msg.value == fee, no fee terminal, zero-cost bridge.

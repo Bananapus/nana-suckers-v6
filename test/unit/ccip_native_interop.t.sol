@@ -21,6 +21,7 @@ import {JBCCIPSuckerDeployer} from "../../src/deployers/JBCCIPSuckerDeployer.sol
 import {IJBSuckerRegistry} from "../../src/interfaces/IJBSuckerRegistry.sol";
 import {JBInboxTreeRoot} from "../../src/structs/JBInboxTreeRoot.sol";
 import {JBMessageRoot} from "../../src/structs/JBMessageRoot.sol";
+import {JBTokenSnapshot} from "../../src/structs/JBTokenSnapshot.sol";
 import {JBRemoteToken} from "../../src/structs/JBRemoteToken.sol";
 import {JBTokenMapping} from "../../src/structs/JBTokenMapping.sol";
 import {MerkleLib} from "../../src/utils/MerkleLib.sol";
@@ -332,12 +333,12 @@ contract CCIPNativeInteropTest is Test {
 
         // Build CCIP message with NATIVE_TOKEN root.
         JBMessageRoot memory msgRoot = JBMessageRoot({
-            version: 1,
+            version: 2,
             token: bytes32(uint256(uint160(JBConstants.NATIVE_TOKEN))),
             amount: bridgeAmount,
             remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(0xdead))}),
             sourceTotalSupply: 0,
-            sourceBalance: 0
+            sourceTokens: new JBTokenSnapshot[](0)
         });
 
         Client.EVMTokenAmount[] memory tokenAmounts = new Client.EVMTokenAmount[](1);
@@ -370,12 +371,12 @@ contract CCIPNativeInteropTest is Test {
         uint256 bridgeAmount = 1 ether;
 
         JBMessageRoot memory msgRoot = JBMessageRoot({
-            version: 1,
+            version: 2,
             token: bytes32(uint256(uint160(celoETH))), // ERC20, not NATIVE_TOKEN
             amount: bridgeAmount,
             remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(0xbeef))}),
             sourceTotalSupply: 0,
-            sourceBalance: 0
+            sourceTokens: new JBTokenSnapshot[](0)
         });
 
         Client.EVMTokenAmount[] memory tokenAmounts = new Client.EVMTokenAmount[](1);
@@ -417,12 +418,12 @@ contract CCIPNativeInteropTest is Test {
         });
 
         JBMessageRoot memory msgRoot = JBMessageRoot({
-            version: 1,
+            version: 2,
             token: bytes32(uint256(uint160(celoETH))),
             amount: amount,
             remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(0xdead))}),
             sourceTotalSupply: 0,
-            sourceBalance: 0
+            sourceTokens: new JBTokenSnapshot[](0)
         });
 
         // Verify MockWETH balance is 0 before.
@@ -474,12 +475,12 @@ contract CCIPNativeInteropTest is Test {
         // Step 4: Simulate receiving on the "Celo side" — the message arrives with
         // root.token = celoETH (the ERC20 representation of ETH on Celo).
         JBMessageRoot memory msgRoot = JBMessageRoot({
-            version: 1,
+            version: 2,
             token: bytes32(uint256(uint160(celoETH))),
             amount: 1 ether,
             remoteRoot: JBInboxTreeRoot({nonce: 1, root: outboxRoot}),
             sourceTotalSupply: 0,
-            sourceBalance: 0
+            sourceTokens: new JBTokenSnapshot[](0)
         });
 
         Client.Any2EVMMessage memory message = Client.Any2EVMMessage({
@@ -512,12 +513,12 @@ contract CCIPNativeInteropTest is Test {
         // Simulate receiving on ETH mainnet — root.token = NATIVE_TOKEN because
         // on mainnet, ETH is the native token. CCIP delivers WETH.
         JBMessageRoot memory msgRoot = JBMessageRoot({
-            version: 1,
+            version: 2,
             token: bytes32(uint256(uint160(JBConstants.NATIVE_TOKEN))),
             amount: bridgeAmount,
             remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(0xcafe))}),
             sourceTotalSupply: 0,
-            sourceBalance: 0
+            sourceTokens: new JBTokenSnapshot[](0)
         });
 
         Client.EVMTokenAmount[] memory tokenAmounts = new Client.EVMTokenAmount[](1);
@@ -582,12 +583,12 @@ contract CCIPNativeInteropTest is Test {
             enabled: true, emergencyHatch: false, minGas: 200_000, addr: bytes32(uint256(uint160(celoETH)))
         });
         JBMessageRoot memory sendMsg = JBMessageRoot({
-            version: 1,
+            version: 2,
             token: bytes32(uint256(uint160(celoETH))),
             amount: bridgeAmount,
             remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(0xaaa))}),
             sourceTotalSupply: 0,
-            sourceBalance: 0
+            sourceTokens: new JBTokenSnapshot[](0)
         });
         ccipSucker.exposed_sendRootOverAMB{value: 0.01 ether}(
             0.01 ether, JBConstants.NATIVE_TOKEN, bridgeAmount, remoteToken, sendMsg
@@ -607,12 +608,12 @@ contract CCIPNativeInteropTest is Test {
         uint256 ethBefore = address(ccipSucker).balance;
 
         JBMessageRoot memory recvMsg = JBMessageRoot({
-            version: 1,
+            version: 2,
             token: bytes32(uint256(uint160(JBConstants.NATIVE_TOKEN))),
             amount: bridgeAmount,
             remoteRoot: JBInboxTreeRoot({nonce: 2, root: bytes32(uint256(0xbbb))}),
             sourceTotalSupply: 0,
-            sourceBalance: 0
+            sourceTokens: new JBTokenSnapshot[](0)
         });
 
         Client.EVMTokenAmount[] memory tokenAmounts = new Client.EVMTokenAmount[](1);

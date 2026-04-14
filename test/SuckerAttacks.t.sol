@@ -21,6 +21,7 @@ import {JBClaim} from "../src/structs/JBClaim.sol";
 import {JBLeaf} from "../src/structs/JBLeaf.sol";
 import {JBInboxTreeRoot} from "../src/structs/JBInboxTreeRoot.sol";
 import {JBMessageRoot} from "../src/structs/JBMessageRoot.sol";
+import {JBTokenSnapshot} from "../src/structs/JBTokenSnapshot.sol";
 import {JBRemoteToken} from "../src/structs/JBRemoteToken.sol";
 import {MerkleLib} from "../src/utils/MerkleLib.sol";
 
@@ -187,12 +188,12 @@ contract SuckerAttacks is Test {
         address spoofedRouter = makeAddr("spoofedRouter");
 
         JBMessageRoot memory fakeRoot = JBMessageRoot({
-            version: 1,
+            version: 2,
             token: bytes32(uint256(uint160(JBConstants.NATIVE_TOKEN))),
             amount: 1 ether,
             remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(123))}),
             sourceTotalSupply: 0,
-            sourceBalance: 0
+            sourceTokens: new JBTokenSnapshot[](0)
         });
 
         // Non-peer calling fromRemote should revert
@@ -213,12 +214,12 @@ contract SuckerAttacks is Test {
         address wrongSender = makeAddr("wrongPeer");
 
         JBMessageRoot memory root = JBMessageRoot({
-            version: 1,
+            version: 2,
             token: bytes32(uint256(uint160(JBConstants.NATIVE_TOKEN))),
             amount: 1 ether,
             remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(456))}),
             sourceTotalSupply: 0,
-            sourceBalance: 0
+            sourceTokens: new JBTokenSnapshot[](0)
         });
 
         vm.prank(wrongSender);
@@ -237,12 +238,12 @@ contract SuckerAttacks is Test {
         AttackTestSucker otherSucker = _createTestSucker(2, "other_salt");
 
         JBMessageRoot memory root = JBMessageRoot({
-            version: 1,
+            version: 2,
             token: bytes32(uint256(uint160(JBConstants.NATIVE_TOKEN))),
             amount: 0,
             remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(789))}),
             sourceTotalSupply: 0,
-            sourceBalance: 0
+            sourceTokens: new JBTokenSnapshot[](0)
         });
 
         // Other sucker calling fromRemote should be rejected
@@ -266,12 +267,12 @@ contract SuckerAttacks is Test {
         // This is the expected behavior — only the peer can submit roots
         if (peerAddr == bytes32(0)) {
             JBMessageRoot memory root = JBMessageRoot({
-                version: 1,
+                version: 2,
                 token: bytes32(uint256(uint160(JBConstants.NATIVE_TOKEN))),
                 amount: 0,
                 remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(0)}),
                 sourceTotalSupply: 0,
-                sourceBalance: 0
+                sourceTokens: new JBTokenSnapshot[](0)
             });
 
             vm.expectRevert();

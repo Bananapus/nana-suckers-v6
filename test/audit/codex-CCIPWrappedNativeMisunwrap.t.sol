@@ -18,6 +18,7 @@ import {JBClaim} from "../../src/structs/JBClaim.sol";
 import {JBInboxTreeRoot} from "../../src/structs/JBInboxTreeRoot.sol";
 import {JBLeaf} from "../../src/structs/JBLeaf.sol";
 import {JBMessageRoot} from "../../src/structs/JBMessageRoot.sol";
+import {JBTokenSnapshot} from "../../src/structs/JBTokenSnapshot.sol";
 
 
 contract CodexMockWETH {
@@ -107,7 +108,9 @@ contract CodexCCIPWrappedNativeMisunwrapTest is Test {
         sucker.initialize(PROJECT_ID);
     }
 
-    function test_ccipReceive_unwrapsWrappedNativeEvenWhenClaimTokenIsWeth() external {
+    /// @notice When root.token is the WETH address (not NATIVE_TOKEN), WETH is correctly
+    /// kept as ERC-20 — no unwrap occurs. This ensures claim settlement can find WETH balance.
+    function test_ccipReceive_keepsWethWhenRootTokenIsWethAddress() external {
         uint256 amount = 1 ether;
         address beneficiary = makeAddr("beneficiary");
 
@@ -149,7 +152,7 @@ contract CodexCCIPWrappedNativeMisunwrapTest is Test {
         proof[31] = 0x8448818bb4ae4562849e949e17ac16e0be16688e156b5cf15e098c627c0056a9;
 
         JBMessageRoot memory root = JBMessageRoot({
-            version: 1,
+            version: 2,
             token: bytes32(uint256(uint160(address(weth)))),
             amount: amount,
             remoteRoot: JBInboxTreeRoot({
@@ -161,7 +164,7 @@ contract CodexCCIPWrappedNativeMisunwrapTest is Test {
                 })
             }),
             sourceTotalSupply: 0,
-            sourceBalance: 0
+            sourceTokens: new JBTokenSnapshot[](0)
         });
 
         Client.EVMTokenAmount[] memory tokenAmounts = new Client.EVMTokenAmount[](1);
@@ -178,23 +181,10 @@ contract CodexCCIPWrappedNativeMisunwrapTest is Test {
         vm.prank(ROUTER);
         sucker.ccipReceive(message);
 
-        assertEq(address(sucker).balance, amount, "weth was unwrapped into native ETH");
-        assertEq(weth.balanceOf(address(sucker)), 0, "no WETH remains for later claim settlement");
-        assertEq(sucker.inboxRootOf(address(weth)), root.remoteRoot.root, "root is still accepted under the WETH key");
-
-        JBClaim memory claimData = JBClaim({
-            token: address(weth),
-            leaf: JBLeaf({
-                index: 0,
-                beneficiary: bytes32(uint256(uint160(beneficiary))),
-                projectTokenCount: 10 ether,
-                terminalTokenAmount: amount
-            }),
-            proof: proof
-        });
-
-        vm.expectRevert(abi.encodeWithSelector(JBSucker.JBSucker_InsufficientBalance.selector, amount, 0));
-        sucker.claim(claimData);
+        // WETH is NOT unwrapped — root.token is the WETH address, not NATIVE_TOKEN.
+        assertEq(address(sucker).balance, 0, "no native ETH - WETH was correctly kept as ERC-20");
+        assertEq(weth.balanceOf(address(sucker)), amount, "WETH remains available for claim settlement");
+        assertEq(sucker.inboxRootOf(address(weth)), root.remoteRoot.root, "root is stored under the WETH key");
     }
 
     receive() external payable {}

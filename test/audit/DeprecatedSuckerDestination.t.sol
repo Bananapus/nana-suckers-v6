@@ -16,6 +16,7 @@ import {IJBSuckerRegistry} from "../../src/interfaces/IJBSuckerRegistry.sol";
 import {JBSuckerState} from "../../src/enums/JBSuckerState.sol";
 import {JBInboxTreeRoot} from "../../src/structs/JBInboxTreeRoot.sol";
 import {JBMessageRoot} from "../../src/structs/JBMessageRoot.sol";
+import {JBTokenSnapshot} from "../../src/structs/JBTokenSnapshot.sol";
 import {JBRemoteToken} from "../../src/structs/JBRemoteToken.sol";
 import {MerkleLib} from "../../src/utils/MerkleLib.sol";
 
@@ -103,10 +104,18 @@ contract DeprecatedSuckerDestinationTest is Test {
         vm.mockCall(DIRECTORY, abi.encodeCall(IJBDirectory.PROJECTS, ()), abi.encode(PROJECT));
         vm.mockCall(PROJECT, abi.encodeCall(IERC721.ownerOf, (PROJECT_ID)), abi.encode(address(this)));
         vm.mockCall(address(1), abi.encodeCall(IJBSuckerRegistry.toRemoteFee, ()), abi.encode(uint256(0)));
+        vm.mockCall(DIRECTORY, abi.encodeCall(IJBDirectory.controllerOf, (PROJECT_ID)), abi.encode(address(0)));
         vm.mockCall(
             DIRECTORY, abi.encodeCall(IJBDirectory.primaryTerminalOf, (PROJECT_ID, TOKEN)), abi.encode(TERMINAL)
         );
         vm.mockCall(TERMINAL, abi.encodeWithSelector(IJBTerminal.pay.selector), abi.encode(uint256(0)));
+
+        // Mock DIRECTORY.terminalsOf() so _buildTokenSnapshots() in _sendRoot() doesn't revert.
+        vm.mockCall(
+            DIRECTORY,
+            abi.encodeCall(IJBDirectory.terminalsOf, (PROJECT_ID)),
+            abi.encode(new IJBTerminal[](0))
+        );
 
         source = _createSucker("codex-source");
         destination = _createSucker("codex-destination");
@@ -137,14 +146,14 @@ contract DeprecatedSuckerDestinationTest is Test {
         assertEq(uint256(destination.state()), uint256(JBSuckerState.DEPRECATED), "destination must be deprecated");
 
         JBMessageRoot memory root = JBMessageRoot({
-            version: 1,
+            version: 2,
             token: bytes32(uint256(uint160(TOKEN))),
             amount: 1 ether,
             remoteRoot: JBInboxTreeRoot({
                 nonce: source.test_getOutboxNonce(TOKEN), root: source.test_getOutboxRoot(TOKEN)
             }),
             sourceTotalSupply: 0,
-            sourceBalance: 0
+            sourceTokens: new JBTokenSnapshot[](0)
         });
 
         vm.prank(address(destination));

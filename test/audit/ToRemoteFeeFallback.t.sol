@@ -86,6 +86,16 @@ contract ToRemoteFeeFallbackTest is Test {
         sucker.seedOutbox(JBConstants.NATIVE_TOKEN, bytes32(uint256(uint160(JBConstants.NATIVE_TOKEN))));
 
         vm.mockCall(REGISTRY, abi.encodeCall(IJBSuckerRegistry.toRemoteFee, ()), abi.encode(uint256(1)));
+
+        // Mock DIRECTORY.controllerOf() so the try-catch in _sendRoot() doesn't revert under via-IR.
+        vm.mockCall(DIRECTORY, abi.encodeCall(IJBDirectory.controllerOf, (uint256(1))), abi.encode(address(0)));
+
+        // Mock DIRECTORY.terminalsOf() so _buildTokenSnapshots() in _sendRoot() doesn't revert.
+        vm.mockCall(
+            DIRECTORY,
+            abi.encodeCall(IJBDirectory.terminalsOf, (uint256(1))),
+            abi.encode(new IJBTerminal[](0))
+        );
     }
 
     function test_toRemoteSucceedsIfFeeTerminalIsMissing() external {

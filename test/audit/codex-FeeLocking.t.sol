@@ -207,6 +207,13 @@ contract CodexFeeLockingTest is Test {
             abi.encodeCall(IJBDirectory.primaryTerminalOf, (PROJECT_ID, JBConstants.NATIVE_TOKEN)),
             abi.encode(address(terminal))
         );
+
+        // Mock DIRECTORY.terminalsOf() so _buildTokenSnapshots() in _sendRoot() doesn't revert.
+        vm.mockCall(
+            DIRECTORY,
+            abi.encodeCall(IJBDirectory.terminalsOf, (PROJECT_ID)),
+            abi.encode(new IJBTerminal[](0))
+        );
     }
 
     function test_failedToRemoteFeePayment_staysLockedAfterLaterNativeClaim() public {

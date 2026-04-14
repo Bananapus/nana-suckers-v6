@@ -2,6 +2,7 @@
 pragma solidity ^0.8.0;
 
 import {JBInboxTreeRoot} from "./JBInboxTreeRoot.sol";
+import {JBTokenSnapshot} from "./JBTokenSnapshot.sol";
 
 /// @notice Information about the remote (inbox) tree's root, passed in a message from the remote chain.
 /// @custom:member version The message format version. Used to reject incompatible messages.
@@ -10,8 +11,9 @@ import {JBInboxTreeRoot} from "./JBInboxTreeRoot.sol";
 /// @custom:member remoteRoot The root of the merkle tree.
 /// @custom:member sourceTotalSupply The total token supply (including reserved tokens) on the source chain at the
 /// time the message was sent. Used by the receiving chain to track cross-chain supply for cash out tax calculations.
-/// @custom:member sourceBalance The total surplus across all terminals on the source chain at the time the message
-/// was sent. Used by the receiving chain to track cross-chain surplus for proportional reclaim calculations.
+/// @custom:member sourceTokens Per-token snapshots of surplus and balance on the source chain at the time the message
+/// was sent. Each entry contains the token address, its decimals, the project-wide surplus denominated in that token,
+/// and the raw recorded balance of that token. Used by the receiving chain for cross-chain surplus and balance tracking.
 // forge-lint: disable-next-line(pascal-case-struct)
 struct JBMessageRoot {
     uint8 version;
@@ -19,5 +21,5 @@ struct JBMessageRoot {
     uint256 amount;
     JBInboxTreeRoot remoteRoot;
     uint256 sourceTotalSupply;
-    uint256 sourceBalance;
+    JBTokenSnapshot[] sourceTokens;
 }
