@@ -1,14 +1,18 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.28;
 
+// External packages (alphabetized).
 import {IJBDirectory} from "@bananapus/core-v6/src/interfaces/IJBDirectory.sol";
 import {IJBPermissions} from "@bananapus/core-v6/src/interfaces/IJBPermissions.sol";
 import {IJBTokens} from "@bananapus/core-v6/src/interfaces/IJBTokens.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {IUniswapV3Factory} from "@uniswap/v3-core/contracts/interfaces/IUniswapV3Factory.sol";
 import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
+import {IUniswapV3Factory} from "@uniswap/v3-core/contracts/interfaces/IUniswapV3Factory.sol";
 
+// Local: interfaces.
 import {IJBSwapCCIPSuckerDeployer} from "../interfaces/IJBSwapCCIPSuckerDeployer.sol";
+
+// Local: deployers.
 import {JBCCIPSuckerDeployer} from "./JBCCIPSuckerDeployer.sol";
 
 /// @notice An `IJBSuckerDeployer` implementation to deploy `JBSwapCCIPSucker` contracts.

@@ -52,7 +52,10 @@ contract CodexMapTokensHarness is JBSucker {
         uint256,
         JBRemoteToken memory,
         JBPayRemoteMessage memory
-    ) internal override {}
+    )
+        internal
+        override
+    {}
 }
 
 contract CodexMapTokensEnableOnlyValueStuckTest is Test {

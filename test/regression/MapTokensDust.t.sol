@@ -242,5 +242,8 @@ contract MapTokensDustSucker is JBSucker {
         uint256,
         JBRemoteToken memory,
         JBPayRemoteMessage memory
-    ) internal override {}
+    )
+        internal
+        override
+    {}
 }

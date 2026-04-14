@@ -65,7 +65,8 @@ contract DeployScript is Script, Sphinx {
         // TODO: Update to contain JB Emergency Developers
         sphinxConfig.projectName = "nana-suckers-v6";
         sphinxConfig.mainnets = ["ethereum", "optimism", "base", "arbitrum", "tempo"];
-        sphinxConfig.testnets = ["ethereum_sepolia", "optimism_sepolia", "base_sepolia", "arbitrum_sepolia", "tempo_moderato"];
+        sphinxConfig.testnets =
+            ["ethereum_sepolia", "optimism_sepolia", "base_sepolia", "arbitrum_sepolia", "tempo_moderato"];
     }
 
     function run() public {

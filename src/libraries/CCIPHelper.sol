@@ -64,99 +64,108 @@ library CCIPHelper {
     address public constant TEMPO_WETH = 0xC5D538C96D6FEE7E6DFE7248B32898087b22ba79;
     address public constant TEMPO_MOD_WETH = 0xbb2D3310E4232085d432A2e04b2Ac09c46F634E4;
 
-    function routerOfChain(uint256 _chainId) internal pure returns (address router) {
-        if (_chainId == ETH_ID) {
+    /// @notice Returns the CCIP router address for a given chain ID.
+    /// @param chainId The EVM chain ID to look up.
+    /// @return router The CCIP router address.
+    function routerOfChain(uint256 chainId) internal pure returns (address router) {
+        if (chainId == ETH_ID) {
             return ETH_ROUTER;
-        } else if (_chainId == OP_ID) {
+        } else if (chainId == OP_ID) {
             return OP_ROUTER;
-        } else if (_chainId == ARB_ID) {
+        } else if (chainId == ARB_ID) {
             return ARB_ROUTER;
-        } else if (_chainId == POLY_ID) {
+        } else if (chainId == POLY_ID) {
             return POLY_ROUTER;
-        } else if (_chainId == AVA_ID) {
+        } else if (chainId == AVA_ID) {
             return AVA_ROUTER;
-        } else if (_chainId == BNB_ID) {
+        } else if (chainId == BNB_ID) {
             return BNB_ROUTER;
-        } else if (_chainId == BASE_ID) {
+        } else if (chainId == BASE_ID) {
             return BASE_ROUTER;
-        } else if (_chainId == ETH_SEP_ID) {
+        } else if (chainId == ETH_SEP_ID) {
             return ETH_SEP_ROUTER;
-        } else if (_chainId == ARB_SEP_ID) {
+        } else if (chainId == ARB_SEP_ID) {
             return ARB_SEP_ROUTER;
-        } else if (_chainId == OP_SEP_ID) {
+        } else if (chainId == OP_SEP_ID) {
             return OP_SEP_ROUTER;
-        } else if (_chainId == BASE_SEP_ID) {
+        } else if (chainId == BASE_SEP_ID) {
             return BASE_SEP_ROUTER;
-        } else if (_chainId == TEMPO_ID) {
+        } else if (chainId == TEMPO_ID) {
             return TEMPO_ROUTER;
-        } else if (_chainId == TEMPO_MOD_ID) {
+        } else if (chainId == TEMPO_MOD_ID) {
             return TEMPO_MOD_ROUTER;
         } else {
-            revert CCIPHelper_UnsupportedChain(_chainId);
+            revert CCIPHelper_UnsupportedChain(chainId);
         }
     }
 
-    function selectorOfChain(uint256 _chainId) internal pure returns (uint64 selectorId) {
-        if (_chainId == ETH_ID) {
+    /// @notice Returns the CCIP chain selector for a given chain ID.
+    /// @param chainId The EVM chain ID to look up.
+    /// @return selectorId The CCIP chain selector.
+    function selectorOfChain(uint256 chainId) internal pure returns (uint64 selectorId) {
+        if (chainId == ETH_ID) {
             return ETH_SEL;
-        } else if (_chainId == OP_ID) {
+        } else if (chainId == OP_ID) {
             return OP_SEL;
-        } else if (_chainId == ARB_ID) {
+        } else if (chainId == ARB_ID) {
             return ARB_SEL;
-        } else if (_chainId == POLY_ID) {
+        } else if (chainId == POLY_ID) {
             return POLY_SEL;
-        } else if (_chainId == AVA_ID) {
+        } else if (chainId == AVA_ID) {
             return AVA_SEL;
-        } else if (_chainId == BNB_ID) {
+        } else if (chainId == BNB_ID) {
             return BNB_SEL;
-        } else if (_chainId == BASE_ID) {
+        } else if (chainId == BASE_ID) {
             return BASE_SEL;
-        } else if (_chainId == ETH_SEP_ID) {
+        } else if (chainId == ETH_SEP_ID) {
             return ETH_SEP_SEL;
-        } else if (_chainId == ARB_SEP_ID) {
+        } else if (chainId == ARB_SEP_ID) {
             return ARB_SEP_SEL;
-        } else if (_chainId == OP_SEP_ID) {
+        } else if (chainId == OP_SEP_ID) {
             return OP_SEP_SEL;
-        } else if (_chainId == BASE_SEP_ID) {
+        } else if (chainId == BASE_SEP_ID) {
             return BASE_SEP_SEL;
-        } else if (_chainId == TEMPO_ID) {
+        } else if (chainId == TEMPO_ID) {
             return TEMPO_SEL;
-        } else if (_chainId == TEMPO_MOD_ID) {
+        } else if (chainId == TEMPO_MOD_ID) {
             return TEMPO_MOD_SEL;
         } else {
-            revert CCIPHelper_UnsupportedChain(_chainId);
+            revert CCIPHelper_UnsupportedChain(chainId);
         }
     }
 
-    function wethOfChain(uint256 _chainId) public pure returns (address weth) {
-        if (_chainId == ETH_ID) {
+    /// @notice Returns the WETH address for a given chain ID.
+    /// @param chainId The EVM chain ID to look up.
+    /// @return weth The WETH address.
+    function wethOfChain(uint256 chainId) public pure returns (address weth) {
+        if (chainId == ETH_ID) {
             return ETH_WETH;
-        } else if (_chainId == OP_ID) {
+        } else if (chainId == OP_ID) {
             return OP_WETH;
-        } else if (_chainId == ARB_ID) {
+        } else if (chainId == ARB_ID) {
             return ARB_WETH;
-        } else if (_chainId == POLY_ID) {
+        } else if (chainId == POLY_ID) {
             return POLY_WETH;
-        } else if (_chainId == AVA_ID) {
+        } else if (chainId == AVA_ID) {
             return AVA_WETH;
-        } else if (_chainId == BNB_ID) {
+        } else if (chainId == BNB_ID) {
             return BNB_WETH;
-        } else if (_chainId == BASE_ID) {
+        } else if (chainId == BASE_ID) {
             return BASE_WETH;
-        } else if (_chainId == ETH_SEP_ID) {
+        } else if (chainId == ETH_SEP_ID) {
             return ETH_SEP_WETH;
-        } else if (_chainId == ARB_SEP_ID) {
+        } else if (chainId == ARB_SEP_ID) {
             return ARB_SEP_WETH;
-        } else if (_chainId == OP_SEP_ID) {
+        } else if (chainId == OP_SEP_ID) {
             return OP_SEP_WETH;
-        } else if (_chainId == BASE_SEP_ID) {
+        } else if (chainId == BASE_SEP_ID) {
             return BASE_SEP_WETH;
-        } else if (_chainId == TEMPO_ID) {
+        } else if (chainId == TEMPO_ID) {
             return TEMPO_WETH;
-        } else if (_chainId == TEMPO_MOD_ID) {
+        } else if (chainId == TEMPO_MOD_ID) {
             return TEMPO_MOD_WETH;
         } else {
-            revert CCIPHelper_UnsupportedChain(_chainId);
+            revert CCIPHelper_UnsupportedChain(chainId);
         }
     }
 }

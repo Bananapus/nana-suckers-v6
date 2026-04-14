@@ -61,28 +61,6 @@ interface IJBSucker is IERC165 {
     /// @param caller The address that relayed the root.
     event NewInboxTreeRoot(address indexed token, uint64 nonce, bytes32 root, address caller);
 
-    /// @notice Emitted when the outbox tree root and bridged assets are sent to the remote peer.
-    /// @param root The outbox tree root being sent.
-    /// @param token The terminal token being bridged.
-    /// @param index The current outbox tree index.
-    /// @param nonce The nonce assigned to this root message.
-    /// @param caller The address that initiated the send.
-    event RootToRemote(bytes32 indexed root, address indexed token, uint256 index, uint64 nonce, address caller);
-
-    /// @notice Emitted when a user initiates a cross-chain payment via `payRemote`.
-    /// @param beneficiary The beneficiary on the source chain who will receive project tokens.
-    /// @param token The terminal token being bridged.
-    /// @param amount The amount of terminal tokens being bridged.
-    /// @param returnTransport The budget for the return bridge hop.
-    /// @param caller The address that initiated the payment.
-    event PayRemote(
-        bytes32 indexed beneficiary,
-        address indexed token,
-        uint256 amount,
-        uint256 returnTransport,
-        address caller
-    );
-
     /// @notice Emitted when a cross-chain payment is executed on the destination chain via `payFromRemote`.
     /// @param beneficiary The beneficiary on the source chain who will receive project tokens.
     /// @param token The terminal token used to pay the project.
@@ -98,6 +76,24 @@ interface IJBSucker is IERC165 {
         uint256 terminalTokensReclaimed,
         address caller
     );
+
+    /// @notice Emitted when a user initiates a cross-chain payment via `payRemote`.
+    /// @param beneficiary The beneficiary on the source chain who will receive project tokens.
+    /// @param token The terminal token being bridged.
+    /// @param amount The amount of terminal tokens being bridged.
+    /// @param returnTransport The budget for the return bridge hop.
+    /// @param caller The address that initiated the payment.
+    event PayRemote(
+        bytes32 indexed beneficiary, address indexed token, uint256 amount, uint256 returnTransport, address caller
+    );
+
+    /// @notice Emitted when the outbox tree root and bridged assets are sent to the remote peer.
+    /// @param root The outbox tree root being sent.
+    /// @param token The terminal token being bridged.
+    /// @param index The current outbox tree index.
+    /// @param nonce The nonce assigned to this root message.
+    /// @param caller The address that initiated the send.
+    event RootToRemote(bytes32 indexed root, address indexed token, uint256 index, uint64 nonce, address caller);
 
     /// @notice Emitted when a received inbox root is rejected because its nonce is stale.
     /// @param token The terminal token address.
@@ -229,6 +225,12 @@ interface IJBSucker is IERC165 {
     /// @param token The terminal token to bridge.
     function toRemote(address token) external payable;
 
+    /// @notice Execute a cross-chain payment on behalf of a remote user. Called by the bridge messenger.
+    /// @dev Only callable by the remote peer via the bridge. Pays the project, cashes out, inserts into
+    /// the outbox tree, and attempts to auto-trigger the return bridge.
+    /// @param message The payment message from the remote chain.
+    function payFromRemote(JBPayRemoteMessage calldata message) external payable;
+
     /// @notice Pay a project on the remote chain from the local chain.
     /// @dev Bridges funds to the remote chain where the sucker pays the project, cashes out at 0% tax,
     /// inserts the resulting tokens into the outbox tree, and auto-triggers the return bridge.
@@ -246,10 +248,4 @@ interface IJBSucker is IERC165 {
     )
         external
         payable;
-
-    /// @notice Execute a cross-chain payment on behalf of a remote user. Called by the bridge messenger.
-    /// @dev Only callable by the remote peer via the bridge. Pays the project, cashes out, inserts into
-    /// the outbox tree, and attempts to auto-trigger the return bridge.
-    /// @param message The payment message from the remote chain.
-    function payFromRemote(JBPayRemoteMessage calldata message) external payable;
 }

@@ -698,7 +698,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
             transportBudget = msg.value - amount;
         } else {
             // For ERC-20: pull tokens, msg.value is entirely transport budget.
-            IERC20(token).safeTransferFrom(_msgSender(), address(this), amount);
+            IERC20(token).safeTransferFrom({from: _msgSender(), to: address(this), value: amount});
             transportBudget = msg.value;
         }
 
@@ -725,11 +725,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
 
         // Bridge the funds and message to the remote chain.
         _sendPayOverAMB({
-            transportPayment: hop1,
-            token: token,
-            amount: amount,
-            remoteToken: remoteToken,
-            message: message
+            transportPayment: hop1, token: token, amount: amount, remoteToken: remoteToken, message: message
         });
     }
 
@@ -750,15 +746,13 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
 
         // Inject the relay beneficiary into the metadata so hooks see the real user.
         bytes memory payMetadata = JBMetadataResolver.addToMetadata(
-            message.metadata,
-            JBRelayBeneficiary.ID,
-            abi.encode(_toAddress(message.beneficiary))
+            message.metadata, JBRelayBeneficiary.ID, abi.encode(_toAddress(message.beneficiary))
         );
 
         // Pay the project with this sucker as beneficiary (so we receive project tokens).
         uint256 nativePayValue = token == JBConstants.NATIVE_TOKEN ? message.amount : 0;
         if (token != JBConstants.NATIVE_TOKEN) {
-            SafeERC20.forceApprove(IERC20(token), address(terminal), message.amount);
+            SafeERC20.forceApprove({token: IERC20(token), spender: address(terminal), value: message.amount});
         }
         uint256 projectTokensReceived = terminal.pay{value: nativePayValue}({
             projectId: _projectId,
@@ -804,10 +798,9 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         JBRemoteToken memory returnRemoteToken = _remoteTokenFor[token];
         if (returnRemoteToken.addr != bytes32(0)) {
             try this.sendRootFromPayRemote({
-                transportPayment: message.returnTransport,
-                token: token,
-                remoteToken: returnRemoteToken
-            }) {} catch {}
+                transportPayment: message.returnTransport, token: token, remoteToken: returnRemoteToken
+            }) {}
+                catch {}
         }
     }
 

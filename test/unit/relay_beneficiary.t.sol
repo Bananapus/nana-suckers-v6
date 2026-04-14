@@ -41,9 +41,7 @@ contract RelayBeneficiaryTest is Test {
     /// @notice Helper: mock isSuckerOf to return the given value.
     function _mockIsSucker(bool isSucker) internal {
         vm.mockCall(
-            address(registry),
-            abi.encodeCall(IJBSuckerRegistry.isSuckerOf, (projectId, payer)),
-            abi.encode(isSucker)
+            address(registry), abi.encodeCall(IJBSuckerRegistry.isSuckerOf, (projectId, payer)), abi.encode(isSucker)
         );
     }
 

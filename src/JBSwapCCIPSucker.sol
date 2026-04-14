@@ -21,29 +21,37 @@ import {IUniswapV3SwapCallback} from "@uniswap/v3-core/contracts/interfaces/call
 import {OracleLibrary} from "@uniswap/v3-periphery/contracts/libraries/OracleLibrary.sol";
 
 // Uniswap V4 imports.
-import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
-import {IUnlockCallback} from "@uniswap/v4-core/src/interfaces/callback/IUnlockCallback.sol";
-import {IHooks} from "@uniswap/v4-core/src/interfaces/IHooks.sol";
 import {BalanceDelta, BalanceDeltaLibrary} from "@uniswap/v4-core/src/types/BalanceDelta.sol";
 import {Currency} from "@uniswap/v4-core/src/types/Currency.sol";
-import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
+import {IHooks} from "@uniswap/v4-core/src/interfaces/IHooks.sol";
+import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
+import {IUnlockCallback} from "@uniswap/v4-core/src/interfaces/callback/IUnlockCallback.sol";
 import {PoolId, PoolIdLibrary} from "@uniswap/v4-core/src/types/PoolId.sol";
+import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
+import {StateLibrary} from "@uniswap/v4-core/src/libraries/StateLibrary.sol";
 import {SwapParams} from "@uniswap/v4-core/src/types/PoolOperation.sol";
 import {TickMath} from "@uniswap/v4-core/src/libraries/TickMath.sol";
-import {StateLibrary} from "@uniswap/v4-core/src/libraries/StateLibrary.sol";
 
-// Local imports.
+// Local: contracts.
 import {JBCCIPSucker} from "./JBCCIPSucker.sol";
-import {IJBSuckerRegistry} from "./interfaces/IJBSuckerRegistry.sol";
-import {ICCIPRouter} from "./interfaces/ICCIPRouter.sol";
-import {IJBSwapCCIPSuckerDeployer} from "./interfaces/IJBSwapCCIPSuckerDeployer.sol";
+
+// Local: deployers.
 import {JBSwapCCIPSuckerDeployer} from "./deployers/JBSwapCCIPSuckerDeployer.sol";
+
+// Local: interfaces (alphabetized).
+import {ICCIPRouter} from "./interfaces/ICCIPRouter.sol";
+import {IGeomeanOracle} from "./interfaces/IGeomeanOracle.sol";
+import {IJBSuckerRegistry} from "./interfaces/IJBSuckerRegistry.sol";
+import {IJBSwapCCIPSuckerDeployer} from "./interfaces/IJBSwapCCIPSuckerDeployer.sol";
+import {IWrappedNativeToken} from "./interfaces/IWrappedNativeToken.sol";
+
+// Local: libraries.
+import {JBSwapLib} from "./libraries/JBSwapLib.sol";
+
+// Local: structs (alphabetized).
 import {JBMessageRoot} from "./structs/JBMessageRoot.sol";
 import {JBPayRemoteMessage} from "./structs/JBPayRemoteMessage.sol";
 import {JBRemoteToken} from "./structs/JBRemoteToken.sol";
-import {JBSwapLib} from "./libraries/JBSwapLib.sol";
-import {IGeomeanOracle} from "./interfaces/IGeomeanOracle.sol";
-import {IWrappedNativeToken} from "./interfaces/IWrappedNativeToken.sol";
 
 /// @notice A `JBCCIPSucker` extension that swaps between local and bridge tokens using the best
 /// Uniswap V3 or V4 pool before/after CCIP bridging.
@@ -210,9 +218,7 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
         BalanceDelta delta = POOL_MANAGER.swap({
             key: key,
             params: SwapParams({
-                zeroForOne: zeroForOne,
-                amountSpecified: amountSpecified,
-                sqrtPriceLimitX96: sqrtPriceLimitX96
+                zeroForOne: zeroForOne, amountSpecified: amountSpecified, sqrtPriceLimitX96: sqrtPriceLimitX96
             }),
             hookData: ""
         });
@@ -256,7 +262,7 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
         // Verify caller is a legitimate V3 pool via the factory.
         // slither-disable-next-line calls-loop
         uint24 fee = IUniswapV3Pool(msg.sender).fee();
-        address expectedPool = V3_FACTORY.getPool(normalizedIn, normalizedOut, fee);
+        address expectedPool = V3_FACTORY.getPool({tokenA: normalizedIn, tokenB: normalizedOut, fee: fee});
         if (msg.sender != expectedPool) revert JBSwapCCIPSucker_CallerNotPool(msg.sender);
 
         // The positive delta is what we owe to the pool.
@@ -267,7 +273,7 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
             WETH.deposit{value: amountToSend}();
         }
 
-        IERC20(normalizedIn).safeTransfer(msg.sender, amountToSend);
+        IERC20(normalizedIn).safeTransfer({to: msg.sender, value: amountToSend});
     }
 
     /// @notice Override CCIP receive to swap bridge tokens into local tokens and track denomination conversion.
@@ -387,7 +393,7 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
         tokenAmounts[0] = Client.EVMTokenAmount({token: bridgeTokenAddr, amount: bridgeAmount});
 
         // Approve the CCIP router to spend bridge tokens.
-        BRIDGE_TOKEN.forceApprove(address(CCIP_ROUTER), bridgeAmount);
+        BRIDGE_TOKEN.forceApprove({spender: address(CCIP_ROUTER), value: bridgeAmount});
 
         Client.EVM2AnyMessage memory message = Client.EVM2AnyMessage({
             receiver: abi.encode(_toAddress(peer())),
@@ -455,7 +461,7 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
         tokenAmounts[0] = Client.EVMTokenAmount({token: bridgeTokenAddr, amount: bridgeAmount});
 
         // Approve the CCIP router to spend bridge tokens.
-        BRIDGE_TOKEN.forceApprove(address(CCIP_ROUTER), bridgeAmount);
+        BRIDGE_TOKEN.forceApprove({spender: address(CCIP_ROUTER), value: bridgeAmount});
 
         Client.EVM2AnyMessage memory ccipMessage = Client.EVM2AnyMessage({
             receiver: abi.encode(_toAddress(peer())),
@@ -531,14 +537,7 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
     /// @param tokenOut The output token (raw address).
     /// @param amount The amount of input tokens to swap.
     /// @return amountOut The amount of output tokens received.
-    function _executeSwap(
-        address tokenIn,
-        address tokenOut,
-        uint256 amount
-    )
-        internal
-        returns (uint256 amountOut)
-    {
+    function _executeSwap(address tokenIn, address tokenOut, uint256 amount) internal returns (uint256 amountOut) {
         address normalizedIn = _normalize(tokenIn);
         address normalizedOut = _normalize(tokenOut);
 
@@ -585,8 +584,7 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
 
         // Search V4 pools (4 fee tiers x 2 hook configs).
         if (address(POOL_MANAGER) != address(0)) {
-            (PoolKey memory v4Candidate, uint128 v4Liquidity) =
-                _discoverV4Pool(normalizedTokenIn, normalizedTokenOut);
+            (PoolKey memory v4Candidate, uint128 v4Liquidity) = _discoverV4Pool(normalizedTokenIn, normalizedTokenOut);
             if (v4Liquidity > bestLiquidity) {
                 // Prefer V4 over V3 only when V4 has a hook (potential TWAP) or V3 has no liquidity.
                 // V3 pools always have TWAP oracles, whereas hookless V4 pools only offer spot ticks,
@@ -613,7 +611,8 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
 
         for (uint256 i; i < 4;) {
             // slither-disable-next-line calls-loop
-            address poolAddr = V3_FACTORY.getPool(normalizedTokenIn, normalizedTokenOut, _feeTier(i));
+            address poolAddr =
+                V3_FACTORY.getPool({tokenA: normalizedTokenIn, tokenB: normalizedTokenOut, fee: _feeTier(i)});
 
             if (poolAddr != address(0)) {
                 // slither-disable-next-line calls-loop
@@ -735,7 +734,9 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
             recipient: address(this),
             zeroForOne: zeroForOne,
             amountSpecified: int256(amount),
-            sqrtPriceLimitX96: JBSwapLib.sqrtPriceLimitFromAmounts(amount, minAmountOut, zeroForOne),
+            sqrtPriceLimitX96: JBSwapLib.sqrtPriceLimitFromAmounts({
+                amountIn: amount, minimumAmountOut: minAmountOut, zeroForOne: zeroForOne
+            }),
             data: abi.encode(originalTokenIn, normalizedTokenIn, normalizedTokenOut)
         });
 
@@ -767,15 +768,15 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
         address v4In = normalizedTokenIn == address(WETH) ? address(0) : normalizedTokenIn;
         bool zeroForOne = Currency.unwrap(key.currency0) == v4In;
 
-        uint160 sqrtPriceLimitX96 =
-            JBSwapLib.sqrtPriceLimitFromAmounts(amount, minAmountOut, zeroForOne);
+        uint160 sqrtPriceLimitX96 = JBSwapLib.sqrtPriceLimitFromAmounts({
+            amountIn: amount, minimumAmountOut: minAmountOut, zeroForOne: zeroForOne
+        });
 
         // V4: negative amountSpecified = exact input.
         int256 exactInputAmount = -int256(amount);
 
-        bytes memory result = POOL_MANAGER.unlock(
-            abi.encode(key, zeroForOne, exactInputAmount, sqrtPriceLimitX96, minAmountOut)
-        );
+        bytes memory result =
+            POOL_MANAGER.unlock(abi.encode(key, zeroForOne, exactInputAmount, sqrtPriceLimitX96, minAmountOut));
 
         amountOut = abi.decode(result, (uint256));
     }
@@ -932,10 +933,7 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
 
         // Quote the gross output at the supplied tick.
         minAmountOut = OracleLibrary.getQuoteAtTick({
-            tick: tick,
-            baseAmount: uint128(amount),
-            baseToken: tokenIn,
-            quoteToken: tokenOut
+            tick: tick, baseAmount: uint128(amount), baseToken: tokenIn, quoteToken: tokenOut
         });
 
         // Discount by the computed slippage tolerance.
@@ -992,7 +990,7 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
         } else {
             // ERC20 settlement: sync -> transfer -> settle.
             POOL_MANAGER.sync(currency);
-            IERC20(Currency.unwrap(currency)).safeTransfer(address(POOL_MANAGER), amount);
+            IERC20(Currency.unwrap(currency)).safeTransfer({to: address(POOL_MANAGER), value: amount});
             // slither-disable-next-line unused-return
             POOL_MANAGER.settle();
         }

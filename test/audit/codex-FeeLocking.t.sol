@@ -116,7 +116,13 @@ contract ZeroCostBridgeSuckerHarness is JBSucker {
     }
 
     // forge-lint: disable-next-line(mixed-case-function)
-    function _sendPayOverAMB(uint256, address, uint256, JBRemoteToken memory, JBPayRemoteMessage memory)
+    function _sendPayOverAMB(
+        uint256,
+        address,
+        uint256,
+        JBRemoteToken memory,
+        JBPayRemoteMessage memory
+    )
         internal
         pure
         override

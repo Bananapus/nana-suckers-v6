@@ -66,9 +66,8 @@ contract PayRemoteTest is Test {
         vm.mockCall(PROJECT, abi.encodeWithSignature("ownerOf(uint256)"), abi.encode(address(this)));
 
         // Deploy the singleton.
-        PayRemoteTestSucker singleton = new PayRemoteTestSucker(
-            IJBDirectory(DIRECTORY), IJBPermissions(PERMISSIONS), IJBTokens(TOKENS), FORWARDER
-        );
+        PayRemoteTestSucker singleton =
+            new PayRemoteTestSucker(IJBDirectory(DIRECTORY), IJBPermissions(PERMISSIONS), IJBTokens(TOKENS), FORWARDER);
 
         // Clone and initialize with our project ID.
         sucker = PayRemoteTestSucker(payable(LibClone.cloneDeterministic(address(singleton), bytes32(0))));
@@ -86,11 +85,7 @@ contract PayRemoteTest is Test {
     function test_payRemote_revertsIfZeroBeneficiary() public {
         vm.expectRevert(JBSucker.JBSucker_ZeroBeneficiary.selector);
         sucker.payRemote({
-            token: JBConstants.NATIVE_TOKEN,
-            amount: 1 ether,
-            beneficiary: bytes32(0),
-            minTokensOut: 0,
-            metadata: ""
+            token: JBConstants.NATIVE_TOKEN, amount: 1 ether, beneficiary: bytes32(0), minTokensOut: 0, metadata: ""
         });
     }
 
@@ -98,19 +93,13 @@ contract PayRemoteTest is Test {
     function test_payRemote_revertsIfZeroAmount() public {
         vm.expectRevert(abi.encodeWithSelector(JBSucker.JBSucker_InsufficientBalance.selector, 0, 0));
         sucker.payRemote({
-            token: JBConstants.NATIVE_TOKEN,
-            amount: 0,
-            beneficiary: bytes32(uint256(1)),
-            minTokensOut: 0,
-            metadata: ""
+            token: JBConstants.NATIVE_TOKEN, amount: 0, beneficiary: bytes32(uint256(1)), minTokensOut: 0, metadata: ""
         });
     }
 
     /// @notice Reverts when the token is not mapped to a remote token.
     function test_payRemote_revertsIfTokenNotMapped() public {
-        vm.expectRevert(
-            abi.encodeWithSelector(JBSucker.JBSucker_TokenNotMapped.selector, JBConstants.NATIVE_TOKEN)
-        );
+        vm.expectRevert(abi.encodeWithSelector(JBSucker.JBSucker_TokenNotMapped.selector, JBConstants.NATIVE_TOKEN));
         sucker.payRemote{value: 1 ether}({
             token: JBConstants.NATIVE_TOKEN,
             amount: 1 ether,
@@ -142,9 +131,7 @@ contract PayRemoteTest is Test {
             JBRemoteToken({enabled: true, emergencyHatch: false, minGas: 0, addr: bytes32(uint256(0xAAAA))})
         );
 
-        vm.expectRevert(
-            abi.encodeWithSelector(JBSucker.JBSucker_InsufficientMsgValue.selector, 0.5 ether, 1 ether)
-        );
+        vm.expectRevert(abi.encodeWithSelector(JBSucker.JBSucker_InsufficientMsgValue.selector, 0.5 ether, 1 ether));
         sucker.payRemote{value: 0.5 ether}({
             token: JBConstants.NATIVE_TOKEN,
             amount: 1 ether,
@@ -194,8 +181,7 @@ contract PayRemoteTest is Test {
 
         // Map native token.
         sucker.test_setRemoteToken(
-            JBConstants.NATIVE_TOKEN,
-            JBRemoteToken({enabled: true, emergencyHatch: false, minGas: 0, addr: remoteAddr})
+            JBConstants.NATIVE_TOKEN, JBRemoteToken({enabled: true, emergencyHatch: false, minGas: 0, addr: remoteAddr})
         );
 
         // Expected transport split: hop1 = 0.1 ether, return = 0.1 ether.
@@ -212,11 +198,7 @@ contract PayRemoteTest is Test {
         });
 
         sucker.payRemote{value: amount + transportBudget}({
-            token: JBConstants.NATIVE_TOKEN,
-            amount: amount,
-            beneficiary: beneficiary,
-            minTokensOut: 100,
-            metadata: ""
+            token: JBConstants.NATIVE_TOKEN, amount: amount, beneficiary: beneficiary, minTokensOut: 100, metadata: ""
         });
 
         // Verify the test harness recorded the _sendPayOverAMB call.
@@ -235,8 +217,7 @@ contract PayRemoteTest is Test {
 
         // Map the ERC-20 token.
         sucker.test_setRemoteToken(
-            address(erc20),
-            JBRemoteToken({enabled: true, emergencyHatch: false, minGas: 0, addr: remoteAddr})
+            address(erc20), JBRemoteToken({enabled: true, emergencyHatch: false, minGas: 0, addr: remoteAddr})
         );
 
         // Approve the sucker to pull tokens.
@@ -257,11 +238,7 @@ contract PayRemoteTest is Test {
         });
 
         sucker.payRemote{value: transportBudget}({
-            token: address(erc20),
-            amount: amount,
-            beneficiary: beneficiary,
-            minTokensOut: 0,
-            metadata: ""
+            token: address(erc20), amount: amount, beneficiary: beneficiary, minTokensOut: 0, metadata: ""
         });
 
         // Verify ERC-20 was pulled from caller.
@@ -321,9 +298,7 @@ contract PayRemoteTest is Test {
 
         // Mock DIRECTORY.primaryTerminalOf -> TERMINAL.
         vm.mockCall(
-            DIRECTORY,
-            abi.encodeCall(IJBDirectory.primaryTerminalOf, (PROJECT_ID, token)),
-            abi.encode(TERMINAL)
+            DIRECTORY, abi.encodeCall(IJBDirectory.primaryTerminalOf, (PROJECT_ID, token)), abi.encode(TERMINAL)
         );
 
         // Mock terminal.pay -> returns projectTokensReceived.
@@ -375,9 +350,7 @@ contract PayRemoteTest is Test {
 
         vm.prank(externalCaller);
         vm.expectRevert(
-            abi.encodeWithSelector(
-                JBSucker.JBSucker_NotPeer.selector, bytes32(uint256(uint160(externalCaller)))
-            )
+            abi.encodeWithSelector(JBSucker.JBSucker_NotPeer.selector, bytes32(uint256(uint160(externalCaller))))
         );
         sucker.sendRootFromPayRemote({transportPayment: 0, token: JBConstants.NATIVE_TOKEN, remoteToken: remoteToken});
     }

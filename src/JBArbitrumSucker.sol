@@ -371,12 +371,10 @@ contract JBArbitrumSucker is JBSucker, IJBArbitrumSucker {
             // slither-disable-next-line calls-loop
             SafeERC20.forceApprove({token: IERC20(token), spender: GATEWAYROUTER.getGateway(token), value: amount});
             // slither-disable-next-line calls-loop,unused-return
-            IArbL2GatewayRouter(address(GATEWAYROUTER)).outboundTransfer({
-                l1Token: _toAddress(remoteToken.addr),
-                to: peerAddress,
-                amount: amount,
-                data: bytes("")
-            });
+            IArbL2GatewayRouter(address(GATEWAYROUTER))
+                .outboundTransfer({
+                    l1Token: _toAddress(remoteToken.addr), to: peerAddress, amount: amount, data: bytes("")
+                });
         } else {
             nativeValue = amount;
         }
@@ -402,8 +400,7 @@ contract JBArbitrumSucker is JBSucker, IJBArbitrumSucker {
         uint256 maxSubmissionCost;
 
         // slither-disable-next-line calls-loop
-        maxSubmissionCost =
-            ARBINBOX.calculateRetryableSubmissionFee({dataLength: data.length, baseFee: maxFeePerGas});
+        maxSubmissionCost = ARBINBOX.calculateRetryableSubmissionFee({dataLength: data.length, baseFee: maxFeePerGas});
         callTransportCost = maxSubmissionCost + (MESSENGER_PAY_GAS_LIMIT * maxFeePerGas);
 
         if (token != JBConstants.NATIVE_TOKEN && amount != 0) {

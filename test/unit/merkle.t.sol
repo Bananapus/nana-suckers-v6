@@ -203,7 +203,10 @@ contract MerkleUnitTest is JBSucker, Test {
         uint256,
         JBRemoteToken memory,
         JBPayRemoteMessage memory
-    ) internal override {}
+    )
+        internal
+        override
+    {}
 
     function peerChainId() external view override returns (uint256 chainId) {}
 }

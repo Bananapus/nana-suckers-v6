@@ -289,6 +289,11 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
     }
 
     /// @notice Bridge funds and a pay message to the remote peer via CCIP.
+    /// @param transportPayment The transport payment for the CCIP message.
+    /// @param token The terminal token being bridged.
+    /// @param amount The amount of terminal tokens to bridge.
+    /// @param remoteToken The remote token configuration.
+    /// @param message The pay-remote message to send.
     // forge-lint: disable-next-line(mixed-case-function)
     function _sendPayOverAMB(
         uint256 transportPayment,
@@ -413,11 +418,7 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
     /// @param data The raw CCIP message data.
     /// @return messageType The message type (0 = root, 1 = pay).
     /// @return payload The inner payload (encoded JBMessageRoot or JBPayRemoteMessage).
-    function _decodeTypedMessage(bytes memory data)
-        internal
-        pure
-        returns (uint8 messageType, bytes memory payload)
-    {
+    function _decodeTypedMessage(bytes memory data) internal pure returns (uint8 messageType, bytes memory payload) {
         // New format: abi.encode(uint8, bytes)
         // Try to decode — if the first word is 0 or 1, it's likely the new format.
         // Old format: abi.encode(JBMessageRoot) where the first word is `version` (uint8, also 0 or 1).

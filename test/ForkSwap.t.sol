@@ -45,7 +45,11 @@ contract ForkSwapHarness is JBSwapCCIPSucker {
     }
 
     /// @notice Expose swap execution for testing.
-    function exposed_executeSwap(address tokenIn, address tokenOut, uint256 amount)
+    function exposed_executeSwap(
+        address tokenIn,
+        address tokenOut,
+        uint256 amount
+    )
         external
         returns (uint256 amountOut)
     {
@@ -74,13 +78,15 @@ contract ForkSwapHarness is JBSwapCCIPSucker {
 /// @dev Verifies pool discovery, ETH/USDC swaps, large swaps, and end-to-end ccipReceive flow
 /// using production Uniswap contracts. Requires `RPC_ETHEREUM_MAINNET` env var.
 contract ForkSwapTest is Test {
-    // ── Ethereum mainnet addresses ──────────────────────────────────
+    // ── Ethereum mainnet addresses
+    // ──────────────────────────────────
     address constant USDC = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
     address constant MAINNET_WETH = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
     address constant V3_FACTORY = 0x1F98431c8aD98523631AE4a59f267346ea31F984;
     address constant MAINNET_CCIP_ROUTER = 0x80226fc0Ee2b096224EeAc085Bb9a8cba1146f7D;
 
-    // ── CCIP / Tempo constants ──────────────────────────────────────
+    // ── CCIP / Tempo constants
+    // ──────────────────────────────────────
     uint64 constant TEMPO_CHAIN_SELECTOR = 7_281_642_695_469_137_430;
 
     // ── Mock addresses for deployer/directory (not swap-relevant) ───
@@ -100,9 +106,7 @@ contract ForkSwapTest is Test {
         // Mock deployer: CCIP config (not relevant to swap tests but needed by constructor).
         vm.mockCall(MOCK_DEPLOYER, abi.encodeWithSignature("ccipRemoteChainId()"), abi.encode(uint256(4217)));
         vm.mockCall(
-            MOCK_DEPLOYER,
-            abi.encodeWithSignature("ccipRemoteChainSelector()"),
-            abi.encode(TEMPO_CHAIN_SELECTOR)
+            MOCK_DEPLOYER, abi.encodeWithSignature("ccipRemoteChainSelector()"), abi.encode(TEMPO_CHAIN_SELECTOR)
         );
         vm.mockCall(MOCK_DEPLOYER, abi.encodeWithSignature("ccipRouter()"), abi.encode(MAINNET_CCIP_ROUTER));
 
