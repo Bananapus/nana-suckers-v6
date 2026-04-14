@@ -1318,21 +1318,20 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         uint256 ethBalance;
         {
             uint256 _projectId = projectId();
-            // Use low-level calls to safely handle non-contract addresses in the call chain.
+            // Get the controller and verify it implements IJBController via ERC165 before querying supply.
             // slither-disable-next-line calls-loop
-            (bool controllerOk, bytes memory controllerData) = address(DIRECTORY).staticcall(
-                abi.encodeCall(IJBDirectory.controllerOf, (_projectId))
-            );
-            if (controllerOk && controllerData.length >= 32) {
-                address controller = abi.decode(controllerData, (address));
-                // slither-disable-next-line calls-loop
-                (bool supplyOk, bytes memory supplyData) = controller.staticcall(
-                    abi.encodeCall(IJBController.totalTokenSupplyWithReservedTokensOf, (_projectId))
-                );
-                if (supplyOk && supplyData.length >= 32) {
-                    localTotalSupply = abi.decode(supplyData, (uint256));
+            try DIRECTORY.controllerOf(_projectId) returns (IERC165 controllerIERC165) {
+                if (address(controllerIERC165) != address(0)) {
+                    // slither-disable-next-line calls-loop
+                    try controllerIERC165.supportsInterface(type(IJBController).interfaceId) returns (bool supported) {
+                        if (supported) {
+                            // slither-disable-next-line calls-loop
+                            localTotalSupply = IJBController(address(controllerIERC165))
+                                .totalTokenSupplyWithReservedTokensOf(_projectId);
+                        }
+                    } catch {}
                 }
-            }
+            } catch {}
 
             (ethSurplus, ethBalance) = _buildETHAggregate(_projectId);
         }

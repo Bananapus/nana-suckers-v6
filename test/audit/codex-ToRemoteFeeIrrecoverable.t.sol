@@ -10,6 +10,7 @@ import {IJBPermissions} from "@bananapus/core-v6/src/interfaces/IJBPermissions.s
 import {IJBTerminal} from "@bananapus/core-v6/src/interfaces/IJBTerminal.sol";
 import {IJBTokens} from "@bananapus/core-v6/src/interfaces/IJBTokens.sol";
 import {JBConstants} from "@bananapus/core-v6/src/libraries/JBConstants.sol";
+import {IERC165} from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
 import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import {LibClone} from "solady/src/utils/LibClone.sol";
 
@@ -150,6 +151,16 @@ contract CodexToRemoteFeeIrrecoverableTest is Test {
             CONTROLLER,
             abi.encodeCall(IJBController.mintTokensOf, (PROJECT_ID, 1, address(0xBEEF), "", false)),
             abi.encode(uint256(1))
+        );
+        vm.mockCall(
+            CONTROLLER,
+            abi.encodeCall(IERC165.supportsInterface, (type(IJBController).interfaceId)),
+            abi.encode(true)
+        );
+        vm.mockCall(
+            CONTROLLER,
+            abi.encodeCall(IJBController.totalTokenSupplyWithReservedTokensOf, (PROJECT_ID)),
+            abi.encode(uint256(0))
         );
         vm.mockCall(REGISTRY, abi.encodeCall(IJBSuckerRegistry.toRemoteFee, ()), abi.encode(FEE));
 
