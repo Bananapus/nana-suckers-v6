@@ -866,7 +866,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         // NOTE: On failure, the fee ETH is retained by this contract (not added back to transportPayment)
         // to avoid DoS on zero-cost bridges (OP, Base, Celo, Arbitrum L2→L1) that revert on non-zero
         // transportPayment.
-        IJBTerminal terminal = _primaryTerminalOf(FEE_PROJECT_ID, JBConstants.NATIVE_TOKEN);
+        IJBTerminal terminal = _primaryTerminalOf({_projectId: FEE_PROJECT_ID, token: JBConstants.NATIVE_TOKEN});
         if (address(terminal) != address(0)) {
             // slither-disable-next-line unused-return,reentrancy-events
             try terminal.pay{value: _toRemoteFee}({
@@ -925,7 +925,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
 
         // Get the project's primary terminal for the token.
         // slither-disable-next-line calls-loop
-        IJBTerminal terminal = _primaryTerminalOf(cachedProjectId, token);
+        IJBTerminal terminal = _primaryTerminalOf({_projectId: cachedProjectId, token: token});
 
         // slither-disable-next-line incorrect-equality
         if (address(terminal) == address(0)) revert JBSucker_NoTerminalForToken(cachedProjectId, token);
@@ -1145,7 +1145,8 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         uint256 _projectId = projectId();
 
         // Get the project's primary terminal for `token`. We will cash out from this terminal.
-        IJBCashOutTerminal terminal = IJBCashOutTerminal(address(_primaryTerminalOf(_projectId, token)));
+        IJBCashOutTerminal terminal =
+            IJBCashOutTerminal(address(_primaryTerminalOf({_projectId: _projectId, token: token})));
 
         // If the project doesn't have a primary terminal for `token`, revert.
         if (address(terminal) == address(0)) {

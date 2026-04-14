@@ -140,6 +140,8 @@ contract JBArbitrumSucker is JBSucker, IJBArbitrumSucker {
     }
 
     /// @notice Approves the Arbitrum gateway to spend `amount` of `token`.
+    /// @param token The ERC-20 token to approve.
+    /// @param amount The amount to approve.
     function _approveGateway(address token, uint256 amount) internal {
         // slither-disable-next-line calls-loop
         SafeERC20.forceApprove({token: IERC20(token), spender: GATEWAYROUTER.getGateway(token), value: amount});
@@ -202,7 +204,7 @@ contract JBArbitrumSucker is JBSucker, IJBArbitrumSucker {
         // If the token is an ERC-20, bridge it to the peer.
         // If the amount is `0` then we do not need to bridge any ERC20.
         if (token != JBConstants.NATIVE_TOKEN && amount != 0) {
-            _approveGateway(token, amount);
+            _approveGateway({token: token, amount: amount});
 
             // Convert bytes32 types to address at the Arbitrum bridge API boundary.
             // slither-disable-next-line calls-loop,unused-return
@@ -279,7 +281,7 @@ contract JBArbitrumSucker is JBSucker, IJBArbitrumSucker {
             }
 
             // Approve the tokens to be bridged.
-            _approveGateway(token, amount);
+            _approveGateway({token: token, amount: amount});
 
             // Perform the ERC-20 bridge transfer. Convert bytes32 peer to address at the Arbitrum bridge API boundary.
             // slither-disable-start out-of-order-retryable
