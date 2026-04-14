@@ -184,6 +184,12 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     /// @dev The `currency` and `decimals` fields describe the denomination; `value` is the balance amount.
     JBDenominatedAmount private _peerChainBalance;
 
+    /// @notice Outbound project-wide snapshot counter. Incremented each time `_sendRoot` is called.
+    uint64 private _snapshotNonce;
+
+    /// @notice The highest snapshot nonce received from the peer chain. Used to reject stale shared-state updates.
+    uint64 private _peerSnapshotNonce;
+
     //*********************************************************************//
     // ---------------------------- constructor -------------------------- //
     //*********************************************************************//
@@ -623,6 +629,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         // Get the inbox in storage.
         JBInboxTreeRoot storage inbox = _inboxOf[localToken];
 
+        // --- Token-local inbox update (gated by per-token nonce) ---
         // Nonce gaps in received messages are expected when messages are processed out of order or retried. The
         // sucker processes each root independently — skipped nonces don't cause data loss, they just mean some
         // messages arrived before others.
@@ -634,11 +641,24 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
             inbox.nonce = root.remoteRoot.nonce;
             inbox.root = root.remoteRoot.root;
 
-            // Update the peer chain's known total supply for cross-chain tax calculations.
-            // Only update if the message includes supply info (non-zero) to be safe with edge cases.
-            if (root.sourceTotalSupply != 0) {
-                peerChainTotalSupply = root.sourceTotalSupply;
-            }
+            emit NewInboxTreeRoot({
+                token: localToken, nonce: root.remoteRoot.nonce, root: root.remoteRoot.root, caller: _msgSender()
+            });
+        } else {
+            // Emit an event when a root is rejected due to a stale (non-increasing) nonce.
+            // This aids off-chain monitoring in detecting out-of-order or duplicate deliveries.
+            emit StaleRootRejected({token: localToken, receivedNonce: root.remoteRoot.nonce, currentNonce: inbox.nonce});
+        }
+
+        // --- Project-wide shared state update (gated by snapshot nonce) ---
+        // The snapshot nonce is a project-wide counter independent of per-token outbox nonces.
+        // This prevents a staler per-token message from rolling back shared state (surplus, balance, supply)
+        // that was already updated by a fresher message for a different token.
+        if (root.snapshotNonce > _peerSnapshotNonce) {
+            _peerSnapshotNonce = root.snapshotNonce;
+
+            // Update unconditionally — a legitimate zero supply must clear phantom cached supply.
+            peerChainTotalSupply = root.sourceTotalSupply;
 
             // Store the surplus and balance snapshots from the source chain.
             _peerChainSurplus = JBDenominatedAmount({
@@ -647,14 +667,6 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
             _peerChainBalance = JBDenominatedAmount({
                 value: root.sourceBalance, currency: uint32(root.sourceCurrency), decimals: root.sourceDecimals
             });
-
-            emit NewInboxTreeRoot({
-                token: localToken, nonce: root.remoteRoot.nonce, root: root.remoteRoot.root, caller: _msgSender()
-            });
-        } else {
-            // Emit an event when a root is rejected due to a stale (non-increasing) nonce.
-            // This aids off-chain monitoring in detecting out-of-order or duplicate deliveries.
-            emit StaleRootRejected({token: localToken, receivedNonce: root.remoteRoot.nonce, currentNonce: inbox.nonce});
         }
     }
 
@@ -1252,7 +1264,8 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
             sourceCurrency: _ETH_CURRENCY,
             sourceDecimals: _ETH_DECIMALS,
             sourceSurplus: ethSurplus,
-            sourceBalance: ethBalance
+            sourceBalance: ethBalance,
+            snapshotNonce: ++_snapshotNonce
         });
 
         // Execute the chain/sucker specific logic for transferring the assets and communicating the root.

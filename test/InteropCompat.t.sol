@@ -429,6 +429,7 @@ contract InteropCompat is Test {
     ///      Slot 7 (offset 256): sourceDecimals (uint8, right-aligned in 32 bytes)
     ///      Slot 8 (offset 288): sourceSurplus (uint256)
     ///      Slot 9 (offset 320): sourceBalance (uint256)
+    ///      Slot 10 (offset 352): snapshotNonce (uint64, right-aligned in 32 bytes)
     function test_messageRoot_encoding() public pure {
         JBMessageRoot memory msg_ = JBMessageRoot({
             version: 1,
@@ -439,7 +440,8 @@ contract InteropCompat is Test {
             sourceCurrency: 0,
             sourceDecimals: 0,
             sourceSurplus: 0,
-            sourceBalance: 0
+            sourceBalance: 0,
+            snapshotNonce: 1
         });
 
         bytes memory encoded = abi.encode(msg_);
@@ -497,7 +499,8 @@ contract InteropCompat is Test {
             sourceCurrency: 0,
             sourceDecimals: 0,
             sourceSurplus: 0,
-            sourceBalance: 0
+            sourceBalance: 0,
+            snapshotNonce: 1
         });
 
         bytes memory encoded = abi.encode(msg_);

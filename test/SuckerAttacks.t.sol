@@ -195,7 +195,8 @@ contract SuckerAttacks is Test {
             sourceCurrency: 0,
             sourceDecimals: 0,
             sourceSurplus: 0,
-            sourceBalance: 0
+            sourceBalance: 0,
+            snapshotNonce: 1
         });
 
         // Non-peer calling fromRemote should revert
@@ -224,7 +225,8 @@ contract SuckerAttacks is Test {
             sourceCurrency: 0,
             sourceDecimals: 0,
             sourceSurplus: 0,
-            sourceBalance: 0
+            sourceBalance: 0,
+            snapshotNonce: 1
         });
 
         vm.prank(wrongSender);
@@ -251,7 +253,8 @@ contract SuckerAttacks is Test {
             sourceCurrency: 0,
             sourceDecimals: 0,
             sourceSurplus: 0,
-            sourceBalance: 0
+            sourceBalance: 0,
+            snapshotNonce: 1
         });
 
         // Other sucker calling fromRemote should be rejected
@@ -283,7 +286,8 @@ contract SuckerAttacks is Test {
                 sourceCurrency: 0,
                 sourceDecimals: 0,
                 sourceSurplus: 0,
-                sourceBalance: 0
+                sourceBalance: 0,
+                snapshotNonce: 1
             });
 
             vm.expectRevert();
