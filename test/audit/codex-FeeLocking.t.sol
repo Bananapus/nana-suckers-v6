@@ -108,6 +108,7 @@ contract ZeroCostBridgeSuckerHarness is JBSucker {
         JBMessageRoot memory
     )
         internal
+        pure
         override
     {
         if (transportPayment != 0) revert JBSucker_UnexpectedMsgValue(transportPayment);
