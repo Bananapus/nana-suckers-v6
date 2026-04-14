@@ -93,22 +93,22 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     /// (successfully/safely) perform a transfer on the remote chain.
     uint32 public constant override MESSENGER_ERC20_MIN_GAS_LIMIT = 200_000;
 
+    /// @notice The message format version. Used to reject incompatible messages from remote chains.
+    uint8 public constant MESSAGE_VERSION = 1;
+
     //*********************************************************************//
     // ------------------------- internal constants ----------------------- //
     //*********************************************************************//
 
-    /// @notice The depth of the merkle tree used to store the outbox and inbox.
-    uint32 constant _TREE_DEPTH = 32;
-
-    /// @notice The message format version. Used to reject incompatible messages from remote chains.
-    uint8 public constant MESSAGE_VERSION = 1;
-
     /// @notice The currency used for cross-chain surplus/balance normalization: ETH (native token).
     /// @dev Bridge messages always carry surplus and balance denominated in this currency at `_ETH_DECIMALS` precision.
-    uint256 constant _ETH_CURRENCY = JBCurrencyIds.ETH;
+    uint256 internal constant _ETH_CURRENCY = JBCurrencyIds.ETH;
 
     /// @notice The decimal precision used for cross-chain surplus/balance normalization: 18.
-    uint8 constant _ETH_DECIMALS = 18;
+    uint8 internal constant _ETH_DECIMALS = 18;
+
+    /// @notice The depth of the merkle tree used to store the outbox and inbox.
+    uint32 internal constant _TREE_DEPTH = 32;
 
     //*********************************************************************//
     // --------------- public immutable stored properties ---------------- //
@@ -397,9 +397,9 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         // Get the surplus denominated in ETH (currency = _ETH_CURRENCY, decimals = _ETH_DECIMALS).
         // currentSurplusOf aggregates across all terminals internally.
         // slither-disable-next-line calls-loop
-        try terminals[0].currentSurplusOf(
-            _projectId, new address[](0), _ETH_DECIMALS, uint32(_ETH_CURRENCY)
-        ) returns (uint256 surplus) {
+        try terminals[0].currentSurplusOf({
+            projectId: _projectId, tokens: new address[](0), decimals: _ETH_DECIMALS, currency: uint32(_ETH_CURRENCY)
+        }) returns (uint256 surplus) {
             ethSurplus = surplus;
         } catch {
             // If surplus computation fails, leave as 0 (safe underestimate).
@@ -429,19 +429,20 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
 
                     // Get the raw balance for this token from this terminal's store.
                     // slither-disable-next-line calls-loop
-                    try IJBMultiTerminal(address(terminals[i])).STORE().balanceOf(
-                        address(terminals[i]), _projectId, tkn
-                    ) returns (uint256 bal) {
+                    try IJBMultiTerminal(address(terminals[i])).STORE().balanceOf({
+                        terminal: address(terminals[i]), projectId: _projectId, token: tkn
+                    }) returns (uint256 bal) {
                         if (bal != 0) {
                             if (tokenCurrency == uint32(_ETH_CURRENCY)) {
                                 // Already ETH — just adjust decimals to 18.
-                                ethBalance += JBFixedPointNumber.adjustDecimals(bal, dec, _ETH_DECIMALS);
+                                ethBalance +=
+                                    JBFixedPointNumber.adjustDecimals({value: bal, decimals: dec, targetDecimals: _ETH_DECIMALS});
                             } else {
                                 // Convert to ETH via the price oracle.
                                 // slither-disable-next-line calls-loop
-                                try prices.pricePerUnitOf(
-                                    _projectId, tokenCurrency, uint32(_ETH_CURRENCY), _ETH_DECIMALS
-                                ) returns (uint256 price) {
+                                try prices.pricePerUnitOf({
+                                    projectId: _projectId, pricingCurrency: tokenCurrency, unitCurrency: uint32(_ETH_CURRENCY), decimals: _ETH_DECIMALS
+                                }) returns (uint256 price) {
                                     ethBalance += (bal * price) / (10 ** dec);
                                 } catch {
                                     // Skip tokens without a price feed — underestimate (safe direction).
@@ -506,9 +507,9 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
             try IJBMultiTerminal(address(terminals[0])).STORE() returns (IJBTerminalStore store) {
                 IJBPrices prices = store.PRICES();
                 // slither-disable-next-line calls-loop
-                try prices.pricePerUnitOf(
-                    _projectId, source.currency, uint32(currency), uint8(decimals)
-                ) returns (uint256 price) {
+                try prices.pricePerUnitOf({
+                    projectId: _projectId, pricingCurrency: source.currency, unitCurrency: uint32(currency), decimals: uint8(decimals)
+                }) returns (uint256 price) {
                     converted = (source.value * price) / (10 ** source.decimals);
                 } catch {
                     // No price feed — return 0 (safe underestimate).
