@@ -65,6 +65,9 @@ contract ArbitrumL2ToRemoteFeeDoSTest is Test {
     ArbitrumL2FeeHarness internal sucker;
 
     function setUp() public {
+        // Mock DIRECTORY.PROJECTS() so the JBSucker constructor can initialize the PROJECTS immutable.
+        vm.mockCall(DIRECTORY, abi.encodeCall(IJBDirectory.PROJECTS, ()), abi.encode(address(0)));
+
         JBArbitrumSuckerDeployer deployer = new JBArbitrumSuckerDeployer({
             directory: IJBDirectory(DIRECTORY),
             permissions: IJBPermissions(PERMISSIONS),
@@ -89,6 +92,12 @@ contract ArbitrumL2ToRemoteFeeDoSTest is Test {
         sucker = ArbitrumL2FeeHarness(payable(LibClone.cloneDeterministic(address(singleton), bytes32("arb_fee_dos"))));
         sucker.initialize(1);
         sucker.seedOutbox(JBConstants.NATIVE_TOKEN, bytes32(uint256(uint160(JBConstants.NATIVE_TOKEN))));
+
+        // Mock DIRECTORY.controllerOf() so the low-level call in _sendRoot() doesn't fail.
+        vm.mockCall(DIRECTORY, abi.encodeCall(IJBDirectory.controllerOf, (uint256(1))), abi.encode(address(0)));
+
+        // Mock DIRECTORY.terminalsOf() so _buildETHAggregate() in _sendRoot() doesn't revert.
+        vm.mockCall(DIRECTORY, abi.encodeCall(IJBDirectory.terminalsOf, (uint256(1))), abi.encode(new IJBTerminal[](0)));
 
         // Mock the registry fee and fee terminal.
         vm.mockCall(REGISTRY, abi.encodeCall(IJBSuckerRegistry.toRemoteFee, ()), abi.encode(uint256(1)));

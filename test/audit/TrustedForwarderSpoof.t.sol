@@ -42,6 +42,9 @@ contract TrustedForwarderSpoofTest is Test {
     JBArbitrumSucker internal sucker;
 
     function setUp() external {
+        // Mock DIRECTORY.PROJECTS() so the JBSucker constructor can initialize the PROJECTS immutable.
+        vm.mockCall(DIRECTORY, abi.encodeCall(IJBDirectory.PROJECTS, ()), abi.encode(address(0)));
+
         JBArbitrumSuckerDeployer deployer = new JBArbitrumSuckerDeployer({
             directory: IJBDirectory(DIRECTORY),
             permissions: IJBPermissions(PERMISSIONS),
@@ -89,14 +92,23 @@ contract TrustedForwarderSpoofTest is Test {
             version: 1,
             token: bytes32(uint256(uint160(TOKEN))),
             amount: 0,
-            remoteRoot: JBInboxTreeRoot({nonce: 1, root: forgedRoot})
+            remoteRoot: JBInboxTreeRoot({nonce: 1, root: forgedRoot}),
+            sourceTotalSupply: 0,
+            sourceCurrency: 0,
+            sourceDecimals: 0,
+            sourceSurplus: 0,
+            sourceBalance: 0,
+            snapshotNonce: 1
         });
 
         // Build the spoofed ERC-2771 calldata: real `fromRemote` encoding + 20-byte suffix
         // that _msgSender() would have decoded as the aliased peer address.
         address spoofedRemoteMessenger = AddressAliasHelper.applyL1ToL2Alias(address(sucker));
         bytes memory forwardedCalldata = bytes.concat(
-            abi.encodeWithSignature("fromRemote((uint8,bytes32,uint256,(uint64,bytes32)))", root),
+            abi.encodeWithSignature(
+                "fromRemote((uint8,bytes32,uint256,(uint64,bytes32),uint256,uint256,uint8,uint256,uint256,uint64))",
+                root
+            ),
             bytes20(spoofedRemoteMessenger)
         );
 

@@ -4,11 +4,13 @@ pragma solidity ^0.8.13;
 // forge-lint: disable-next-line(unaliased-plain-import)
 import "forge-std/Test.sol";
 
+import {IJBController} from "@bananapus/core-v6/src/interfaces/IJBController.sol";
 import {IJBDirectory} from "@bananapus/core-v6/src/interfaces/IJBDirectory.sol";
 import {IJBPermissions} from "@bananapus/core-v6/src/interfaces/IJBPermissions.sol";
 import {IJBTerminal} from "@bananapus/core-v6/src/interfaces/IJBTerminal.sol";
 import {IJBTokens} from "@bananapus/core-v6/src/interfaces/IJBTokens.sol";
 import {JBConstants} from "@bananapus/core-v6/src/libraries/JBConstants.sol";
+import {IERC165} from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
 import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import {LibClone} from "solady/src/utils/LibClone.sol";
 
@@ -110,6 +112,9 @@ contract FeeFallbackTest is Test {
     function setUp() public {
         vm.warp(100 days);
 
+        // Mock PROJECTS() so the constructor can cache the immutable.
+        vm.mockCall(DIRECTORY, abi.encodeCall(IJBDirectory.PROJECTS, ()), abi.encode(PROJECT));
+
         // Deploy singleton and clone.
         ZeroCostBridgeSucker singleton = new ZeroCostBridgeSucker(
             IJBDirectory(DIRECTORY),
@@ -129,9 +134,20 @@ contract FeeFallbackTest is Test {
         vm.mockCall(DIRECTORY, abi.encodeCall(IJBDirectory.PROJECTS, ()), abi.encode(PROJECT));
         vm.mockCall(PROJECT, abi.encodeCall(IERC721.ownerOf, (PROJECT_ID)), abi.encode(address(this)));
         vm.mockCall(DIRECTORY, abi.encodeCall(IJBDirectory.controllerOf, (PROJECT_ID)), abi.encode(CONTROLLER));
+        vm.mockCall(
+            CONTROLLER, abi.encodeCall(IERC165.supportsInterface, (type(IJBController).interfaceId)), abi.encode(true)
+        );
+        vm.mockCall(
+            CONTROLLER,
+            abi.encodeCall(IJBController.totalTokenSupplyWithReservedTokensOf, (PROJECT_ID)),
+            abi.encode(uint256(0))
+        );
 
         // Mock the registry's toRemoteFee() to return a non-zero fee.
         vm.mockCall(REGISTRY, abi.encodeCall(IJBSuckerRegistry.toRemoteFee, ()), abi.encode(TO_REMOTE_FEE));
+
+        // Mock DIRECTORY.terminalsOf() so _buildETHAggregate() in _sendRoot() doesn't revert.
+        vm.mockCall(DIRECTORY, abi.encodeCall(IJBDirectory.terminalsOf, (PROJECT_ID)), abi.encode(new IJBTerminal[](0)));
     }
 
     /// @notice toRemote() with msg.value == fee, no fee terminal, zero-cost bridge.

@@ -9,6 +9,7 @@ import {IJBDirectory} from "@bananapus/core-v6/src/interfaces/IJBDirectory.sol";
 import {IJBPermissions} from "@bananapus/core-v6/src/interfaces/IJBPermissions.sol";
 import {IJBTerminal} from "@bananapus/core-v6/src/interfaces/IJBTerminal.sol";
 import {IJBTokens} from "@bananapus/core-v6/src/interfaces/IJBTokens.sol";
+import {IERC165} from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
 import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import {LibClone} from "solady/src/utils/LibClone.sol";
 
@@ -193,12 +194,20 @@ contract TestAuditGaps is Test {
         vm.label(CONTROLLER, "MOCK_CONTROLLER");
         vm.label(PROJECT, "MOCK_PROJECT");
 
-        sucker = _createTestSucker(PROJECT_ID, "audit_gap_salt");
-
-        // Common mocks.
+        // Mock PROJECTS() so the constructor can cache the immutable.
         vm.mockCall(DIRECTORY, abi.encodeCall(IJBDirectory.PROJECTS, ()), abi.encode(PROJECT));
+
+        sucker = _createTestSucker(PROJECT_ID, "audit_gap_salt");
         vm.mockCall(PROJECT, abi.encodeCall(IERC721.ownerOf, (PROJECT_ID)), abi.encode(address(this)));
         vm.mockCall(DIRECTORY, abi.encodeCall(IJBDirectory.controllerOf, (PROJECT_ID)), abi.encode(CONTROLLER));
+        vm.mockCall(
+            CONTROLLER, abi.encodeCall(IERC165.supportsInterface, (type(IJBController).interfaceId)), abi.encode(true)
+        );
+        vm.mockCall(
+            CONTROLLER,
+            abi.encodeCall(IJBController.totalTokenSupplyWithReservedTokensOf, (PROJECT_ID)),
+            abi.encode(uint256(0))
+        );
         vm.mockCall(
             DIRECTORY, abi.encodeCall(IJBDirectory.primaryTerminalOf, (PROJECT_ID, TOKEN)), abi.encode(TERMINAL)
         );
@@ -209,6 +218,9 @@ contract TestAuditGaps is Test {
 
         // Mock the registry's toRemoteFee() to return 0 (registry is address(1) with no code).
         vm.mockCall(address(1), abi.encodeCall(IJBSuckerRegistry.toRemoteFee, ()), abi.encode(uint256(0)));
+
+        // Mock DIRECTORY.terminalsOf() so _buildETHAggregate() in _sendRoot() doesn't revert.
+        vm.mockCall(DIRECTORY, abi.encodeCall(IJBDirectory.terminalsOf, (PROJECT_ID)), abi.encode(new IJBTerminal[](0)));
     }
 
     function _createTestSucker(uint256 projectId, bytes32 salt) internal returns (AuditGapSucker) {
@@ -476,7 +488,13 @@ contract TestAuditGaps is Test {
                 version: 1,
                 token: bytes32(uint256(uint160(TOKEN))),
                 amount: i * 1 ether,
-                remoteRoot: JBInboxTreeRoot({nonce: i, root: roots[i - 1]})
+                remoteRoot: JBInboxTreeRoot({nonce: i, root: roots[i - 1]}),
+                sourceTotalSupply: 0,
+                sourceCurrency: 0,
+                sourceDecimals: 0,
+                sourceSurplus: 0,
+                sourceBalance: 0,
+                snapshotNonce: 1
             });
 
             vm.prank(address(sucker)); // peer = self for clones
@@ -495,7 +513,13 @@ contract TestAuditGaps is Test {
             version: 1,
             token: bytes32(uint256(uint160(TOKEN))),
             amount: 3 ether,
-            remoteRoot: JBInboxTreeRoot({nonce: 3, root: bytes32(uint256(0xDDD))})
+            remoteRoot: JBInboxTreeRoot({nonce: 3, root: bytes32(uint256(0xDDD))}),
+            sourceTotalSupply: 0,
+            sourceCurrency: 0,
+            sourceDecimals: 0,
+            sourceSurplus: 0,
+            sourceBalance: 0,
+            snapshotNonce: 1
         });
 
         vm.prank(address(sucker));
@@ -509,7 +533,13 @@ contract TestAuditGaps is Test {
             version: 1,
             token: bytes32(uint256(uint160(TOKEN))),
             amount: 2 ether,
-            remoteRoot: JBInboxTreeRoot({nonce: 2, root: bytes32(uint256(0xEEE))})
+            remoteRoot: JBInboxTreeRoot({nonce: 2, root: bytes32(uint256(0xEEE))}),
+            sourceTotalSupply: 0,
+            sourceCurrency: 0,
+            sourceDecimals: 0,
+            sourceSurplus: 0,
+            sourceBalance: 0,
+            snapshotNonce: 1
         });
 
         vm.prank(address(sucker));
@@ -671,7 +701,13 @@ contract TestAuditGaps is Test {
                 version: 1,
                 token: bytes32(uint256(uint160(TOKEN))),
                 amount: 1 ether,
-                remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(0x111))})
+                remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(0x111))}),
+                sourceTotalSupply: 0,
+                sourceCurrency: 0,
+                sourceDecimals: 0,
+                sourceSurplus: 0,
+                sourceBalance: 0,
+                snapshotNonce: 1
             })
         );
         assertEq(sucker.test_getInboxNonce(TOKEN), 1);
@@ -683,7 +719,13 @@ contract TestAuditGaps is Test {
                 version: 1,
                 token: bytes32(uint256(uint160(TOKEN))),
                 amount: 2 ether,
-                remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(0x222))})
+                remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(0x222))}),
+                sourceTotalSupply: 0,
+                sourceCurrency: 0,
+                sourceDecimals: 0,
+                sourceSurplus: 0,
+                sourceBalance: 0,
+                snapshotNonce: 1
             })
         );
         assertEq(sucker.test_getInboxNonce(TOKEN), 1, "Same nonce should not update");
@@ -696,7 +738,13 @@ contract TestAuditGaps is Test {
                 version: 1,
                 token: bytes32(uint256(uint160(TOKEN))),
                 amount: 5 ether,
-                remoteRoot: JBInboxTreeRoot({nonce: 5, root: bytes32(uint256(0x555))})
+                remoteRoot: JBInboxTreeRoot({nonce: 5, root: bytes32(uint256(0x555))}),
+                sourceTotalSupply: 0,
+                sourceCurrency: 0,
+                sourceDecimals: 0,
+                sourceSurplus: 0,
+                sourceBalance: 0,
+                snapshotNonce: 1
             })
         );
         assertEq(sucker.test_getInboxNonce(TOKEN), 5, "Higher nonce should update");
@@ -709,7 +757,13 @@ contract TestAuditGaps is Test {
                 version: 1,
                 token: bytes32(uint256(uint160(TOKEN))),
                 amount: 3 ether,
-                remoteRoot: JBInboxTreeRoot({nonce: 3, root: bytes32(uint256(0x333))})
+                remoteRoot: JBInboxTreeRoot({nonce: 3, root: bytes32(uint256(0x333))}),
+                sourceTotalSupply: 0,
+                sourceCurrency: 0,
+                sourceDecimals: 0,
+                sourceSurplus: 0,
+                sourceBalance: 0,
+                snapshotNonce: 1
             })
         );
         assertEq(sucker.test_getInboxNonce(TOKEN), 5, "Lower nonce should not update");
@@ -758,7 +812,13 @@ contract TestAuditGaps is Test {
                 version: 1,
                 token: bytes32(uint256(uint160(tokenA))),
                 amount: 1 ether,
-                remoteRoot: JBInboxTreeRoot({nonce: 3, root: bytes32(uint256(0xAAA))})
+                remoteRoot: JBInboxTreeRoot({nonce: 3, root: bytes32(uint256(0xAAA))}),
+                sourceTotalSupply: 0,
+                sourceCurrency: 0,
+                sourceDecimals: 0,
+                sourceSurplus: 0,
+                sourceBalance: 0,
+                snapshotNonce: 1
             })
         );
 
@@ -768,7 +828,13 @@ contract TestAuditGaps is Test {
                 version: 1,
                 token: bytes32(uint256(uint160(tokenB))),
                 amount: 2 ether,
-                remoteRoot: JBInboxTreeRoot({nonce: 7, root: bytes32(uint256(0xBBB))})
+                remoteRoot: JBInboxTreeRoot({nonce: 7, root: bytes32(uint256(0xBBB))}),
+                sourceTotalSupply: 0,
+                sourceCurrency: 0,
+                sourceDecimals: 0,
+                sourceSurplus: 0,
+                sourceBalance: 0,
+                snapshotNonce: 1
             })
         );
 
@@ -785,7 +851,13 @@ contract TestAuditGaps is Test {
                 version: 1,
                 token: bytes32(uint256(uint160(tokenA))),
                 amount: 10 ether,
-                remoteRoot: JBInboxTreeRoot({nonce: 10, root: bytes32(uint256(0xCCC))})
+                remoteRoot: JBInboxTreeRoot({nonce: 10, root: bytes32(uint256(0xCCC))}),
+                sourceTotalSupply: 0,
+                sourceCurrency: 0,
+                sourceDecimals: 0,
+                sourceSurplus: 0,
+                sourceBalance: 0,
+                snapshotNonce: 1
             })
         );
 
@@ -874,7 +946,13 @@ contract TestAuditGaps is Test {
             version: 99, // wrong version
             token: bytes32(uint256(uint160(TOKEN))),
             amount: 1 ether,
-            remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(0x123))})
+            remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(0x123))}),
+            sourceTotalSupply: 0,
+            sourceCurrency: 0,
+            sourceDecimals: 0,
+            sourceSurplus: 0,
+            sourceBalance: 0,
+            snapshotNonce: 1
         });
 
         vm.prank(address(sucker));

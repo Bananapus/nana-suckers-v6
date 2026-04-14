@@ -139,7 +139,7 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
         address origin = abi.decode(any2EvmMessage.sender, (address));
 
         // Make sure that the message came from our peer.
-        if (origin != _toAddress(peer()) || any2EvmMessage.sourceChainSelector != REMOTE_CHAIN_SELECTOR) {
+        if (origin != _peerAddress() || any2EvmMessage.sourceChainSelector != REMOTE_CHAIN_SELECTOR) {
             revert JBSucker_NotPeer(_toBytes32(origin));
         }
 
@@ -254,7 +254,7 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
         // Create an EVM2AnyMessage struct in memory with necessary information for sending a cross-chain message
         // CCIP requires EVM addresses, so convert the bytes32 peer to an address for the receiver field.
         Client.EVM2AnyMessage memory message = Client.EVM2AnyMessage({
-            receiver: abi.encode(_toAddress(peer())),
+            receiver: abi.encode(_peerAddress()),
             data: abi.encode(sucker_message),
             tokenAmounts: tokenAmounts,
             extraArgs: Client._argsToBytes(
