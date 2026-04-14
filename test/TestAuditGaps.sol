@@ -20,7 +20,6 @@ import {JBClaim} from "../src/structs/JBClaim.sol";
 import {JBLeaf} from "../src/structs/JBLeaf.sol";
 import {JBInboxTreeRoot} from "../src/structs/JBInboxTreeRoot.sol";
 import {JBMessageRoot} from "../src/structs/JBMessageRoot.sol";
-import {JBTokenSnapshot} from "../src/structs/JBTokenSnapshot.sol";
 import {JBRemoteToken} from "../src/structs/JBRemoteToken.sol";
 import {MerkleLib} from "../src/utils/MerkleLib.sol";
 
@@ -211,7 +210,7 @@ contract TestAuditGaps is Test {
         // Mock the registry's toRemoteFee() to return 0 (registry is address(1) with no code).
         vm.mockCall(address(1), abi.encodeCall(IJBSuckerRegistry.toRemoteFee, ()), abi.encode(uint256(0)));
 
-        // Mock DIRECTORY.terminalsOf() so _buildTokenSnapshots() in _sendRoot() doesn't revert.
+        // Mock DIRECTORY.terminalsOf() so _buildETHAggregate() in _sendRoot() doesn't revert.
         vm.mockCall(
             DIRECTORY,
             abi.encodeCall(IJBDirectory.terminalsOf, (PROJECT_ID)),
@@ -481,12 +480,15 @@ contract TestAuditGaps is Test {
 
         for (uint64 i = 1; i <= 3; i++) {
             JBMessageRoot memory msgRoot = JBMessageRoot({
-                version: 2,
+                version: 1,
                 token: bytes32(uint256(uint160(TOKEN))),
                 amount: i * 1 ether,
                 remoteRoot: JBInboxTreeRoot({nonce: i, root: roots[i - 1]}),
                 sourceTotalSupply: 0,
-                sourceTokens: new JBTokenSnapshot[](0)
+                sourceCurrency: 0,
+                sourceDecimals: 0,
+                sourceSurplus: 0,
+            sourceBalance: 0
             });
 
             vm.prank(address(sucker)); // peer = self for clones
@@ -502,12 +504,15 @@ contract TestAuditGaps is Test {
     function test_concurrentFromRemote_outOfOrderDelivery() public {
         // Deliver nonce 3 first.
         JBMessageRoot memory root3 = JBMessageRoot({
-            version: 2,
+            version: 1,
             token: bytes32(uint256(uint160(TOKEN))),
             amount: 3 ether,
             remoteRoot: JBInboxTreeRoot({nonce: 3, root: bytes32(uint256(0xDDD))}),
             sourceTotalSupply: 0,
-            sourceTokens: new JBTokenSnapshot[](0)
+                sourceCurrency: 0,
+                sourceDecimals: 0,
+            sourceSurplus: 0,
+            sourceBalance: 0
         });
 
         vm.prank(address(sucker));
@@ -518,12 +523,15 @@ contract TestAuditGaps is Test {
 
         // Now deliver nonce 2 (late) — should be silently ignored.
         JBMessageRoot memory root2 = JBMessageRoot({
-            version: 2,
+            version: 1,
             token: bytes32(uint256(uint160(TOKEN))),
             amount: 2 ether,
             remoteRoot: JBInboxTreeRoot({nonce: 2, root: bytes32(uint256(0xEEE))}),
             sourceTotalSupply: 0,
-            sourceTokens: new JBTokenSnapshot[](0)
+                sourceCurrency: 0,
+                sourceDecimals: 0,
+            sourceSurplus: 0,
+            sourceBalance: 0
         });
 
         vm.prank(address(sucker));
@@ -682,12 +690,15 @@ contract TestAuditGaps is Test {
         vm.prank(address(sucker));
         sucker.fromRemote(
             JBMessageRoot({
-                version: 2,
+                version: 1,
                 token: bytes32(uint256(uint160(TOKEN))),
                 amount: 1 ether,
                 remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(0x111))}),
                 sourceTotalSupply: 0,
-                sourceTokens: new JBTokenSnapshot[](0)
+                sourceCurrency: 0,
+                sourceDecimals: 0,
+                sourceSurplus: 0,
+            sourceBalance: 0
             })
         );
         assertEq(sucker.test_getInboxNonce(TOKEN), 1);
@@ -696,12 +707,15 @@ contract TestAuditGaps is Test {
         vm.prank(address(sucker));
         sucker.fromRemote(
             JBMessageRoot({
-                version: 2,
+                version: 1,
                 token: bytes32(uint256(uint160(TOKEN))),
                 amount: 2 ether,
                 remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(0x222))}),
                 sourceTotalSupply: 0,
-                sourceTokens: new JBTokenSnapshot[](0)
+                sourceCurrency: 0,
+                sourceDecimals: 0,
+                sourceSurplus: 0,
+            sourceBalance: 0
             })
         );
         assertEq(sucker.test_getInboxNonce(TOKEN), 1, "Same nonce should not update");
@@ -711,12 +725,15 @@ contract TestAuditGaps is Test {
         vm.prank(address(sucker));
         sucker.fromRemote(
             JBMessageRoot({
-                version: 2,
+                version: 1,
                 token: bytes32(uint256(uint160(TOKEN))),
                 amount: 5 ether,
                 remoteRoot: JBInboxTreeRoot({nonce: 5, root: bytes32(uint256(0x555))}),
                 sourceTotalSupply: 0,
-                sourceTokens: new JBTokenSnapshot[](0)
+                sourceCurrency: 0,
+                sourceDecimals: 0,
+                sourceSurplus: 0,
+            sourceBalance: 0
             })
         );
         assertEq(sucker.test_getInboxNonce(TOKEN), 5, "Higher nonce should update");
@@ -726,12 +743,15 @@ contract TestAuditGaps is Test {
         vm.prank(address(sucker));
         sucker.fromRemote(
             JBMessageRoot({
-                version: 2,
+                version: 1,
                 token: bytes32(uint256(uint160(TOKEN))),
                 amount: 3 ether,
                 remoteRoot: JBInboxTreeRoot({nonce: 3, root: bytes32(uint256(0x333))}),
                 sourceTotalSupply: 0,
-                sourceTokens: new JBTokenSnapshot[](0)
+                sourceCurrency: 0,
+                sourceDecimals: 0,
+                sourceSurplus: 0,
+            sourceBalance: 0
             })
         );
         assertEq(sucker.test_getInboxNonce(TOKEN), 5, "Lower nonce should not update");
@@ -777,24 +797,30 @@ contract TestAuditGaps is Test {
         vm.prank(address(sucker));
         sucker.fromRemote(
             JBMessageRoot({
-                version: 2,
+                version: 1,
                 token: bytes32(uint256(uint160(tokenA))),
                 amount: 1 ether,
                 remoteRoot: JBInboxTreeRoot({nonce: 3, root: bytes32(uint256(0xAAA))}),
                 sourceTotalSupply: 0,
-                sourceTokens: new JBTokenSnapshot[](0)
+                sourceCurrency: 0,
+                sourceDecimals: 0,
+                sourceSurplus: 0,
+            sourceBalance: 0
             })
         );
 
         vm.prank(address(sucker));
         sucker.fromRemote(
             JBMessageRoot({
-                version: 2,
+                version: 1,
                 token: bytes32(uint256(uint160(tokenB))),
                 amount: 2 ether,
                 remoteRoot: JBInboxTreeRoot({nonce: 7, root: bytes32(uint256(0xBBB))}),
                 sourceTotalSupply: 0,
-                sourceTokens: new JBTokenSnapshot[](0)
+                sourceCurrency: 0,
+                sourceDecimals: 0,
+                sourceSurplus: 0,
+            sourceBalance: 0
             })
         );
 
@@ -808,12 +834,15 @@ contract TestAuditGaps is Test {
         vm.prank(address(sucker));
         sucker.fromRemote(
             JBMessageRoot({
-                version: 2,
+                version: 1,
                 token: bytes32(uint256(uint160(tokenA))),
                 amount: 10 ether,
                 remoteRoot: JBInboxTreeRoot({nonce: 10, root: bytes32(uint256(0xCCC))}),
                 sourceTotalSupply: 0,
-                sourceTokens: new JBTokenSnapshot[](0)
+                sourceCurrency: 0,
+                sourceDecimals: 0,
+                sourceSurplus: 0,
+            sourceBalance: 0
             })
         );
 
@@ -904,11 +933,14 @@ contract TestAuditGaps is Test {
             amount: 1 ether,
             remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(0x123))}),
             sourceTotalSupply: 0,
-            sourceTokens: new JBTokenSnapshot[](0)
+                sourceCurrency: 0,
+                sourceDecimals: 0,
+            sourceSurplus: 0,
+            sourceBalance: 0
         });
 
         vm.prank(address(sucker));
-        vm.expectRevert(abi.encodeWithSelector(JBSucker.JBSucker_InvalidMessageVersion.selector, 99, 2));
+        vm.expectRevert(abi.encodeWithSelector(JBSucker.JBSucker_InvalidMessageVersion.selector, 99, 1));
         sucker.fromRemote(root);
 
         // Inbox should be unchanged.

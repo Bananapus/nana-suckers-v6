@@ -18,7 +18,6 @@ import {JBClaim} from "../../src/structs/JBClaim.sol";
 import {JBInboxTreeRoot} from "../../src/structs/JBInboxTreeRoot.sol";
 import {JBLeaf} from "../../src/structs/JBLeaf.sol";
 import {JBMessageRoot} from "../../src/structs/JBMessageRoot.sol";
-import {JBTokenSnapshot} from "../../src/structs/JBTokenSnapshot.sol";
 
 
 contract CodexMockWETH {
@@ -152,7 +151,7 @@ contract CodexCCIPWrappedNativeMisunwrapTest is Test {
         proof[31] = 0x8448818bb4ae4562849e949e17ac16e0be16688e156b5cf15e098c627c0056a9;
 
         JBMessageRoot memory root = JBMessageRoot({
-            version: 2,
+            version: 1,
             token: bytes32(uint256(uint160(address(weth)))),
             amount: amount,
             remoteRoot: JBInboxTreeRoot({
@@ -164,7 +163,10 @@ contract CodexCCIPWrappedNativeMisunwrapTest is Test {
                 })
             }),
             sourceTotalSupply: 0,
-            sourceTokens: new JBTokenSnapshot[](0)
+                sourceCurrency: 0,
+                sourceDecimals: 0,
+            sourceSurplus: 0,
+            sourceBalance: 0
         });
 
         Client.EVMTokenAmount[] memory tokenAmounts = new Client.EVMTokenAmount[](1);

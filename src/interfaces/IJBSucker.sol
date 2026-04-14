@@ -131,46 +131,16 @@ interface IJBSucker is IERC165 {
     function peerChainTotalSupply() external view returns (uint256);
 
     /// @notice The aggregate peer chain surplus, normalized to a desired currency and decimal precision using JBPrices.
-    /// @dev If `tokens` is non-empty, only those tokens are summed; if empty, all stored peer chain tokens are summed.
-    /// If a price feed is missing for a token, that token's contribution is skipped (underestimate).
-    /// @param tokens The tokens to filter by (empty = all stored peer chain tokens).
-    /// @param decimals The decimal precision for the returned value.
-    /// @param currency The currency to normalize to (e.g. `uint256(uint160(JBConstants.NATIVE_TOKEN))` for ETH).
-    /// @return A `JBTokenAmount` with the aggregated, normalized value.
-    function peerChainSurplusOf(
-        address[] calldata tokens,
-        uint256 decimals,
-        uint256 currency
-    )
-        external
-        view
-        returns (JBTokenAmount memory);
-
-    /// @notice The aggregate peer chain balance, normalized to a desired currency and decimal precision using JBPrices.
-    /// @dev If `tokens` is non-empty, only those tokens are summed; if empty, all stored peer chain tokens are summed.
-    /// If a price feed is missing for a token, that token's contribution is skipped (underestimate).
-    /// @param tokens The tokens to filter by (empty = all stored peer chain tokens).
-    /// @param decimals The decimal precision for the returned value.
-    /// @param currency The currency to normalize to (e.g. `uint256(uint160(JBConstants.NATIVE_TOKEN))` for ETH).
-    /// @return A `JBTokenAmount` with the aggregated, normalized value.
-    function peerChainBalanceOf(
-        address[] calldata tokens,
-        uint256 decimals,
-        uint256 currency
-    )
-        external
-        view
-        returns (JBTokenAmount memory);
-
-    /// @notice The aggregate peer chain surplus across all stored tokens, normalized to a desired currency and decimal
-    /// precision.
+    /// @dev The surplus is stored as ETH-denominated (18 decimals) and converted to the requested currency/decimals
+    /// using the local JBPrices oracle.
     /// @param decimals The decimal precision for the returned value.
     /// @param currency The currency to normalize to.
     /// @return A `JBTokenAmount` with the aggregated, normalized value.
     function peerChainSurplusOf(uint256 decimals, uint256 currency) external view returns (JBTokenAmount memory);
 
-    /// @notice The aggregate peer chain balance across all stored tokens, normalized to a desired currency and decimal
-    /// precision.
+    /// @notice The aggregate peer chain balance, normalized to a desired currency and decimal precision using JBPrices.
+    /// @dev The balance is stored as ETH-denominated (18 decimals) and converted to the requested currency/decimals
+    /// using the local JBPrices oracle.
     /// @param decimals The decimal precision for the returned value.
     /// @param currency The currency to normalize to.
     /// @return A `JBTokenAmount` with the aggregated, normalized value.

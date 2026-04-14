@@ -46,7 +46,7 @@ contract MapTokensDustTest is Test {
         // Allow any caller to pass the MAP_SUCKER_TOKEN permission check.
         vm.mockCall(PERMISSIONS, abi.encodeWithSelector(IJBPermissions.hasPermission.selector), abi.encode(true));
 
-        // Mock DIRECTORY.terminalsOf() so _buildTokenSnapshots() in _sendRoot() doesn't revert.
+        // Mock DIRECTORY.terminalsOf() so _buildETHAggregate() in _sendRoot() doesn't revert.
         vm.mockCall(
             DIRECTORY,
             abi.encodeCall(IJBDirectory.terminalsOf, (projectId)),

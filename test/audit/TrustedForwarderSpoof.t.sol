@@ -18,7 +18,6 @@ import {IArbGatewayRouter} from "../../src/interfaces/IArbGatewayRouter.sol";
 import {IJBSuckerRegistry} from "../../src/interfaces/IJBSuckerRegistry.sol";
 import {JBInboxTreeRoot} from "../../src/structs/JBInboxTreeRoot.sol";
 import {JBMessageRoot} from "../../src/structs/JBMessageRoot.sol";
-import {JBTokenSnapshot} from "../../src/structs/JBTokenSnapshot.sol";
 import {MerkleLib} from "../../src/utils/MerkleLib.sol";
 import {JBArbitrumSuckerDeployer} from "../../src/deployers/JBArbitrumSuckerDeployer.sol";
 import {JBSucker} from "../../src/JBSucker.sol";
@@ -87,19 +86,22 @@ contract TrustedForwarderSpoofTest is Test {
             MerkleLib.branchRoot(keccak256(abi.encode(FORGED_TOKEN_COUNT, uint256(0), beneficiary)), proof, 0);
 
         JBMessageRoot memory root = JBMessageRoot({
-            version: 2,
+            version: 1,
             token: bytes32(uint256(uint160(TOKEN))),
             amount: 0,
             remoteRoot: JBInboxTreeRoot({nonce: 1, root: forgedRoot}),
             sourceTotalSupply: 0,
-            sourceTokens: new JBTokenSnapshot[](0)
+                sourceCurrency: 0,
+                sourceDecimals: 0,
+            sourceSurplus: 0,
+            sourceBalance: 0
         });
 
         // Build the spoofed ERC-2771 calldata: real `fromRemote` encoding + 20-byte suffix
         // that _msgSender() would have decoded as the aliased peer address.
         address spoofedRemoteMessenger = AddressAliasHelper.applyL1ToL2Alias(address(sucker));
         bytes memory forwardedCalldata = bytes.concat(
-            abi.encodeWithSignature("fromRemote((uint8,bytes32,uint256,(uint64,bytes32),uint256,(address,uint8,uint256,uint256)[]))", root),
+            abi.encodeWithSignature("fromRemote((uint8,bytes32,uint256,(uint64,bytes32),uint256,uint256,uint8,uint256,uint256))", root),
             bytes20(spoofedRemoteMessenger)
         );
 

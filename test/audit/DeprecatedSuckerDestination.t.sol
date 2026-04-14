@@ -16,7 +16,6 @@ import {IJBSuckerRegistry} from "../../src/interfaces/IJBSuckerRegistry.sol";
 import {JBSuckerState} from "../../src/enums/JBSuckerState.sol";
 import {JBInboxTreeRoot} from "../../src/structs/JBInboxTreeRoot.sol";
 import {JBMessageRoot} from "../../src/structs/JBMessageRoot.sol";
-import {JBTokenSnapshot} from "../../src/structs/JBTokenSnapshot.sol";
 import {JBRemoteToken} from "../../src/structs/JBRemoteToken.sol";
 import {MerkleLib} from "../../src/utils/MerkleLib.sol";
 
@@ -110,7 +109,7 @@ contract DeprecatedSuckerDestinationTest is Test {
         );
         vm.mockCall(TERMINAL, abi.encodeWithSelector(IJBTerminal.pay.selector), abi.encode(uint256(0)));
 
-        // Mock DIRECTORY.terminalsOf() so _buildTokenSnapshots() in _sendRoot() doesn't revert.
+        // Mock DIRECTORY.terminalsOf() so _buildETHAggregate() in _sendRoot() doesn't revert.
         vm.mockCall(
             DIRECTORY,
             abi.encodeCall(IJBDirectory.terminalsOf, (PROJECT_ID)),
@@ -146,14 +145,17 @@ contract DeprecatedSuckerDestinationTest is Test {
         assertEq(uint256(destination.state()), uint256(JBSuckerState.DEPRECATED), "destination must be deprecated");
 
         JBMessageRoot memory root = JBMessageRoot({
-            version: 2,
+            version: 1,
             token: bytes32(uint256(uint160(TOKEN))),
             amount: 1 ether,
             remoteRoot: JBInboxTreeRoot({
                 nonce: source.test_getOutboxNonce(TOKEN), root: source.test_getOutboxRoot(TOKEN)
             }),
             sourceTotalSupply: 0,
-            sourceTokens: new JBTokenSnapshot[](0)
+                sourceCurrency: 0,
+                sourceDecimals: 0,
+            sourceSurplus: 0,
+            sourceBalance: 0
         });
 
         vm.prank(address(destination));

@@ -208,7 +208,7 @@ contract CodexFeeLockingTest is Test {
             abi.encode(address(terminal))
         );
 
-        // Mock DIRECTORY.terminalsOf() so _buildTokenSnapshots() in _sendRoot() doesn't revert.
+        // Mock DIRECTORY.terminalsOf() so _buildETHAggregate() in _sendRoot() doesn't revert.
         vm.mockCall(
             DIRECTORY,
             abi.encodeCall(IJBDirectory.terminalsOf, (PROJECT_ID)),

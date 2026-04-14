@@ -129,7 +129,7 @@ contract CCIPRefundTest is Test {
         // Mock the registry's toRemoteFee() to return 0 (registry is address(1) with no code).
         vm.mockCall(address(1), abi.encodeCall(IJBSuckerRegistry.toRemoteFee, ()), abi.encode(uint256(0)));
 
-        // Mock DIRECTORY.terminalsOf() so _buildTokenSnapshots() in _sendRoot() doesn't revert.
+        // Mock DIRECTORY.terminalsOf() so _buildETHAggregate() in _sendRoot() doesn't revert.
         vm.mockCall(
             DIRECTORY,
             abi.encodeCall(IJBDirectory.terminalsOf, (PROJECT_ID)),

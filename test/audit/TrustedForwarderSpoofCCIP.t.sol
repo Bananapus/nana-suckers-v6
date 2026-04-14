@@ -17,7 +17,6 @@ import {ICCIPRouter} from "../../src/interfaces/ICCIPRouter.sol";
 import {IJBSuckerRegistry} from "../../src/interfaces/IJBSuckerRegistry.sol";
 import {JBInboxTreeRoot} from "../../src/structs/JBInboxTreeRoot.sol";
 import {JBMessageRoot} from "../../src/structs/JBMessageRoot.sol";
-import {JBTokenSnapshot} from "../../src/structs/JBTokenSnapshot.sol";
 import {JBSucker} from "../../src/JBSucker.sol";
 import {MerkleLib} from "../../src/utils/MerkleLib.sol";
 
@@ -83,12 +82,15 @@ contract TrustedForwarderSpoofCCIPTest is Test {
             MerkleLib.branchRoot(keccak256(abi.encode(FORGED_TOKEN_COUNT, uint256(0), beneficiary)), proof, 0);
 
         JBMessageRoot memory root = JBMessageRoot({
-            version: 2,
+            version: 1,
             token: bytes32(uint256(uint160(TOKEN))),
             amount: 0,
             remoteRoot: JBInboxTreeRoot({nonce: 1, root: forgedRoot}),
             sourceTotalSupply: 0,
-            sourceTokens: new JBTokenSnapshot[](0)
+                sourceCurrency: 0,
+                sourceDecimals: 0,
+            sourceSurplus: 0,
+            sourceBalance: 0
         });
 
         // Build a crafted CCIP message with attacker-controlled sender and chain selector.

@@ -34,7 +34,6 @@ import {JBInboxTreeRoot} from "./structs/JBInboxTreeRoot.sol";
 import {JBMessageRoot} from "./structs/JBMessageRoot.sol";
 import {JBOutboxTree} from "./structs/JBOutboxTree.sol";
 import {JBRemoteToken} from "./structs/JBRemoteToken.sol";
-import {JBTokenSnapshot} from "./structs/JBTokenSnapshot.sol";
 import {JBTokenMapping} from "./structs/JBTokenMapping.sol";
 import {MerkleLib} from "./utils/MerkleLib.sol";
 
@@ -101,8 +100,14 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     uint32 constant _TREE_DEPTH = 32;
 
     /// @notice The message format version. Used to reject incompatible messages from remote chains.
-    /// @dev Bumped to 2 to include `sourceTotalSupply` in bridge messages for cross-chain tax supply tracking.
-    uint8 public constant MESSAGE_VERSION = 2;
+    uint8 public constant MESSAGE_VERSION = 1;
+
+    /// @notice The currency used for cross-chain surplus/balance normalization: ETH (native token).
+    /// @dev Bridge messages always carry surplus and balance denominated in this currency at `_ETH_DECIMALS` precision.
+    uint256 constant _ETH_CURRENCY = uint256(uint160(JBConstants.NATIVE_TOKEN));
+
+    /// @notice The decimal precision used for cross-chain surplus/balance normalization: 18.
+    uint8 constant _ETH_DECIMALS = 18;
 
     //*********************************************************************//
     // --------------- public immutable stored properties ---------------- //
@@ -132,23 +137,21 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     /// suckers, preventing cash out tax bypass on chains where a holder dominates the local supply.
     uint256 public peerChainTotalSupply;
 
-    /// @notice The last known project-wide surplus on the peer chain for a given token denomination, updated each time
-    /// a bridge message is received.
-    mapping(address token => uint256) private _peerChainSurplusOf;
+    /// @notice The currency the peer chain used to denominate its surplus/balance snapshots.
+    /// Updated each time a bridge message is received.
+    uint256 private _peerChainCurrency;
 
-    /// @notice The last known raw terminal balance on the peer chain for a given token, updated each time a bridge
-    /// message is received.
-    mapping(address token => uint256) private _peerChainBalanceOf;
+    /// @notice The decimal precision of the peer chain's surplus/balance snapshots.
+    /// Updated each time a bridge message is received.
+    uint8 private _peerChainDecimals;
 
-    /// @notice The decimal precision of a peer chain token snapshot, updated each time a bridge message is received.
-    mapping(address token => uint8) private _peerChainDecimalsOf;
+    /// @notice The last known project-wide surplus on the peer chain, denominated in `_peerChainCurrency` at
+    /// `_peerChainDecimals` precision. Updated each time a bridge message is received.
+    uint256 private _peerChainSurplus;
 
-    //*********************************************************************//
-    // --------------------- private stored properties ------------------- //
-    //*********************************************************************//
-
-    /// @notice Tracks which tokens have entries in the peer chain snapshot mappings, so they can be cleared on update.
-    address[] private _peerChainTokens;
+    /// @notice The last known total recorded balance on the peer chain, denominated in `_peerChainCurrency` at
+    /// `_peerChainDecimals` precision. Updated each time a bridge message is received.
+    uint256 private _peerChainBalance;
 
     /// @notice The timestamp after which the sucker is entirely deprecated.
     uint256 internal deprecatedAfter;
@@ -267,56 +270,22 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         return _toBytes32(address(this));
     }
 
-    /// @notice The aggregate peer chain surplus, normalized to a desired currency and decimal precision using JBPrices.
-    /// @param tokens The tokens to filter by (empty = all stored peer chain tokens).
+    /// @notice The peer chain surplus, converted from the source denomination to the requested currency and decimal
+    /// precision using the local JBPrices oracle.
     /// @param decimals The decimal precision for the returned value.
     /// @param currency The currency to normalize to (e.g. `uint256(uint160(JBConstants.NATIVE_TOKEN))` for ETH).
-    /// @return A `JBTokenAmount` with the aggregated, normalized value.
-    function peerChainSurplusOf(
-        address[] calldata tokens,
-        uint256 decimals,
-        uint256 currency
-    )
-        external
-        view
-        returns (JBTokenAmount memory)
-    {
-        return _aggregateSnapshots({tokens: tokens, decimals: decimals, currency: currency, useBalance: false});
-    }
-
-    /// @notice The aggregate peer chain balance, normalized to a desired currency and decimal precision using JBPrices.
-    /// @param tokens The tokens to filter by (empty = all stored peer chain tokens).
-    /// @param decimals The decimal precision for the returned value.
-    /// @param currency The currency to normalize to (e.g. `uint256(uint160(JBConstants.NATIVE_TOKEN))` for ETH).
-    /// @return A `JBTokenAmount` with the aggregated, normalized value.
-    function peerChainBalanceOf(
-        address[] calldata tokens,
-        uint256 decimals,
-        uint256 currency
-    )
-        external
-        view
-        returns (JBTokenAmount memory)
-    {
-        return _aggregateSnapshots({tokens: tokens, decimals: decimals, currency: currency, useBalance: true});
-    }
-
-    /// @notice The aggregate peer chain surplus across all stored tokens, normalized to a desired currency and decimal
-    /// precision.
-    /// @param decimals The decimal precision for the returned value.
-    /// @param currency The currency to normalize to.
-    /// @return A `JBTokenAmount` with the aggregated, normalized value.
+    /// @return A `JBTokenAmount` with the converted value.
     function peerChainSurplusOf(uint256 decimals, uint256 currency) external view returns (JBTokenAmount memory) {
-        return _aggregateSnapshots({tokens: new address[](0), decimals: decimals, currency: currency, useBalance: false});
+        return _convertPeerValue({sourceValue: _peerChainSurplus, decimals: decimals, currency: currency});
     }
 
-    /// @notice The aggregate peer chain balance across all stored tokens, normalized to a desired currency and decimal
-    /// precision.
+    /// @notice The peer chain balance, converted from the source denomination to the requested currency and decimal
+    /// precision using the local JBPrices oracle.
     /// @param decimals The decimal precision for the returned value.
-    /// @param currency The currency to normalize to.
-    /// @return A `JBTokenAmount` with the aggregated, normalized value.
+    /// @param currency The currency to normalize to (e.g. `uint256(uint160(JBConstants.NATIVE_TOKEN))` for ETH).
+    /// @return A `JBTokenAmount` with the converted value.
     function peerChainBalanceOf(uint256 decimals, uint256 currency) external view returns (JBTokenAmount memory) {
-        return _aggregateSnapshots({tokens: new address[](0), decimals: decimals, currency: currency, useBalance: true});
+        return _convertPeerValue({sourceValue: _peerChainBalance, decimals: decimals, currency: currency});
     }
 
     /// @notice The ID of the project (on the local chain) that this sucker is associated with.
@@ -608,34 +577,11 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
                 peerChainTotalSupply = root.sourceTotalSupply;
             }
 
-            // Clear previous per-token snapshots.
-            uint256 prevTokenCount = _peerChainTokens.length;
-            for (uint256 j; j < prevTokenCount;) {
-                address t = _peerChainTokens[j];
-                delete _peerChainSurplusOf[t];
-                delete _peerChainBalanceOf[t];
-                delete _peerChainDecimalsOf[t];
-                unchecked {
-                    ++j;
-                }
-            }
-            delete _peerChainTokens;
-
-            // Store new per-token snapshots from the bridge message.
-            uint256 numSnapshots = root.sourceTokens.length;
-            for (uint256 j; j < numSnapshots;) {
-                JBTokenSnapshot calldata snap = root.sourceTokens[j];
-                // Track tokens for future clearing. Avoid duplicates (multiple terminals with same token).
-                if (_peerChainSurplusOf[snap.token] == 0 && _peerChainBalanceOf[snap.token] == 0) {
-                    _peerChainTokens.push(snap.token);
-                }
-                _peerChainSurplusOf[snap.token] += snap.surplus;
-                _peerChainBalanceOf[snap.token] += snap.balance;
-                _peerChainDecimalsOf[snap.token] = snap.decimals;
-                unchecked {
-                    ++j;
-                }
-            }
+            // Store the surplus, balance, and their denomination from the source chain.
+            _peerChainCurrency = root.sourceCurrency;
+            _peerChainDecimals = root.sourceDecimals;
+            _peerChainSurplus = root.sourceSurplus;
+            _peerChainBalance = root.sourceBalance;
 
             emit NewInboxTreeRoot({
                 token: localToken, nonce: root.remoteRoot.nonce, root: root.remoteRoot.root, caller: _msgSender()
@@ -1207,11 +1153,12 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         // Emit an event for the relayers to watch for.
         emit RootToRemote({root: root, token: token, index: index, nonce: nonce, caller: _msgSender()});
 
-        // Get the current local total supply (including reserved tokens) and per-token snapshots of surplus and
-        // balance to include in the bridge message. The peer chain uses these to track cross-chain supply, surplus,
-        // and balance for cash out and data hook calculations.
+        // Get the current local total supply (including reserved tokens) and the ETH-denominated aggregate
+        // surplus/balance to include in the bridge message. The peer chain uses these to track cross-chain supply,
+        // surplus, and balance for cash out and data hook calculations.
         uint256 localTotalSupply;
-        JBTokenSnapshot[] memory snapshots;
+        uint256 ethSurplus;
+        uint256 ethBalance;
         {
             uint256 _projectId = projectId();
             // Use low-level calls to safely handle non-contract addresses in the call chain.
@@ -1230,17 +1177,20 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
                 }
             }
 
-            snapshots = _buildTokenSnapshots(_projectId);
+            (ethSurplus, ethBalance) = _buildETHAggregate(_projectId);
         }
 
-        // Build the message to be sent.
+        // Build the message to be sent. Surplus and balance are denominated in _ETH_CURRENCY at _ETH_DECIMALS.
         JBMessageRoot memory message = JBMessageRoot({
             version: MESSAGE_VERSION,
             token: remoteToken.addr,
             amount: amount,
             remoteRoot: JBInboxTreeRoot({nonce: nonce, root: root}),
             sourceTotalSupply: localTotalSupply,
-            sourceTokens: snapshots
+            sourceCurrency: _ETH_CURRENCY,
+            sourceDecimals: _ETH_DECIMALS,
+            sourceSurplus: ethSurplus,
+            sourceBalance: ethBalance
         });
 
         // Execute the chain/sucker specific logic for transferring the assets and communicating the root.
@@ -1433,21 +1383,46 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         });
     }
 
-    /// @notice Build per-token snapshots of surplus and balance across all terminals for the project.
-    /// @dev Iterates each terminal's accounting contexts, deduplicates tokens, and aggregates balance (via
-    /// STORE.balanceOf) and surplus (via currentSurplusOf per denomination) for each unique token.
-    /// @param _projectId The project ID to build snapshots for.
-    /// @return snapshots The array of per-token snapshots.
-    function _buildTokenSnapshots(uint256 _projectId) internal view returns (JBTokenSnapshot[] memory snapshots) {
+    /// @notice Build ETH-denominated aggregate surplus and balance across all terminals for the project.
+    /// @dev Surplus: uses `currentSurplusOf` on the first terminal (which aggregates across all terminals internally),
+    /// denominated in ETH at 18 decimals. Balance: iterates each terminal's accounting contexts, converts each
+    /// token's balance to ETH via JBPrices. Tokens without price feeds are skipped (safe underestimate).
+    /// @param _projectId The project ID to build the aggregate for.
+    /// @return ethSurplus The total surplus denominated in ETH at 18 decimals.
+    /// @return ethBalance The total balance denominated in ETH at 18 decimals.
+    // forge-lint: disable-next-line(mixed-case-function)
+    function _buildETHAggregate(uint256 _projectId)
+        internal
+        view
+        returns (uint256 ethSurplus, uint256 ethBalance)
+    {
         IJBTerminal[] memory terminals = DIRECTORY.terminalsOf(_projectId);
         uint256 numTerminals = terminals.length;
+        if (numTerminals == 0) return (0, 0);
 
-        // First pass: count unique tokens across all terminals.
-        // Use a temporary array to track unique tokens and their decimals.
-        address[] memory uniqueTokens = new address[](numTerminals * 10); // generous upper bound
-        uint8[] memory tokenDecimals = new uint8[](uniqueTokens.length);
-        uint256 uniqueCount;
+        // Get the surplus denominated in ETH (currency = _ETH_CURRENCY, decimals = _ETH_DECIMALS).
+        // currentSurplusOf aggregates across all terminals internally.
+        // slither-disable-next-line calls-loop
+        try terminals[0].currentSurplusOf(
+            _projectId, new address[](0), _ETH_DECIMALS, uint32(_ETH_CURRENCY)
+        ) returns (uint256 surplus) {
+            ethSurplus = surplus;
+        } catch {
+            // If surplus computation fails, leave as 0 (safe underestimate).
+        }
 
+        // Get a reference to JBPrices for balance conversion.
+        IJBPrices prices;
+        {
+            // slither-disable-next-line calls-loop
+            try IJBMultiTerminal(address(terminals[0])).STORE() returns (IJBTerminalStore store) {
+                prices = store.PRICES();
+            } catch {
+                return (ethSurplus, 0);
+            }
+        }
+
+        // Aggregate balance from each terminal, converting each token to ETH.
         for (uint256 i; i < numTerminals;) {
             // slither-disable-next-line calls-loop
             try terminals[i].accountingContextsOf(_projectId) returns (
@@ -1455,24 +1430,34 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
             ) {
                 for (uint256 j; j < contexts.length;) {
                     address tkn = contexts[j].token;
-                    // Check if we've already seen this token.
-                    bool found;
-                    for (uint256 k; k < uniqueCount;) {
-                        if (uniqueTokens[k] == tkn) {
-                            found = true;
-                            break;
+                    uint8 dec = contexts[j].decimals;
+                    uint32 tokenCurrency = uint32(uint160(tkn));
+
+                    // Get the raw balance for this token from this terminal's store.
+                    // slither-disable-next-line calls-loop
+                    try IJBMultiTerminal(address(terminals[i])).STORE().balanceOf(
+                        address(terminals[i]), _projectId, tkn
+                    ) returns (uint256 bal) {
+                        if (bal != 0) {
+                            if (tokenCurrency == uint32(_ETH_CURRENCY)) {
+                                // Already ETH — just adjust decimals to 18.
+                                ethBalance += JBFixedPointNumber.adjustDecimals(bal, dec, _ETH_DECIMALS);
+                            } else {
+                                // Convert to ETH via the price oracle.
+                                // slither-disable-next-line calls-loop
+                                try prices.pricePerUnitOf(
+                                    _projectId, tokenCurrency, uint32(_ETH_CURRENCY), _ETH_DECIMALS
+                                ) returns (uint256 price) {
+                                    ethBalance += (bal * price) / (10 ** dec);
+                                } catch {
+                                    // Skip tokens without a price feed — underestimate (safe direction).
+                                }
+                            }
                         }
-                        unchecked {
-                            ++k;
-                        }
+                    } catch {
+                        // Skip terminals that don't have this token.
                     }
-                    if (!found) {
-                        uniqueTokens[uniqueCount] = tkn;
-                        tokenDecimals[uniqueCount] = contexts[j].decimals;
-                        unchecked {
-                            ++uniqueCount;
-                        }
-                    }
+
                     unchecked {
                         ++j;
                     }
@@ -1484,74 +1469,26 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
                 ++i;
             }
         }
-
-        // Second pass: for each unique token, aggregate balance and surplus.
-        snapshots = new JBTokenSnapshot[](uniqueCount);
-        for (uint256 i; i < uniqueCount;) {
-            address tkn = uniqueTokens[i];
-            uint8 dec = tokenDecimals[i];
-            uint256 totalBalance;
-            uint256 totalSurplus;
-
-            // Aggregate balance from each terminal's store.
-            for (uint256 j; j < numTerminals;) {
-                // slither-disable-next-line calls-loop
-                try IJBMultiTerminal(address(terminals[j])).STORE().balanceOf(
-                    address(terminals[j]), _projectId, tkn
-                ) returns (uint256 bal) {
-                    totalBalance += bal;
-                } catch {
-                    // Skip terminals that don't have this token.
-                }
-                unchecked {
-                    ++j;
-                }
-            }
-
-            // Get surplus denominated in this token across all terminals.
-            // currentSurplusOf aggregates across all terminals internally.
-            // slither-disable-next-line calls-loop
-            try terminals[0].currentSurplusOf(
-                _projectId, new address[](0), dec, uint32(uint160(tkn))
-            ) returns (uint256 surplus) {
-                totalSurplus = surplus;
-            } catch {
-                // If surplus computation fails, leave as 0 (safe underestimate).
-            }
-
-            snapshots[i] = JBTokenSnapshot({token: tkn, decimals: dec, surplus: totalSurplus, balance: totalBalance});
-            unchecked {
-                ++i;
-            }
-        }
     }
 
-    /// @notice Normalize per-token peer chain snapshots to a single currency and decimal precision.
-    /// @dev Iterates `_peerChainTokens`, converts each value via JBPrices to the target currency.
-    /// If a price feed is missing, that token is silently skipped (underestimate, safe direction).
+    /// @notice Convert a peer chain snapshot value to the requested currency and decimal precision.
+    /// @dev Uses the `_peerChainCurrency` and `_peerChainDecimals` stored from the last bridge message to know
+    /// the source denomination. If the target currency matches, adjusts decimals directly. Otherwise converts
+    /// via JBPrices. If no price feed exists, returns 0 (safe underestimate).
+    /// @param sourceValue The value denominated in `_peerChainCurrency` at `_peerChainDecimals` precision.
     /// @param decimals The target decimal precision.
-    /// @param currency The target currency (e.g. `uint32(uint160(JBConstants.NATIVE_TOKEN))`).
-    /// @notice Aggregate peer chain snapshots into a single `JBTokenAmount`, normalized to the caller's currency and
-    /// decimals.
-    /// @param tokens The tokens to filter by. If empty, all stored peer chain tokens are summed.
-    /// @param decimals The decimal precision for the returned value.
-    /// @param currency The currency to normalize to.
-    /// @param useBalance If true, aggregate balances; if false, aggregate surpluses.
-    /// @return result The aggregated, normalized `JBTokenAmount`.
-    function _aggregateSnapshots(
-        address[] memory tokens,
+    /// @param currency The target currency (e.g. `uint256(uint160(JBConstants.NATIVE_TOKEN))` for ETH).
+    /// @return result The converted `JBTokenAmount`.
+    function _convertPeerValue(
+        uint256 sourceValue,
         uint256 decimals,
-        uint256 currency,
-        bool useBalance
+        uint256 currency
     )
         internal
         view
         returns (JBTokenAmount memory result)
     {
-        // Determine which token list to iterate: caller-supplied or all stored.
-        address[] memory list = tokens.length > 0 ? tokens : _peerChainTokens;
-        uint256 numTokens = list.length;
-        if (numTokens == 0) {
+        if (sourceValue == 0) {
             return JBTokenAmount({
                 token: address(uint160(currency)),
                 decimals: uint8(decimals),
@@ -1560,11 +1497,18 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
             });
         }
 
-        uint256 _projectId = projectId();
+        // Read the denomination the peer chain used from storage (set by fromRemote).
+        uint256 srcCurrency = _peerChainCurrency;
+        uint8 srcDecimals = _peerChainDecimals;
 
-        // Get a reference to JBPrices from the first terminal's store.
-        IJBPrices prices;
-        {
+        uint256 converted;
+
+        if (uint32(srcCurrency) == uint32(currency)) {
+            // Same currency — just adjust decimals.
+            converted = JBFixedPointNumber.adjustDecimals(sourceValue, srcDecimals, decimals);
+        } else {
+            // Convert from the source currency to the target currency via the price oracle.
+            uint256 _projectId = projectId();
             IJBTerminal[] memory terminals = DIRECTORY.terminalsOf(_projectId);
             if (terminals.length == 0) {
                 return JBTokenAmount({
@@ -1574,44 +1518,20 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
                     value: 0
                 });
             }
+
             // slither-disable-next-line calls-loop
             try IJBMultiTerminal(address(terminals[0])).STORE() returns (IJBTerminalStore store) {
-                prices = store.PRICES();
-            } catch {
-                return JBTokenAmount({
-                    token: address(uint160(currency)),
-                    decimals: uint8(decimals),
-                    currency: uint32(currency),
-                    value: 0
-                });
-            }
-        }
-
-        uint256 total;
-        for (uint256 i; i < numTokens;) {
-            address tkn = list[i];
-            uint256 rawValue = useBalance ? _peerChainBalanceOf[tkn] : _peerChainSurplusOf[tkn];
-            uint8 rawDecimals = _peerChainDecimalsOf[tkn];
-            uint32 tokenCurrency = uint32(uint160(tkn));
-
-            if (rawValue != 0) {
-                if (tokenCurrency == uint32(currency)) {
-                    // Same currency — just adjust decimals.
-                    total += JBFixedPointNumber.adjustDecimals(rawValue, rawDecimals, decimals);
-                } else {
-                    // Convert via price oracle.
-                    // slither-disable-next-line calls-loop
-                    try prices.pricePerUnitOf(_projectId, tokenCurrency, uint32(currency), uint8(decimals)) returns (
-                        uint256 price
-                    ) {
-                        total += (rawValue * price) / (10 ** rawDecimals);
-                    } catch {
-                        // Skip if no price feed — underestimate (safe direction).
-                    }
+                IJBPrices prices = store.PRICES();
+                // slither-disable-next-line calls-loop
+                try prices.pricePerUnitOf(
+                    _projectId, uint32(srcCurrency), uint32(currency), uint8(decimals)
+                ) returns (uint256 price) {
+                    converted = (sourceValue * price) / (10 ** srcDecimals);
+                } catch {
+                    // No price feed — return 0 (safe underestimate).
                 }
-            }
-            unchecked {
-                ++i;
+            } catch {
+                // No store — return 0.
             }
         }
 
@@ -1619,7 +1539,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
             token: address(uint160(currency)),
             decimals: uint8(decimals),
             currency: uint32(currency),
-            value: total
+            value: converted
         });
     }
 }
