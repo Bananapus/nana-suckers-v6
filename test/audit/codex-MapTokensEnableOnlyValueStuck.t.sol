@@ -13,7 +13,6 @@ import {LibClone} from "solady/src/utils/LibClone.sol";
 import "../../src/JBSucker.sol";
 import "../../src/interfaces/IJBSuckerRegistry.sol";
 import "../../src/structs/JBMessageRoot.sol";
-import "../../src/structs/JBPayRemoteMessage.sol";
 import "../../src/structs/JBRemoteToken.sol";
 import "../../src/structs/JBTokenMapping.sol";
 
@@ -41,17 +40,6 @@ contract CodexMapTokensHarness is JBSucker {
         uint256,
         JBRemoteToken memory,
         JBMessageRoot memory
-    )
-        internal
-        override
-    {}
-
-    function _sendPayOverAMB(
-        uint256,
-        address,
-        uint256,
-        JBRemoteToken memory,
-        JBPayRemoteMessage memory
     )
         internal
         override

@@ -5,7 +5,7 @@ import {JBMetadataResolver} from "@bananapus/core-v6/src/libraries/JBMetadataRes
 
 import {IJBSuckerRegistry} from "../interfaces/IJBSuckerRegistry.sol";
 
-/// @notice Library to resolve the relay beneficiary from metadata injected by a sucker during `payFromRemote`.
+/// @notice Library to resolve the relay beneficiary from metadata injected by a relay terminal or sucker.
 /// @dev When a sucker pays a project on behalf of a remote user, the sucker is both payer and beneficiary.
 /// The real user's address is embedded in the payment metadata under the `ID` key. Data hooks and pay hooks
 /// use this library to resolve the real beneficiary so that NFTs, credits, etc. accrue to the correct user.

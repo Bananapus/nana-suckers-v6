@@ -19,7 +19,6 @@ import "../../src/JBSucker.sol";
 import {IJBSuckerRegistry} from "../../src/interfaces/IJBSuckerRegistry.sol";
 import {JBRemoteToken} from "../../src/structs/JBRemoteToken.sol";
 import {JBMessageRoot} from "../../src/structs/JBMessageRoot.sol";
-import {JBPayRemoteMessage} from "../../src/structs/JBPayRemoteMessage.sol";
 import {MerkleLib} from "../../src/utils/MerkleLib.sol";
 
 /// @notice Test harness sucker that mimics a zero-cost bridge (like OP/Base) —
@@ -88,17 +87,6 @@ contract ZeroCostBridgeSucker is JBSucker {
     {
         _insertIntoTree(projectTokenCount, token, terminalTokenAmount, beneficiary);
     }
-
-    function _sendPayOverAMB(
-        uint256,
-        address,
-        uint256,
-        JBRemoteToken memory,
-        JBPayRemoteMessage memory
-    )
-        internal
-        override
-    {}
 }
 
 /// @title FeeFallbackTest

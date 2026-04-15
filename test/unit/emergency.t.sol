@@ -10,7 +10,6 @@ import {LibClone} from "solady/src/utils/LibClone.sol";
 // forge-lint: disable-next-line(unaliased-plain-import)
 import /* {*} from */ "@bananapus/core-v6/test/helpers/TestBaseWorkflow.sol";
 import {IJBSuckerRegistry} from "../../src/interfaces/IJBSuckerRegistry.sol";
-import {JBPayRemoteMessage} from "../../src/structs/JBPayRemoteMessage.sol";
 
 contract SuckerEmergencyTest is Test {
     using stdStorage for StdStorage;
@@ -321,15 +320,4 @@ contract TestSucker is JBSucker {
     /// @dev Override _addToBalance to be a no-op for fuzz testing.
     /// These tests focus on emergency exit state machine behavior, not token balance mechanics.
     function _addToBalance(address, uint256, uint256) internal override {}
-
-    function _sendPayOverAMB(
-        uint256,
-        address,
-        uint256,
-        JBRemoteToken memory,
-        JBPayRemoteMessage memory
-    )
-        internal
-        override
-    {}
 }

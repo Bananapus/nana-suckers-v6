@@ -16,7 +16,6 @@ import {IJBOptimismSucker} from "./interfaces/IJBOptimismSucker.sol";
 import {IOPMessenger} from "./interfaces/IOPMessenger.sol";
 import {IOPStandardBridge} from "./interfaces/IOPStandardBridge.sol";
 import {JBMessageRoot} from "./structs/JBMessageRoot.sol";
-import {JBPayRemoteMessage} from "./structs/JBPayRemoteMessage.sol";
 import {JBRemoteToken} from "./structs/JBRemoteToken.sol";
 import {MerkleLib} from "./utils/MerkleLib.sol";
 
@@ -141,59 +140,5 @@ contract JBOptimismSucker is JBSucker, IJBOptimismSucker {
             message: abi.encodeCall(JBSucker.fromRemote, (message)),
             gasLimit: MESSENGER_BASE_GAS_LIMIT
         });
-    }
-
-    /// @notice Bridge funds and a pay message to the remote peer via the OP bridge.
-    /// @param transportPayment The transport payment (must be 0 for OP — free bridge).
-    /// @param token The terminal token being bridged.
-    /// @param amount The amount of terminal tokens being bridged.
-    /// @param remoteToken The remote token info.
-    /// @param message The pay remote message.
-    // forge-lint: disable-next-line(mixed-case-function)
-    function _sendPayOverAMB(
-        uint256 transportPayment,
-        address token,
-        uint256 amount,
-        JBRemoteToken memory remoteToken,
-        JBPayRemoteMessage memory message
-    )
-        internal
-        virtual
-        override
-    {
-        // OP bridge is free — revert if transport payment is provided.
-        if (transportPayment != 0) revert JBSucker_UnexpectedMsgValue(transportPayment);
-
-        uint256 nativeValue;
-        address peerAddress = _toAddress(peer());
-
-        // Bridge ERC-20 tokens if applicable.
-        if (token != JBConstants.NATIVE_TOKEN && amount != 0) {
-            SafeERC20.forceApprove({token: IERC20(token), spender: address(OPBRIDGE), value: amount});
-            // slither-disable-next-line reentrancy-events,calls-loop
-            OPBRIDGE.bridgeERC20To({
-                localToken: token,
-                remoteToken: _toAddress(remoteToken.addr),
-                to: peerAddress,
-                amount: amount,
-                minGasLimit: remoteToken.minGas,
-                extraData: bytes("")
-            });
-        } else {
-            nativeValue = amount;
-        }
-
-        // Send the pay message to the peer.
-        // slither-disable-next-line arbitrary-send-eth,reentrancy-events,calls-loop
-        OPMESSENGER.sendMessage{value: nativeValue}({
-            target: peerAddress,
-            message: abi.encodeCall(JBSucker.payFromRemote, (message)),
-            gasLimit: MESSENGER_PAY_GAS_LIMIT
-        });
-    }
-
-    /// @notice OP bridge is free in both directions.
-    function _splitTransportBudget(uint256) internal virtual override returns (uint256, uint256) {
-        return (0, 0);
     }
 }

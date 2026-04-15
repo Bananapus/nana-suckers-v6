@@ -48,7 +48,6 @@ import {JBDenominatedAmount} from "./structs/JBDenominatedAmount.sol";
 import {JBInboxTreeRoot} from "./structs/JBInboxTreeRoot.sol";
 import {JBMessageRoot} from "./structs/JBMessageRoot.sol";
 import {JBOutboxTree} from "./structs/JBOutboxTree.sol";
-import {JBPayRemoteMessage} from "./structs/JBPayRemoteMessage.sol";
 import {JBRemoteToken} from "./structs/JBRemoteToken.sol";
 import {JBTokenMapping} from "./structs/JBTokenMapping.sol";
 
@@ -106,10 +105,6 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     /// @notice A reasonable minimum gas limit used when bridging ERC-20s. The minimum amount of gas required to
     /// (successfully/safely) perform a transfer on the remote chain.
     uint32 public constant override MESSENGER_ERC20_MIN_GAS_LIMIT = 200_000;
-
-    /// @notice The gas limit for `payFromRemote` cross-chain calls. Higher than `MESSENGER_BASE_GAS_LIMIT`
-    /// because `payFromRemote` performs pay + cashout + insertIntoTree + sendRoot in a single call.
-    uint32 public constant MESSENGER_PAY_GAS_LIMIT = 1_000_000;
 
     /// @notice The message format version. Used to reject incompatible messages from remote chains.
     uint8 public constant MESSAGE_VERSION = 1;
@@ -644,145 +639,6 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         _sendRoot({transportPayment: transportPayment, token: token, remoteToken: remoteToken});
     }
 
-    /// @notice Pay a project on the remote chain. Bridges funds to the remote sucker which pays the project,
-    /// cashes out at 0% tax (sucker privilege), inserts project tokens into the outbox tree, and auto-triggers
-    /// the return bridge so the beneficiary can claim on the local chain.
-    /// @param token The local terminal token to bridge.
-    /// @param amount The amount of terminal tokens to pay.
-    /// @param beneficiary The beneficiary on the local chain (bytes32 for cross-VM compatibility).
-    /// @param minTokensOut Minimum project tokens from the pay step (slippage protection).
-    /// @param metadata Metadata forwarded to `terminal.pay()` for hooks on the remote chain.
-    function payRemote(
-        address token,
-        uint256 amount,
-        bytes32 beneficiary,
-        uint256 minTokensOut,
-        bytes calldata metadata
-    )
-        external
-        payable
-        override
-    {
-        // Validate inputs.
-        if (beneficiary == bytes32(0)) revert JBSucker_ZeroBeneficiary();
-        if (amount == 0) revert JBSucker_InsufficientBalance({amount: 0, balance: 0});
-
-        // Guard against amounts that would overflow uint128 on SVM.
-        if (amount > type(uint128).max) revert JBSucker_AmountExceedsUint128(amount);
-
-        // Make sure the token is mapped.
-        JBRemoteToken memory remoteToken = _remoteTokenFor[token];
-        if (!remoteToken.enabled) revert JBSucker_TokenNotMapped(token);
-
-        // Make sure the sucker is not deprecated.
-        JBSuckerState deprecationState = state();
-        if (deprecationState == JBSuckerState.DEPRECATED || deprecationState == JBSuckerState.SENDING_DISABLED) {
-            revert JBSucker_Deprecated();
-        }
-
-        // Determine transport budget.
-        uint256 transportBudget;
-        if (token == JBConstants.NATIVE_TOKEN) {
-            // For native: msg.value must cover amount + transport.
-            if (msg.value < amount) revert JBSucker_InsufficientMsgValue({received: msg.value, expected: amount});
-            transportBudget = msg.value - amount;
-        } else {
-            // For ERC-20: pull tokens, msg.value is entirely transport budget.
-            IERC20(token).safeTransferFrom({from: _msgSender(), to: address(this), value: amount});
-            transportBudget = msg.value;
-        }
-
-        // Split transport between the outbound hop and the return trip.
-        (uint256 hop1, uint256 returnTransport) = _splitTransportBudget(transportBudget);
-
-        // Build the pay message.
-        JBPayRemoteMessage memory message = JBPayRemoteMessage({
-            token: remoteToken.addr,
-            amount: amount,
-            returnTransport: returnTransport,
-            beneficiary: beneficiary,
-            minTokensOut: minTokensOut,
-            metadata: metadata
-        });
-
-        emit PayRemote({
-            beneficiary: beneficiary,
-            token: token,
-            amount: amount,
-            returnTransport: returnTransport,
-            caller: _msgSender()
-        });
-
-        // Bridge the funds and message to the remote chain.
-        _sendPayOverAMB({
-            transportPayment: hop1, token: token, amount: amount, remoteToken: remoteToken, message: message
-        });
-    }
-
-    /// @notice Execute a cross-chain payment on behalf of a remote user.
-    /// @dev Only callable by the remote peer via the bridge messenger.
-    /// @dev Flow: pay project → receive tokens → cash out at 0% tax → insert into outbox → auto-trigger return.
-    /// @dev Delegates the pay + cashout logic to JBSuckerLib (via DELEGATECALL) to reduce bytecode.
-    /// @param message The payment message from the remote chain.
-    function payFromRemote(JBPayRemoteMessage calldata message) external payable {
-        // Authenticate: only the remote peer can call this.
-        if (!_isRemotePeer(msg.sender)) revert JBSucker_NotPeer(_toBytes32(msg.sender));
-
-        uint256 _projectId = projectId();
-        address token = _toAddress(message.token);
-
-        // Delegate pay + cashout to library (runs via DELEGATECALL).
-        // slither-disable-next-line reentrancy-benign,reentrancy-events
-        (uint256 projectTokensReceived, uint256 terminalTokensReclaimed) =
-            JBSuckerLib.executePayFromRemote({directory: DIRECTORY, projectId: _projectId, message: message});
-
-        emit PayFromRemote({
-            beneficiary: message.beneficiary,
-            token: token,
-            amountPaid: message.amount,
-            projectTokensReceived: projectTokensReceived,
-            terminalTokensReclaimed: terminalTokensReclaimed,
-            caller: _msgSender()
-        });
-
-        // Insert the project tokens into the outbox tree for return bridging.
-        _insertIntoTree({
-            projectTokenCount: projectTokensReceived,
-            token: token,
-            terminalTokenAmount: terminalTokensReclaimed,
-            beneficiary: message.beneficiary
-        });
-
-        // Auto-trigger the return bridge. Best-effort: if return transport is insufficient,
-        // the outbox entry still exists for manual `toRemote()` later.
-        JBRemoteToken memory returnRemoteToken = _remoteTokenFor[token];
-        if (returnRemoteToken.addr != bytes32(0)) {
-            try this.sendRootFromPayRemote({
-                transportPayment: message.returnTransport, token: token, remoteToken: returnRemoteToken
-            }) {}
-                catch {}
-        }
-    }
-
-    /// @notice External wrapper for `_sendRoot` used by `payFromRemote` in a try/catch pattern.
-    /// @dev This is external so it can be called via `this.sendRootFromPayRemote()` in a try/catch.
-    /// Only callable by this contract itself.
-    /// @param transportPayment The transport payment for the return bridge.
-    /// @param token The terminal token to bridge.
-    /// @param remoteToken The remote token info.
-    function sendRootFromPayRemote(
-        uint256 transportPayment,
-        address token,
-        JBRemoteToken memory remoteToken
-    )
-        external
-        payable
-    {
-        // Only callable by this contract itself (from payFromRemote's try/catch).
-        if (msg.sender != address(this)) revert JBSucker_NotPeer(_toBytes32(msg.sender));
-        _sendRoot({transportPayment: transportPayment, token: token, remoteToken: remoteToken});
-    }
-
     //*********************************************************************//
     // ------------------------ external views --------------------------- //
     //*********************************************************************//
@@ -1219,35 +1075,6 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     )
         internal
         virtual;
-
-    /// @notice Performs the logic to send a pay message and tokens to the peer over the AMB.
-    /// @dev This is chain/sucker/bridge specific logic, analogous to `_sendRootOverAMB`.
-    /// @param transportPayment The amount of `msg.value` for sending this message.
-    /// @param token The terminal token being bridged.
-    /// @param amount The amount of terminal tokens being bridged.
-    /// @param remoteToken The remote token which the terminal token is mapped to.
-    /// @param message The pay remote message to send.
-    // forge-lint: disable-next-line(mixed-case-function)
-    function _sendPayOverAMB(
-        uint256 transportPayment,
-        address token,
-        uint256 amount,
-        JBRemoteToken memory remoteToken,
-        JBPayRemoteMessage memory message
-    )
-        internal
-        virtual;
-
-    /// @notice Split a transport budget between the outbound hop and the return trip.
-    /// @dev Override in bridge implementations where one or both directions are free.
-    /// Default splits evenly.
-    /// @param budget The total transport budget.
-    /// @return hop1 The budget for the outbound hop.
-    /// @return returnTrip The budget for the return trip.
-    function _splitTransportBudget(uint256 budget) internal virtual returns (uint256 hop1, uint256 returnTrip) {
-        hop1 = budget / 2;
-        returnTrip = budget - hop1;
-    }
 
     /// @notice Validates a leaf as being in the inbox merkle tree and registers the leaf as executed (to prevent
     /// double-spending).

@@ -24,7 +24,6 @@ import {IJBSuckerRegistry} from "../../src/interfaces/IJBSuckerRegistry.sol";
 import {JBDenominatedAmount} from "../../src/structs/JBDenominatedAmount.sol";
 import {JBInboxTreeRoot} from "../../src/structs/JBInboxTreeRoot.sol";
 import {JBMessageRoot} from "../../src/structs/JBMessageRoot.sol";
-import {JBPayRemoteMessage} from "../../src/structs/JBPayRemoteMessage.sol";
 import {JBRemoteToken} from "../../src/structs/JBRemoteToken.sol";
 import {MerkleLib} from "../../src/utils/MerkleLib.sol";
 
@@ -67,21 +66,6 @@ contract PeerChainStateSucker is JBSucker {
 
     function _isRemotePeer(address sender) internal view override returns (bool) {
         return sender == _toAddress(peer());
-    }
-
-    // forge-lint: disable-next-line(mixed-case-function)
-    function _sendPayOverAMB(
-        uint256,
-        address,
-        uint256,
-        JBRemoteToken memory,
-        JBPayRemoteMessage memory
-    )
-        internal
-        pure
-        override
-    {
-        revert("not implemented");
     }
 
     function peerChainId() external view virtual override returns (uint256) {

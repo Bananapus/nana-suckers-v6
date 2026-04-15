@@ -26,7 +26,6 @@ import {JBClaim} from "../src/structs/JBClaim.sol";
 import {JBLeaf} from "../src/structs/JBLeaf.sol";
 import {JBInboxTreeRoot} from "../src/structs/JBInboxTreeRoot.sol";
 import {JBMessageRoot} from "../src/structs/JBMessageRoot.sol";
-import {JBPayRemoteMessage} from "../src/structs/JBPayRemoteMessage.sol";
 import {JBRemoteToken} from "../src/structs/JBRemoteToken.sol";
 import {JBTokenMapping} from "../src/structs/JBTokenMapping.sol";
 import {MerkleLib} from "../src/utils/MerkleLib.sol";
@@ -180,17 +179,6 @@ contract DeepAttackSucker is JBSucker {
     function test_setDeprecatedAfter(uint256 timestamp) external {
         deprecatedAfter = timestamp;
     }
-
-    function _sendPayOverAMB(
-        uint256,
-        address,
-        uint256,
-        JBRemoteToken memory,
-        JBPayRemoteMessage memory
-    )
-        internal
-        override
-    {}
 }
 
 /// @title SuckerDeepAttacks

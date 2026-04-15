@@ -26,7 +26,6 @@ import {JBCCIPLib} from "./libraries/JBCCIPLib.sol";
 
 // Local: structs (alphabetized)
 import {JBMessageRoot} from "./structs/JBMessageRoot.sol";
-import {JBPayRemoteMessage} from "./structs/JBPayRemoteMessage.sol";
 import {JBRemoteToken} from "./structs/JBRemoteToken.sol";
 import {JBTokenMapping} from "./structs/JBTokenMapping.sol";
 
@@ -62,9 +61,6 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
 
     /// @notice Message type prefix for root messages (fromRemote).
     uint8 internal constant _CCIP_MSG_TYPE_ROOT = 0;
-
-    /// @notice Message type prefix for pay messages (payFromRemote).
-    uint8 internal constant _CCIP_MSG_TYPE_PAY = 1;
 
     //*********************************************************************//
     // --------------- public immutable stored properties ---------------- //
@@ -190,19 +186,6 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
 
             // Forward the root message to this contract's fromRemote handler.
             this.fromRemote(root);
-        } else if (messageType == _CCIP_MSG_TYPE_PAY) {
-            // Decode the pay message from the payload.
-            JBPayRemoteMessage memory payMsg = abi.decode(payload, (JBPayRemoteMessage));
-
-            // Only unwrap WETH -> ETH when the pay message targets native token.
-            if (payMsg.token == bytes32(uint256(uint160(JBConstants.NATIVE_TOKEN)))) {
-                JBCCIPLib.unwrapReceivedTokens({
-                    ccipRouter: CCIP_ROUTER, destTokenAmounts: any2EvmMessage.destTokenAmounts
-                });
-            }
-
-            // Forward the pay message to this contract's payFromRemote handler.
-            this.payFromRemote(payMsg);
         } else {
             revert JBCCIPSucker_UnknownMessageType(messageType);
         }
@@ -211,61 +194,6 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
     //*********************************************************************//
     // --------------------- internal transactions ----------------------- //
     //*********************************************************************//
-
-    /// @notice Bridge funds and a pay message to the remote peer via CCIP.
-    /// @dev Delegates CCIP message construction and sending to JBCCIPLib (via DELEGATECALL) to reduce bytecode.
-    /// @param transportPayment The transport payment for the CCIP message.
-    /// @param token The terminal token being bridged.
-    /// @param amount The amount of terminal tokens to bridge.
-    /// @param remoteToken The remote token configuration.
-    /// @param message The pay-remote message to send.
-    // forge-lint: disable-next-line(mixed-case-function)
-    function _sendPayOverAMB(
-        uint256 transportPayment,
-        address token,
-        uint256 amount,
-        JBRemoteToken memory remoteToken,
-        JBPayRemoteMessage memory message
-    )
-        internal
-        virtual
-        override
-    {
-        // Revert if no transport payment was provided.
-        if (transportPayment == 0) revert JBSucker_ExpectedMsgValue();
-
-        // Start with the pay gas limit for cross-chain pay calls.
-        uint256 gasLimit = MESSENGER_PAY_GAS_LIMIT;
-        Client.EVMTokenAmount[] memory tokenAmounts;
-
-        if (amount != 0) {
-            // Add extra gas for the ERC-20 token transfer on the remote chain.
-            gasLimit += remoteToken.minGas;
-
-            // Wrap native ETH -> WETH if needed, build the CCIP token amounts array, and approve the router.
-            // slither-disable-next-line unused-return
-            (tokenAmounts,) = JBCCIPLib.prepareTokenAmounts({ccipRouter: CCIP_ROUTER, token: token, amount: amount});
-        } else {
-            // No tokens to bridge — use an empty array.
-            tokenAmounts = new Client.EVMTokenAmount[](0);
-        }
-
-        // Build and send the CCIP message with the pay payload.
-        // slither-disable-next-line reentrancy-events
-        (bool refundFailed, uint256 refundAmount) = JBCCIPLib.sendCCIPMessage({
-            ccipRouter: CCIP_ROUTER,
-            remoteChainSelector: REMOTE_CHAIN_SELECTOR,
-            peerAddress: _toAddress(peer()),
-            transportPayment: transportPayment,
-            gasLimit: gasLimit,
-            encodedPayload: abi.encode(_CCIP_MSG_TYPE_PAY, abi.encode(message)),
-            tokenAmounts: tokenAmounts,
-            refundRecipient: _msgSender()
-        });
-
-        // Emit an event if the excess transport payment refund failed.
-        if (refundFailed) emit TransportPaymentRefundFailed(_msgSender(), refundAmount);
-    }
 
     /// @notice Uses CCIP to send the root and assets over the bridge to the peer.
     /// @dev Delegates CCIP message construction and sending to JBCCIPLib (via DELEGATECALL) to reduce bytecode.
@@ -334,22 +262,6 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
     function _isRemotePeer(address sender) internal view override returns (bool _valid) {
         // We do not check if it is the `peer` here, as this contract is supposed to be the caller *NOT* the peer.
         return sender == address(this);
-    }
-
-    /// @notice Splits the transport budget between outbound and return hops.
-    /// @dev CCIP cannot bridge native ETH for the return trip, so allocate the entire transport budget to the
-    /// outbound hop. Without this override the base class splits 50/50, leaving the return half stuck in the source
-    /// sucker with no recovery path.
-    /// @param budget The total transport budget to split.
-    /// @return outbound The amount allocated to the outbound hop.
-    /// @return returnTrip The amount allocated to the return hop (always 0 for CCIP).
-    function _splitTransportBudget(uint256 budget)
-        internal
-        pure
-        override
-        returns (uint256 outbound, uint256 returnTrip)
-    {
-        return (budget, 0);
     }
 
     /// @notice Validates a token mapping. Allows CCIP-specific mapping rules.

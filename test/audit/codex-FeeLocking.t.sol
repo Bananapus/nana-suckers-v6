@@ -22,7 +22,6 @@ import {IJBCCIPSuckerDeployer} from "../../src/interfaces/IJBCCIPSuckerDeployer.
 import {IJBSuckerRegistry} from "../../src/interfaces/IJBSuckerRegistry.sol";
 import {ICCIPRouter} from "../../src/interfaces/ICCIPRouter.sol";
 import {JBMessageRoot} from "../../src/structs/JBMessageRoot.sol";
-import {JBPayRemoteMessage} from "../../src/structs/JBPayRemoteMessage.sol";
 import {JBRemoteToken} from "../../src/structs/JBRemoteToken.sol";
 import {MerkleLib} from "../../src/utils/MerkleLib.sol";
 
@@ -113,21 +112,6 @@ contract ZeroCostBridgeSuckerHarness is JBSucker {
         override
     {
         if (transportPayment != 0) revert JBSucker_UnexpectedMsgValue(transportPayment);
-    }
-
-    // forge-lint: disable-next-line(mixed-case-function)
-    function _sendPayOverAMB(
-        uint256,
-        address,
-        uint256,
-        JBRemoteToken memory,
-        JBPayRemoteMessage memory
-    )
-        internal
-        pure
-        override
-    {
-        revert("not implemented");
     }
 
     function test_setRemoteToken(address localToken, JBRemoteToken memory remoteToken) external {

@@ -12,7 +12,6 @@ import {JBAccountingContext} from "@bananapus/core-v6/src/structs/JBAccountingCo
 import {JBConstants} from "@bananapus/core-v6/src/libraries/JBConstants.sol";
 import {JBCurrencyIds} from "@bananapus/core-v6/src/libraries/JBCurrencyIds.sol";
 import {JBFixedPointNumber} from "@bananapus/core-v6/src/libraries/JBFixedPointNumber.sol";
-import {JBMetadataResolver} from "@bananapus/core-v6/src/libraries/JBMetadataResolver.sol";
 import {mulDiv} from "@prb/math/src/Common.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
@@ -21,8 +20,6 @@ import {IERC165} from "@openzeppelin/contracts/utils/introspection/ERC165.sol";
 import {JBDenominatedAmount} from "../structs/JBDenominatedAmount.sol";
 import {JBInboxTreeRoot} from "../structs/JBInboxTreeRoot.sol";
 import {JBMessageRoot} from "../structs/JBMessageRoot.sol";
-import {JBPayRemoteMessage} from "../structs/JBPayRemoteMessage.sol";
-import {JBRelayBeneficiary} from "./JBRelayBeneficiary.sol";
 import {MerkleLib} from "../utils/MerkleLib.sol";
 
 /// @notice Library with bytecode-heavy functions extracted from JBSucker to reduce child contract sizes.
@@ -329,74 +326,6 @@ library JBSuckerLib {
             sourceSurplus: ethSurplus,
             sourceBalance: ethBalance,
             snapshotNonce: snapshotNonce
-        });
-    }
-
-    /// @notice Execute a cross-chain payment: pay project, cash out at 0% tax.
-    /// @dev Runs via DELEGATECALL so external calls use the sucker's address/balance.
-    /// @param directory The JB directory.
-    /// @param projectId The local project ID.
-    /// @param message The payment message from the remote chain.
-    /// @return projectTokensReceived The project tokens received from the pay.
-    /// @return terminalTokensReclaimed The terminal tokens reclaimed from the cash out.
-    function executePayFromRemote(
-        IJBDirectory directory,
-        uint256 projectId,
-        JBPayRemoteMessage calldata message
-    )
-        external
-        returns (uint256 projectTokensReceived, uint256 terminalTokensReclaimed)
-    {
-        // Decode the token address from the cross-chain bytes32 representation.
-        address token = address(uint160(uint256(message.token)));
-
-        // Get the terminal for this token.
-        IJBTerminal terminal = directory.primaryTerminalOf({projectId: projectId, token: token});
-
-        // Revert if no terminal is configured for this token.
-        if (address(terminal) == address(0)) {
-            revert JBSuckerLib_NoTerminalForToken({projectId: projectId, token: token});
-        }
-
-        // Inject the relay beneficiary into the metadata so hooks see the real user.
-        bytes memory payMetadata = JBMetadataResolver.addToMetadata({
-            originalMetadata: message.metadata,
-            idToAdd: JBRelayBeneficiary.ID,
-            dataToAdd: abi.encode(address(uint160(uint256(message.beneficiary))))
-        });
-
-        // Determine the native ETH value to send (non-zero only for native token payments).
-        uint256 nativePayValue = token == JBConstants.NATIVE_TOKEN ? message.amount : 0;
-
-        // Approve the terminal to spend ERC-20 tokens on behalf of this sucker.
-        if (token != JBConstants.NATIVE_TOKEN) {
-            SafeERC20.forceApprove({token: IERC20(token), spender: address(terminal), value: message.amount});
-        }
-
-        // Pay the project with this sucker as beneficiary (so we receive project tokens).
-        // slither-disable-next-line arbitrary-send-eth
-        projectTokensReceived = terminal.pay{value: nativePayValue}({
-            projectId: projectId,
-            token: token,
-            amount: message.amount,
-            beneficiary: address(this),
-            minReturnedTokens: message.minTokensOut,
-            memo: "",
-            metadata: payMetadata
-        });
-
-        // Cast the terminal to the cash-out interface.
-        IJBCashOutTerminal cashOutTerminal = IJBCashOutTerminal(address(terminal));
-
-        // Cash out the project tokens at 0% tax (sucker privilege via data hook).
-        terminalTokensReclaimed = cashOutTerminal.cashOutTokensOf({
-            holder: address(this),
-            projectId: projectId,
-            cashOutCount: projectTokensReceived,
-            tokenToReclaim: token,
-            minTokensReclaimed: 0,
-            beneficiary: payable(address(this)),
-            metadata: bytes("")
         });
     }
 

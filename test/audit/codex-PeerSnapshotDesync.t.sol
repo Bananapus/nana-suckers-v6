@@ -14,7 +14,6 @@ import {IJBSuckerRegistry} from "../../src/interfaces/IJBSuckerRegistry.sol";
 import {JBDenominatedAmount} from "../../src/structs/JBDenominatedAmount.sol";
 import {JBInboxTreeRoot} from "../../src/structs/JBInboxTreeRoot.sol";
 import {JBMessageRoot} from "../../src/structs/JBMessageRoot.sol";
-import {JBPayRemoteMessage} from "../../src/structs/JBPayRemoteMessage.sol";
 import {JBRemoteToken} from "../../src/structs/JBRemoteToken.sol";
 
 contract CodexPeerSnapshotSucker is JBSucker {
@@ -38,21 +37,6 @@ contract CodexPeerSnapshotSucker is JBSucker {
         pure
         override
     {}
-
-    // forge-lint: disable-next-line(mixed-case-function)
-    function _sendPayOverAMB(
-        uint256,
-        address,
-        uint256,
-        JBRemoteToken memory,
-        JBPayRemoteMessage memory
-    )
-        internal
-        pure
-        override
-    {
-        revert("not implemented");
-    }
 
     function _isRemotePeer(address sender) internal view override returns (bool) {
         return sender == address(this);

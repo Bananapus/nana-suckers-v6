@@ -40,7 +40,6 @@ import {JBSwapPoolLib} from "./libraries/JBSwapPoolLib.sol";
 // Local: structs (alphabetized).
 import {JBClaim} from "./structs/JBClaim.sol";
 import {JBMessageRoot} from "./structs/JBMessageRoot.sol";
-import {JBPayRemoteMessage} from "./structs/JBPayRemoteMessage.sol";
 import {JBRemoteToken} from "./structs/JBRemoteToken.sol";
 
 /// @notice A `JBCCIPSucker` extension that swaps between local and bridge tokens using the best
@@ -213,9 +212,8 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
     //*********************************************************************//
 
     /// @notice Override CCIP receive to swap bridge tokens into local tokens and track denomination conversion.
-    /// @dev Preserves the parent's typed message discrimination (ROOT vs PAY) and adds swap logic for ROOT messages.
+    /// @dev Preserves the parent's typed message discrimination and adds swap logic for ROOT messages.
     /// For ROOT messages: swaps received bridge tokens to local tokens and tracks the leaf-to-local conversion ratio.
-    /// For PAY messages: delegates to the parent's flow (unwrap WETH if needed, then payFromRemote).
     /// @param any2EvmMessage The CCIP message received from the remote chain.
     function ccipReceive(Client.Any2EVMMessage calldata any2EvmMessage) external override {
         // Use msg.sender (not _msgSender()) to prevent ERC2771 spoofing.
@@ -273,22 +271,6 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
 
             // Store the inbox merkle root for later claims.
             this.fromRemote(root);
-        } else if (messageType == _CCIP_MSG_TYPE_PAY) {
-            // PAY message — swap bridge token to local token if needed, then pay.
-            JBPayRemoteMessage memory payMsg = abi.decode(payload, (JBPayRemoteMessage));
-            address localToken = _toAddress(payMsg.token);
-
-            if (any2EvmMessage.destTokenAmounts.length == 1) {
-                Client.EVMTokenAmount memory tokenAmount = any2EvmMessage.destTokenAmounts[0];
-
-                if (localToken != address(BRIDGE_TOKEN) && localToken != tokenAmount.token) {
-                    // Cross-currency: swap bridge token -> local token and update the pay amount.
-                    payMsg.amount =
-                        _executeSwap({tokenIn: tokenAmount.token, tokenOut: localToken, amount: tokenAmount.amount});
-                }
-            }
-
-            this.payFromRemote(payMsg);
         } else {
             revert JBCCIPSucker_UnknownMessageType(messageType);
         }
@@ -384,77 +366,6 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
         }
         // Leaf index not found in any received batch.
         revert JBSwapCCIPSucker_BatchNotReceived(0);
-    }
-
-    /// @notice Override to swap local tokens into bridge tokens before CCIP bridging of PAY messages.
-    /// @dev Mirrors `_sendRootOverAMB`: swaps local -> bridge, updates `message.amount` to bridge denomination,
-    /// then sends via CCIP. Delegates CCIP construction to JBCCIPLib (via DELEGATECALL) to reduce bytecode.
-    /// @param transportPayment The ETH sent for CCIP fees.
-    /// @param token The local token being bridged.
-    /// @param amount The amount of local tokens to bridge.
-    /// @param remoteToken The remote token configuration (including minGas).
-    /// @param message The pay message to send to the remote chain.
-    // forge-lint: disable-next-line(mixed-case-function)
-    function _sendPayOverAMB(
-        uint256 transportPayment,
-        address token,
-        uint256 amount,
-        JBRemoteToken memory remoteToken,
-        JBPayRemoteMessage memory message
-    )
-        internal
-        override
-    {
-        if (transportPayment == 0) revert JBSucker_ExpectedMsgValue();
-
-        // If no tokens to bridge, delegate to parent for message-only send.
-        if (amount == 0) {
-            super._sendPayOverAMB({
-                transportPayment: transportPayment,
-                token: token,
-                amount: amount,
-                remoteToken: remoteToken,
-                message: message
-            });
-            return;
-        }
-
-        Client.EVMTokenAmount[] memory tokenAmounts;
-        uint256 gasLimit = MESSENGER_PAY_GAS_LIMIT + remoteToken.minGas;
-        bytes memory encodedPayload;
-
-        {
-            address bridgeTokenAddr = address(BRIDGE_TOKEN);
-            uint256 bridgeAmount;
-
-            if (token == bridgeTokenAddr) {
-                bridgeAmount = amount;
-            } else {
-                // slither-disable-next-line reentrancy-events
-                bridgeAmount = _executeSwap({tokenIn: token, tokenOut: bridgeTokenAddr, amount: amount});
-                if (bridgeAmount == 0) revert JBSwapCCIPSucker_SwapFailed();
-            }
-
-            message.amount = bridgeAmount;
-
-            tokenAmounts = new Client.EVMTokenAmount[](1);
-            tokenAmounts[0] = Client.EVMTokenAmount({token: bridgeTokenAddr, amount: bridgeAmount});
-            BRIDGE_TOKEN.forceApprove({spender: address(CCIP_ROUTER), value: bridgeAmount});
-            encodedPayload = abi.encode(_CCIP_MSG_TYPE_PAY, abi.encode(message));
-        }
-
-        (bool refundFailed, uint256 refundAmount) = JBCCIPLib.sendCCIPMessage({
-            ccipRouter: CCIP_ROUTER,
-            remoteChainSelector: REMOTE_CHAIN_SELECTOR,
-            peerAddress: _toAddress(peer()),
-            transportPayment: transportPayment,
-            gasLimit: gasLimit,
-            encodedPayload: encodedPayload,
-            tokenAmounts: tokenAmounts,
-            refundRecipient: _msgSender()
-        });
-
-        if (refundFailed) emit TransportPaymentRefundFailed(_msgSender(), refundAmount);
     }
 
     /// @notice Override to swap local tokens into bridge tokens before CCIP bridging.

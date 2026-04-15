@@ -154,8 +154,8 @@ library JBCCIPLib {
 
     /// @notice Decode a typed CCIP message: abi.encode(uint8 type, bytes payload).
     /// @param data The raw CCIP message data.
-    /// @return messageType The message type (0 = root, 1 = pay).
-    /// @return payload The inner payload (encoded JBMessageRoot or JBPayRemoteMessage).
+    /// @return messageType The message type (0 = root).
+    /// @return payload The inner payload (encoded JBMessageRoot).
     function decodeTypedMessage(bytes memory data) external pure returns (uint8 messageType, bytes memory payload) {
         // ABI-decode the type and payload from the raw data.
         (messageType, payload) = abi.decode(data, (uint8, bytes));

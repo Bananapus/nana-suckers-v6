@@ -14,7 +14,6 @@ import {JBOptimismSucker} from "../../src/JBOptimismSucker.sol";
 import {JBLeaf} from "../../src/structs/JBLeaf.sol";
 import {JBClaim} from "../../src/structs/JBClaim.sol";
 import {IJBSuckerRegistry} from "../../src/interfaces/IJBSuckerRegistry.sol";
-import {JBPayRemoteMessage} from "../../src/structs/JBPayRemoteMessage.sol";
 import {IJBProjects} from "@bananapus/core-v6/src/interfaces/IJBProjects.sol";
 
 /// @dev Minimal mock directory that returns a mock PROJECTS address.
@@ -194,17 +193,6 @@ contract MerkleUnitTest is JBSucker, Test {
     )
         internal
         virtual
-        override
-    {}
-
-    function _sendPayOverAMB(
-        uint256,
-        address,
-        uint256,
-        JBRemoteToken memory,
-        JBPayRemoteMessage memory
-    )
-        internal
         override
     {}
 
