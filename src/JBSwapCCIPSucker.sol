@@ -49,6 +49,7 @@ import {IWrappedNativeToken} from "./interfaces/IWrappedNativeToken.sol";
 import {JBSwapLib} from "./libraries/JBSwapLib.sol";
 
 // Local: structs (alphabetized).
+import {JBClaim} from "./structs/JBClaim.sol";
 import {JBMessageRoot} from "./structs/JBMessageRoot.sol";
 import {JBPayRemoteMessage} from "./structs/JBPayRemoteMessage.sol";
 import {JBRemoteToken} from "./structs/JBRemoteToken.sol";
@@ -61,9 +62,10 @@ import {JBRemoteToken} from "./structs/JBRemoteToken.sol";
 ///
 /// **Cross-denomination claim scaling:** Because the merkle tree leaf amounts are denominated in the
 /// source chain's terminal token, the receiving chain must scale each claim proportionally. This contract
-/// maintains a FIFO queue of per-batch conversion entries (one per received root), preserving each batch's
-/// exact swap rate. `_addToBalance` consumes entries from the oldest batch first, applying the rate
-/// `scaledAmount = leafAmount * batchLocal / batchLeaf` for each batch independently.
+/// stores an immutable conversion rate per nonce (one per received root batch). The `claim` override
+/// sets the leaf index context, and `_addToBalance` uses it to look up the correct nonce and rate:
+/// `scaledAmount = leafAmount * batchLocal / batchLeaf`. This is ordering-independent — out-of-order
+/// CCIP delivery cannot cause one batch's rate to be applied to another batch's claims.
 ///
 /// Flow (Ethereum -> Tempo, ETH -> USDC):
 ///   prepare(ETH) -> burn project tokens, cash out ETH from terminal
@@ -105,6 +107,7 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
     error JBSwapCCIPSucker_NoLiquidity();
     error JBSwapCCIPSucker_InsufficientTwapHistory();
     error JBSwapCCIPSucker_AmountOverflow(uint256 amount);
+    error JBSwapCCIPSucker_BatchNotReceived(uint64 nonce);
 
     //*********************************************************************//
     // --------------------- private constants -------------------------- //
@@ -146,20 +149,26 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
     // ------------------- internal stored properties -------------------- //
     //*********************************************************************//
 
-    /// @notice A conversion entry preserving the exact exchange rate of one received root batch.
-    /// @dev Stored in a FIFO queue per token so each batch's rate is applied independently.
-    struct ConversionEntry {
-        uint256 leafAmount; // Remaining leaf-denomination (source chain) amount
-        uint256 localAmount; // Remaining local-denomination (after swap) amount
+    /// @notice Immutable conversion rate for one received root batch, keyed by nonce.
+    /// @dev Each batch stores its total leaf and local amounts. Individual claims compute their
+    /// scaled amount as `claimLeafAmount * localTotal / leafTotal` — no mutable state changes.
+    struct ConversionRate {
+        uint256 leafTotal; // Total leaf-denomination (source chain) amount for this batch
+        uint256 localTotal; // Total local-denomination (after swap) amount for this batch
     }
 
-    /// @notice FIFO queue of conversion entries per token, one per received root batch.
-    /// @dev Claims consume entries from the head of the queue (oldest batch first), ensuring
-    /// each batch is scaled at its own swap rate rather than a blended token-wide average.
-    mapping(address token => ConversionEntry[]) internal _conversionQueue;
+    /// @notice Conversion rate for each received root batch, keyed by token and nonce.
+    mapping(address token => mapping(uint64 nonce => ConversionRate)) internal _conversionRateOf;
 
-    /// @notice Head pointer into `_conversionQueue[token]` — the index of the next entry to consume.
-    mapping(address token => uint256) internal _conversionQueueHead;
+    /// @notice Cumulative leaf count at each nonce, used to map leaf indices to their batch nonce.
+    mapping(address token => mapping(uint64 nonce => uint256)) internal _cumulativeCountOf;
+
+    /// @notice Highest nonce received so far per token. Used as upper bound for nonce iteration.
+    mapping(address token => uint64) internal _highestReceivedNonce;
+
+    /// @notice Leaf index of the claim currently being processed (set by `claim` override).
+    /// @dev Sentinel value `type(uint256).max` means no active claim (bypass scaling).
+    uint256 internal _currentClaimLeafIndex = type(uint256).max;
 
     //*********************************************************************//
     // ---------------------------- constructor -------------------------- //
@@ -203,6 +212,26 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
     //*********************************************************************//
     // --------------------- external transactions ----------------------- //
     //*********************************************************************//
+
+    /// @notice ABI-decode helper used via `this.decodeRootWithCount(payload)` in a try/catch
+    /// to detect whether the payload includes a cumulative leaf count alongside the root.
+    /// @dev Must be external so it can be called via `this.` for try/catch. Not intended for
+    /// external callers — has no access control because it's a pure decoder with no side effects.
+    function decodeRootWithCount(bytes calldata payload)
+        external
+        pure
+        returns (JBMessageRoot memory root, uint256 count)
+    {
+        (root, count) = abi.decode(payload, (JBMessageRoot, uint256));
+    }
+
+    /// @notice Override single claim to set the leaf index context for `_addToBalance` scaling.
+    /// @dev The batch `claim(JBClaim[])` calls this in a loop, so it works automatically.
+    function claim(JBClaim calldata claimData) public override {
+        _currentClaimLeafIndex = claimData.leaf.index;
+        super.claim(claimData);
+        _currentClaimLeafIndex = type(uint256).max;
+    }
 
     /// @notice Uniswap V4 unlock callback — executes the swap atomically within `PoolManager.unlock()`.
     /// @param data Encoded swap parameters: (PoolKey, bool zeroForOne, int256 amountSpecified,
@@ -296,7 +325,22 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
 
         if (messageType == _CCIP_MSG_TYPE_ROOT) {
             // ROOT message — swap bridge tokens to local tokens before storing the merkle root.
-            JBMessageRoot memory root = abi.decode(payload, (JBMessageRoot));
+            // Decode the root and optional cumulative leaf count.
+            // JBMessageRoot ABI-encodes to a fixed size. If the payload is longer, it includes the count.
+            JBMessageRoot memory root;
+            uint256 batchCount;
+            {
+                // Try decoding with count first; fall back to root-only for backward compat
+                // (e.g., amount==0 messages sent by parent's _sendRootOverAMB).
+                // solhint-disable-next-line no-empty-blocks
+                try this.decodeRootWithCount(payload) returns (JBMessageRoot memory _root, uint256 _count) {
+                    root = _root;
+                    batchCount = _count;
+                } catch {
+                    root = abi.decode(payload, (JBMessageRoot));
+                }
+            }
+
             address localToken = _toAddress(root.token);
             uint256 localAmount;
 
@@ -312,11 +356,21 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
                 }
             }
 
-            // Push a conversion entry for this root batch, preserving its exact swap rate.
-            // root.amount is the sum of leaf terminalTokenAmount values (in source-chain denomination).
-            // localAmount is the actual amount of local tokens received (after swap, if any).
-            if (root.amount > 0 && localAmount > 0) {
-                _conversionQueue[localToken].push(ConversionEntry({leafAmount: root.amount, localAmount: localAmount}));
+            // Always record nonce progression and cumulative count so that _findNonceForLeafIndex
+            // doesn't treat this nonce as a gap. Zero-amount batches are valid (e.g., metadata-only roots).
+            if (batchCount > 0) {
+                _cumulativeCountOf[localToken][root.remoteRoot.nonce] = batchCount;
+                if (root.remoteRoot.nonce > _highestReceivedNonce[localToken]) {
+                    _highestReceivedNonce[localToken] = root.remoteRoot.nonce;
+                }
+            }
+
+            // Store conversion rate whenever the batch has leaf-denomination tokens, even if
+            // localAmount == 0 (swap rounded to zero). Without this, claims for this nonce would
+            // skip scaling and use the raw leaf amount, draining backing from other batches.
+            if (root.amount > 0) {
+                _conversionRateOf[localToken][root.remoteRoot.nonce] =
+                    ConversionRate({leafTotal: root.amount, localTotal: localAmount});
             }
 
             // Store the inbox merkle root for later claims.
@@ -364,40 +418,42 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
     {
         if (transportPayment == 0) revert JBSucker_ExpectedMsgValue();
 
-        // If no tokens to bridge, delegate to parent for message-only send.
-        if (amount == 0) {
-            super._sendRootOverAMB(transportPayment, index, token, amount, remoteToken, sucker_message);
-            return;
-        }
-
         uint256 bridgeAmount;
-        address bridgeTokenAddr = address(BRIDGE_TOKEN);
+        Client.EVMTokenAmount[] memory tokenAmounts;
 
-        if (token == bridgeTokenAddr) {
-            // No swap needed — local token IS the bridge token.
-            bridgeAmount = amount;
+        if (amount == 0) {
+            // Message-only root (no tokens to bridge). Use empty token amounts.
+            tokenAmounts = new Client.EVMTokenAmount[](0);
         } else {
-            // Swap local token -> bridge token via best V3/V4 pool.
-            bridgeAmount = _executeSwap(token, bridgeTokenAddr, amount);
-            if (bridgeAmount == 0) revert JBSwapCCIPSucker_SwapFailed();
+            address bridgeTokenAddr = address(BRIDGE_TOKEN);
+
+            if (token == bridgeTokenAddr) {
+                // No swap needed — local token IS the bridge token.
+                bridgeAmount = amount;
+            } else {
+                // Swap local token -> bridge token via best V3/V4 pool.
+                bridgeAmount = _executeSwap(token, bridgeTokenAddr, amount);
+                if (bridgeAmount == 0) revert JBSwapCCIPSucker_SwapFailed();
+            }
+
+            tokenAmounts = new Client.EVMTokenAmount[](1);
+            tokenAmounts[0] = Client.EVMTokenAmount({token: bridgeTokenAddr, amount: bridgeAmount});
+
+            // Approve the CCIP router to spend bridge tokens.
+            BRIDGE_TOKEN.forceApprove({spender: address(CCIP_ROUTER), value: bridgeAmount});
         }
 
         // NOTE: We intentionally do NOT update sucker_message.amount here.
         // It stays as the original leaf-denomination total (e.g., ETH wei), which the
         // receiving chain uses to compute the proportional scaling factor for claims.
 
-        // Build the CCIP message with bridge tokens.
+        // Build the CCIP message. Always encode the cumulative leaf count (index + 1)
+        // so the receiving chain records nonce progression even for zero-amount batches.
         uint256 gasLimit = MESSENGER_BASE_GAS_LIMIT + remoteToken.minGas;
-
-        Client.EVMTokenAmount[] memory tokenAmounts = new Client.EVMTokenAmount[](1);
-        tokenAmounts[0] = Client.EVMTokenAmount({token: bridgeTokenAddr, amount: bridgeAmount});
-
-        // Approve the CCIP router to spend bridge tokens.
-        BRIDGE_TOKEN.forceApprove({spender: address(CCIP_ROUTER), value: bridgeAmount});
 
         Client.EVM2AnyMessage memory message = Client.EVM2AnyMessage({
             receiver: abi.encode(_toAddress(peer())),
-            data: abi.encode(_CCIP_MSG_TYPE_ROOT, abi.encode(sucker_message)),
+            data: abi.encode(_CCIP_MSG_TYPE_ROOT, abi.encode(sucker_message, index + 1)),
             tokenAmounts: tokenAmounts,
             extraArgs: Client._argsToBytes(Client.EVMExtraArgsV1({gasLimit: gasLimit})),
             feeToken: address(0)
@@ -487,42 +543,50 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
 
     /// @notice Override to scale claim amounts from source-chain denomination to local-chain denomination.
     /// @dev When cross-currency bridging, merkle tree leaf amounts are in the source chain's terminal token
-    /// denomination. This override converts them proportionally using the FIFO conversion queue populated
-    /// during `ccipReceive`.
+    /// denomination. This override converts them proportionally using the nonce-indexed conversion rate
+    /// populated during `ccipReceive`.
     ///
-    /// **Per-batch isolation**: Each received root creates its own conversion entry in the queue. Claims consume
-    /// entries from the oldest batch first, so each batch's swap rate is applied independently. This prevents
-    /// a blended-rate bug where overlapping roots at different exchange rates would distort individual claims.
+    /// **Per-batch isolation**: Each received root stores an immutable conversion rate keyed by nonce.
+    /// The `claim` override sets `_currentClaimLeafIndex`, which this function uses to look up the
+    /// correct nonce (and thus the correct rate) for the claim. This prevents out-of-order CCIP
+    /// delivery from applying the wrong batch's rate to a claim.
     function _addToBalance(address token, uint256 amount, uint256 cachedProjectId) internal override {
-        ConversionEntry[] storage queue = _conversionQueue[token];
-        uint256 head = _conversionQueueHead[token];
-
-        if (head < queue.length) {
-            // Scale using the FIFO queue — each batch keeps its own swap rate.
-            uint256 remaining = amount;
-            uint256 scaledTotal;
-
-            while (remaining > 0 && head < queue.length) {
-                ConversionEntry storage entry = queue[head];
-                uint256 consume = remaining > entry.leafAmount ? entry.leafAmount : remaining;
-                uint256 scaled = consume * entry.localAmount / entry.leafAmount;
-
-                entry.leafAmount -= consume;
-                entry.localAmount -= scaled;
-                remaining -= consume;
-                scaledTotal += scaled;
-
-                if (entry.leafAmount == 0) {
-                    delete queue[head];
-                    ++head;
+        if (_currentClaimLeafIndex != type(uint256).max) {
+            uint64 nonce = _findNonceForLeafIndex(token, _currentClaimLeafIndex);
+            if (nonce != 0) {
+                ConversionRate storage rate = _conversionRateOf[token][nonce];
+                if (rate.leafTotal > 0) {
+                    amount = amount * rate.localTotal / rate.leafTotal;
                 }
             }
-
-            _conversionQueueHead[token] = head;
-            amount = scaledTotal + remaining;
         }
 
         super._addToBalance(token, amount, cachedProjectId);
+    }
+
+    /// @notice Find the nonce whose batch contains the given leaf index.
+    /// @dev Iterates nonces 1..max using cumulative counts as range boundaries.
+    /// If a gap is detected (nonce not yet received), reverts if the leaf might be in that range.
+    /// @param token The local token address.
+    /// @param leafIndex The leaf index from the claim.
+    /// @return The nonce of the batch containing this leaf, or 0 if no conversion rates exist.
+    function _findNonceForLeafIndex(address token, uint256 leafIndex) internal view returns (uint64) {
+        uint64 maxNonce = _highestReceivedNonce[token];
+        if (maxNonce == 0) return 0;
+
+        uint256 prevCumCount;
+        for (uint64 n = 1; n <= maxNonce; n++) {
+            uint256 cumCount = _cumulativeCountOf[token][n];
+            if (cumCount == 0) {
+                // Gap: this nonce hasn't been received yet. If the leaf could be in this range, revert.
+                if (leafIndex >= prevCumCount) revert JBSwapCCIPSucker_BatchNotReceived(n);
+                continue;
+            }
+            if (leafIndex >= prevCumCount && leafIndex < cumCount) return n;
+            prevCumCount = cumCount;
+        }
+        // Leaf index beyond all known batches — the batch hasn't arrived yet.
+        revert JBSwapCCIPSucker_BatchNotReceived(0);
     }
 
     /// @notice Allow this contract to receive ETH (from V4 swaps, WETH unwrap, and CCIP refunds).

@@ -61,15 +61,27 @@ contract ForkSwapHarness is JBSwapCCIPSucker {
         return _normalize(token);
     }
 
-    /// @notice Number of unconsumed conversion entries.
-    function exposed_conversionQueueRemaining(address token) external view returns (uint256) {
-        return _conversionQueue[token].length - _conversionQueueHead[token];
+    /// @notice Read a conversion rate for a given nonce.
+    function exposed_conversionRateOf(
+        address token,
+        uint64 nonce
+    )
+        external
+        view
+        returns (uint256 leafTotal, uint256 localTotal)
+    {
+        ConversionRate storage rate = _conversionRateOf[token][nonce];
+        return (rate.leafTotal, rate.localTotal);
     }
 
-    /// @notice Read a specific conversion entry.
-    function exposed_conversionEntry(address token, uint256 index) external view returns (uint256 leaf, uint256 local) {
-        ConversionEntry storage entry = _conversionQueue[token][index];
-        return (entry.leafAmount, entry.localAmount);
+    /// @notice Read cumulative count for a given nonce.
+    function exposed_cumulativeCountOf(address token, uint64 nonce) external view returns (uint256) {
+        return _cumulativeCountOf[token][nonce];
+    }
+
+    /// @notice Read highest received nonce for a token.
+    function exposed_highestReceivedNonce(address token) external view returns (uint64) {
+        return _highestReceivedNonce[token];
     }
 }
 
@@ -346,11 +358,11 @@ contract ForkSwapTest is Test {
         // Verify: USDC was consumed by the swap.
         assertEq(IERC20(USDC).balanceOf(address(sucker)), 0, "All USDC should be swapped");
 
-        // Verify: conversion queue has one entry with correct values.
-        assertEq(sucker.exposed_conversionQueueRemaining(JBConstants.NATIVE_TOKEN), 1, "one conversion entry");
-        (uint256 leafEntry, uint256 localEntry) = sucker.exposed_conversionEntry(JBConstants.NATIVE_TOKEN, 0);
-        assertEq(leafEntry, usdcAmount, "leafAmount should equal root.amount (source denomination)");
-        assertEq(localEntry, ethReceived, "localAmount should equal ETH received from swap");
+        // Verify: conversion rate stored for nonce 1 with correct values.
+        assertEq(sucker.exposed_highestReceivedNonce(JBConstants.NATIVE_TOKEN), 1, "highest nonce should be 1");
+        (uint256 leafEntry, uint256 localEntry) = sucker.exposed_conversionRateOf(JBConstants.NATIVE_TOKEN, 1);
+        assertEq(leafEntry, usdcAmount, "leafTotal should equal root.amount (source denomination)");
+        assertEq(localEntry, ethReceived, "localTotal should equal ETH received from swap");
     }
 
     /// @notice ccipReceive with no swap needed (localToken == BRIDGE_TOKEN).
@@ -389,11 +401,11 @@ contract ForkSwapTest is Test {
         vm.prank(MAINNET_CCIP_ROUTER);
         sucker.ccipReceive(ccipMsg);
 
-        // No swap — conversion queue should have one entry with 1:1 ratio.
-        assertEq(sucker.exposed_conversionQueueRemaining(USDC), 1, "one conversion entry");
-        (uint256 leafEntry, uint256 localEntry) = sucker.exposed_conversionEntry(USDC, 0);
-        assertEq(leafEntry, usdcAmount, "leafAmount should equal root.amount");
-        assertEq(localEntry, usdcAmount, "localAmount should equal delivered amount (no swap, 1:1)");
+        // No swap — conversion rate stored for nonce 1 with 1:1 ratio.
+        assertEq(sucker.exposed_highestReceivedNonce(USDC), 1, "highest nonce should be 1");
+        (uint256 leafEntry, uint256 localEntry) = sucker.exposed_conversionRateOf(USDC, 1);
+        assertEq(leafEntry, usdcAmount, "leafTotal should equal root.amount");
+        assertEq(localEntry, usdcAmount, "localTotal should equal delivered amount (no swap, 1:1)");
     }
 
     // =========================================================================

@@ -54,33 +54,54 @@ contract SwapCCIPTestHarness is JBSwapCCIPSucker {
         JBSwapCCIPSucker(deployer, directory, tokens, permissions, 1, IJBSuckerRegistry(address(1)), address(0))
     {}
 
-    /// @notice Push a conversion entry into the FIFO queue for testing.
-    function test_pushConversionEntry(address token, uint256 leafAmount, uint256 localAmount) external {
-        _conversionQueue[token].push(ConversionEntry({leafAmount: leafAmount, localAmount: localAmount}));
+    /// @notice Set a conversion rate for a specific nonce (replaces the old FIFO push).
+    function test_setConversionRate(
+        address token,
+        uint64 nonce,
+        uint256 leafTotal,
+        uint256 localTotal,
+        uint256 cumCount
+    )
+        external
+    {
+        _conversionRateOf[token][nonce] = ConversionRate({leafTotal: leafTotal, localTotal: localTotal});
+        _cumulativeCountOf[token][nonce] = cumCount;
+        if (nonce > _highestReceivedNonce[token]) {
+            _highestReceivedNonce[token] = nonce;
+        }
     }
 
-    /// @notice Number of entries in the conversion queue for a token.
-    function exposed_conversionQueueLength(address token) external view returns (uint256) {
-        return _conversionQueue[token].length;
+    /// @notice Read a conversion rate for a given nonce.
+    function exposed_conversionRateOf(
+        address token,
+        uint64 nonce
+    )
+        external
+        view
+        returns (uint256 leafTotal, uint256 localTotal)
+    {
+        ConversionRate storage rate = _conversionRateOf[token][nonce];
+        return (rate.leafTotal, rate.localTotal);
     }
 
-    /// @notice Head pointer for the conversion queue.
-    function exposed_conversionQueueHead(address token) external view returns (uint256) {
-        return _conversionQueueHead[token];
+    /// @notice Read the cumulative count for a given nonce.
+    function exposed_cumulativeCountOf(address token, uint64 nonce) external view returns (uint256) {
+        return _cumulativeCountOf[token][nonce];
     }
 
-    /// @notice Read a specific conversion entry.
-    function exposed_conversionEntry(address token, uint256 index) external view returns (uint256 leaf, uint256 local) {
-        ConversionEntry storage entry = _conversionQueue[token][index];
-        return (entry.leafAmount, entry.localAmount);
+    /// @notice Read the highest received nonce for a token.
+    function exposed_highestReceivedNonce(address token) external view returns (uint64) {
+        return _highestReceivedNonce[token];
     }
 
-    /// @notice Number of unconsumed entries remaining.
-    function exposed_conversionQueueRemaining(address token) external view returns (uint256) {
-        return _conversionQueue[token].length - _conversionQueueHead[token];
+    /// @notice Expose _addToBalance for direct testing (with leaf index context).
+    function exposed_addToBalance(address token, uint256 amount, uint256 projectId, uint256 leafIndex) external {
+        _currentClaimLeafIndex = leafIndex;
+        _addToBalance(token, amount, projectId);
+        _currentClaimLeafIndex = type(uint256).max;
     }
 
-    /// @notice Expose _addToBalance for direct testing.
+    /// @notice Expose _addToBalance without leaf index (bypass scaling).
     function exposed_addToBalance(address token, uint256 amount, uint256 projectId) external {
         _addToBalance(token, amount, projectId);
     }
@@ -167,79 +188,75 @@ contract SwapCCIPScalingTest is Test {
     function test_scaling_singleBatch() public {
         address token = address(usdc);
 
-        // Simulate: received 1e18 leaf amount → 1800e6 USDC.
-        sucker.test_pushConversionEntry(token, 1e18, 1800e6);
-
-        // Mint USDC to sucker so amountToAddToBalanceOf passes.
+        // Simulate: nonce 1, 1 leaf in batch, 1e18 leaf amount → 1800e6 USDC.
+        sucker.test_setConversionRate(token, 1, 1e18, 1800e6, 1);
         usdc.mint(address(sucker), 1800e6);
 
-        // Claim full batch (1e18 leaf amount).
-        sucker.exposed_addToBalance(token, 1e18, PROJECT_ID);
-
-        // Queue should be fully consumed.
-        assertEq(sucker.exposed_conversionQueueRemaining(token), 0, "queue should be empty after full claim");
+        // Claim leaf 0 (full batch, 1e18 leaf amount) — should scale to 1800e6.
+        sucker.exposed_addToBalance(token, 1e18, PROJECT_ID, 0);
     }
 
     /// @notice Single batch — partial claim scales proportionally.
     function test_scaling_singleBatch_partial() public {
         address token = address(usdc);
 
-        // Simulate: 2e18 leaf → 3600e6 USDC.
-        sucker.test_pushConversionEntry(token, 2e18, 3600e6);
+        // Simulate: nonce 1, 2 leaves, 2e18 leaf total → 3600e6 USDC.
+        sucker.test_setConversionRate(token, 1, 2e18, 3600e6, 2);
         usdc.mint(address(sucker), 3600e6);
 
-        // Claim half (1e18 leaf).
-        sucker.exposed_addToBalance(token, 1e18, PROJECT_ID);
+        // Claim leaf 0 (half: 1e18 leaf).
+        uint256 balBefore = usdc.balanceOf(address(sucker));
+        sucker.exposed_addToBalance(token, 1e18, PROJECT_ID, 0);
+        uint256 claimed = balBefore - usdc.balanceOf(address(sucker));
+        assertEq(claimed, 1800e6, "half claim should get half local amount");
 
-        // Remaining entry should be half.
-        assertEq(sucker.exposed_conversionQueueRemaining(token), 1, "one entry should remain");
-        (uint256 leaf, uint256 local) = sucker.exposed_conversionEntry(token, 0);
-        assertEq(leaf, 1e18, "leafAmount should be halved");
-        assertEq(local, 1800e6, "localAmount should be halved");
+        // Rate is immutable — can still claim the other half at the same rate.
+        balBefore = usdc.balanceOf(address(sucker));
+        sucker.exposed_addToBalance(token, 1e18, PROJECT_ID, 1);
+        claimed = balBefore - usdc.balanceOf(address(sucker));
+        assertEq(claimed, 1800e6, "second half should get same rate");
     }
 
     // =========================================================================
-    // Scaling: multiple batches — fully claimed between arrivals
+    // Scaling: multiple batches — different rates
     // =========================================================================
 
-    /// @notice Two batches with different rates, first fully claimed before second arrives.
-    /// Each batch should get its own rate — no cross-batch pollution.
-    function test_scaling_twoBatches_fullyClaimed_noDoS() public {
+    /// @notice Two batches with different rates — each claim gets its own rate.
+    function test_scaling_twoBatches_differentRates() public {
         address token = address(usdc);
 
-        // Batch 1: 1e18 leaf → 1800e6 USDC.
-        sucker.test_pushConversionEntry(token, 1e18, 1800e6);
-        usdc.mint(address(sucker), 1800e6);
+        // Batch 1 (nonce 1): 1e18 leaf → 1800e6 USDC, 1 leaf.
+        sucker.test_setConversionRate(token, 1, 1e18, 1800e6, 1);
+        // Batch 2 (nonce 2): 1e18 leaf → 1600e6 USDC, 1 leaf (cumCount=2).
+        sucker.test_setConversionRate(token, 2, 1e18, 1600e6, 2);
+        usdc.mint(address(sucker), 3400e6);
 
-        // Fully claim batch 1.
-        sucker.exposed_addToBalance(token, 1e18, PROJECT_ID);
-        assertEq(sucker.exposed_conversionQueueRemaining(token), 0);
+        // Claim from batch 1 (leaf 0).
+        uint256 balBefore = usdc.balanceOf(address(sucker));
+        sucker.exposed_addToBalance(token, 1e18, PROJECT_ID, 0);
+        uint256 claimed1 = balBefore - usdc.balanceOf(address(sucker));
+        assertEq(claimed1, 1800e6, "batch 1 should use rate 1800");
 
-        // Batch 2: 1e18 leaf → 1600e6 USDC (rate dropped).
-        sucker.test_pushConversionEntry(token, 1e18, 1600e6);
-        usdc.mint(address(sucker), 1600e6);
-
-        // Claim batch 2 — must NOT revert.
-        sucker.exposed_addToBalance(token, 1e18, PROJECT_ID);
-        assertEq(sucker.exposed_conversionQueueRemaining(token), 0, "queue should be empty after both batches");
+        // Claim from batch 2 (leaf 1).
+        balBefore = usdc.balanceOf(address(sucker));
+        sucker.exposed_addToBalance(token, 1e18, PROJECT_ID, 1);
+        uint256 claimed2 = balBefore - usdc.balanceOf(address(sucker));
+        assertEq(claimed2, 1600e6, "batch 2 should use rate 1600");
     }
 
-    /// @notice Two batches with rising rate, fully claimed between arrivals.
-    /// Verifies no stuck dust — all tokens are claimable.
+    /// @notice Two batches with rising rate — no dust.
     function test_scaling_twoBatches_risingRate_noDust() public {
         address token = address(usdc);
 
         // Batch 1: 1e18 leaf → 1800e6 USDC.
-        sucker.test_pushConversionEntry(token, 1e18, 1800e6);
-        usdc.mint(address(sucker), 1800e6);
-        sucker.exposed_addToBalance(token, 1e18, PROJECT_ID);
+        sucker.test_setConversionRate(token, 1, 1e18, 1800e6, 1);
+        // Batch 2: 1e18 leaf → 2000e6 USDC.
+        sucker.test_setConversionRate(token, 2, 1e18, 2000e6, 2);
+        usdc.mint(address(sucker), 3800e6);
 
-        // Batch 2: 1e18 leaf → 2000e6 USDC (rate rose).
-        sucker.test_pushConversionEntry(token, 1e18, 2000e6);
-        usdc.mint(address(sucker), 2000e6);
-        sucker.exposed_addToBalance(token, 1e18, PROJECT_ID);
+        sucker.exposed_addToBalance(token, 1e18, PROJECT_ID, 0);
+        sucker.exposed_addToBalance(token, 1e18, PROJECT_ID, 1);
 
-        // No stuck dust.
         assertEq(usdc.balanceOf(address(sucker)), 0, "no USDC dust should be stuck");
     }
 
@@ -252,58 +269,78 @@ contract SwapCCIPScalingTest is Test {
     function test_scaling_overlappingBatches_rateIsolation() public {
         address token = address(usdc);
 
-        // Batch 1: 100 leaf → 100 local (rate 1.0).
-        sucker.test_pushConversionEntry(token, 100, 100);
-        // Batch 2: 100 leaf → 50 local (rate 0.5).
-        sucker.test_pushConversionEntry(token, 100, 50);
+        // Batch 1 (nonce 1): 100 leaf → 100 local (rate 1.0), 1 leaf.
+        sucker.test_setConversionRate(token, 1, 100, 100, 1);
+        // Batch 2 (nonce 2): 100 leaf → 50 local (rate 0.5), 1 leaf.
+        sucker.test_setConversionRate(token, 2, 100, 50, 2);
         usdc.mint(address(sucker), 150);
 
-        // Claim 100 from batch 1 — should get 100, not the blended 75.
+        // Claim from batch 1 (leaf 0) — should get 100, not blended 75.
         uint256 balBefore = usdc.balanceOf(address(sucker));
-        sucker.exposed_addToBalance(token, 100, PROJECT_ID);
+        sucker.exposed_addToBalance(token, 100, PROJECT_ID, 0);
         uint256 claimed1 = balBefore - usdc.balanceOf(address(sucker));
         assertEq(claimed1, 100, "batch 1 claim should use rate 1.0");
 
-        // Claim 100 from batch 2 — should get 50, not the blended 75.
+        // Claim from batch 2 (leaf 1) — should get 50, not blended 75.
         balBefore = usdc.balanceOf(address(sucker));
-        sucker.exposed_addToBalance(token, 100, PROJECT_ID);
+        sucker.exposed_addToBalance(token, 100, PROJECT_ID, 1);
         uint256 claimed2 = balBefore - usdc.balanceOf(address(sucker));
         assertEq(claimed2, 50, "batch 2 claim should use rate 0.5");
+    }
 
-        assertEq(sucker.exposed_conversionQueueRemaining(token), 0, "queue should be empty");
+    /// @notice Out-of-order claims: batch 2 claimed before batch 1 — still correct rates.
+    function test_scaling_outOfOrder_correctRates() public {
+        address token = address(usdc);
+
+        // Batch 1 (nonce 1): rate 1.0.
+        sucker.test_setConversionRate(token, 1, 100, 100, 1);
+        // Batch 2 (nonce 2): rate 0.5.
+        sucker.test_setConversionRate(token, 2, 100, 50, 2);
+        usdc.mint(address(sucker), 150);
+
+        // Claim batch 2 FIRST (leaf 1).
+        uint256 balBefore = usdc.balanceOf(address(sucker));
+        sucker.exposed_addToBalance(token, 100, PROJECT_ID, 1);
+        uint256 claimed2 = balBefore - usdc.balanceOf(address(sucker));
+        assertEq(claimed2, 50, "batch 2 claim should use rate 0.5 even when claimed first");
+
+        // Then claim batch 1 (leaf 0).
+        balBefore = usdc.balanceOf(address(sucker));
+        sucker.exposed_addToBalance(token, 100, PROJECT_ID, 0);
+        uint256 claimed1 = balBefore - usdc.balanceOf(address(sucker));
+        assertEq(claimed1, 100, "batch 1 claim should use rate 1.0 even when claimed second");
     }
 
     // =========================================================================
     // Scaling: conservation property
     // =========================================================================
 
-    /// @notice Total scaled claims always equal total local tokens received.
+    /// @notice Total scaled claims from one batch always equal batch's localTotal.
     function test_scaling_conservation_threeClaims() public {
         address token = address(usdc);
 
-        // 3e18 leaf → 5400e6 USDC.
-        sucker.test_pushConversionEntry(token, 3e18, 5400e6);
+        // Nonce 1: 3e18 leaf → 5400e6 USDC, 3 leaves.
+        sucker.test_setConversionRate(token, 1, 3e18, 5400e6, 3);
         usdc.mint(address(sucker), 5400e6);
 
-        // Three claims of 1e18 each.
-        sucker.exposed_addToBalance(token, 1e18, PROJECT_ID);
-        sucker.exposed_addToBalance(token, 1e18, PROJECT_ID);
-        sucker.exposed_addToBalance(token, 1e18, PROJECT_ID);
+        // Three claims of 1e18 each from the same batch.
+        sucker.exposed_addToBalance(token, 1e18, PROJECT_ID, 0);
+        sucker.exposed_addToBalance(token, 1e18, PROJECT_ID, 1);
+        sucker.exposed_addToBalance(token, 1e18, PROJECT_ID, 2);
 
-        // All tokens should be claimed (allowing for at most 2 wei rounding).
-        assertLe(usdc.balanceOf(address(sucker)), 2, "at most 2 wei dust from rounding");
-        assertEq(sucker.exposed_conversionQueueRemaining(token), 0, "queue should be empty");
+        // All tokens should be claimed.
+        assertEq(usdc.balanceOf(address(sucker)), 0, "no dust should remain");
     }
 
     // =========================================================================
     // Scaling: no cross-currency (bypass)
     // =========================================================================
 
-    /// @notice When queue is empty (same-denomination bridging), scaling is bypassed.
-    function test_scaling_bypass_whenQueueEmpty() public {
+    /// @notice When no conversion rates exist (same-denomination bridging), scaling is bypassed.
+    function test_scaling_bypass_whenNoRates() public {
         address token = address(usdc);
 
-        // No cumulative totals set (default 0).
+        // No conversion rates set (default 0).
         usdc.mint(address(sucker), 1000e6);
 
         // The raw amount should pass through unscaled.
@@ -315,7 +352,7 @@ contract SwapCCIPScalingTest is Test {
     // Scaling: fuzz test
     // =========================================================================
 
-    /// @notice Fuzz: total claims from a single batch never exceed localTotal.
+    /// @notice Fuzz: multiple claims from a single batch — total scaled never exceeds localTotal.
     function testFuzz_scaling_singleBatch_neverExceedsLocal(
         uint128 leafTotal,
         uint128 localTotal,
@@ -323,35 +360,73 @@ contract SwapCCIPScalingTest is Test {
     )
         public
     {
-        // Bound to reasonable ranges.
         vm.assume(leafTotal > 0);
         vm.assume(localTotal > 0);
         vm.assume(numClaims > 0 && numClaims <= 20);
-        // Each claim gets an equal share of the leaf total.
         uint256 perClaim = uint256(leafTotal) / numClaims;
         vm.assume(perClaim > 0);
 
         address token = address(usdc);
-        sucker.test_pushConversionEntry(token, leafTotal, localTotal);
+        sucker.test_setConversionRate(token, 1, leafTotal, localTotal, numClaims);
         usdc.mint(address(sucker), localTotal);
 
         uint256 totalClaimed;
         uint256 balBefore;
         for (uint256 i; i < numClaims - 1; i++) {
             balBefore = usdc.balanceOf(address(sucker));
-            sucker.exposed_addToBalance(token, perClaim, PROJECT_ID);
+            sucker.exposed_addToBalance(token, perClaim, PROJECT_ID, i);
             totalClaimed += balBefore - usdc.balanceOf(address(sucker));
         }
 
         // Last claim gets the remainder.
         uint256 remainder = uint256(leafTotal) - perClaim * (numClaims - 1);
         balBefore = usdc.balanceOf(address(sucker));
-        sucker.exposed_addToBalance(token, remainder, PROJECT_ID);
+        sucker.exposed_addToBalance(token, remainder, PROJECT_ID, numClaims - 1);
         totalClaimed += balBefore - usdc.balanceOf(address(sucker));
 
-        // Conservation: total claimed should equal localTotal.
-        assertEq(totalClaimed, localTotal, "total claimed must equal localTotal");
-        assertEq(sucker.exposed_conversionQueueRemaining(token), 0, "queue must be empty");
+        // Conservation: total claimed should equal localTotal (within rounding dust).
+        // The immutable rate approach rounds independently per claim: floor(claimAmount * localTotal / leafTotal).
+        // Each claim can lose at most 1 wei, so total dust is bounded by numClaims.
+        assertLe(localTotal - totalClaimed, numClaims, "rounding dust must be bounded by numClaims");
+    }
+
+    // =========================================================================
+    // Gap detection
+    // =========================================================================
+
+    /// @notice Missing nonce blocks claims in that range with BatchNotReceived.
+    function test_scaling_gap_reverts() public {
+        address token = address(usdc);
+
+        // Only nonce 2 received (nonce 1 missing). Leaf 0 might be in nonce 1's range.
+        sucker.test_setConversionRate(token, 2, 100, 50, 2);
+        usdc.mint(address(sucker), 50);
+
+        // Claiming leaf 0 should revert because nonce 1 is a gap.
+        vm.expectRevert(abi.encodeWithSelector(JBSwapCCIPSucker.JBSwapCCIPSucker_BatchNotReceived.selector, uint64(1)));
+        sucker.exposed_addToBalance(token, 100, PROJECT_ID, 0);
+    }
+
+    /// @notice Gap fill: late nonce 1 arrival unblocks previously blocked claims.
+    function test_scaling_gapFill_unblocks() public {
+        address token = address(usdc);
+
+        // Nonce 2 arrives first.
+        sucker.test_setConversionRate(token, 2, 100, 50, 2);
+        usdc.mint(address(sucker), 150);
+
+        // Leaf 0 reverts (nonce 1 gap).
+        vm.expectRevert(abi.encodeWithSelector(JBSwapCCIPSucker.JBSwapCCIPSucker_BatchNotReceived.selector, uint64(1)));
+        sucker.exposed_addToBalance(token, 100, PROJECT_ID, 0);
+
+        // Nonce 1 arrives late.
+        sucker.test_setConversionRate(token, 1, 100, 100, 1);
+
+        // Now leaf 0 succeeds with nonce 1's rate.
+        uint256 balBefore = usdc.balanceOf(address(sucker));
+        sucker.exposed_addToBalance(token, 100, PROJECT_ID, 0);
+        uint256 claimed = balBefore - usdc.balanceOf(address(sucker));
+        assertEq(claimed, 100, "leaf 0 should use nonce 1's rate after gap fill");
     }
 
     // =========================================================================

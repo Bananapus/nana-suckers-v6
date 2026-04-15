@@ -41,12 +41,26 @@ contract CodexSwapBatchHarness is JBSwapCCIPSucker {
         JBSwapCCIPSucker(deployer, directory, tokens, permissions, 1, IJBSuckerRegistry(address(1)), address(0))
     {}
 
-    function test_pushConversionEntry(address token, uint256 leafAmount, uint256 localAmount) external {
-        _conversionQueue[token].push(ConversionEntry({leafAmount: leafAmount, localAmount: localAmount}));
+    function test_setConversionRate(
+        address token,
+        uint64 nonce,
+        uint256 leafTotal,
+        uint256 localTotal,
+        uint256 cumCount
+    )
+        external
+    {
+        _conversionRateOf[token][nonce] = ConversionRate({leafTotal: leafTotal, localTotal: localTotal});
+        _cumulativeCountOf[token][nonce] = cumCount;
+        if (nonce > _highestReceivedNonce[token]) {
+            _highestReceivedNonce[token] = nonce;
+        }
     }
 
-    function exposed_addToBalance(address token, uint256 amount, uint256 projectId) external {
+    function exposed_addToBalance(address token, uint256 amount, uint256 projectId, uint256 leafIndex) external {
+        _currentClaimLeafIndex = leafIndex;
         _addToBalance(token, amount, projectId);
+        _currentClaimLeafIndex = type(uint256).max;
     }
 }
 
@@ -102,23 +116,22 @@ contract CodexSwapBatchRateMixingTest is Test {
         sucker.initialize(PROJECT_ID);
     }
 
-    function test_overlappingRoots_fixedByFifoQueue() external {
-        // Batch 1 should redeem 1:1 (100 leaf -> 100 local).
-        // Batch 2 should redeem 1:0.5 (100 leaf -> 50 local).
-        // With the FIFO queue fix, each batch gets its own rate instead of the blended 0.75.
-        sucker.test_pushConversionEntry(address(usdc), 100e18, 100e6);
-        sucker.test_pushConversionEntry(address(usdc), 100e18, 50e6);
+    function test_overlappingRoots_fixedByNonceIndexedRates() external {
+        // Batch 1 (nonce 1): rate 1.0 (100e18 leaf -> 100e6 local), 1 leaf.
+        // Batch 2 (nonce 2): rate 0.5 (100e18 leaf -> 50e6 local), 1 leaf.
+        sucker.test_setConversionRate(address(usdc), 1, 100e18, 100e6, 1);
+        sucker.test_setConversionRate(address(usdc), 2, 100e18, 50e6, 2);
         usdc.mint(address(sucker), 150e6);
 
-        // First claim (100 leaf) should get 100 local (rate 1.0), not 75 (blended 0.75).
+        // Claim from batch 1 (leaf 0) — should get 100e6 (rate 1.0), not 75e6 (blended).
         uint256 terminalBalanceBefore = usdc.balanceOf(address(terminal));
-        sucker.exposed_addToBalance(address(usdc), 100e18, PROJECT_ID);
+        sucker.exposed_addToBalance(address(usdc), 100e18, PROJECT_ID, 0);
         uint256 paid1 = usdc.balanceOf(address(terminal)) - terminalBalanceBefore;
         assertEq(paid1, 100e6, "batch 1 should use its own rate 1.0");
 
-        // Second claim (100 leaf) should get 50 local (rate 0.5), not 75.
+        // Claim from batch 2 (leaf 1) — should get 50e6 (rate 0.5), not 75e6.
         terminalBalanceBefore = usdc.balanceOf(address(terminal));
-        sucker.exposed_addToBalance(address(usdc), 100e18, PROJECT_ID);
+        sucker.exposed_addToBalance(address(usdc), 100e18, PROJECT_ID, 1);
         uint256 paid2 = usdc.balanceOf(address(terminal)) - terminalBalanceBefore;
         assertEq(paid2, 50e6, "batch 2 should use its own rate 0.5");
     }

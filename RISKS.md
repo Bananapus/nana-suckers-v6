@@ -127,6 +127,10 @@ The registry owner can adjust `toRemoteFee` via `JBSuckerRegistry.setToRemoteFee
 
 The fee is paid to `FEE_PROJECT_ID` (the protocol project), not to the sucker's own `projectId()`. This centralizes fee collection, but it is still only best-effort: if the fee project's native terminal is missing or its `pay` call reverts, the fee ETH stays in the sucker contract and is later recoverable through the normal claim path. The sucker's project does not directly benefit from the anti-spam fee.
 
-### 10.5 `mapTokens` refunds ETH on enable-only batches
+### 10.5 Hookless V4 spot pricing is sandwich-vulnerable by design
+
+When the only available Uniswap pool for a cross-denomination swap is a hookless V4 pool (no V3 pool exists), `_getV4Quote` falls back to the instantaneous spot tick from `POOL_MANAGER.getSlot0()` instead of a TWAP oracle. This tick is manipulable via sandwich attacks, allowing an attacker to skew the `minAmountOut` and extract value from the swap. The sigmoid slippage model limits the damage but operates on a corrupted baseline. This is an accepted tradeoff: reverting when no TWAP is available would cause the CCIP message to fail, leaving bridged tokens stuck in the CCIP router until manual retry. Getting some value (even at a worse rate) is preferred over a stuck bridge message, especially since this path only triggers when no V3 pool with built-in TWAP exists at all. The hooked V4 path also falls back to spot if the hook's `observe()` reverts, with the same tradeoff.
+
+### 10.6 `mapTokens` refunds ETH on enable-only batches
 
 `mapTokens()` only uses `msg.value` when one or more mappings are being disabled and need transport payment for the final root flush. If every mapping in the batch is enable-only (`numberToDisable == 0`), the full `msg.value` is refunded to `_msgSender()`. If the refund transfer fails (e.g., the caller is a non-payable contract), the call reverts with `JBSucker_RefundFailed`. When disables are present, any dust remainder from integer division (`msg.value % numberToDisable`) is also refunded on a best-effort basis.

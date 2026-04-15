@@ -265,7 +265,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
 
     /// @notice `JBClaim` project tokens which have been bridged from the remote chain for their beneficiary.
     /// @param claimData The terminal token, merkle tree leaf, and proof for the claim.
-    function claim(JBClaim calldata claimData) public override {
+    function claim(JBClaim calldata claimData) public virtual override {
         // Attempt to validate the proof against the inbox tree for the terminal token.
         _validate({
             projectTokenCount: claimData.leaf.projectTokenCount,
