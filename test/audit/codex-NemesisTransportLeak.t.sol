@@ -102,8 +102,7 @@ contract CodexNemesisTransportLeakTest is Test {
             trustedForwarder: address(0)
         });
         deployer.setChainSpecificConstants({
-            messenger: IOPMessenger(OP_MESSENGER),
-            bridge: IOPStandardBridge(OP_BRIDGE)
+            messenger: IOPMessenger(OP_MESSENGER), bridge: IOPStandardBridge(OP_BRIDGE)
         });
 
         CodexOptimismPayRemoteHarness singleton = new CodexOptimismPayRemoteHarness({
@@ -160,9 +159,7 @@ contract CodexNemesisTransportLeakTest is Test {
             trustedForwarder: address(0)
         });
         deployer.setChainSpecificConstants({
-            remoteChainId: 42161,
-            remoteChainSelector: 4949039107694359620,
-            router: ICCIPRouter(CCIP_ROUTER)
+            remoteChainId: 42_161, remoteChainSelector: 4_949_039_107_694_359_620, router: ICCIPRouter(CCIP_ROUTER)
         });
 
         CodexCCIPPayFromRemoteHarness singleton = new CodexCCIPPayFromRemoteHarness({
@@ -193,12 +190,18 @@ contract CodexNemesisTransportLeakTest is Test {
             abi.encode(IJBTerminal(TERMINAL))
         );
         vm.mockCall(TERMINAL, abi.encodeWithSelector(IJBTerminal.pay.selector), abi.encode(uint256(10)));
-        vm.mockCall(TERMINAL, abi.encodeWithSelector(IJBCashOutTerminal.cashOutTokensOf.selector), abi.encode(uint256(0)));
+        vm.mockCall(
+            TERMINAL, abi.encodeWithSelector(IJBCashOutTerminal.cashOutTokensOf.selector), abi.encode(uint256(0))
+        );
         vm.mockCall(DIRECTORY, abi.encodeCall(IJBDirectory.controllerOf, (PROJECT_ID)), abi.encode(address(0)));
         vm.mockCall(DIRECTORY, abi.encodeCall(IJBDirectory.terminalsOf, (PROJECT_ID)), abi.encode(new IJBTerminal[](0)));
 
         // Force the auto-return sendRoot to fail by making the mocked CCIP fee exceed the prepaid budget.
-        vm.mockCall(CCIP_ROUTER, abi.encodeWithSignature("getFee(uint64,(bytes,bytes,(address,uint256)[],bytes,address))"), abi.encode(uint256(2 ether)));
+        vm.mockCall(
+            CCIP_ROUTER,
+            abi.encodeWithSignature("getFee(uint64,(bytes,bytes,(address,uint256)[],bytes,address))"),
+            abi.encode(uint256(2 ether))
+        );
         vm.mockCall(
             CCIP_ROUTER,
             abi.encodeWithSignature("ccipSend(uint64,(bytes,bytes,(address,uint256)[],bytes,address))"),
@@ -222,7 +225,9 @@ contract CodexNemesisTransportLeakTest is Test {
 
         assertEq(address(sucker).balance, prepaidReturnTransport, "failed auto-return leaves prepaid ETH in contract");
         assertEq(sucker.test_outboxCount(JBConstants.NATIVE_TOKEN), 1, "return leaf stays queued for manual send");
-        assertEq(sucker.test_numberOfClaimsSent(JBConstants.NATIVE_TOKEN), 0, "failed auto-return never marks leaf sent");
+        assertEq(
+            sucker.test_numberOfClaimsSent(JBConstants.NATIVE_TOKEN), 0, "failed auto-return never marks leaf sent"
+        );
 
         vm.expectRevert(JBSucker.JBSucker_ExpectedMsgValue.selector);
         sucker.toRemote{value: 0}(JBConstants.NATIVE_TOKEN);

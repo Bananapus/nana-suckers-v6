@@ -84,10 +84,10 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
     // --------------------------- custom errors ------------------------- //
     //*********************************************************************//
 
-    error JBSwapCCIPSucker_SwapFailed();
-    error JBSwapCCIPSucker_InvalidBridgeToken();
-    error JBSwapCCIPSucker_CallerNotPoolManager(address caller);
     error JBSwapCCIPSucker_BatchNotReceived(uint64 nonce);
+    error JBSwapCCIPSucker_CallerNotPoolManager(address caller);
+    error JBSwapCCIPSucker_InvalidBridgeToken();
+    error JBSwapCCIPSucker_SwapFailed();
 
     //*********************************************************************//
     // --------------- public immutable stored properties ---------------- //
@@ -99,11 +99,11 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
     /// @notice The Uniswap V4 PoolManager. Can be address(0) if V4 is unavailable on this chain.
     IPoolManager public immutable POOL_MANAGER;
 
-    /// @notice The Uniswap V3 factory for pool discovery and callback verification. Can be address(0).
-    IUniswapV3Factory public immutable V3_FACTORY;
-
     /// @notice The Uniswap V4 hook address for pool discovery (optional).
     address public immutable UNIV4_HOOK;
+
+    /// @notice The Uniswap V3 factory for pool discovery and callback verification. Can be address(0).
+    IUniswapV3Factory public immutable V3_FACTORY;
 
     /// @notice The wrapped native token (e.g., WETH on Ethereum). Used for V3 native swaps.
     IWrappedNativeToken public immutable WETH;
@@ -115,32 +115,47 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
     /// @notice Immutable conversion rate for one received root batch, keyed by nonce.
     /// @dev Each batch stores its total leaf and local amounts. Individual claims compute their
     /// scaled amount as `claimLeafAmount * localTotal / leafTotal` — no mutable state changes.
+    /// @custom:member leafTotal Total leaf-denomination (source chain) amount for this batch.
+    /// @custom:member localTotal Total local-denomination (after swap) amount for this batch.
     struct ConversionRate {
-        uint256 leafTotal; // Total leaf-denomination (source chain) amount for this batch
-        uint256 localTotal; // Total local-denomination (after swap) amount for this batch
+        uint256 leafTotal;
+        uint256 localTotal;
     }
 
-    /// @notice Conversion rate for each received root batch, keyed by token and nonce.
-    mapping(address token => mapping(uint64 nonce => ConversionRate)) internal _conversionRateOf;
+    /// @notice End leaf index (exclusive) for each received root batch, keyed by token and nonce.
+    /// @custom:param token The local token address.
+    /// @custom:param nonce The CCIP nonce identifying the batch.
+    mapping(address token => mapping(uint64 nonce => uint256)) internal _batchEndOf;
 
     /// @notice Start leaf index for each received root batch, keyed by token and nonce.
     /// @dev Together with `_batchEndOf`, defines the half-open range [start, end) of leaf indices in each batch.
     /// Self-describing per nonce — no sequential dependency for out-of-order CCIP delivery.
+    /// @custom:param token The local token address.
+    /// @custom:param nonce The CCIP nonce identifying the batch.
     mapping(address token => mapping(uint64 nonce => uint256)) internal _batchStartOf;
 
-    /// @notice End leaf index (exclusive) for each received root batch, keyed by token and nonce.
-    mapping(address token => mapping(uint64 nonce => uint256)) internal _batchEndOf;
+    /// @notice Cached nonce from the last successful `_findNonceForLeafIndex` lookup.
+    /// @dev Batched claims from the same nonce hit this cache and skip the scan entirely.
+    /// @custom:param token The local token address.
+    mapping(address token => uint64) internal _cachedNonce;
+
+    /// @notice Conversion rate for each received root batch, keyed by token and nonce.
+    /// @custom:param token The local token address.
+    /// @custom:param nonce The CCIP nonce identifying the batch.
+    mapping(address token => mapping(uint64 nonce => ConversionRate)) internal _conversionRateOf;
 
     /// @notice Highest nonce received so far per token. Used as upper bound for nonce iteration.
+    /// @custom:param token The local token address.
     mapping(address token => uint64) internal _highestReceivedNonce;
 
     /// @notice Cumulative leaf count at the last `_sendRootOverAMB` call, per token.
     /// @dev Used on the sender side to derive the batch start index for the next send.
+    /// @custom:param token The local token address.
     mapping(address token => uint256) internal _lastSentCount;
 
-    /// @notice Cached nonce from the last successful `_findNonceForLeafIndex` lookup.
-    /// @dev Batched claims from the same nonce hit this cache and skip the scan entirely.
-    mapping(address token => uint64) internal _cachedNonce;
+    //*********************************************************************//
+    // ------------------- transient stored properties ------------------- //
+    //*********************************************************************//
 
     /// @notice Leaf index + 1 of the claim currently being processed (set by `claim` override).
     /// @dev Transient storage — auto-resets to 0 each transaction, saving ~9,800 gas per claim vs SSTORE.
@@ -187,32 +202,15 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
     }
 
     //*********************************************************************//
-    // --------------------- external transactions ----------------------- //
+    // ------------------------- receive / fallback ---------------------- //
     //*********************************************************************//
 
-    /// @notice Override single claim to set the leaf index context for `_addToBalance` scaling.
-    /// @dev The batch `claim(JBClaim[])` calls this in a loop, so it works automatically.
-    /// Stores leafIndex + 1 (0 = no active claim sentinel). No reset needed — transient storage auto-clears.
-    function claim(JBClaim calldata claimData) public override {
-        _currentClaimLeafIndex = claimData.leaf.index + 1;
-        super.claim(claimData);
-    }
+    /// @notice Allow this contract to receive ETH (from V4 swaps, WETH unwrap, and CCIP refunds).
+    receive() external payable override {}
 
-    /// @notice Uniswap V4 unlock callback — delegates to JBSwapPoolLib (via DELEGATECALL) to reduce bytecode.
-    /// @param data Encoded swap parameters from PoolManager.unlock().
-    /// @return Encoded output amount.
-    function unlockCallback(bytes calldata data) external override returns (bytes memory) {
-        if (msg.sender != address(POOL_MANAGER)) revert JBSwapCCIPSucker_CallerNotPoolManager(msg.sender);
-        return JBSwapPoolLib.executeV4UnlockCallback(POOL_MANAGER, data);
-    }
-
-    /// @notice Uniswap V3 swap callback — delegates to JBSwapPoolLib (via DELEGATECALL) to reduce bytecode.
-    /// @param amount0Delta The amount of token0 being used for the swap.
-    /// @param amount1Delta The amount of token1 being used for the swap.
-    /// @param data Encoded (originalTokenIn, normalizedTokenIn, normalizedTokenOut).
-    function uniswapV3SwapCallback(int256 amount0Delta, int256 amount1Delta, bytes calldata data) external override {
-        JBSwapPoolLib.executeV3SwapCallback(V3_FACTORY, amount0Delta, amount1Delta, data);
-    }
+    //*********************************************************************//
+    // --------------------- external transactions ----------------------- //
+    //*********************************************************************//
 
     /// @notice Override CCIP receive to swap bridge tokens into local tokens and track denomination conversion.
     /// @dev Preserves the parent's typed message discrimination (ROOT vs PAY) and adds swap logic for ROOT messages.
@@ -249,7 +247,9 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
                     localAmount = tokenAmount.amount;
                 } else {
                     // Swap bridge token -> local token via best V3/V4 pool.
-                    localAmount = _executeSwap(tokenAmount.token, localToken, tokenAmount.amount);
+                    // slither-disable-next-line reentrancy-benign,reentrancy-events
+                    localAmount =
+                        _executeSwap({tokenIn: tokenAmount.token, tokenOut: localToken, amount: tokenAmount.amount});
                 }
             }
 
@@ -283,7 +283,8 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
 
                 if (localToken != address(BRIDGE_TOKEN) && localToken != tokenAmount.token) {
                     // Cross-currency: swap bridge token -> local token and update the pay amount.
-                    payMsg.amount = _executeSwap(tokenAmount.token, localToken, tokenAmount.amount);
+                    payMsg.amount =
+                        _executeSwap({tokenIn: tokenAmount.token, tokenOut: localToken, amount: tokenAmount.amount});
                 }
             }
 
@@ -293,134 +294,41 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
         }
     }
 
-    //*********************************************************************//
-    // -------------------- internal overrides --------------------------- //
-    //*********************************************************************//
-
-    /// @notice Override to swap local tokens into bridge tokens before CCIP bridging.
-    /// @dev Does NOT modify `sucker_message.amount` — keeps the original leaf-denomination total so the
-    /// receiving chain can use it (along with the actual delivered amount) to compute the proportional
-    /// scaling factor for individual claims.
-    /// Delegates CCIP message construction to JBCCIPLib (via DELEGATECALL) to reduce bytecode.
-    // forge-lint: disable-next-line(mixed-case-function)
-    function _sendRootOverAMB(
-        uint256 transportPayment,
-        uint256 index,
-        address token,
-        uint256 amount,
-        JBRemoteToken memory remoteToken,
-        // forge-lint: disable-next-line(mixed-case-variable)
-        JBMessageRoot memory sucker_message
-    )
-        internal
-        override
-    {
-        if (transportPayment == 0) revert JBSucker_ExpectedMsgValue();
-
-        Client.EVMTokenAmount[] memory tokenAmounts;
-        uint256 gasLimit = MESSENGER_BASE_GAS_LIMIT + remoteToken.minGas;
-        bytes memory encodedPayload;
-
-        {
-            uint256 bridgeAmount;
-            if (amount == 0) {
-                tokenAmounts = new Client.EVMTokenAmount[](0);
-            } else {
-                address bridgeTokenAddr = address(BRIDGE_TOKEN);
-
-                if (token == bridgeTokenAddr) {
-                    bridgeAmount = amount;
-                } else {
-                    bridgeAmount = _executeSwap(token, bridgeTokenAddr, amount);
-                    if (bridgeAmount == 0) revert JBSwapCCIPSucker_SwapFailed();
-                }
-
-                tokenAmounts = new Client.EVMTokenAmount[](1);
-                tokenAmounts[0] = Client.EVMTokenAmount({token: bridgeTokenAddr, amount: bridgeAmount});
-                BRIDGE_TOKEN.forceApprove({spender: address(CCIP_ROUTER), value: bridgeAmount});
-            }
-
-            // NOTE: sucker_message.amount stays as the original leaf-denomination total.
-            // Encode batch range [batchStart, batchEnd) so the receiver can resolve leaf ownership
-            // per-nonce without requiring contiguous nonce delivery.
-            uint256 batchStart = _lastSentCount[token];
-            uint256 batchEnd = index + 1;
-            _lastSentCount[token] = batchEnd;
-            encodedPayload = abi.encode(_CCIP_MSG_TYPE_ROOT, abi.encode(sucker_message, batchStart, batchEnd));
-        }
-
-        (bool refundFailed, uint256 refundAmount) = JBCCIPLib.sendCCIPMessage({
-            ccipRouter: CCIP_ROUTER,
-            remoteChainSelector: REMOTE_CHAIN_SELECTOR,
-            peerAddress: _toAddress(peer()),
-            transportPayment: transportPayment,
-            gasLimit: gasLimit,
-            encodedPayload: encodedPayload,
-            tokenAmounts: tokenAmounts,
-            refundRecipient: _msgSender()
+    /// @notice Uniswap V3 swap callback — delegates to JBSwapPoolLib (via DELEGATECALL) to reduce bytecode.
+    /// @param amount0Delta The amount of token0 being used for the swap.
+    /// @param amount1Delta The amount of token1 being used for the swap.
+    /// @param data Encoded (originalTokenIn, normalizedTokenIn, normalizedTokenOut).
+    function uniswapV3SwapCallback(int256 amount0Delta, int256 amount1Delta, bytes calldata data) external override {
+        JBSwapPoolLib.executeV3SwapCallback({
+            v3Factory: V3_FACTORY, amount0Delta: amount0Delta, amount1Delta: amount1Delta, data: data
         });
-
-        if (refundFailed) emit TransportPaymentRefundFailed(_msgSender(), refundAmount);
     }
 
-    /// @notice Override to swap local tokens into bridge tokens before CCIP bridging of PAY messages.
-    /// @dev Mirrors `_sendRootOverAMB`: swaps local -> bridge, updates `message.amount` to bridge denomination,
-    /// then sends via CCIP. Delegates CCIP construction to JBCCIPLib (via DELEGATECALL) to reduce bytecode.
-    // forge-lint: disable-next-line(mixed-case-function)
-    function _sendPayOverAMB(
-        uint256 transportPayment,
-        address token,
-        uint256 amount,
-        JBRemoteToken memory remoteToken,
-        JBPayRemoteMessage memory message
-    )
-        internal
-        override
-    {
-        if (transportPayment == 0) revert JBSucker_ExpectedMsgValue();
-
-        // If no tokens to bridge, delegate to parent for message-only send.
-        if (amount == 0) {
-            super._sendPayOverAMB(transportPayment, token, amount, remoteToken, message);
-            return;
-        }
-
-        Client.EVMTokenAmount[] memory tokenAmounts;
-        uint256 gasLimit = MESSENGER_PAY_GAS_LIMIT + remoteToken.minGas;
-        bytes memory encodedPayload;
-
-        {
-            address bridgeTokenAddr = address(BRIDGE_TOKEN);
-            uint256 bridgeAmount;
-
-            if (token == bridgeTokenAddr) {
-                bridgeAmount = amount;
-            } else {
-                bridgeAmount = _executeSwap(token, bridgeTokenAddr, amount);
-                if (bridgeAmount == 0) revert JBSwapCCIPSucker_SwapFailed();
-            }
-
-            message.amount = bridgeAmount;
-
-            tokenAmounts = new Client.EVMTokenAmount[](1);
-            tokenAmounts[0] = Client.EVMTokenAmount({token: bridgeTokenAddr, amount: bridgeAmount});
-            BRIDGE_TOKEN.forceApprove({spender: address(CCIP_ROUTER), value: bridgeAmount});
-            encodedPayload = abi.encode(_CCIP_MSG_TYPE_PAY, abi.encode(message));
-        }
-
-        (bool refundFailed, uint256 refundAmount) = JBCCIPLib.sendCCIPMessage({
-            ccipRouter: CCIP_ROUTER,
-            remoteChainSelector: REMOTE_CHAIN_SELECTOR,
-            peerAddress: _toAddress(peer()),
-            transportPayment: transportPayment,
-            gasLimit: gasLimit,
-            encodedPayload: encodedPayload,
-            tokenAmounts: tokenAmounts,
-            refundRecipient: _msgSender()
-        });
-
-        if (refundFailed) emit TransportPaymentRefundFailed(_msgSender(), refundAmount);
+    /// @notice Uniswap V4 unlock callback — delegates to JBSwapPoolLib (via DELEGATECALL) to reduce bytecode.
+    /// @param data Encoded swap parameters from PoolManager.unlock().
+    /// @return Encoded output amount.
+    function unlockCallback(bytes calldata data) external override returns (bytes memory) {
+        if (msg.sender != address(POOL_MANAGER)) revert JBSwapCCIPSucker_CallerNotPoolManager(msg.sender);
+        return JBSwapPoolLib.executeV4UnlockCallback({poolManager: POOL_MANAGER, data: data});
     }
+
+    //*********************************************************************//
+    // ----------------------- public transactions ----------------------- //
+    //*********************************************************************//
+
+    /// @notice Override single claim to set the leaf index context for `_addToBalance` scaling.
+    /// @dev The batch `claim(JBClaim[])` calls this in a loop, so it works automatically.
+    /// Stores leafIndex + 1 (0 = no active claim sentinel). No reset needed — transient storage auto-clears.
+    /// @param claimData The claim data containing the leaf and proof.
+    function claim(JBClaim calldata claimData) public override {
+        // slither-disable-next-line events-maths
+        _currentClaimLeafIndex = claimData.leaf.index + 1;
+        super.claim(claimData);
+    }
+
+    //*********************************************************************//
+    // ---------------------- internal transactions ---------------------- //
+    //*********************************************************************//
 
     /// @notice Override to scale claim amounts from source-chain denomination to local-chain denomination.
     /// @dev When cross-currency bridging, merkle tree leaf amounts are in the source chain's terminal token
@@ -431,9 +339,12 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
     /// The `claim` override sets `_currentClaimLeafIndex`, which this function uses to look up the
     /// correct nonce (and thus the correct rate) for the claim. This prevents out-of-order CCIP
     /// delivery from applying the wrong batch's rate to a claim.
+    /// @param token The local token address.
+    /// @param amount The claim amount in source-chain denomination.
+    /// @param cachedProjectId The project ID (cached for gas efficiency).
     function _addToBalance(address token, uint256 amount, uint256 cachedProjectId) internal override {
         if (_currentClaimLeafIndex != 0) {
-            uint64 nonce = _findNonceForLeafIndex(token, _currentClaimLeafIndex - 1);
+            uint64 nonce = _findNonceForLeafIndex({token: token, leafIndex: _currentClaimLeafIndex - 1});
             if (nonce != 0) {
                 ConversionRate storage rate = _conversionRateOf[token][nonce];
                 if (rate.leafTotal > 0) {
@@ -442,7 +353,7 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
             }
         }
 
-        super._addToBalance(token, amount, cachedProjectId);
+        super._addToBalance({token: token, amount: amount, cachedProjectId: cachedProjectId});
     }
 
     /// @notice Find the nonce whose batch contains the given leaf index.
@@ -475,11 +386,152 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
         revert JBSwapCCIPSucker_BatchNotReceived(0);
     }
 
-    /// @notice Allow this contract to receive ETH (from V4 swaps, WETH unwrap, and CCIP refunds).
-    receive() external payable override {}
+    /// @notice Override to swap local tokens into bridge tokens before CCIP bridging of PAY messages.
+    /// @dev Mirrors `_sendRootOverAMB`: swaps local -> bridge, updates `message.amount` to bridge denomination,
+    /// then sends via CCIP. Delegates CCIP construction to JBCCIPLib (via DELEGATECALL) to reduce bytecode.
+    /// @param transportPayment The ETH sent for CCIP fees.
+    /// @param token The local token being bridged.
+    /// @param amount The amount of local tokens to bridge.
+    /// @param remoteToken The remote token configuration (including minGas).
+    /// @param message The pay message to send to the remote chain.
+    // forge-lint: disable-next-line(mixed-case-function)
+    function _sendPayOverAMB(
+        uint256 transportPayment,
+        address token,
+        uint256 amount,
+        JBRemoteToken memory remoteToken,
+        JBPayRemoteMessage memory message
+    )
+        internal
+        override
+    {
+        if (transportPayment == 0) revert JBSucker_ExpectedMsgValue();
+
+        // If no tokens to bridge, delegate to parent for message-only send.
+        if (amount == 0) {
+            super._sendPayOverAMB({
+                transportPayment: transportPayment,
+                token: token,
+                amount: amount,
+                remoteToken: remoteToken,
+                message: message
+            });
+            return;
+        }
+
+        Client.EVMTokenAmount[] memory tokenAmounts;
+        uint256 gasLimit = MESSENGER_PAY_GAS_LIMIT + remoteToken.minGas;
+        bytes memory encodedPayload;
+
+        {
+            address bridgeTokenAddr = address(BRIDGE_TOKEN);
+            uint256 bridgeAmount;
+
+            if (token == bridgeTokenAddr) {
+                bridgeAmount = amount;
+            } else {
+                // slither-disable-next-line reentrancy-events
+                bridgeAmount = _executeSwap({tokenIn: token, tokenOut: bridgeTokenAddr, amount: amount});
+                if (bridgeAmount == 0) revert JBSwapCCIPSucker_SwapFailed();
+            }
+
+            message.amount = bridgeAmount;
+
+            tokenAmounts = new Client.EVMTokenAmount[](1);
+            tokenAmounts[0] = Client.EVMTokenAmount({token: bridgeTokenAddr, amount: bridgeAmount});
+            BRIDGE_TOKEN.forceApprove({spender: address(CCIP_ROUTER), value: bridgeAmount});
+            encodedPayload = abi.encode(_CCIP_MSG_TYPE_PAY, abi.encode(message));
+        }
+
+        (bool refundFailed, uint256 refundAmount) = JBCCIPLib.sendCCIPMessage({
+            ccipRouter: CCIP_ROUTER,
+            remoteChainSelector: REMOTE_CHAIN_SELECTOR,
+            peerAddress: _toAddress(peer()),
+            transportPayment: transportPayment,
+            gasLimit: gasLimit,
+            encodedPayload: encodedPayload,
+            tokenAmounts: tokenAmounts,
+            refundRecipient: _msgSender()
+        });
+
+        if (refundFailed) emit TransportPaymentRefundFailed(_msgSender(), refundAmount);
+    }
+
+    /// @notice Override to swap local tokens into bridge tokens before CCIP bridging.
+    /// @dev Does NOT modify `sucker_message.amount` — keeps the original leaf-denomination total so the
+    /// receiving chain can use it (along with the actual delivered amount) to compute the proportional
+    /// scaling factor for individual claims.
+    /// Delegates CCIP message construction to JBCCIPLib (via DELEGATECALL) to reduce bytecode.
+    /// @param transportPayment The ETH sent for CCIP fees.
+    /// @param index The last leaf index in the current batch.
+    /// @param token The local token being bridged.
+    /// @param amount The amount of local tokens to bridge.
+    /// @param remoteToken The remote token configuration (including minGas).
+    /// @param sucker_message The merkle root message to send to the remote chain.
+    // forge-lint: disable-next-line(mixed-case-function)
+    function _sendRootOverAMB(
+        uint256 transportPayment,
+        uint256 index,
+        address token,
+        uint256 amount,
+        JBRemoteToken memory remoteToken,
+        // forge-lint: disable-next-line(mixed-case-variable)
+        JBMessageRoot memory sucker_message
+    )
+        internal
+        override
+    {
+        if (transportPayment == 0) revert JBSucker_ExpectedMsgValue();
+
+        Client.EVMTokenAmount[] memory tokenAmounts;
+        uint256 gasLimit = MESSENGER_BASE_GAS_LIMIT + remoteToken.minGas;
+        bytes memory encodedPayload;
+
+        {
+            uint256 bridgeAmount;
+            if (amount == 0) {
+                tokenAmounts = new Client.EVMTokenAmount[](0);
+            } else {
+                address bridgeTokenAddr = address(BRIDGE_TOKEN);
+
+                if (token == bridgeTokenAddr) {
+                    bridgeAmount = amount;
+                } else {
+                    // slither-disable-next-line reentrancy-events,reentrancy-benign
+                    bridgeAmount = _executeSwap({tokenIn: token, tokenOut: bridgeTokenAddr, amount: amount});
+                    if (bridgeAmount == 0) revert JBSwapCCIPSucker_SwapFailed();
+                }
+
+                tokenAmounts = new Client.EVMTokenAmount[](1);
+                tokenAmounts[0] = Client.EVMTokenAmount({token: bridgeTokenAddr, amount: bridgeAmount});
+                BRIDGE_TOKEN.forceApprove({spender: address(CCIP_ROUTER), value: bridgeAmount});
+            }
+
+            // NOTE: sucker_message.amount stays as the original leaf-denomination total.
+            // Encode batch range [batchStart, batchEnd) so the receiver can resolve leaf ownership
+            // per-nonce without requiring contiguous nonce delivery.
+            uint256 batchStart = _lastSentCount[token];
+            uint256 batchEnd = index + 1;
+            _lastSentCount[token] = batchEnd;
+            encodedPayload = abi.encode(_CCIP_MSG_TYPE_ROOT, abi.encode(sucker_message, batchStart, batchEnd));
+        }
+
+        (bool refundFailed, uint256 refundAmount) = JBCCIPLib.sendCCIPMessage({
+            ccipRouter: CCIP_ROUTER,
+            remoteChainSelector: REMOTE_CHAIN_SELECTOR,
+            peerAddress: _toAddress(peer()),
+            transportPayment: transportPayment,
+            gasLimit: gasLimit,
+            encodedPayload: encodedPayload,
+            tokenAmounts: tokenAmounts,
+            refundRecipient: _msgSender()
+        });
+
+        if (refundFailed) emit TransportPaymentRefundFailed(_msgSender(), refundAmount);
+    }
 
     //*********************************************************************//
-    // ---------------------- internal swap logic ------------------------ //
+    // ----------------------- internal helpers -------------------------- //
     //*********************************************************************//
 
     /// @notice Execute a swap between two tokens using the best available V3 or V4 pool.
@@ -492,15 +544,11 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
     function _executeSwap(address tokenIn, address tokenOut, uint256 amount) internal returns (uint256 amountOut) {
         return JBSwapPoolLib.executeSwap({
             config: JBSwapPoolLib.SwapConfig({
-                v3Factory: V3_FACTORY,
-                poolManager: POOL_MANAGER,
-                univ4Hook: UNIV4_HOOK,
-                weth: address(WETH)
+                v3Factory: V3_FACTORY, poolManager: POOL_MANAGER, univ4Hook: UNIV4_HOOK, weth: address(WETH)
             }),
             tokenIn: tokenIn,
             tokenOut: tokenOut,
             amount: amount
         });
     }
-
 }

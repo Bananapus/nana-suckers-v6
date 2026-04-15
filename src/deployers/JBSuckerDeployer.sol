@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.28;
 
+// External packages (alphabetized).
 import {JBPermissioned} from "@bananapus/core-v6/src/abstract/JBPermissioned.sol";
 import {IJBDirectory} from "@bananapus/core-v6/src/interfaces/IJBDirectory.sol";
 import {IJBPermissions} from "@bananapus/core-v6/src/interfaces/IJBPermissions.sol";
@@ -9,7 +10,10 @@ import {ERC2771Context} from "@openzeppelin/contracts/metatx/ERC2771Context.sol"
 import {Context} from "@openzeppelin/contracts/utils/Context.sol";
 import {LibClone} from "solady/src/utils/LibClone.sol";
 
+// Local: contracts.
 import {JBSucker} from "../JBSucker.sol";
+
+// Local: interfaces (alphabetized).
 import {IJBSucker} from "../interfaces/IJBSucker.sol";
 import {IJBSuckerDeployer} from "../interfaces/IJBSuckerDeployer.sol";
 
@@ -57,6 +61,7 @@ abstract contract JBSuckerDeployer is ERC2771Context, JBPermissioned, IJBSuckerD
     /// @param permissions The permissions contract for the deployer.
     /// @param tokens The contract that manages token minting and burning.
     /// @param configurator The address of the configurator.
+    /// @param trustedForwarder The trusted forwarder for ERC-2771 meta-transactions.
     constructor(
         IJBDirectory directory,
         IJBPermissions permissions,
@@ -67,8 +72,13 @@ abstract contract JBSuckerDeployer is ERC2771Context, JBPermissioned, IJBSuckerD
         ERC2771Context(trustedForwarder)
         JBPermissioned(permissions)
     {
+        // Store the directory.
         DIRECTORY = directory;
+
+        // Store the tokens contract.
         TOKENS = tokens;
+
+        // Store the layer-specific configurator address.
         LAYER_SPECIFIC_CONFIGURATOR = configurator;
 
         // There has to be a configurator address or the layer specific configuration has to already be configured.
@@ -82,11 +92,13 @@ abstract contract JBSuckerDeployer is ERC2771Context, JBPermissioned, IJBSuckerD
     //*********************************************************************//
 
     /// @dev ERC-2771 specifies the context as being a single address (20 bytes).
+    /// @return The length of the context suffix in bytes.
     function _contextSuffixLength() internal view virtual override(ERC2771Context, Context) returns (uint256) {
         return ERC2771Context._contextSuffixLength();
     }
 
     /// @notice Check if the layer specific configuration is set or not. Used as a sanity check.
+    /// @return A flag indicating whether the layer specific configuration has been set.
     function _layerSpecificConfigurationIsSet() internal view virtual returns (bool);
 
     /// @notice The calldata. Preferred to use over `msg.data`.
@@ -122,6 +134,7 @@ abstract contract JBSuckerDeployer is ERC2771Context, JBPermissioned, IJBSuckerD
         // Make sure the singleton is not already configured.
         if (address(singleton) != address(0)) revert JBSuckerDeployer_AlreadyConfigured();
 
+        // Store the singleton.
         singleton = _singleton;
     }
 

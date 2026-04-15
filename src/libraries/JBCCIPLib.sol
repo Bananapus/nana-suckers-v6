@@ -12,11 +12,14 @@ import {ICCIPRouter, IWrappedNativeToken} from "../interfaces/ICCIPRouter.sol";
 /// to reduce child contract sizes.
 /// @dev These are `external` library functions, deployed as a separate contract and called via DELEGATECALL.
 library JBCCIPLib {
+    // A library for safe ERC-20 operations.
     using SafeERC20 for IERC20;
 
-    // -------------------- external state-changing -------------------- //
+    //*********************************************************************//
+    // ---------------------- external transactions ---------------------- //
+    //*********************************************************************//
 
-    /// @notice Prepare token amounts for CCIP: wrap native ETH → WETH, build token amounts array, approve router.
+    /// @notice Prepare token amounts for CCIP: wrap native ETH -> WETH, build token amounts array, approve router.
     /// @dev Runs via DELEGATECALL so native ETH wrapping uses the caller's balance.
     /// @param ccipRouter The CCIP router.
     /// @param token The token to bridge (may be NATIVE_TOKEN).
@@ -31,52 +34,34 @@ library JBCCIPLib {
         external
         returns (Client.EVMTokenAmount[] memory tokenAmounts, address bridgeToken)
     {
+        // If the amount is zero, return an empty array and the original token.
         if (amount == 0) {
             return (new Client.EVMTokenAmount[](0), token);
         }
 
+        // Start with the original token as the bridge token.
         bridgeToken = token;
 
-        // Wrap native ETH → WETH for CCIP bridging. CCIP only transports ERC-20s.
+        // Wrap native ETH -> WETH for CCIP bridging. CCIP only transports ERC-20s.
         if (token == JBConstants.NATIVE_TOKEN) {
+            // Get the wrapped native token address from the CCIP router.
             // slither-disable-next-line calls-loop
             IWrappedNativeToken wrappedNative = ccipRouter.getWrappedNative();
+
+            // Deposit ETH to receive WETH.
             // slither-disable-next-line calls-loop,arbitrary-send-eth
             wrappedNative.deposit{value: amount}();
+
+            // Update the bridge token to the wrapped native address.
             bridgeToken = address(wrappedNative);
         }
 
+        // Build a single-element token amounts array for CCIP.
         tokenAmounts = new Client.EVMTokenAmount[](1);
         tokenAmounts[0] = Client.EVMTokenAmount({token: bridgeToken, amount: amount});
 
-        // Approve the Router to spend tokens on contract's behalf.
+        // Approve the Router to spend tokens on the contract's behalf.
         SafeERC20.forceApprove({token: IERC20(bridgeToken), spender: address(ccipRouter), value: amount});
-    }
-
-    /// @notice Unwrap WETH → ETH from received CCIP tokens if the delivered token is the router's wrapped native.
-    /// @dev Runs via DELEGATECALL so `address(this).balance` refers to the calling contract.
-    /// @param ccipRouter The CCIP router (used to look up wrapped native token).
-    /// @param destTokenAmounts The token amounts delivered by CCIP (length 0 or 1).
-    function unwrapReceivedTokens(ICCIPRouter ccipRouter, Client.EVMTokenAmount[] calldata destTokenAmounts) external {
-        if (destTokenAmounts.length == 1) {
-            Client.EVMTokenAmount calldata tokenAmount = destTokenAmounts[0];
-            // slither-disable-next-line calls-loop
-            IWrappedNativeToken wrappedNative = ccipRouter.getWrappedNative();
-            if (tokenAmount.token == address(wrappedNative) && tokenAmount.amount > 0) {
-                uint256 balanceBefore = address(this).balance;
-                wrappedNative.withdraw(tokenAmount.amount);
-                // slither-disable-next-line incorrect-equality
-                assert(balanceBefore + tokenAmount.amount == address(this).balance);
-            }
-        }
-    }
-
-    /// @notice Decode a typed CCIP message: abi.encode(uint8 type, bytes payload).
-    /// @param data The raw CCIP message data.
-    /// @return messageType The message type (0 = root, 1 = pay).
-    /// @return payload The inner payload (encoded JBMessageRoot or JBPayRemoteMessage).
-    function decodeTypedMessage(bytes memory data) external pure returns (uint8 messageType, bytes memory payload) {
-        (messageType, payload) = abi.decode(data, (uint8, bytes));
     }
 
     /// @notice Build and send a CCIP message, then handle refunds.
@@ -113,20 +98,67 @@ library JBCCIPLib {
             feeToken: address(0)
         });
 
-        // Get the CCIP fee.
+        // Get the CCIP fee for sending the message.
         // slither-disable-next-line calls-loop
         uint256 fees = ccipRouter.getFee({destinationChainSelector: remoteChainSelector, message: message});
 
-        // Send the CCIP message.
-        // slither-disable-next-line calls-loop,unused-return
+        // Send the CCIP message, paying the fee in native ETH.
+        // slither-disable-next-line calls-loop,unused-return,arbitrary-send-eth
         ccipRouter.ccipSend{value: fees}({destinationChainSelector: remoteChainSelector, message: message});
 
-        // Refund excess transport payment.
+        // Calculate the excess transport payment to refund.
         refundAmount = transportPayment - fees;
+
+        // Refund excess transport payment to the recipient.
         if (refundAmount != 0) {
             // slither-disable-next-line calls-loop,msg-value-loop,reentrancy-events
+            // slither-disable-next-line arbitrary-send-eth,missing-zero-check
             (bool sent,) = refundRecipient.call{value: refundAmount}("");
+
+            // Record the refund failure if the transfer did not succeed.
             if (!sent) refundFailed = true;
         }
+    }
+
+    /// @notice Unwrap WETH -> ETH from received CCIP tokens if the delivered token is the router's wrapped native.
+    /// @dev Runs via DELEGATECALL so `address(this).balance` refers to the calling contract.
+    /// @param ccipRouter The CCIP router (used to look up wrapped native token).
+    /// @param destTokenAmounts The token amounts delivered by CCIP (length 0 or 1).
+    function unwrapReceivedTokens(ICCIPRouter ccipRouter, Client.EVMTokenAmount[] calldata destTokenAmounts) external {
+        // Only process if exactly one token was delivered.
+        if (destTokenAmounts.length == 1) {
+            // Get a reference to the delivered token amount.
+            Client.EVMTokenAmount calldata tokenAmount = destTokenAmounts[0];
+
+            // Look up the wrapped native token from the CCIP router.
+            // slither-disable-next-line calls-loop
+            IWrappedNativeToken wrappedNative = ccipRouter.getWrappedNative();
+
+            // If the delivered token is WETH and the amount is non-zero, unwrap it.
+            if (tokenAmount.token == address(wrappedNative) && tokenAmount.amount > 0) {
+                // Record the ETH balance before unwrapping.
+                uint256 balanceBefore = address(this).balance;
+
+                // Withdraw WETH to receive ETH.
+                wrappedNative.withdraw(tokenAmount.amount);
+
+                // Assert the ETH balance increased by the expected amount.
+                // slither-disable-next-line incorrect-equality
+                assert(balanceBefore + tokenAmount.amount == address(this).balance);
+            }
+        }
+    }
+
+    //*********************************************************************//
+    // ----------------------- external views ---------------------------- //
+    //*********************************************************************//
+
+    /// @notice Decode a typed CCIP message: abi.encode(uint8 type, bytes payload).
+    /// @param data The raw CCIP message data.
+    /// @return messageType The message type (0 = root, 1 = pay).
+    /// @return payload The inner payload (encoded JBMessageRoot or JBPayRemoteMessage).
+    function decodeTypedMessage(bytes memory data) external pure returns (uint8 messageType, bytes memory payload) {
+        // ABI-decode the type and payload from the raw data.
+        (messageType, payload) = abi.decode(data, (uint8, bytes));
     }
 }

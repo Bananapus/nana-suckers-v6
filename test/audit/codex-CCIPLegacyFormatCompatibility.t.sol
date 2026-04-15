@@ -34,7 +34,7 @@ contract CodexCCIPLegacyFormatCompatibilityTest is Test {
     address internal constant PROJECTS = address(0x1005);
     address internal constant ROUTER = address(0x1006);
 
-    uint256 internal constant REMOTE_CHAIN_ID = 42161;
+    uint256 internal constant REMOTE_CHAIN_ID = 42_161;
     uint64 internal constant REMOTE_CHAIN_SELECTOR = 4_949_039_107_694_359_620;
 
     CodexCCIPLegacyFormatHarness internal sucker;
@@ -43,9 +43,7 @@ contract CodexCCIPLegacyFormatCompatibilityTest is Test {
         vm.etch(ROUTER, hex"01");
 
         vm.mockCall(DIRECTORY, abi.encodeCall(IJBDirectory.PROJECTS, ()), abi.encode(PROJECTS));
-        vm.mockCall(
-            DEPLOYER, abi.encodeCall(IJBCCIPSuckerDeployer.ccipRemoteChainId, ()), abi.encode(REMOTE_CHAIN_ID)
-        );
+        vm.mockCall(DEPLOYER, abi.encodeCall(IJBCCIPSuckerDeployer.ccipRemoteChainId, ()), abi.encode(REMOTE_CHAIN_ID));
         vm.mockCall(
             DEPLOYER,
             abi.encodeCall(IJBCCIPSuckerDeployer.ccipRemoteChainSelector, ()),

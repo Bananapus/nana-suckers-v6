@@ -1,15 +1,15 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.28;
 
-import {JBPermissioned} from "@bananapus/core-v6/src/abstract/JBPermissioned.sol";
+// External packages (alphabetized)
 import {IJBCashOutTerminal} from "@bananapus/core-v6/src/interfaces/IJBCashOutTerminal.sol";
 import {IJBController} from "@bananapus/core-v6/src/interfaces/IJBController.sol";
 import {IJBDirectory} from "@bananapus/core-v6/src/interfaces/IJBDirectory.sol";
 import {IJBMultiTerminal} from "@bananapus/core-v6/src/interfaces/IJBMultiTerminal.sol";
-import {IJBPermissions} from "@bananapus/core-v6/src/interfaces/IJBPermissions.sol";
-import {IJBProjects} from "@bananapus/core-v6/src/interfaces/IJBProjects.sol";
 import {IJBPermissioned} from "@bananapus/core-v6/src/interfaces/IJBPermissioned.sol";
+import {IJBPermissions} from "@bananapus/core-v6/src/interfaces/IJBPermissions.sol";
 import {IJBPrices} from "@bananapus/core-v6/src/interfaces/IJBPrices.sol";
+import {IJBProjects} from "@bananapus/core-v6/src/interfaces/IJBProjects.sol";
 import {IJBTerminal} from "@bananapus/core-v6/src/interfaces/IJBTerminal.sol";
 import {IJBTerminalStore} from "@bananapus/core-v6/src/interfaces/IJBTerminalStore.sol";
 import {IJBTokens} from "@bananapus/core-v6/src/interfaces/IJBTokens.sol";
@@ -17,23 +17,32 @@ import {JBAccountingContext} from "@bananapus/core-v6/src/structs/JBAccountingCo
 import {JBConstants} from "@bananapus/core-v6/src/libraries/JBConstants.sol";
 import {JBCurrencyIds} from "@bananapus/core-v6/src/libraries/JBCurrencyIds.sol";
 import {JBFixedPointNumber} from "@bananapus/core-v6/src/libraries/JBFixedPointNumber.sol";
-import {mulDiv} from "@prb/math/src/Common.sol";
+import {JBMetadataResolver} from "@bananapus/core-v6/src/libraries/JBMetadataResolver.sol";
+import {JBPermissioned} from "@bananapus/core-v6/src/abstract/JBPermissioned.sol";
 import {JBPermissionIds} from "@bananapus/permission-ids-v6/src/JBPermissionIds.sol";
-import {ERC2771Context} from "@openzeppelin/contracts/metatx/ERC2771Context.sol";
-import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
-import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {BitMaps} from "@openzeppelin/contracts/utils/structs/BitMaps.sol";
 import {Context} from "@openzeppelin/contracts/utils/Context.sol";
 import {ERC165, IERC165} from "@openzeppelin/contracts/utils/introspection/ERC165.sol";
-import {BitMaps} from "@openzeppelin/contracts/utils/structs/BitMaps.sol";
+import {ERC2771Context} from "@openzeppelin/contracts/metatx/ERC2771Context.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {mulDiv} from "@prb/math/src/Common.sol";
 
-import {JBMetadataResolver} from "@bananapus/core-v6/src/libraries/JBMetadataResolver.sol";
-
+// Local: enums
 import {JBSuckerState} from "./enums/JBSuckerState.sol";
+
+// Local: interfaces (alphabetized)
 import {IJBSucker} from "./interfaces/IJBSucker.sol";
 import {IJBSuckerExtended} from "./interfaces/IJBSuckerExtended.sol";
 import {IJBSuckerRegistry} from "./interfaces/IJBSuckerRegistry.sol";
+
+// Local: libraries (alphabetized)
 import {JBRelayBeneficiary} from "./libraries/JBRelayBeneficiary.sol";
+import {JBSuckerLib} from "./libraries/JBSuckerLib.sol";
+import {MerkleLib} from "./utils/MerkleLib.sol";
+
+// Local: structs (alphabetized)
 import {JBClaim} from "./structs/JBClaim.sol";
 import {JBDenominatedAmount} from "./structs/JBDenominatedAmount.sol";
 import {JBInboxTreeRoot} from "./structs/JBInboxTreeRoot.sol";
@@ -42,8 +51,6 @@ import {JBOutboxTree} from "./structs/JBOutboxTree.sol";
 import {JBPayRemoteMessage} from "./structs/JBPayRemoteMessage.sol";
 import {JBRemoteToken} from "./structs/JBRemoteToken.sol";
 import {JBTokenMapping} from "./structs/JBTokenMapping.sol";
-import {JBSuckerLib} from "./libraries/JBSuckerLib.sol";
-import {MerkleLib} from "./utils/MerkleLib.sol";
 
 /// @notice An abstract contract for bridging a Juicebox project's tokens and the corresponding funds to and from a
 /// remote chain.
@@ -207,6 +214,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     /// @param tokens A contract that manages token minting and burning.
     /// @param feeProjectId The project ID that receives the `toRemoteFee` payment (typically 1).
     /// @param registry The sucker registry that manages the global `toRemoteFee`.
+    /// @param trustedForwarder The trusted forwarder for ERC-2771 meta-transactions.
     constructor(
         IJBDirectory directory,
         IJBPermissions permissions,
@@ -316,7 +324,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
             }
         }
 
-        emit EmergencyHatchOpened(tokens, _msgSender());
+        emit EmergencyHatchOpened({tokens: tokens, caller: _msgSender()});
     }
 
     /// @notice Lets user exit on the chain they deposited in a scenario where the bridge is no longer functional.
@@ -581,7 +589,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         }
 
         deprecatedAfter = timestamp;
-        emit DeprecationTimeUpdated(timestamp, _msgSender());
+        emit DeprecationTimeUpdated({timestamp: timestamp, caller: _msgSender()});
     }
 
     /// @notice Bridge the project tokens, cashed out funds, and beneficiary information for a given `token` to the
@@ -627,11 +635,9 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         // NOTE: On failure, the fee ETH is retained by this contract (not added back to transportPayment)
         // to avoid DoS on zero-cost bridges (OP, Base, Celo, Arbitrum L2→L1) that revert on non-zero
         // transportPayment.
+        // slither-disable-next-line reentrancy-benign,reentrancy-events
         JBSuckerLib.payToRemoteFee({
-            directory: DIRECTORY,
-            feeProjectId: FEE_PROJECT_ID,
-            feeAmount: _toRemoteFee,
-            sender: _msgSender()
+            directory: DIRECTORY, feeProjectId: FEE_PROJECT_ID, feeAmount: _toRemoteFee, sender: _msgSender()
         });
 
         // Send the merkle root to the remote chain.
@@ -659,7 +665,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     {
         // Validate inputs.
         if (beneficiary == bytes32(0)) revert JBSucker_ZeroBeneficiary();
-        if (amount == 0) revert JBSucker_InsufficientBalance(0, 0);
+        if (amount == 0) revert JBSucker_InsufficientBalance({amount: 0, balance: 0});
 
         // Guard against amounts that would overflow uint128 on SVM.
         if (amount > type(uint128).max) revert JBSucker_AmountExceedsUint128(amount);
@@ -678,7 +684,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         uint256 transportBudget;
         if (token == JBConstants.NATIVE_TOKEN) {
             // For native: msg.value must cover amount + transport.
-            if (msg.value < amount) revert JBSucker_InsufficientMsgValue(msg.value, amount);
+            if (msg.value < amount) revert JBSucker_InsufficientMsgValue({received: msg.value, expected: amount});
             transportBudget = msg.value - amount;
         } else {
             // For ERC-20: pull tokens, msg.value is entirely transport budget.
@@ -726,6 +732,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         address token = _toAddress(message.token);
 
         // Delegate pay + cashout to library (runs via DELEGATECALL).
+        // slither-disable-next-line reentrancy-benign,reentrancy-events
         (uint256 projectTokensReceived, uint256 terminalTokensReclaimed) =
             JBSuckerLib.executePayFromRemote({directory: DIRECTORY, projectId: _projectId, message: message});
 
@@ -782,6 +789,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
 
     /// @notice The inbox merkle tree root for a given token.
     /// @param token The local terminal token to get the inbox for.
+    /// @return The inbox tree root for the token.
     function inboxOf(address token) external view returns (JBInboxTreeRoot memory) {
         return _inboxOf[token];
     }
@@ -793,8 +801,9 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         return _remoteTokenFor[token].addr != bytes32(0);
     }
 
-    /// @notice Information about the token on the remote chain that the given token on the local chain is mapped to.
-    /// @param token The local terminal token to get the remote token for.
+    /// @notice The outbox merkle tree for a given token.
+    /// @param token The local terminal token to get the outbox for.
+    /// @return The outbox tree for the token.
     function outboxOf(address token) external view returns (JBOutboxTree memory) {
         return _outboxOf[token];
     }
@@ -831,6 +840,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
 
     /// @notice Information about the token on the remote chain that the given token on the local chain is mapped to.
     /// @param token The local terminal token to get the remote token for.
+    /// @return The remote token mapping for the given local token.
     function remoteTokenFor(address token) external view returns (JBRemoteToken memory) {
         return _remoteTokenFor[token];
     }
@@ -841,6 +851,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
 
     /// @notice The outstanding amount of tokens to be added to the project's balance by `claim`.
     /// @param token The local terminal token to get the amount to add to balance for.
+    /// @return The amount of terminal tokens available to add to the project's balance.
     function amountToAddToBalanceOf(address token) public view override returns (uint256) {
         // Get the amount that is in this sucker to be bridged.
         return _balanceOf({token: token, addr: address(this)}) - _outboxOf[token].balance;
@@ -855,11 +866,13 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     /// EVM-SVM deployments). Note that overriding `peer()` is fully supported by the sucker implementation and
     /// off-chain infrastructure, but for revnets it breaks the assumption of matching configurations on both
     /// chains -- for this reason the default same-address behavior is preferred.
+    /// @return The bytes32 representation of the peer sucker address.
     function peer() public view virtual returns (bytes32) {
         return _toBytes32(address(this));
     }
 
     /// @notice The ID of the project (on the local chain) that this sucker is associated with.
+    /// @return The local project ID.
     function projectId() public view returns (uint256) {
         return _localProjectId;
     }
@@ -889,6 +902,9 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         return JBSuckerState.DEPRECATED;
     }
 
+    /// @notice Indicates whether this contract supports the given interface.
+    /// @param interfaceId The interface ID to check.
+    /// @return A boolean indicating whether the interface is supported.
     function supportsInterface(bytes4 interfaceId) public view virtual override(ERC165, IERC165) returns (bool) {
         return interfaceId == type(IJBSuckerExtended).interfaceId || interfaceId == type(IJBSucker).interfaceId
             || interfaceId == type(IJBPermissioned).interfaceId || super.supportsInterface(interfaceId);
@@ -931,10 +947,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         }
 
         JBSuckerLib.addToProjectBalance({
-            directory: DIRECTORY,
-            projectId: cachedProjectId,
-            token: token,
-            amount: amount
+            directory: DIRECTORY, projectId: cachedProjectId, token: token, amount: amount
         });
     }
 
@@ -1016,6 +1029,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
 
     /// @notice Checks if the `sender` (`_msgSender`) is a valid representative of the remote peer.
     /// @param sender The message's sender.
+    /// @return valid Whether the sender is the remote peer.
     function _isRemotePeer(address sender) internal virtual returns (bool valid);
 
     /// @notice Map an ERC-20 token on the local chain to an ERC-20 token on the remote chain, allowing that token to be
@@ -1281,6 +1295,12 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     /// @notice Validates a branch root against the expected root.
     /// @dev This is a virtual function to allow a tests to override the behavior, it should never be overwritten
     /// otherwise.
+    /// @param expectedRoot The expected merkle root to validate against.
+    /// @param projectTokenCount The number of project tokens in the leaf.
+    /// @param terminalTokenAmount The amount of terminal tokens in the leaf.
+    /// @param beneficiary The beneficiary address in the leaf (bytes32 for cross-VM compatibility).
+    /// @param index The index of the leaf in the merkle tree.
+    /// @param leaves The merkle branch proving the leaf's inclusion.
     function _validateBranchRoot(
         bytes32 expectedRoot,
         uint256 projectTokenCount,
@@ -1418,8 +1438,10 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     /// @return The merkle root.
     function _computeOutboxRoot(MerkleLib.Tree storage tree) internal view returns (bytes32) {
         uint256 count = tree.count;
+        // An empty tree has a known zero root.
         if (count == 0) return MerkleLib.Z_32;
 
+        // Copy only the non-zero branch slots from storage into memory for the root computation.
         bytes32[_TREE_DEPTH] memory branch;
         for (uint256 i; i < _TREE_DEPTH;) {
             if (count & (1 << i) != 0) {
@@ -1429,7 +1451,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
                 ++i;
             }
         }
-        return JBSuckerLib.computeTreeRoot(branch, count);
+        return JBSuckerLib.computeTreeRoot({branch: branch, count: count});
     }
 
     /// @notice Build ETH-denominated aggregate surplus and balance across all terminals for the project.
@@ -1447,6 +1469,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     /// @param projectTokenCount The number of project tokens being cashed out.
     /// @param terminalTokenAmount The amount of terminal tokens being reclaimed by the cash out.
     /// @param beneficiary The beneficiary which will receive the project tokens (bytes32 for cross-VM compatibility).
+    /// @return hash The keccak256 hash of the leaf data.
     function _buildTreeHash(
         uint256 projectTokenCount,
         uint256 terminalTokenAmount,
@@ -1467,7 +1490,9 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         }
     }
 
+    /// @notice The length of the context suffix for ERC-2771 meta-transactions.
     /// @dev ERC-2771 specifies the context as being a single address (20 bytes).
+    /// @return The suffix length in bytes.
     function _contextSuffixLength() internal view virtual override(ERC2771Context, Context) returns (uint256) {
         return ERC2771Context._contextSuffixLength();
     }
@@ -1541,6 +1566,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     }
 
     /// @notice Allow sucker implementations to add/override mapping rules to suite their specific needs.
+    /// @param map The token mapping to validate.
     function _validateTokenMapping(JBTokenMapping calldata map) internal pure virtual {
         bool isNative = map.localToken == JBConstants.NATIVE_TOKEN;
 
@@ -1593,6 +1619,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
             snapshotNonce: ++_snapshotNonce
         });
 
+        // Send the root over the AMB (positional args — slither IR parser crashes on named args here).
         _sendRootOverAMB(transportPayment, index, token, amount, remoteToken, message);
     }
 }

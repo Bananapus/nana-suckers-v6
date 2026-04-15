@@ -19,7 +19,11 @@ contract CodexZeroCostPayRemoteHarness is JBSucker {
     bool public sendPayCalled;
     uint256 public lastTransportPayment;
 
-    constructor(IJBDirectory directory, IJBPermissions permissions, IJBTokens tokens)
+    constructor(
+        IJBDirectory directory,
+        IJBPermissions permissions,
+        IJBTokens tokens
+    )
         JBSucker(directory, permissions, tokens, 1, IJBSuckerRegistry(address(0xBEEF)), address(0))
     {}
 
@@ -80,9 +84,8 @@ contract CodexNemesisPayRemoteOverpayTest is Test {
     function setUp() public {
         vm.mockCall(DIRECTORY, abi.encodeCall(IJBDirectory.PROJECTS, ()), abi.encode(PROJECTS));
 
-        CodexZeroCostPayRemoteHarness singleton = new CodexZeroCostPayRemoteHarness(
-            IJBDirectory(DIRECTORY), IJBPermissions(PERMISSIONS), IJBTokens(TOKENS)
-        );
+        CodexZeroCostPayRemoteHarness singleton =
+            new CodexZeroCostPayRemoteHarness(IJBDirectory(DIRECTORY), IJBPermissions(PERMISSIONS), IJBTokens(TOKENS));
         sucker = CodexZeroCostPayRemoteHarness(
             payable(address(LibClone.cloneDeterministic(address(singleton), bytes32("codex-nemesis-overpay"))))
         );
@@ -91,10 +94,7 @@ contract CodexNemesisPayRemoteOverpayTest is Test {
         sucker.test_setRemoteToken(
             JBConstants.NATIVE_TOKEN,
             JBRemoteToken({
-                enabled: true,
-                emergencyHatch: false,
-                minGas: 0,
-                addr: bytes32(uint256(uint160(address(0xCAFE))))
+                enabled: true, emergencyHatch: false, minGas: 0, addr: bytes32(uint256(uint160(address(0xCAFE))))
             })
         );
     }

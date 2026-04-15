@@ -1,14 +1,20 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.28;
 
+// External packages (alphabetized).
 import {IInbox} from "@arbitrum/nitro-contracts/src/bridge/IInbox.sol";
 import {IJBDirectory} from "@bananapus/core-v6/src/interfaces/IJBDirectory.sol";
 import {IJBPermissions} from "@bananapus/core-v6/src/interfaces/IJBPermissions.sol";
 import {IJBTokens} from "@bananapus/core-v6/src/interfaces/IJBTokens.sol";
 
+// Local: enums.
 import {JBLayer} from "../enums/JBLayer.sol";
+
+// Local: interfaces (alphabetized).
 import {IArbGatewayRouter} from "../interfaces/IArbGatewayRouter.sol";
 import {IJBArbitrumSuckerDeployer} from "../interfaces/IJBArbitrumSuckerDeployer.sol";
+
+// Local: deployers.
 import {JBSuckerDeployer} from "./JBSuckerDeployer.sol";
 
 /// @notice An `IJBSuckerDeployer` implementation to deploy `JBArbitrumSucker` contracts.
@@ -34,6 +40,7 @@ contract JBArbitrumSuckerDeployer is JBSuckerDeployer, IJBArbitrumSuckerDeployer
     /// @param permissions The permissions contract for the deployer.
     /// @param tokens The contract that manages token minting and burning.
     /// @param configurator The address of the configurator.
+    /// @param trustedForwarder The trusted forwarder for ERC-2771 meta-transactions.
     constructor(
         IJBDirectory directory,
         IJBPermissions permissions,
@@ -49,6 +56,7 @@ contract JBArbitrumSuckerDeployer is JBSuckerDeployer, IJBArbitrumSuckerDeployer
     //*********************************************************************//
 
     /// @notice Check if the layer specific configuration is set or not. Used as a sanity check.
+    /// @return A flag indicating whether the layer specific configuration has been set.
     function _layerSpecificConfigurationIsSet() internal view override returns (bool) {
         // On L2, the inbox is legitimately address(0) — only the gateway router is needed.
         // On L1, both the inbox and gateway router must be set.
@@ -66,10 +74,12 @@ contract JBArbitrumSuckerDeployer is JBSuckerDeployer, IJBArbitrumSuckerDeployer
     /// @param inbox The Arbitrum inbox on this layer.
     /// @param gatewayRouter The Arbitrum gateway router on this layer.
     function setChainSpecificConstants(JBLayer layer, IInbox inbox, IArbGatewayRouter gatewayRouter) external {
+        // Make sure the layer specific configuration has not already been set.
         if (_layerSpecificConfigurationIsSet()) {
             revert JBSuckerDeployer_AlreadyConfigured();
         }
 
+        // Make sure only the configurator can call this function.
         if (_msgSender() != LAYER_SPECIFIC_CONFIGURATOR) {
             revert JBSuckerDeployer_Unauthorized(_msgSender(), LAYER_SPECIFIC_CONFIGURATOR);
         }

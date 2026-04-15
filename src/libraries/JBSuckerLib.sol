@@ -31,17 +31,23 @@ import {MerkleLib} from "../utils/MerkleLib.sol";
 library JBSuckerLib {
     using SafeERC20 for IERC20;
 
-    // ------------------------- custom errors ---------------------------- //
+    //*********************************************************************//
+    // --------------------------- custom errors ------------------------- //
+    //*********************************************************************//
 
     error JBSuckerLib_NoTerminalForToken(uint256 projectId, address token);
     error JBSuckerLib_InsufficientBalance(uint256 amount, uint256 balance);
 
-    // ------------------------- internal constants ----------------------- //
+    //*********************************************************************//
+    // ----------------------- internal constants ------------------------ //
+    //*********************************************************************//
 
     uint256 internal constant _ETH_CURRENCY = JBCurrencyIds.ETH;
     uint8 internal constant _ETH_DECIMALS = 18;
 
+    //*********************************************************************//
     // ------------------------- external views -------------------------- //
+    //*********************************************************************//
 
     /// @notice Build ETH-denominated aggregate surplus and balance across all terminals for a project.
     /// @param directory The JB directory to look up terminals.
@@ -60,7 +66,9 @@ library JBSuckerLib {
         return _buildETHAggregateInternal(directory, projectId);
     }
 
-    // -------------------- internal helpers --------------------------- //
+    //*********************************************************************//
+    // ----------------------- internal helpers -------------------------- //
+    //*********************************************************************//
 
     /// @dev Shared implementation for ETH aggregate. Internal so it can be called from other
     /// external library functions (libraries cannot call their own external functions).
@@ -213,7 +221,53 @@ library JBSuckerLib {
         }
     }
 
-    // -------------------- external state-changing -------------------- //
+    //*********************************************************************//
+    // -------------------- external state-changing ---------------------- //
+    //*********************************************************************//
+
+    /// @notice Add terminal tokens to a project's balance.
+    /// @dev Runs via DELEGATECALL so the sucker's token balance and ETH are used.
+    /// @param directory The JB directory.
+    /// @param projectId The project ID.
+    /// @param token The terminal token.
+    /// @param amount The amount to add.
+    function addToProjectBalance(IJBDirectory directory, uint256 projectId, address token, uint256 amount) external {
+        // Get the project's primary terminal for the token.
+        // slither-disable-next-line calls-loop
+        IJBTerminal terminal = directory.primaryTerminalOf({projectId: projectId, token: token});
+
+        // Revert if no terminal is configured for this token.
+        // slither-disable-next-line incorrect-equality
+        if (address(terminal) == address(0)) {
+            revert JBSuckerLib_NoTerminalForToken({projectId: projectId, token: token});
+        }
+
+        // Perform the `addToBalance` for ERC-20 tokens.
+        if (token != JBConstants.NATIVE_TOKEN) {
+            // Record the balance before the transfer for the sanity check.
+            // slither-disable-next-line calls-loop
+            uint256 balanceBefore = IERC20(token).balanceOf(address(this));
+
+            // Approve the terminal to spend the ERC-20 tokens.
+            SafeERC20.forceApprove({token: IERC20(token), spender: address(terminal), value: amount});
+
+            // Add the tokens to the project's balance.
+            // slither-disable-next-line calls-loop
+            terminal.addToBalanceOf({
+                projectId: projectId, token: token, amount: amount, shouldReturnHeldFees: false, memo: "", metadata: ""
+            });
+
+            // Sanity check: make sure we transferred the full amount.
+            // slither-disable-next-line calls-loop,incorrect-equality
+            assert(IERC20(token).balanceOf(address(this)) == balanceBefore - amount);
+        } else {
+            // If the token is the native token, send ETH with the call.
+            // slither-disable-next-line arbitrary-send-eth,calls-loop
+            terminal.addToBalanceOf{value: amount}({
+                projectId: projectId, token: token, amount: amount, shouldReturnHeldFees: false, memo: "", metadata: ""
+            });
+        }
+    }
 
     /// @notice Build the cross-chain snapshot message (total supply, surplus, balance).
     /// @dev Extracted from `JBSucker._buildSnapshotAndSend` to reduce child contract bytecode.
@@ -241,6 +295,7 @@ library JBSuckerLib {
         view
         returns (JBMessageRoot memory message)
     {
+        // Will hold the total token supply (including reserved tokens) for the project.
         uint256 localTotalSupply;
 
         // Get the controller and verify it implements IJBController via ERC165 before querying supply.
@@ -262,18 +317,19 @@ library JBSuckerLib {
         (uint256 ethSurplus, uint256 ethBalance) =
             _buildETHAggregateInternal({directory: directory, projectId: projectId});
 
-        message = JBMessageRoot(
-            messageVersion,
-            remoteToken,
-            amount,
-            JBInboxTreeRoot(nonce, root),
-            localTotalSupply,
-            _ETH_CURRENCY,
-            _ETH_DECIMALS,
-            ethSurplus,
-            ethBalance,
-            snapshotNonce
-        );
+        // Construct the cross-chain message with the snapshot data.
+        message = JBMessageRoot({
+            version: messageVersion,
+            token: remoteToken,
+            amount: amount,
+            remoteRoot: JBInboxTreeRoot({nonce: nonce, root: root}),
+            sourceTotalSupply: localTotalSupply,
+            sourceCurrency: _ETH_CURRENCY,
+            sourceDecimals: _ETH_DECIMALS,
+            sourceSurplus: ethSurplus,
+            sourceBalance: ethBalance,
+            snapshotNonce: snapshotNonce
+        });
     }
 
     /// @notice Execute a cross-chain payment: pay project, cash out at 0% tax.
@@ -291,24 +347,34 @@ library JBSuckerLib {
         external
         returns (uint256 projectTokensReceived, uint256 terminalTokensReclaimed)
     {
+        // Decode the token address from the cross-chain bytes32 representation.
         address token = address(uint160(uint256(message.token)));
 
         // Get the terminal for this token.
         IJBTerminal terminal = directory.primaryTerminalOf({projectId: projectId, token: token});
+
+        // Revert if no terminal is configured for this token.
         if (address(terminal) == address(0)) {
-            revert JBSuckerLib_NoTerminalForToken(projectId, token);
+            revert JBSuckerLib_NoTerminalForToken({projectId: projectId, token: token});
         }
 
         // Inject the relay beneficiary into the metadata so hooks see the real user.
-        bytes memory payMetadata = JBMetadataResolver.addToMetadata(
-            message.metadata, JBRelayBeneficiary.ID, abi.encode(address(uint160(uint256(message.beneficiary))))
-        );
+        bytes memory payMetadata = JBMetadataResolver.addToMetadata({
+            originalMetadata: message.metadata,
+            idToAdd: JBRelayBeneficiary.ID,
+            dataToAdd: abi.encode(address(uint160(uint256(message.beneficiary))))
+        });
 
-        // Pay the project with this sucker as beneficiary (so we receive project tokens).
+        // Determine the native ETH value to send (non-zero only for native token payments).
         uint256 nativePayValue = token == JBConstants.NATIVE_TOKEN ? message.amount : 0;
+
+        // Approve the terminal to spend ERC-20 tokens on behalf of this sucker.
         if (token != JBConstants.NATIVE_TOKEN) {
             SafeERC20.forceApprove({token: IERC20(token), spender: address(terminal), value: message.amount});
         }
+
+        // Pay the project with this sucker as beneficiary (so we receive project tokens).
+        // slither-disable-next-line arbitrary-send-eth
         projectTokensReceived = terminal.pay{value: nativePayValue}({
             projectId: projectId,
             token: token,
@@ -319,8 +385,10 @@ library JBSuckerLib {
             metadata: payMetadata
         });
 
-        // Cash out the project tokens at 0% tax (sucker privilege via data hook).
+        // Cast the terminal to the cash-out interface.
         IJBCashOutTerminal cashOutTerminal = IJBCashOutTerminal(address(terminal));
+
+        // Cash out the project tokens at 0% tax (sucker privilege via data hook).
         terminalTokensReclaimed = cashOutTerminal.cashOutTokensOf({
             holder: address(this),
             projectId: projectId,
@@ -332,23 +400,45 @@ library JBSuckerLib {
         });
     }
 
+    /// @notice Mint project tokens for a beneficiary via the controller.
+    /// @dev Runs via DELEGATECALL.
+    /// @param directory The JB directory.
+    /// @param projectId The project ID.
+    /// @param tokenCount The number of tokens to mint.
+    /// @param beneficiary The address receiving the tokens.
+    function mintTokensFor(
+        IJBDirectory directory,
+        uint256 projectId,
+        uint256 tokenCount,
+        address beneficiary
+    )
+        external
+    {
+        // Mint project tokens for the beneficiary via the project's controller.
+        // slither-disable-next-line calls-loop,unused-return
+        IJBController(address(directory.controllerOf(projectId)))
+            .mintTokensOf({
+                projectId: projectId,
+                tokenCount: tokenCount,
+                beneficiary: beneficiary,
+                memo: "",
+                useReservedPercent: false
+            });
+    }
+
     /// @notice Pay the toRemote fee into the fee project. Best-effort (does not revert on failure).
     /// @dev Runs via DELEGATECALL so msg.value is available.
     /// @param directory The JB directory.
     /// @param feeProjectId The project ID that receives the fee.
     /// @param feeAmount The fee amount in native token.
     /// @param sender The original sender (gets fee project tokens).
-    function payToRemoteFee(
-        IJBDirectory directory,
-        uint256 feeProjectId,
-        uint256 feeAmount,
-        address sender
-    )
-        external
-    {
+    function payToRemoteFee(IJBDirectory directory, uint256 feeProjectId, uint256 feeAmount, address sender) external {
+        // Look up the fee project's native token terminal.
         IJBTerminal terminal = directory.primaryTerminalOf({projectId: feeProjectId, token: JBConstants.NATIVE_TOKEN});
+
+        // Only attempt to pay the fee if a terminal exists.
         if (address(terminal) != address(0)) {
-            // slither-disable-next-line unused-return,reentrancy-events
+            // slither-disable-next-line unused-return,reentrancy-events,arbitrary-send-eth
             try terminal.pay{value: feeAmount}({
                 projectId: feeProjectId,
                 token: JBConstants.NATIVE_TOKEN,
@@ -357,7 +447,9 @@ library JBSuckerLib {
                 minReturnedTokens: 0,
                 memo: "",
                 metadata: ""
-            }) returns (uint256) {}
+            }) returns (
+                uint256
+            ) {}
                 catch {}
         }
     }
@@ -384,12 +476,15 @@ library JBSuckerLib {
         IJBCashOutTerminal terminal =
             IJBCashOutTerminal(address(directory.primaryTerminalOf({projectId: projectId, token: token})));
 
+        // Revert if no terminal is configured for this token.
         if (address(terminal) == address(0)) {
             revert JBSuckerLib_NoTerminalForToken({projectId: projectId, token: token});
         }
 
-        // Cash out the tokens.
-        uint256 balanceBefore = _balanceOfToken(token, address(this));
+        // Record the balance before the cash out for the sanity check.
+        uint256 balanceBefore = _balanceOfToken({token: token, addr: address(this)});
+
+        // Cash out the project tokens for terminal tokens.
         reclaimedAmount = terminal.cashOutTokensOf({
             holder: address(this),
             projectId: projectId,
@@ -402,35 +497,12 @@ library JBSuckerLib {
 
         // Sanity check to make sure we received the expected amount.
         // slither-disable-next-line incorrect-equality
-        assert(reclaimedAmount == _balanceOfToken(token, address(this)) - balanceBefore);
+        assert(reclaimedAmount == _balanceOfToken({token: token, addr: address(this)}) - balanceBefore);
     }
 
-    /// @notice Mint project tokens for a beneficiary via the controller.
-    /// @dev Runs via DELEGATECALL.
-    /// @param directory The JB directory.
-    /// @param projectId The project ID.
-    /// @param tokenCount The number of tokens to mint.
-    /// @param beneficiary The address receiving the tokens.
-    function mintTokensFor(
-        IJBDirectory directory,
-        uint256 projectId,
-        uint256 tokenCount,
-        address beneficiary
-    )
-        external
-    {
-        // slither-disable-next-line calls-loop,unused-return
-        IJBController(address(directory.controllerOf(projectId)))
-            .mintTokensOf({
-                projectId: projectId,
-                tokenCount: tokenCount,
-                beneficiary: beneficiary,
-                memo: "",
-                useReservedPercent: false
-            });
-    }
-
-    // -------------------- merkle tree helpers ------------------------ //
+    //*********************************************************************//
+    // -------------------- merkle tree helpers -------------------------- //
+    //*********************************************************************//
 
     /// @notice Compute the merkle tree root from branch and count. Loop-based replacement for the unrolled
     /// MerkleLib.root() — saves ~3KB per sucker when called via DELEGATECALL instead of inlining.
@@ -438,6 +510,7 @@ library JBSuckerLib {
     /// @param count The number of leaves inserted into the tree.
     /// @return current The merkle root.
     function computeTreeRoot(bytes32[32] memory branch, uint256 count) external pure returns (bytes32 current) {
+        // An empty tree has a well-known root.
         if (count == 0) return MerkleLib.Z_32;
 
         // solhint-disable-next-line no-inline-assembly
@@ -489,73 +562,24 @@ library JBSuckerLib {
     /// @param branch The 32-element merkle proof branch.
     /// @param index The leaf index.
     /// @return The computed merkle root.
-    function computeBranchRoot(
-        bytes32 item,
-        bytes32[32] memory branch,
-        uint256 index
-    )
-        external
-        pure
-        returns (bytes32)
-    {
-        return MerkleLib.branchRoot(item, branch, index);
+    function computeBranchRoot(bytes32 item, bytes32[32] memory branch, uint256 index) external pure returns (bytes32) {
+        // Delegate to MerkleLib's unrolled assembly implementation.
+        return MerkleLib.branchRoot({_item: item, _branch: branch, _index: index});
     }
 
-    // -------------------- internal helpers --------------------------- //
+    //*********************************************************************//
+    // ----------------------- internal helpers -------------------------- //
+    //*********************************************************************//
 
-    /// @dev Helper to get token balance (handles native token).
+    /// @notice Get the token balance for an address (handles native token).
+    /// @param token The token address (or `JBConstants.NATIVE_TOKEN` for ETH).
+    /// @param addr The address to check the balance of.
+    /// @return The token balance.
     function _balanceOfToken(address token, address addr) internal view returns (uint256) {
+        // If the token is the native token, return the ETH balance.
         if (token == JBConstants.NATIVE_TOKEN) return addr.balance;
+
+        // Otherwise, return the ERC-20 balance.
         return IERC20(token).balanceOf(addr);
-    }
-
-    /// @notice Add terminal tokens to a project's balance.
-    /// @dev Runs via DELEGATECALL so the sucker's token balance and ETH are used.
-    /// @param directory The JB directory.
-    /// @param projectId The project ID.
-    /// @param token The terminal token.
-    /// @param amount The amount to add.
-    function addToProjectBalance(IJBDirectory directory, uint256 projectId, address token, uint256 amount) external {
-        // Get the project's primary terminal for the token.
-        // slither-disable-next-line calls-loop
-        IJBTerminal terminal = directory.primaryTerminalOf({projectId: projectId, token: token});
-
-        // slither-disable-next-line incorrect-equality
-        if (address(terminal) == address(0)) {
-            revert JBSuckerLib_NoTerminalForToken({projectId: projectId, token: token});
-        }
-
-        // Perform the `addToBalance`.
-        if (token != JBConstants.NATIVE_TOKEN) {
-            // slither-disable-next-line calls-loop
-            uint256 balanceBefore = IERC20(token).balanceOf(address(this));
-
-            SafeERC20.forceApprove({token: IERC20(token), spender: address(terminal), value: amount});
-
-            // slither-disable-next-line calls-loop
-            terminal.addToBalanceOf({
-                projectId: projectId,
-                token: token,
-                amount: amount,
-                shouldReturnHeldFees: false,
-                memo: "",
-                metadata: ""
-            });
-
-            // Sanity check: make sure we transfer the full amount.
-            // slither-disable-next-line calls-loop,incorrect-equality
-            assert(IERC20(token).balanceOf(address(this)) == balanceBefore - amount);
-        } else {
-            // If the token is the native token, use `msg.value`.
-            // slither-disable-next-line arbitrary-send-eth,calls-loop
-            terminal.addToBalanceOf{value: amount}({
-                projectId: projectId,
-                token: token,
-                amount: amount,
-                shouldReturnHeldFees: false,
-                memo: "",
-                metadata: ""
-            });
-        }
     }
 }
