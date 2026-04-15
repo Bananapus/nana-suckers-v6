@@ -103,7 +103,7 @@ contract TrustedForwarderSpoofCCIPTest is Test {
             messageId: bytes32(uint256(1)),
             sourceChainSelector: REMOTE_CHAIN_SELECTOR,
             sender: abi.encode(address(sucker)), // spoof the peer address
-            data: abi.encode(root),
+            data: abi.encode(uint8(0), abi.encode(root)),
             destTokenAmounts: destTokenAmounts
         });
 

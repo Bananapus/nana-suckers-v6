@@ -46,21 +46,22 @@ contract CodexNemesisSwapHarness is JBSwapCCIPSucker {
         uint64 nonce,
         uint256 leafTotal,
         uint256 localTotal,
-        uint256 cumCount
+        uint256 batchStart,
+        uint256 batchEnd
     )
         external
     {
         _conversionRateOf[token][nonce] = ConversionRate({leafTotal: leafTotal, localTotal: localTotal});
-        _cumulativeCountOf[token][nonce] = cumCount;
+        _batchStartOf[token][nonce] = batchStart;
+        _batchEndOf[token][nonce] = batchEnd;
         if (nonce > _highestReceivedNonce[token]) {
             _highestReceivedNonce[token] = nonce;
         }
     }
 
     function test_addToBalance(address token, uint256 amount, uint256 projectId, uint256 leafIndex) external {
-        _currentClaimLeafIndex = leafIndex;
+        _currentClaimLeafIndex = leafIndex + 1;
         _addToBalance(token, amount, projectId);
-        _currentClaimLeafIndex = type(uint256).max;
     }
 }
 
@@ -122,10 +123,10 @@ contract CodexNemesisSwapQueueOrderTest is Test {
     /// Previously, a batch 2 claimant claiming first would drain batch 1's favorable rate.
     /// With nonce-indexed rates, each claim looks up its correct batch by leaf index.
     function test_outOfOrderClaims_getCorrectRates() public {
-        // Batch 1 (nonce 1): favorable rate 1.0 (100 leaf -> 100 local), 1 leaf.
-        sucker.test_setConversionRate(address(usdc), 1, 100, 100, 1);
-        // Batch 2 (nonce 2): unfavorable rate 0.5 (100 leaf -> 50 local), 1 leaf.
-        sucker.test_setConversionRate(address(usdc), 2, 100, 50, 2);
+        // Batch 1 (nonce 1): favorable rate 1.0 (100 leaf -> 100 local), range [0,1).
+        sucker.test_setConversionRate(address(usdc), 1, 100, 100, 0, 1);
+        // Batch 2 (nonce 2): unfavorable rate 0.5 (100 leaf -> 50 local), range [1,2).
+        sucker.test_setConversionRate(address(usdc), 2, 100, 50, 1, 2);
         usdc.mint(address(sucker), 150);
 
         // Batch 2 claimant claims FIRST (leaf index 1) — gets rate 0.5, NOT 1.0.
@@ -144,11 +145,11 @@ contract CodexNemesisSwapQueueOrderTest is Test {
     /// @notice FIX VERIFIED: out-of-order root arrival doesn't affect rate application.
     /// With nonce-indexed rates, the order roots arrive in doesn't matter — each is keyed by nonce.
     function test_outOfOrderRootArrival_correctRates() public {
-        // Root 2 arrives BEFORE root 1. With nonce-indexed storage, this is fine.
-        // Nonce 2: rate 0.5, cumCount=2.
-        sucker.test_setConversionRate(address(usdc), 2, 100, 50, 2);
-        // Nonce 1 arrives late: rate 1.0, cumCount=1.
-        sucker.test_setConversionRate(address(usdc), 1, 100, 100, 1);
+        // Root 2 arrives BEFORE root 1. With per-nonce ranges, this is fine.
+        // Nonce 2: rate 0.5, range [1,2).
+        sucker.test_setConversionRate(address(usdc), 2, 100, 50, 1, 2);
+        // Nonce 1 arrives late: rate 1.0, range [0,1).
+        sucker.test_setConversionRate(address(usdc), 1, 100, 100, 0, 1);
         usdc.mint(address(sucker), 150);
 
         // Claim leaf 0 (batch 1) — should get rate 1.0.
@@ -164,20 +165,22 @@ contract CodexNemesisSwapQueueOrderTest is Test {
         assertEq(secondClaimed, 50, "leaf 1 should use nonce 2's rate 0.5");
     }
 
-    /// @notice Gap detection: missing nonce blocks ALL claims that might be in the unknown range.
-    /// When nonce 1 is missing, we don't know how many leaves it contained, so any leaf index
-    /// >= 0 is potentially in nonce 1's range and must revert conservatively.
-    function test_missingNonce_blocksClaims() public {
-        // Only nonce 2 received (nonce 1 missing).
-        sucker.test_setConversionRate(address(usdc), 2, 100, 50, 2);
+    /// @notice FIX VERIFIED: missing nonce only blocks claims for leaves NOT in any received range.
+    /// With per-nonce [start, end) ranges, each nonce is self-describing. Leaves in a received
+    /// nonce's range can be claimed even if earlier nonces haven't arrived yet.
+    function test_missingNonce_onlyBlocksUnreceivedRange() public {
+        // Only nonce 2 received (nonce 1 missing). Nonce 2 covers range [1, 2).
+        sucker.test_setConversionRate(address(usdc), 2, 100, 50, 1, 2);
         usdc.mint(address(sucker), 50);
 
-        // Claiming leaf 0 reverts because nonce 1 is a gap and leaf 0 might be in it.
-        vm.expectRevert(abi.encodeWithSelector(JBSwapCCIPSucker.JBSwapCCIPSucker_BatchNotReceived.selector, uint64(1)));
+        // Leaf 0 is NOT in any received range — reverts.
+        vm.expectRevert(abi.encodeWithSelector(JBSwapCCIPSucker.JBSwapCCIPSucker_BatchNotReceived.selector, uint64(0)));
         sucker.test_addToBalance(address(usdc), 100, PROJECT_ID, 0);
 
-        // Leaf 1 ALSO reverts — we don't know nonce 1's leaf count, so leaf 1 might be in it too.
-        vm.expectRevert(abi.encodeWithSelector(JBSwapCCIPSucker.JBSwapCCIPSucker_BatchNotReceived.selector, uint64(1)));
+        // Leaf 1 IS in nonce 2's range [1, 2) — succeeds with nonce 2's rate.
+        uint256 balBefore = usdc.balanceOf(address(sucker));
         sucker.test_addToBalance(address(usdc), 100, PROJECT_ID, 1);
+        uint256 claimed = balBefore - usdc.balanceOf(address(sucker));
+        assertEq(claimed, 50, "leaf 1 should use nonce 2's rate 0.5");
     }
 }

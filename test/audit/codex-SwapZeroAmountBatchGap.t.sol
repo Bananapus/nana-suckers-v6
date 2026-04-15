@@ -45,17 +45,20 @@ contract CodexSwapZeroBatchHarness is JBSwapCCIPSucker {
     {}
 
     function test_addToBalance(address token, uint256 amount, uint256 projectId, uint256 leafIndex) external {
-        _currentClaimLeafIndex = leafIndex;
+        _currentClaimLeafIndex = leafIndex + 1;
         _addToBalance(token, amount, projectId);
-        _currentClaimLeafIndex = type(uint256).max;
     }
 
     function exposed_highestReceivedNonce(address token) external view returns (uint64) {
         return _highestReceivedNonce[token];
     }
 
-    function exposed_cumulativeCountOf(address token, uint64 nonce) external view returns (uint256) {
-        return _cumulativeCountOf[token][nonce];
+    function exposed_batchStartOf(address token, uint64 nonce) external view returns (uint256) {
+        return _batchStartOf[token][nonce];
+    }
+
+    function exposed_batchEndOf(address token, uint64 nonce) external view returns (uint256) {
+        return _batchEndOf[token][nonce];
     }
 }
 
@@ -137,6 +140,7 @@ contract CodexSwapZeroAmountBatchGapTest is Test {
                         sourceBalance: 0,
                         snapshotNonce: 1
                     }),
+                    uint256(0),
                     uint256(1)
                 )
             ),
@@ -148,7 +152,8 @@ contract CodexSwapZeroAmountBatchGapTest is Test {
 
         // Nonce progression IS recorded even for zero-amount batch.
         assertEq(sucker.exposed_highestReceivedNonce(address(usdc)), 1, "zero-amount batch should advance nonce");
-        assertEq(sucker.exposed_cumulativeCountOf(address(usdc), 1), 1, "zero batch count should be recorded");
+        assertEq(sucker.exposed_batchStartOf(address(usdc), 1), 0, "zero batch start should be recorded");
+        assertEq(sucker.exposed_batchEndOf(address(usdc), 1), 1, "zero batch end should be recorded");
 
         // Send a funded batch (nonce 2, batchCount=2).
         usdc.mint(address(sucker), 50);
@@ -175,6 +180,7 @@ contract CodexSwapZeroAmountBatchGapTest is Test {
                         sourceBalance: 0,
                         snapshotNonce: 2
                     }),
+                    uint256(1),
                     uint256(2)
                 )
             ),
@@ -185,7 +191,8 @@ contract CodexSwapZeroAmountBatchGapTest is Test {
         sucker.ccipReceive(fundedBatchMessage);
 
         assertEq(sucker.exposed_highestReceivedNonce(address(usdc)), 2, "later funded batch is tracked");
-        assertEq(sucker.exposed_cumulativeCountOf(address(usdc), 2), 2, "later batch stores cumulative leaf count");
+        assertEq(sucker.exposed_batchStartOf(address(usdc), 2), 1, "later batch start should be recorded");
+        assertEq(sucker.exposed_batchEndOf(address(usdc), 2), 2, "later batch end should be recorded");
 
         // Claim leaf 1 (from nonce 2) — should succeed, NOT revert with BatchNotReceived.
         uint256 balBefore = usdc.balanceOf(address(sucker));

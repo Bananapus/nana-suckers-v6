@@ -46,21 +46,22 @@ contract CodexSwapBatchHarness is JBSwapCCIPSucker {
         uint64 nonce,
         uint256 leafTotal,
         uint256 localTotal,
-        uint256 cumCount
+        uint256 batchStart,
+        uint256 batchEnd
     )
         external
     {
         _conversionRateOf[token][nonce] = ConversionRate({leafTotal: leafTotal, localTotal: localTotal});
-        _cumulativeCountOf[token][nonce] = cumCount;
+        _batchStartOf[token][nonce] = batchStart;
+        _batchEndOf[token][nonce] = batchEnd;
         if (nonce > _highestReceivedNonce[token]) {
             _highestReceivedNonce[token] = nonce;
         }
     }
 
     function exposed_addToBalance(address token, uint256 amount, uint256 projectId, uint256 leafIndex) external {
-        _currentClaimLeafIndex = leafIndex;
+        _currentClaimLeafIndex = leafIndex + 1;
         _addToBalance(token, amount, projectId);
-        _currentClaimLeafIndex = type(uint256).max;
     }
 }
 
@@ -117,10 +118,10 @@ contract CodexSwapBatchRateMixingTest is Test {
     }
 
     function test_overlappingRoots_fixedByNonceIndexedRates() external {
-        // Batch 1 (nonce 1): rate 1.0 (100e18 leaf -> 100e6 local), 1 leaf.
-        // Batch 2 (nonce 2): rate 0.5 (100e18 leaf -> 50e6 local), 1 leaf.
-        sucker.test_setConversionRate(address(usdc), 1, 100e18, 100e6, 1);
-        sucker.test_setConversionRate(address(usdc), 2, 100e18, 50e6, 2);
+        // Batch 1 (nonce 1): rate 1.0 (100e18 leaf -> 100e6 local), range [0,1).
+        // Batch 2 (nonce 2): rate 0.5 (100e18 leaf -> 50e6 local), range [1,2).
+        sucker.test_setConversionRate(address(usdc), 1, 100e18, 100e6, 0, 1);
+        sucker.test_setConversionRate(address(usdc), 2, 100e18, 50e6, 1, 2);
         usdc.mint(address(sucker), 150e6);
 
         // Claim from batch 1 (leaf 0) — should get 100e6 (rate 1.0), not 75e6 (blended).

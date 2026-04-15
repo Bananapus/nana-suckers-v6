@@ -18,7 +18,10 @@ import {JBSwapCCIPSuckerDeployer} from "../src/deployers/JBSwapCCIPSuckerDeploye
 import {IJBSuckerRegistry} from "../src/interfaces/IJBSuckerRegistry.sol";
 import {JBInboxTreeRoot} from "../src/structs/JBInboxTreeRoot.sol";
 import {JBMessageRoot} from "../src/structs/JBMessageRoot.sol";
+import {JBSwapPoolLib} from "../src/libraries/JBSwapPoolLib.sol";
+import {IUniswapV3Factory} from "@uniswap/v3-core/contracts/interfaces/IUniswapV3Factory.sol";
 import {IUniswapV3Pool} from "@uniswap/v3-core/contracts/interfaces/IUniswapV3Pool.sol";
+import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
 import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
 
 /// @notice Harness exposing internal swap functions for fork testing against real Uniswap V3 pools.
@@ -32,7 +35,7 @@ contract ForkSwapHarness is JBSwapCCIPSucker {
         JBSwapCCIPSucker(deployer, directory, tokens, permissions, 1, IJBSuckerRegistry(address(1)), address(0))
     {}
 
-    /// @notice Expose pool discovery for testing.
+    /// @notice Expose pool discovery for testing (delegates to JBSwapPoolLib).
     function exposed_discoverPool(
         address normalizedIn,
         address normalizedOut
@@ -41,7 +44,16 @@ contract ForkSwapHarness is JBSwapCCIPSucker {
         view
         returns (bool isV4, IUniswapV3Pool v3Pool, PoolKey memory v4Key)
     {
-        return _discoverPool(normalizedIn, normalizedOut);
+        return JBSwapPoolLib.discoverPool(
+            JBSwapPoolLib.SwapConfig({
+                v3Factory: V3_FACTORY,
+                poolManager: POOL_MANAGER,
+                univ4Hook: UNIV4_HOOK,
+                weth: address(WETH)
+            }),
+            normalizedIn,
+            normalizedOut
+        );
     }
 
     /// @notice Expose swap execution for testing.
@@ -58,7 +70,7 @@ contract ForkSwapHarness is JBSwapCCIPSucker {
 
     /// @notice Expose normalization for testing.
     function exposed_normalize(address token) external view returns (address) {
-        return _normalize(token);
+        return token == JBConstants.NATIVE_TOKEN ? address(WETH) : token;
     }
 
     /// @notice Read a conversion rate for a given nonce.
@@ -74,9 +86,14 @@ contract ForkSwapHarness is JBSwapCCIPSucker {
         return (rate.leafTotal, rate.localTotal);
     }
 
-    /// @notice Read cumulative count for a given nonce.
-    function exposed_cumulativeCountOf(address token, uint64 nonce) external view returns (uint256) {
-        return _cumulativeCountOf[token][nonce];
+    /// @notice Read batch start for a given nonce.
+    function exposed_batchStartOf(address token, uint64 nonce) external view returns (uint256) {
+        return _batchStartOf[token][nonce];
+    }
+
+    /// @notice Read batch end for a given nonce.
+    function exposed_batchEndOf(address token, uint64 nonce) external view returns (uint256) {
+        return _batchEndOf[token][nonce];
     }
 
     /// @notice Read highest received nonce for a token.
@@ -340,7 +357,7 @@ contract ForkSwapTest is Test {
             messageId: bytes32(uint256(1)),
             sourceChainSelector: TEMPO_CHAIN_SELECTOR,
             sender: abi.encode(address(sucker)), // peer() == address(this)
-            data: abi.encode(uint8(0), abi.encode(root, uint256(1))), // type 0 = ROOT, count = 1
+            data: abi.encode(uint8(0), abi.encode(root, uint256(0), uint256(1))), // type 0 = ROOT, range [0,1)
             destTokenAmounts: destTokenAmounts
         });
 
@@ -394,7 +411,7 @@ contract ForkSwapTest is Test {
             messageId: bytes32(uint256(2)),
             sourceChainSelector: TEMPO_CHAIN_SELECTOR,
             sender: abi.encode(address(sucker)),
-            data: abi.encode(uint8(0), abi.encode(root, uint256(1))), // count = 1
+            data: abi.encode(uint8(0), abi.encode(root, uint256(0), uint256(1))), // range [0,1)
             destTokenAmounts: destTokenAmounts
         });
 

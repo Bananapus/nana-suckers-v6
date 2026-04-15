@@ -5,7 +5,6 @@ pragma solidity 0.8.28;
 import {IJBDirectory} from "@bananapus/core-v6/src/interfaces/IJBDirectory.sol";
 import {IJBPermissions} from "@bananapus/core-v6/src/interfaces/IJBPermissions.sol";
 import {IJBTokens} from "@bananapus/core-v6/src/interfaces/IJBTokens.sol";
-import {JBConstants} from "@bananapus/core-v6/src/libraries/JBConstants.sol";
 
 // CCIP imports.
 import {Client} from "@chainlink/contracts-ccip/src/v0.8/ccip/libraries/Client.sol";
@@ -16,21 +15,11 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 
 // Uniswap V3 imports.
 import {IUniswapV3Factory} from "@uniswap/v3-core/contracts/interfaces/IUniswapV3Factory.sol";
-import {IUniswapV3Pool} from "@uniswap/v3-core/contracts/interfaces/IUniswapV3Pool.sol";
 import {IUniswapV3SwapCallback} from "@uniswap/v3-core/contracts/interfaces/callback/IUniswapV3SwapCallback.sol";
-import {OracleLibrary} from "@uniswap/v3-periphery/contracts/libraries/OracleLibrary.sol";
 
 // Uniswap V4 imports.
-import {BalanceDelta, BalanceDeltaLibrary} from "@uniswap/v4-core/src/types/BalanceDelta.sol";
-import {Currency} from "@uniswap/v4-core/src/types/Currency.sol";
-import {IHooks} from "@uniswap/v4-core/src/interfaces/IHooks.sol";
 import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
 import {IUnlockCallback} from "@uniswap/v4-core/src/interfaces/callback/IUnlockCallback.sol";
-import {PoolId, PoolIdLibrary} from "@uniswap/v4-core/src/types/PoolId.sol";
-import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
-import {StateLibrary} from "@uniswap/v4-core/src/libraries/StateLibrary.sol";
-import {SwapParams} from "@uniswap/v4-core/src/types/PoolOperation.sol";
-import {TickMath} from "@uniswap/v4-core/src/libraries/TickMath.sol";
 
 // Local: contracts.
 import {JBCCIPSucker} from "./JBCCIPSucker.sol";
@@ -40,13 +29,13 @@ import {JBSwapCCIPSuckerDeployer} from "./deployers/JBSwapCCIPSuckerDeployer.sol
 
 // Local: interfaces (alphabetized).
 import {ICCIPRouter} from "./interfaces/ICCIPRouter.sol";
-import {IGeomeanOracle} from "./interfaces/IGeomeanOracle.sol";
 import {IJBSuckerRegistry} from "./interfaces/IJBSuckerRegistry.sol";
 import {IJBSwapCCIPSuckerDeployer} from "./interfaces/IJBSwapCCIPSuckerDeployer.sol";
 import {IWrappedNativeToken} from "./interfaces/IWrappedNativeToken.sol";
 
 // Local: libraries.
-import {JBSwapLib} from "./libraries/JBSwapLib.sol";
+import {JBCCIPLib} from "./libraries/JBCCIPLib.sol";
+import {JBSwapPoolLib} from "./libraries/JBSwapPoolLib.sol";
 
 // Local: structs (alphabetized).
 import {JBClaim} from "./structs/JBClaim.sol";
@@ -90,9 +79,6 @@ import {JBRemoteToken} from "./structs/JBRemoteToken.sol";
 /// liquidity or price conditions normalize.
 contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallback {
     using SafeERC20 for IERC20;
-    using BalanceDeltaLibrary for BalanceDelta;
-    using PoolIdLibrary for PoolKey;
-    using StateLibrary for IPoolManager;
 
     //*********************************************************************//
     // --------------------------- custom errors ------------------------- //
@@ -101,30 +87,7 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
     error JBSwapCCIPSucker_SwapFailed();
     error JBSwapCCIPSucker_InvalidBridgeToken();
     error JBSwapCCIPSucker_CallerNotPoolManager(address caller);
-    error JBSwapCCIPSucker_CallerNotPool(address caller);
-    error JBSwapCCIPSucker_SlippageExceeded(uint256 amountOut, uint256 minAmountOut);
-    error JBSwapCCIPSucker_NoPool();
-    error JBSwapCCIPSucker_NoLiquidity();
-    error JBSwapCCIPSucker_InsufficientTwapHistory();
-    error JBSwapCCIPSucker_AmountOverflow(uint256 amount);
     error JBSwapCCIPSucker_BatchNotReceived(uint64 nonce);
-
-    //*********************************************************************//
-    // --------------------- private constants -------------------------- //
-    //*********************************************************************//
-
-    /// @notice Default V3 TWAP window (10 minutes).
-    uint256 private constant _DEFAULT_TWAP_WINDOW = 600;
-
-    /// @notice Minimum V3 TWAP window (2 minutes).
-    uint256 private constant _MIN_TWAP_WINDOW = 120;
-
-    /// @notice V4 hook TWAP window (2 minutes). Matches the minimum V3 TWAP window for
-    /// consistent manipulation resistance across both pool versions.
-    uint32 private constant _V4_TWAP_WINDOW = 120;
-
-    /// @notice Denominator for slippage tolerance basis points.
-    uint256 private constant _SLIPPAGE_DENOMINATOR = 10_000;
 
     //*********************************************************************//
     // --------------- public immutable stored properties ---------------- //
@@ -160,15 +123,29 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
     /// @notice Conversion rate for each received root batch, keyed by token and nonce.
     mapping(address token => mapping(uint64 nonce => ConversionRate)) internal _conversionRateOf;
 
-    /// @notice Cumulative leaf count at each nonce, used to map leaf indices to their batch nonce.
-    mapping(address token => mapping(uint64 nonce => uint256)) internal _cumulativeCountOf;
+    /// @notice Start leaf index for each received root batch, keyed by token and nonce.
+    /// @dev Together with `_batchEndOf`, defines the half-open range [start, end) of leaf indices in each batch.
+    /// Self-describing per nonce — no sequential dependency for out-of-order CCIP delivery.
+    mapping(address token => mapping(uint64 nonce => uint256)) internal _batchStartOf;
+
+    /// @notice End leaf index (exclusive) for each received root batch, keyed by token and nonce.
+    mapping(address token => mapping(uint64 nonce => uint256)) internal _batchEndOf;
 
     /// @notice Highest nonce received so far per token. Used as upper bound for nonce iteration.
     mapping(address token => uint64) internal _highestReceivedNonce;
 
-    /// @notice Leaf index of the claim currently being processed (set by `claim` override).
-    /// @dev Sentinel value `type(uint256).max` means no active claim (bypass scaling).
-    uint256 internal _currentClaimLeafIndex = type(uint256).max;
+    /// @notice Cumulative leaf count at the last `_sendRootOverAMB` call, per token.
+    /// @dev Used on the sender side to derive the batch start index for the next send.
+    mapping(address token => uint256) internal _lastSentCount;
+
+    /// @notice Cached nonce from the last successful `_findNonceForLeafIndex` lookup.
+    /// @dev Batched claims from the same nonce hit this cache and skip the scan entirely.
+    mapping(address token => uint64) internal _cachedNonce;
+
+    /// @notice Leaf index + 1 of the claim currently being processed (set by `claim` override).
+    /// @dev Transient storage — auto-resets to 0 each transaction, saving ~9,800 gas per claim vs SSTORE.
+    /// Value 0 means no active claim (bypass scaling); non-zero means leafIndex = value - 1.
+    uint256 transient _currentClaimLeafIndex;
 
     //*********************************************************************//
     // ---------------------------- constructor -------------------------- //
@@ -213,96 +190,28 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
     // --------------------- external transactions ----------------------- //
     //*********************************************************************//
 
-    /// @notice ABI-decode helper used via `this.decodeRootWithCount(payload)` in a try/catch
-    /// to detect whether the payload includes a cumulative leaf count alongside the root.
-    /// @dev Must be external so it can be called via `this.` for try/catch. Not intended for
-    /// external callers — has no access control because it's a pure decoder with no side effects.
-    function decodeRootWithCount(bytes calldata payload)
-        external
-        pure
-        returns (JBMessageRoot memory root, uint256 count)
-    {
-        (root, count) = abi.decode(payload, (JBMessageRoot, uint256));
-    }
-
     /// @notice Override single claim to set the leaf index context for `_addToBalance` scaling.
     /// @dev The batch `claim(JBClaim[])` calls this in a loop, so it works automatically.
+    /// Stores leafIndex + 1 (0 = no active claim sentinel). No reset needed — transient storage auto-clears.
     function claim(JBClaim calldata claimData) public override {
-        _currentClaimLeafIndex = claimData.leaf.index;
+        _currentClaimLeafIndex = claimData.leaf.index + 1;
         super.claim(claimData);
-        _currentClaimLeafIndex = type(uint256).max;
     }
 
-    /// @notice Uniswap V4 unlock callback — executes the swap atomically within `PoolManager.unlock()`.
-    /// @param data Encoded swap parameters: (PoolKey, bool zeroForOne, int256 amountSpecified,
-    ///             uint160 sqrtPriceLimit, uint256 minAmountOut).
+    /// @notice Uniswap V4 unlock callback — delegates to JBSwapPoolLib (via DELEGATECALL) to reduce bytecode.
+    /// @param data Encoded swap parameters from PoolManager.unlock().
     /// @return Encoded output amount.
     function unlockCallback(bytes calldata data) external override returns (bytes memory) {
         if (msg.sender != address(POOL_MANAGER)) revert JBSwapCCIPSucker_CallerNotPoolManager(msg.sender);
-
-        (PoolKey memory key, bool zeroForOne, int256 amountSpecified, uint160 sqrtPriceLimitX96, uint256 minAmountOut) =
-            abi.decode(data, (PoolKey, bool, int256, uint160, uint256));
-
-        // Execute the swap.
-        BalanceDelta delta = POOL_MANAGER.swap({
-            key: key,
-            params: SwapParams({
-                zeroForOne: zeroForOne, amountSpecified: amountSpecified, sqrtPriceLimitX96: sqrtPriceLimitX96
-            }),
-            hookData: ""
-        });
-
-        // V4 sign convention: negative = we owe (input), positive = we're owed (output).
-        int128 delta0 = delta.amount0();
-        int128 delta1 = delta.amount1();
-        uint256 amountIn;
-        uint256 amountOut;
-
-        if (zeroForOne) {
-            amountIn = uint256(uint128(-delta0));
-            amountOut = uint256(uint128(delta1));
-        } else {
-            amountIn = uint256(uint128(-delta1));
-            amountOut = uint256(uint128(delta0));
-        }
-
-        if (amountOut < minAmountOut) revert JBSwapCCIPSucker_SlippageExceeded(amountOut, minAmountOut);
-
-        // Settle input (pay what we owe to the PoolManager).
-        Currency inputCurrency = zeroForOne ? key.currency0 : key.currency1;
-        _settleV4(inputCurrency, amountIn);
-
-        // Take output (receive what the PoolManager owes us).
-        Currency outputCurrency = zeroForOne ? key.currency1 : key.currency0;
-        _takeV4(outputCurrency, amountOut);
-
-        return abi.encode(amountOut);
+        return JBSwapPoolLib.executeV4UnlockCallback(POOL_MANAGER, data);
     }
 
-    /// @notice Uniswap V3 swap callback — settles the input side of the swap.
-    /// @dev Verifies the caller is a legitimate pool via the factory, then transfers input tokens.
+    /// @notice Uniswap V3 swap callback — delegates to JBSwapPoolLib (via DELEGATECALL) to reduce bytecode.
     /// @param amount0Delta The amount of token0 being used for the swap.
     /// @param amount1Delta The amount of token1 being used for the swap.
     /// @param data Encoded (originalTokenIn, normalizedTokenIn, normalizedTokenOut).
     function uniswapV3SwapCallback(int256 amount0Delta, int256 amount1Delta, bytes calldata data) external override {
-        (address originalTokenIn, address normalizedIn, address normalizedOut) =
-            abi.decode(data, (address, address, address));
-
-        // Verify caller is a legitimate V3 pool via the factory.
-        // slither-disable-next-line calls-loop
-        uint24 fee = IUniswapV3Pool(msg.sender).fee();
-        address expectedPool = V3_FACTORY.getPool({tokenA: normalizedIn, tokenB: normalizedOut, fee: fee});
-        if (msg.sender != expectedPool) revert JBSwapCCIPSucker_CallerNotPool(msg.sender);
-
-        // The positive delta is what we owe to the pool.
-        uint256 amountToSend = amount0Delta < 0 ? uint256(amount1Delta) : uint256(amount0Delta);
-
-        // If input is native ETH, wrap to WETH for V3.
-        if (originalTokenIn == JBConstants.NATIVE_TOKEN) {
-            WETH.deposit{value: amountToSend}();
-        }
-
-        IERC20(normalizedIn).safeTransfer({to: msg.sender, value: amountToSend});
+        JBSwapPoolLib.executeV3SwapCallback(V3_FACTORY, amount0Delta, amount1Delta, data);
     }
 
     /// @notice Override CCIP receive to swap bridge tokens into local tokens and track denomination conversion.
@@ -321,25 +230,13 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
         }
 
         // Decode the typed message (handles backward compatibility with old format).
-        (uint8 messageType, bytes memory payload) = _decodeTypedMessage(any2EvmMessage.data);
+        (uint8 messageType, bytes memory payload) = JBCCIPLib.decodeTypedMessage(any2EvmMessage.data);
 
         if (messageType == _CCIP_MSG_TYPE_ROOT) {
             // ROOT message — swap bridge tokens to local tokens before storing the merkle root.
-            // Decode the root and optional cumulative leaf count.
-            // JBMessageRoot ABI-encodes to a fixed size. If the payload is longer, it includes the count.
-            JBMessageRoot memory root;
-            uint256 batchCount;
-            {
-                // Try decoding with count first; fall back to root-only for backward compat
-                // (e.g., amount==0 messages sent by parent's _sendRootOverAMB).
-                // solhint-disable-next-line no-empty-blocks
-                try this.decodeRootWithCount(payload) returns (JBMessageRoot memory _root, uint256 _count) {
-                    root = _root;
-                    batchCount = _count;
-                } catch {
-                    root = abi.decode(payload, (JBMessageRoot));
-                }
-            }
+            // Decode the root and batch range [batchStart, batchEnd).
+            (JBMessageRoot memory root, uint256 batchStart, uint256 batchEnd) =
+                abi.decode(payload, (JBMessageRoot, uint256, uint256));
 
             address localToken = _toAddress(root.token);
             uint256 localAmount;
@@ -356,10 +253,11 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
                 }
             }
 
-            // Always record nonce progression and cumulative count so that _findNonceForLeafIndex
-            // doesn't treat this nonce as a gap. Zero-amount batches are valid (e.g., metadata-only roots).
-            if (batchCount > 0) {
-                _cumulativeCountOf[localToken][root.remoteRoot.nonce] = batchCount;
+            // Record the batch range so _findNonceForLeafIndex can resolve leaf ownership
+            // independently of nonce ordering. Each nonce is self-describing: [start, end).
+            if (batchEnd > 0) {
+                _batchStartOf[localToken][root.remoteRoot.nonce] = batchStart;
+                _batchEndOf[localToken][root.remoteRoot.nonce] = batchEnd;
                 if (root.remoteRoot.nonce > _highestReceivedNonce[localToken]) {
                     _highestReceivedNonce[localToken] = root.remoteRoot.nonce;
                 }
@@ -403,6 +301,7 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
     /// @dev Does NOT modify `sucker_message.amount` — keeps the original leaf-denomination total so the
     /// receiving chain can use it (along with the actual delivered amount) to compute the proportional
     /// scaling factor for individual claims.
+    /// Delegates CCIP message construction to JBCCIPLib (via DELEGATECALL) to reduce bytecode.
     // forge-lint: disable-next-line(mixed-case-function)
     function _sendRootOverAMB(
         uint256 transportPayment,
@@ -418,64 +317,55 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
     {
         if (transportPayment == 0) revert JBSucker_ExpectedMsgValue();
 
-        uint256 bridgeAmount;
         Client.EVMTokenAmount[] memory tokenAmounts;
+        uint256 gasLimit = MESSENGER_BASE_GAS_LIMIT + remoteToken.minGas;
+        bytes memory encodedPayload;
 
-        if (amount == 0) {
-            // Message-only root (no tokens to bridge). Use empty token amounts.
-            tokenAmounts = new Client.EVMTokenAmount[](0);
-        } else {
-            address bridgeTokenAddr = address(BRIDGE_TOKEN);
-
-            if (token == bridgeTokenAddr) {
-                // No swap needed — local token IS the bridge token.
-                bridgeAmount = amount;
+        {
+            uint256 bridgeAmount;
+            if (amount == 0) {
+                tokenAmounts = new Client.EVMTokenAmount[](0);
             } else {
-                // Swap local token -> bridge token via best V3/V4 pool.
-                bridgeAmount = _executeSwap(token, bridgeTokenAddr, amount);
-                if (bridgeAmount == 0) revert JBSwapCCIPSucker_SwapFailed();
+                address bridgeTokenAddr = address(BRIDGE_TOKEN);
+
+                if (token == bridgeTokenAddr) {
+                    bridgeAmount = amount;
+                } else {
+                    bridgeAmount = _executeSwap(token, bridgeTokenAddr, amount);
+                    if (bridgeAmount == 0) revert JBSwapCCIPSucker_SwapFailed();
+                }
+
+                tokenAmounts = new Client.EVMTokenAmount[](1);
+                tokenAmounts[0] = Client.EVMTokenAmount({token: bridgeTokenAddr, amount: bridgeAmount});
+                BRIDGE_TOKEN.forceApprove({spender: address(CCIP_ROUTER), value: bridgeAmount});
             }
 
-            tokenAmounts = new Client.EVMTokenAmount[](1);
-            tokenAmounts[0] = Client.EVMTokenAmount({token: bridgeTokenAddr, amount: bridgeAmount});
-
-            // Approve the CCIP router to spend bridge tokens.
-            BRIDGE_TOKEN.forceApprove({spender: address(CCIP_ROUTER), value: bridgeAmount});
+            // NOTE: sucker_message.amount stays as the original leaf-denomination total.
+            // Encode batch range [batchStart, batchEnd) so the receiver can resolve leaf ownership
+            // per-nonce without requiring contiguous nonce delivery.
+            uint256 batchStart = _lastSentCount[token];
+            uint256 batchEnd = index + 1;
+            _lastSentCount[token] = batchEnd;
+            encodedPayload = abi.encode(_CCIP_MSG_TYPE_ROOT, abi.encode(sucker_message, batchStart, batchEnd));
         }
 
-        // NOTE: We intentionally do NOT update sucker_message.amount here.
-        // It stays as the original leaf-denomination total (e.g., ETH wei), which the
-        // receiving chain uses to compute the proportional scaling factor for claims.
-
-        // Build the CCIP message. Always encode the cumulative leaf count (index + 1)
-        // so the receiving chain records nonce progression even for zero-amount batches.
-        uint256 gasLimit = MESSENGER_BASE_GAS_LIMIT + remoteToken.minGas;
-
-        Client.EVM2AnyMessage memory message = Client.EVM2AnyMessage({
-            receiver: abi.encode(_toAddress(peer())),
-            data: abi.encode(_CCIP_MSG_TYPE_ROOT, abi.encode(sucker_message, index + 1)),
+        (bool refundFailed, uint256 refundAmount) = JBCCIPLib.sendCCIPMessage({
+            ccipRouter: CCIP_ROUTER,
+            remoteChainSelector: REMOTE_CHAIN_SELECTOR,
+            peerAddress: _toAddress(peer()),
+            transportPayment: transportPayment,
+            gasLimit: gasLimit,
+            encodedPayload: encodedPayload,
             tokenAmounts: tokenAmounts,
-            extraArgs: Client._argsToBytes(Client.EVMExtraArgsV1({gasLimit: gasLimit})),
-            feeToken: address(0)
+            refundRecipient: _msgSender()
         });
 
-        uint256 fees = CCIP_ROUTER.getFee({destinationChainSelector: REMOTE_CHAIN_SELECTOR, message: message});
-        if (fees > transportPayment) revert JBSucker_InsufficientMsgValue(transportPayment, fees);
-
-        // slither-disable-next-line unused-return
-        CCIP_ROUTER.ccipSend{value: fees}({destinationChainSelector: REMOTE_CHAIN_SELECTOR, message: message});
-
-        // Refund excess transport payment.
-        uint256 refundAmount = transportPayment - fees;
-        if (refundAmount != 0) {
-            (bool sent,) = _msgSender().call{value: refundAmount}("");
-            if (!sent) emit TransportPaymentRefundFailed(_msgSender(), refundAmount);
-        }
+        if (refundFailed) emit TransportPaymentRefundFailed(_msgSender(), refundAmount);
     }
 
     /// @notice Override to swap local tokens into bridge tokens before CCIP bridging of PAY messages.
     /// @dev Mirrors `_sendRootOverAMB`: swaps local -> bridge, updates `message.amount` to bridge denomination,
-    /// then sends via CCIP. The remote swap sucker's `ccipReceive` PAY handler reverses the swap.
+    /// then sends via CCIP. Delegates CCIP construction to JBCCIPLib (via DELEGATECALL) to reduce bytecode.
     // forge-lint: disable-next-line(mixed-case-function)
     function _sendPayOverAMB(
         uint256 transportPayment,
@@ -495,50 +385,41 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
             return;
         }
 
-        uint256 bridgeAmount;
-        address bridgeTokenAddr = address(BRIDGE_TOKEN);
+        Client.EVMTokenAmount[] memory tokenAmounts;
+        uint256 gasLimit = MESSENGER_PAY_GAS_LIMIT + remoteToken.minGas;
+        bytes memory encodedPayload;
 
-        if (token == bridgeTokenAddr) {
-            // No swap needed — local token IS the bridge token.
-            bridgeAmount = amount;
-        } else {
-            // Swap local token -> bridge token via best V3/V4 pool.
-            bridgeAmount = _executeSwap(token, bridgeTokenAddr, amount);
-            if (bridgeAmount == 0) revert JBSwapCCIPSucker_SwapFailed();
+        {
+            address bridgeTokenAddr = address(BRIDGE_TOKEN);
+            uint256 bridgeAmount;
+
+            if (token == bridgeTokenAddr) {
+                bridgeAmount = amount;
+            } else {
+                bridgeAmount = _executeSwap(token, bridgeTokenAddr, amount);
+                if (bridgeAmount == 0) revert JBSwapCCIPSucker_SwapFailed();
+            }
+
+            message.amount = bridgeAmount;
+
+            tokenAmounts = new Client.EVMTokenAmount[](1);
+            tokenAmounts[0] = Client.EVMTokenAmount({token: bridgeTokenAddr, amount: bridgeAmount});
+            BRIDGE_TOKEN.forceApprove({spender: address(CCIP_ROUTER), value: bridgeAmount});
+            encodedPayload = abi.encode(_CCIP_MSG_TYPE_PAY, abi.encode(message));
         }
 
-        // Update the message amount to bridge denomination so the remote side knows what it received.
-        message.amount = bridgeAmount;
-
-        // Build the CCIP message with bridge tokens.
-        uint256 gasLimit = MESSENGER_PAY_GAS_LIMIT + remoteToken.minGas;
-
-        Client.EVMTokenAmount[] memory tokenAmounts = new Client.EVMTokenAmount[](1);
-        tokenAmounts[0] = Client.EVMTokenAmount({token: bridgeTokenAddr, amount: bridgeAmount});
-
-        // Approve the CCIP router to spend bridge tokens.
-        BRIDGE_TOKEN.forceApprove({spender: address(CCIP_ROUTER), value: bridgeAmount});
-
-        Client.EVM2AnyMessage memory ccipMessage = Client.EVM2AnyMessage({
-            receiver: abi.encode(_toAddress(peer())),
-            data: abi.encode(_CCIP_MSG_TYPE_PAY, abi.encode(message)),
+        (bool refundFailed, uint256 refundAmount) = JBCCIPLib.sendCCIPMessage({
+            ccipRouter: CCIP_ROUTER,
+            remoteChainSelector: REMOTE_CHAIN_SELECTOR,
+            peerAddress: _toAddress(peer()),
+            transportPayment: transportPayment,
+            gasLimit: gasLimit,
+            encodedPayload: encodedPayload,
             tokenAmounts: tokenAmounts,
-            extraArgs: Client._argsToBytes(Client.EVMExtraArgsV1({gasLimit: gasLimit})),
-            feeToken: address(0)
+            refundRecipient: _msgSender()
         });
 
-        uint256 fees = CCIP_ROUTER.getFee({destinationChainSelector: REMOTE_CHAIN_SELECTOR, message: ccipMessage});
-        if (fees > transportPayment) revert JBSucker_InsufficientMsgValue(transportPayment, fees);
-
-        // slither-disable-next-line unused-return
-        CCIP_ROUTER.ccipSend{value: fees}({destinationChainSelector: REMOTE_CHAIN_SELECTOR, message: ccipMessage});
-
-        // Refund excess transport payment.
-        uint256 refundAmount = transportPayment - fees;
-        if (refundAmount != 0) {
-            (bool sent,) = _msgSender().call{value: refundAmount}("");
-            if (!sent) emit TransportPaymentRefundFailed(_msgSender(), refundAmount);
-        }
+        if (refundFailed) emit TransportPaymentRefundFailed(_msgSender(), refundAmount);
     }
 
     /// @notice Override to scale claim amounts from source-chain denomination to local-chain denomination.
@@ -551,8 +432,8 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
     /// correct nonce (and thus the correct rate) for the claim. This prevents out-of-order CCIP
     /// delivery from applying the wrong batch's rate to a claim.
     function _addToBalance(address token, uint256 amount, uint256 cachedProjectId) internal override {
-        if (_currentClaimLeafIndex != type(uint256).max) {
-            uint64 nonce = _findNonceForLeafIndex(token, _currentClaimLeafIndex);
+        if (_currentClaimLeafIndex != 0) {
+            uint64 nonce = _findNonceForLeafIndex(token, _currentClaimLeafIndex - 1);
             if (nonce != 0) {
                 ConversionRate storage rate = _conversionRateOf[token][nonce];
                 if (rate.leafTotal > 0) {
@@ -565,27 +446,32 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
     }
 
     /// @notice Find the nonce whose batch contains the given leaf index.
-    /// @dev Iterates nonces 1..max using cumulative counts as range boundaries.
-    /// If a gap is detected (nonce not yet received), reverts if the leaf might be in that range.
+    /// @dev Uses a per-token cache for O(1) lookups when claims are batched from the same nonce.
+    /// Falls back to a reverse scan (most-recent-first) so recent claims resolve quickly.
     /// @param token The local token address.
     /// @param leafIndex The leaf index from the claim.
     /// @return The nonce of the batch containing this leaf, or 0 if no conversion rates exist.
-    function _findNonceForLeafIndex(address token, uint256 leafIndex) internal view returns (uint64) {
+    function _findNonceForLeafIndex(address token, uint256 leafIndex) internal returns (uint64) {
         uint64 maxNonce = _highestReceivedNonce[token];
         if (maxNonce == 0) return 0;
 
-        uint256 prevCumCount;
-        for (uint64 n = 1; n <= maxNonce; n++) {
-            uint256 cumCount = _cumulativeCountOf[token][n];
-            if (cumCount == 0) {
-                // Gap: this nonce hasn't been received yet. If the leaf could be in this range, revert.
-                if (leafIndex >= prevCumCount) revert JBSwapCCIPSucker_BatchNotReceived(n);
-                continue;
-            }
-            if (leafIndex >= prevCumCount && leafIndex < cumCount) return n;
-            prevCumCount = cumCount;
+        // Fast path: check cached nonce (O(1) for batched claims from the same nonce).
+        uint64 hint = _cachedNonce[token];
+        if (hint != 0) {
+            uint256 end = _batchEndOf[token][hint];
+            if (end != 0 && leafIndex >= _batchStartOf[token][hint] && leafIndex < end) return hint;
         }
-        // Leaf index beyond all known batches — the batch hasn't arrived yet.
+
+        // Slow path: scan from most recent nonce backwards (recent claims found quickly).
+        for (uint64 n = maxNonce; n >= 1; n--) {
+            uint256 end = _batchEndOf[token][n];
+            if (end == 0) continue; // Not received yet — skip.
+            if (leafIndex >= _batchStartOf[token][n] && leafIndex < end) {
+                _cachedNonce[token] = n;
+                return n;
+            }
+        }
+        // Leaf index not found in any received batch.
         revert JBSwapCCIPSucker_BatchNotReceived(0);
     }
 
@@ -597,505 +483,24 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
     //*********************************************************************//
 
     /// @notice Execute a swap between two tokens using the best available V3 or V4 pool.
+    /// @dev Delegates pool discovery, quoting, and swap execution to JBSwapPoolLib (via DELEGATECALL).
+    /// Swap callbacks (`uniswapV3SwapCallback`, `unlockCallback`) remain on this contract.
     /// @param tokenIn The input token (raw address, e.g., NATIVE_TOKEN sentinel for ETH).
     /// @param tokenOut The output token (raw address).
     /// @param amount The amount of input tokens to swap.
     /// @return amountOut The amount of output tokens received.
     function _executeSwap(address tokenIn, address tokenOut, uint256 amount) internal returns (uint256 amountOut) {
-        address normalizedIn = _normalize(tokenIn);
-        address normalizedOut = _normalize(tokenOut);
-
-        // Guard: no swap needed if tokens are the same after normalization (e.g., NATIVE_TOKEN and WETH).
-        if (normalizedIn == normalizedOut) return amount;
-
-        // Discover the most liquid pool across V3 and V4.
-        (bool isV4, IUniswapV3Pool v3Pool, PoolKey memory v4Key) = _discoverPool(normalizedIn, normalizedOut);
-
-        if (!isV4 && address(v3Pool) == address(0)) revert JBSwapCCIPSucker_NoPool();
-
-        if (isV4) {
-            // V4 path: quote via hook TWAP or spot, then swap via PoolManager.unlock().
-            uint256 minOut = _getV4Quote(v4Key, normalizedIn, normalizedOut, amount);
-            amountOut = _executeV4Swap(v4Key, normalizedIn, amount, minOut);
-        } else {
-            // V3 path: quote via TWAP oracle, then swap via pool.swap().
-            uint256 minOut = _getV3TwapQuote(v3Pool, normalizedIn, normalizedOut, amount);
-            amountOut = _executeV3Swap(v3Pool, normalizedIn, normalizedOut, amount, minOut, tokenIn);
-            // V3 outputs WETH for native pairs — unwrap to raw ETH.
-            if (tokenOut == JBConstants.NATIVE_TOKEN) {
-                WETH.withdraw(amountOut);
-            }
-        }
-    }
-
-    /// @notice Find the highest liquidity pool across all V3 fee tiers and V4 pool configurations.
-    /// @param normalizedTokenIn The input token (wrapped if native, i.e., WETH not NATIVE_TOKEN).
-    /// @param normalizedTokenOut The output token (wrapped if native).
-    /// @return isV4 Whether the best pool is on V4.
-    /// @return v3Pool The V3 pool reference (valid when isV4 is false).
-    /// @return v4Key The V4 pool key (valid when isV4 is true).
-    function _discoverPool(
-        address normalizedTokenIn,
-        address normalizedTokenOut
-    )
-        internal
-        view
-        returns (bool isV4, IUniswapV3Pool v3Pool, PoolKey memory v4Key)
-    {
-        // Search V3 pools (4 fee tiers).
-        uint128 bestLiquidity;
-        (v3Pool, bestLiquidity) = _discoverV3Pool(normalizedTokenIn, normalizedTokenOut);
-
-        // Search V4 pools (4 fee tiers x 2 hook configs).
-        if (address(POOL_MANAGER) != address(0)) {
-            (PoolKey memory v4Candidate, uint128 v4Liquidity) = _discoverV4Pool(normalizedTokenIn, normalizedTokenOut);
-            if (v4Liquidity > bestLiquidity) {
-                // Prefer V4 over V3 only when V4 has a hook (potential TWAP) or V3 has no liquidity.
-                // V3 pools always have TWAP oracles, whereas hookless V4 pools only offer spot ticks,
-                // making them vulnerable to sandwich attacks.
-                if (address(v4Candidate.hooks) != address(0) || bestLiquidity == 0) {
-                    isV4 = true;
-                    v3Pool = IUniswapV3Pool(address(0));
-                    v4Key = v4Candidate;
-                }
-            }
-        }
-    }
-
-    /// @notice Search V3 pools across 4 fee tiers for the highest liquidity.
-    function _discoverV3Pool(
-        address normalizedTokenIn,
-        address normalizedTokenOut
-    )
-        internal
-        view
-        returns (IUniswapV3Pool bestPool, uint128 bestLiquidity)
-    {
-        if (address(V3_FACTORY) == address(0)) return (bestPool, bestLiquidity);
-
-        for (uint256 i; i < 4;) {
-            // slither-disable-next-line calls-loop
-            address poolAddr =
-                V3_FACTORY.getPool({tokenA: normalizedTokenIn, tokenB: normalizedTokenOut, fee: _feeTier(i)});
-
-            if (poolAddr != address(0)) {
-                // slither-disable-next-line calls-loop
-                uint128 poolLiquidity = IUniswapV3Pool(poolAddr).liquidity();
-                if (poolLiquidity > bestLiquidity) {
-                    bestLiquidity = poolLiquidity;
-                    bestPool = IUniswapV3Pool(poolAddr);
-                }
-            }
-
-            unchecked {
-                ++i;
-            }
-        }
-    }
-
-    /// @notice Search V4 pools across 4 fee tiers and 2 hook configs for the highest liquidity.
-    function _discoverV4Pool(
-        address normalizedTokenIn,
-        address normalizedTokenOut
-    )
-        internal
-        view
-        returns (PoolKey memory bestKey, uint128 bestLiquidity)
-    {
-        // Convert to V4 convention: WETH -> address(0) for native ETH.
-        address sorted0;
-        address sorted1;
-        {
-            address v4In = normalizedTokenIn == address(WETH) ? address(0) : normalizedTokenIn;
-            address v4Out = normalizedTokenOut == address(WETH) ? address(0) : normalizedTokenOut;
-            (sorted0, sorted1) = v4In < v4Out ? (v4In, v4Out) : (v4Out, v4In);
-        }
-
-        for (uint256 i; i < 4;) {
-            for (uint256 j; j < 2;) {
-                // Probe vanilla pools first (j=0), then the configured hook (j=1).
-                IHooks hooks = j == 0 ? IHooks(address(0)) : IHooks(UNIV4_HOOK);
-                if (j != 0 && address(hooks) == address(0)) {
-                    unchecked {
-                        ++j;
-                    }
-                    continue;
-                }
-
-                PoolKey memory key;
-                {
-                    (uint24 fee, int24 tickSpacing) = _v4FeeAndTickSpacing(i);
-                    key = PoolKey({
-                        currency0: Currency.wrap(sorted0),
-                        currency1: Currency.wrap(sorted1),
-                        fee: fee,
-                        tickSpacing: tickSpacing,
-                        hooks: hooks
-                    });
-                }
-
-                {
-                    PoolId id = key.toId();
-
-                    // Check if pool is initialized (sqrtPriceX96 != 0).
-                    // slither-disable-next-line unused-return,calls-loop
-                    (uint160 sqrtPriceX96,,,) = POOL_MANAGER.getSlot0(id);
-                    // slither-disable-next-line incorrect-equality
-                    if (sqrtPriceX96 == 0) {
-                        unchecked {
-                            ++j;
-                        }
-                        continue;
-                    }
-
-                    // slither-disable-next-line calls-loop
-                    uint128 poolLiquidity = POOL_MANAGER.getLiquidity(id);
-                    if (poolLiquidity > bestLiquidity) {
-                        bestLiquidity = poolLiquidity;
-                        bestKey = key;
-                    }
-                }
-
-                unchecked {
-                    ++j;
-                }
-            }
-
-            unchecked {
-                ++i;
-            }
-        }
-    }
-
-    //*********************************************************************//
-    // -------------------- internal V3 execution ----------------------- //
-    //*********************************************************************//
-
-    /// @notice Execute a swap through a V3 pool.
-    /// @param pool The V3 pool to swap through.
-    /// @param normalizedTokenIn The normalized token being sold (WETH not NATIVE_TOKEN).
-    /// @param normalizedTokenOut The normalized token being bought.
-    /// @param amount The exact input amount to swap.
-    /// @param minAmountOut The minimum acceptable output after slippage protection.
-    /// @param originalTokenIn The pre-normalization token address (for WETH wrapping in callback).
-    /// @return amountOut The amount of output tokens received.
-    function _executeV3Swap(
-        IUniswapV3Pool pool,
-        address normalizedTokenIn,
-        address normalizedTokenOut,
-        uint256 amount,
-        uint256 minAmountOut,
-        address originalTokenIn
-    )
-        internal
-        returns (uint256 amountOut)
-    {
-        // Determine swap direction using Uniswap's canonical token ordering.
-        bool zeroForOne = normalizedTokenIn < normalizedTokenOut;
-
-        // Execute the V3 swap. The callback settles the input token.
-        (int256 amount0, int256 amount1) = pool.swap({
-            recipient: address(this),
-            zeroForOne: zeroForOne,
-            amountSpecified: int256(amount),
-            sqrtPriceLimitX96: JBSwapLib.sqrtPriceLimitFromAmounts({
-                amountIn: amount, minimumAmountOut: minAmountOut, zeroForOne: zeroForOne
+        return JBSwapPoolLib.executeSwap({
+            config: JBSwapPoolLib.SwapConfig({
+                v3Factory: V3_FACTORY,
+                poolManager: POOL_MANAGER,
+                univ4Hook: UNIV4_HOOK,
+                weth: address(WETH)
             }),
-            data: abi.encode(originalTokenIn, normalizedTokenIn, normalizedTokenOut)
-        });
-
-        // The output side is negative (pool sent tokens out), so negate to get positive amount.
-        amountOut = uint256(-(zeroForOne ? amount1 : amount0));
-        if (amountOut < minAmountOut) revert JBSwapCCIPSucker_SlippageExceeded(amountOut, minAmountOut);
-    }
-
-    //*********************************************************************//
-    // -------------------- internal V4 execution ----------------------- //
-    //*********************************************************************//
-
-    /// @notice Execute a swap through a V4 pool via `PoolManager.unlock()`.
-    /// @param key The V4 pool key describing the pool to swap through.
-    /// @param normalizedTokenIn The normalized token being swapped in (WETH not NATIVE_TOKEN).
-    /// @param amount The amount of input tokens to swap.
-    /// @param minAmountOut The minimum acceptable amount out for the swap.
-    /// @return amountOut The amount produced by the V4 swap.
-    function _executeV4Swap(
-        PoolKey memory key,
-        address normalizedTokenIn,
-        uint256 amount,
-        uint256 minAmountOut
-    )
-        internal
-        returns (uint256 amountOut)
-    {
-        // Convert WETH to V4's native ETH (address(0)) for direction comparison.
-        address v4In = normalizedTokenIn == address(WETH) ? address(0) : normalizedTokenIn;
-        bool zeroForOne = Currency.unwrap(key.currency0) == v4In;
-
-        uint160 sqrtPriceLimitX96 = JBSwapLib.sqrtPriceLimitFromAmounts({
-            amountIn: amount, minimumAmountOut: minAmountOut, zeroForOne: zeroForOne
-        });
-
-        // V4: negative amountSpecified = exact input.
-        int256 exactInputAmount = -int256(amount);
-
-        bytes memory result =
-            POOL_MANAGER.unlock(abi.encode(key, zeroForOne, exactInputAmount, sqrtPriceLimitX96, minAmountOut));
-
-        amountOut = abi.decode(result, (uint256));
-    }
-
-    //*********************************************************************//
-    // --------------------- internal quoting --------------------------- //
-    //*********************************************************************//
-
-    /// @notice Get a TWAP-based quote with dynamic slippage for a V3 pool.
-    /// @param pool The V3 pool being quoted.
-    /// @param normalizedTokenIn The normalized input token.
-    /// @param normalizedTokenOut The normalized output token.
-    /// @param amount The amount of input tokens being quoted.
-    /// @return minAmountOut The minimum amount out implied by the TWAP and sigmoid slippage model.
-    function _getV3TwapQuote(
-        IUniswapV3Pool pool,
-        address normalizedTokenIn,
-        address normalizedTokenOut,
-        uint256 amount
-    )
-        internal
-        view
-        returns (uint256 minAmountOut)
-    {
-        // Convert V3 fee tier into basis points for the slippage helper.
-        uint256 feeBps = uint256(pool.fee()) / 100;
-
-        // Read how much oracle history the pool has.
-        uint32 oldestObservation = OracleLibrary.getOldestObservationSecondsAgo(address(pool));
-        if (oldestObservation == 0) revert JBSwapCCIPSucker_InsufficientTwapHistory();
-
-        // Clamp the TWAP window to available history.
-        uint256 twapWindow = _DEFAULT_TWAP_WINDOW;
-        if (oldestObservation < twapWindow) twapWindow = oldestObservation;
-        if (twapWindow < _MIN_TWAP_WINDOW) revert JBSwapCCIPSucker_InsufficientTwapHistory();
-
-        // Query the V3 oracle for arithmetic-mean tick and in-range liquidity.
-        (int24 arithmeticMeanTick, uint128 liquidity) =
-            OracleLibrary.consult({pool: address(pool), secondsAgo: uint32(twapWindow)});
-
-        if (liquidity == 0) revert JBSwapCCIPSucker_NoLiquidity();
-
-        minAmountOut = _quoteWithSlippage({
-            amount: amount,
-            liquidity: liquidity,
-            tokenIn: normalizedTokenIn,
-            tokenOut: normalizedTokenOut,
-            tick: arithmeticMeanTick,
-            poolFeeBps: feeBps
-        });
-    }
-
-    /// @notice Get a V4 quote with dynamic slippage. Prefers hook TWAP, falls back to spot tick.
-    /// @param key The V4 pool key.
-    /// @param normalizedTokenIn The normalized input token.
-    /// @param normalizedTokenOut The normalized output token.
-    /// @param amount The amount of input tokens being quoted.
-    /// @return minAmountOut The minimum amount out after the sigmoid slippage model.
-    function _getV4Quote(
-        PoolKey memory key,
-        address normalizedTokenIn,
-        address normalizedTokenOut,
-        uint256 amount
-    )
-        internal
-        view
-        returns (uint256 minAmountOut)
-    {
-        // Extract fee early to free the key pointer from the stack before the final call.
-        uint256 feeBps = uint256(key.fee) / 100;
-        int24 tick;
-        uint128 liquidity;
-
-        // Scope: pool state reads and TWAP attempt.
-        {
-            PoolId id = key.toId();
-            bool usedTwap;
-
-            // Try hook-provided TWAP if the pool has a hook.
-            if (address(key.hooks) != address(0)) {
-                uint32[] memory secondsAgos = new uint32[](2);
-                secondsAgos[0] = _V4_TWAP_WINDOW;
-                secondsAgos[1] = 0;
-
-                // slither-disable-next-line unused-return
-                try IGeomeanOracle(address(key.hooks)).observe(key, secondsAgos) returns (
-                    int56[] memory tickCumulatives, uint160[] memory
-                ) {
-                    tick = int24((tickCumulatives[1] - tickCumulatives[0]) / int56(int32(_V4_TWAP_WINDOW)));
-                    usedTwap = true;
-                } catch {}
-            }
-
-            // Fall back to the instantaneous spot tick.
-            if (!usedTwap) {
-                // slither-disable-next-line unused-return
-                (, tick,,) = POOL_MANAGER.getSlot0(id);
-            }
-
-            liquidity = POOL_MANAGER.getLiquidity(id);
-        }
-
-        if (liquidity == 0) revert JBSwapCCIPSucker_NoLiquidity();
-
-        // V4 uses address(0) for native ETH — adjust for OracleLibrary token sorting.
-        address quotingIn = normalizedTokenIn == address(WETH) ? address(0) : normalizedTokenIn;
-        address quotingOut = normalizedTokenOut == address(WETH) ? address(0) : normalizedTokenOut;
-
-        minAmountOut = _quoteWithSlippage({
-            amount: amount,
-            liquidity: liquidity,
-            tokenIn: quotingIn,
-            tokenOut: quotingOut,
-            tick: tick,
-            poolFeeBps: feeBps
-        });
-    }
-
-    /// @notice Compute the minimum acceptable output using sigmoid slippage at the given tick.
-    /// @param amount The amount of input tokens being swapped.
-    /// @param liquidity The pool's in-range liquidity.
-    /// @param tokenIn The input token address (used for token sorting and quoting).
-    /// @param tokenOut The output token address.
-    /// @param tick The tick to quote at (TWAP mean tick or spot tick).
-    /// @param poolFeeBps The pool fee in basis points.
-    /// @return minAmountOut The quoted output amount after slippage.
-    function _quoteWithSlippage(
-        uint256 amount,
-        uint128 liquidity,
-        address tokenIn,
-        address tokenOut,
-        int24 tick,
-        uint256 poolFeeBps
-    )
-        internal
-        pure
-        returns (uint256 minAmountOut)
-    {
-        // Compute sigmoid slippage tolerance.
-        uint256 slippageTolerance = _getSlippageTolerance({
-            amountIn: amount,
-            liquidity: liquidity,
-            tokenOut: tokenOut,
             tokenIn: tokenIn,
-            arithmeticMeanTick: tick,
-            poolFeeBps: poolFeeBps
+            tokenOut: tokenOut,
+            amount: amount
         });
-
-        // Full slippage means no safe output.
-        if (slippageTolerance >= _SLIPPAGE_DENOMINATOR) return 0;
-
-        // OracleLibrary accepts only uint128 base amounts.
-        if (amount > type(uint128).max) revert JBSwapCCIPSucker_AmountOverflow(amount);
-
-        // Quote the gross output at the supplied tick.
-        minAmountOut = OracleLibrary.getQuoteAtTick({
-            tick: tick, baseAmount: uint128(amount), baseToken: tokenIn, quoteToken: tokenOut
-        });
-
-        // Discount by the computed slippage tolerance.
-        minAmountOut -= (minAmountOut * slippageTolerance) / _SLIPPAGE_DENOMINATOR;
     }
 
-    /// @notice Compute the sigmoid slippage tolerance for a given swap.
-    /// @param amountIn The amount of tokens being swapped in.
-    /// @param liquidity The pool's in-range liquidity.
-    /// @param tokenOut The output token address.
-    /// @param tokenIn The input token address.
-    /// @param arithmeticMeanTick The TWAP or spot tick.
-    /// @param poolFeeBps The pool fee in basis points.
-    /// @return The slippage tolerance in basis points.
-    function _getSlippageTolerance(
-        uint256 amountIn,
-        uint128 liquidity,
-        address tokenOut,
-        address tokenIn,
-        int24 arithmeticMeanTick,
-        uint256 poolFeeBps
-    )
-        internal
-        pure
-        returns (uint256)
-    {
-        // Determine token ordering for directional impact calculation.
-        (address token0,) = tokenOut < tokenIn ? (tokenOut, tokenIn) : (tokenIn, tokenOut);
-        bool zeroForOne = tokenIn == token0;
-
-        // Convert tick to sqrt price for impact calculation.
-        uint160 sqrtP = TickMath.getSqrtPriceAtTick(arithmeticMeanTick);
-        if (sqrtP == 0) return _SLIPPAGE_DENOMINATOR;
-
-        // Estimate price impact using JBSwapLib sigmoid model.
-        uint256 impact =
-            JBSwapLib.calculateImpact({amountIn: amountIn, liquidity: liquidity, sqrtP: sqrtP, zeroForOne: zeroForOne});
-
-        return JBSwapLib.getSlippageTolerance({impact: impact, poolFeeBps: poolFeeBps});
-    }
-
-    //*********************************************************************//
-    // --------------------- internal V4 helpers ------------------------ //
-    //*********************************************************************//
-
-    /// @notice Settle the input side of a V4 swap by transferring the owed asset to the PoolManager.
-    /// @param currency The V4 currency the contract owes to the PoolManager.
-    /// @param amount The amount to settle.
-    function _settleV4(Currency currency, uint256 amount) internal {
-        if (Currency.unwrap(currency) == address(0)) {
-            // Native ETH settlement.
-            // slither-disable-next-line unused-return
-            POOL_MANAGER.settle{value: amount}();
-        } else {
-            // ERC20 settlement: sync -> transfer -> settle.
-            POOL_MANAGER.sync(currency);
-            IERC20(Currency.unwrap(currency)).safeTransfer({to: address(POOL_MANAGER), value: amount});
-            // slither-disable-next-line unused-return
-            POOL_MANAGER.settle();
-        }
-    }
-
-    /// @notice Take the output side of a V4 swap by pulling the owed asset from the PoolManager.
-    /// @param currency The V4 currency the PoolManager owes to the contract.
-    /// @param amount The amount to take.
-    function _takeV4(Currency currency, uint256 amount) internal {
-        POOL_MANAGER.take({currency: currency, to: address(this), amount: amount});
-    }
-
-    //*********************************************************************//
-    // ----------------------- internal helpers ------------------------- //
-    //*********************************************************************//
-
-    /// @notice Normalize NATIVE_TOKEN to WETH address for Uniswap pool lookups.
-    /// @param token The raw token address (may be NATIVE_TOKEN sentinel).
-    /// @return The normalized address (WETH if native, otherwise unchanged).
-    function _normalize(address token) internal view returns (address) {
-        return token == JBConstants.NATIVE_TOKEN ? address(WETH) : token;
-    }
-
-    /// @notice Return the V3 fee tier at the given index (ordered by commonality).
-    /// @param index The tier index (0-3): 0.30%, 0.05%, 1.00%, 0.01%.
-    /// @return fee The fee value.
-    function _feeTier(uint256 index) internal pure returns (uint24 fee) {
-        if (index == 0) return 3000; // 0.30%
-        if (index == 1) return 500; // 0.05%
-        if (index == 2) return 10_000; // 1.00%
-        return 100; // 0.01%
-    }
-
-    /// @notice Return the V4 fee and tick spacing at the given index.
-    /// @param index The tier index (0-3).
-    /// @return fee The V4 fee value.
-    /// @return tickSpacing The V4 tick spacing value.
-    function _v4FeeAndTickSpacing(uint256 index) internal pure returns (uint24 fee, int24 tickSpacing) {
-        if (index == 0) return (3000, 60); // 0.30%
-        if (index == 1) return (500, 10); // 0.05%
-        if (index == 2) return (10_000, 200); // 1.00%
-        return (100, 1); // 0.01%
-    }
 }

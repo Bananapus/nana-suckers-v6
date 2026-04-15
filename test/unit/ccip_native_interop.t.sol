@@ -363,7 +363,7 @@ contract CCIPNativeInteropTest is Test {
             messageId: bytes32(uint256(1)),
             sourceChainSelector: REMOTE_CHAIN_SELECTOR,
             sender: abi.encode(address(ccipSucker)), // peer is address(this)
-            data: abi.encode(msgRoot),
+            data: abi.encode(uint8(0), abi.encode(msgRoot)),
             destTokenAmounts: tokenAmounts
         });
 
@@ -405,7 +405,7 @@ contract CCIPNativeInteropTest is Test {
             messageId: bytes32(uint256(2)),
             sourceChainSelector: REMOTE_CHAIN_SELECTOR,
             sender: abi.encode(address(ccipSucker)),
-            data: abi.encode(msgRoot),
+            data: abi.encode(uint8(0), abi.encode(msgRoot)),
             destTokenAmounts: tokenAmounts
         });
 
@@ -514,7 +514,7 @@ contract CCIPNativeInteropTest is Test {
             messageId: bytes32(uint256(3)),
             sourceChainSelector: REMOTE_CHAIN_SELECTOR,
             sender: abi.encode(address(ccipSucker)),
-            data: abi.encode(msgRoot),
+            data: abi.encode(uint8(0), abi.encode(msgRoot)),
             destTokenAmounts: new Client.EVMTokenAmount[](0)
         });
 
@@ -559,7 +559,7 @@ contract CCIPNativeInteropTest is Test {
             messageId: bytes32(uint256(4)),
             sourceChainSelector: REMOTE_CHAIN_SELECTOR,
             sender: abi.encode(address(ccipSucker)),
-            data: abi.encode(msgRoot),
+            data: abi.encode(uint8(0), abi.encode(msgRoot)),
             destTokenAmounts: tokenAmounts
         });
 
@@ -662,7 +662,7 @@ contract CCIPNativeInteropTest is Test {
             messageId: bytes32(uint256(99)),
             sourceChainSelector: REMOTE_CHAIN_SELECTOR,
             sender: abi.encode(address(ccipSucker)),
-            data: abi.encode(recvMsg),
+            data: abi.encode(uint8(0), abi.encode(recvMsg)),
             destTokenAmounts: tokenAmounts
         });
 
