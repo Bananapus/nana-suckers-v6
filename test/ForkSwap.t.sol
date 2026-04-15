@@ -340,7 +340,7 @@ contract ForkSwapTest is Test {
             messageId: bytes32(uint256(1)),
             sourceChainSelector: TEMPO_CHAIN_SELECTOR,
             sender: abi.encode(address(sucker)), // peer() == address(this)
-            data: abi.encode(uint8(0), abi.encode(root)), // type 0 = ROOT
+            data: abi.encode(uint8(0), abi.encode(root, uint256(1))), // type 0 = ROOT, count = 1
             destTokenAmounts: destTokenAmounts
         });
 
@@ -394,7 +394,7 @@ contract ForkSwapTest is Test {
             messageId: bytes32(uint256(2)),
             sourceChainSelector: TEMPO_CHAIN_SELECTOR,
             sender: abi.encode(address(sucker)),
-            data: abi.encode(uint8(0), abi.encode(root)),
+            data: abi.encode(uint8(0), abi.encode(root, uint256(1))), // count = 1
             destTokenAmounts: destTokenAmounts
         });
 
