@@ -1693,24 +1693,24 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
 
         // Build the message and send over the bridge. Surplus and balance are denominated in _ETH_CURRENCY at
         // _ETH_DECIMALS.
-        _sendRootOverAMB({
-            transportPayment: transportPayment,
-            index: index,
-            token: token,
-            amount: amount,
-            remoteToken: remoteToken,
-            message: JBMessageRoot({
-                version: MESSAGE_VERSION,
-                token: remoteToken.addr,
-                amount: amount,
-                remoteRoot: JBInboxTreeRoot({nonce: nonce, root: root}),
-                sourceTotalSupply: localTotalSupply,
-                sourceCurrency: _ETH_CURRENCY,
-                sourceDecimals: _ETH_DECIMALS,
-                sourceSurplus: ethSurplus,
-                sourceBalance: ethBalance,
-                snapshotNonce: ++_snapshotNonce
-            })
-        });
+        _sendRootOverAMB(
+            transportPayment,
+            index,
+            token,
+            amount,
+            remoteToken,
+            JBMessageRoot(
+                MESSAGE_VERSION,
+                remoteToken.addr,
+                amount,
+                JBInboxTreeRoot(nonce, root),
+                localTotalSupply,
+                _ETH_CURRENCY,
+                _ETH_DECIMALS,
+                ethSurplus,
+                ethBalance,
+                ++_snapshotNonce
+            )
+        );
     }
 }

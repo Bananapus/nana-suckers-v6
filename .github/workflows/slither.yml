@@ -22,10 +22,6 @@ jobs:
         uses: foundry-rs/foundry-toolchain@v1
       - name: Run slither
         uses: crytic/slither-action@v0.4.0
-        # Known Slither IR generation crash on JBSwapCCIPSucker._buildSnapshotAndSend
-        # due to named-argument virtual dispatch through 3-level inheritance chain.
-        # Tracked upstream: crytic/slither#2600
-        continue-on-error: true
         with:
             slither-config: slither-ci.config.json
             fail-on: medium
