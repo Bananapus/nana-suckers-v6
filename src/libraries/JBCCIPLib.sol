@@ -111,7 +111,6 @@ library JBCCIPLib {
 
         // Refund excess transport payment to the recipient.
         if (refundAmount != 0) {
-            // slither-disable-next-line calls-loop,msg-value-loop,reentrancy-events
             // slither-disable-next-line arbitrary-send-eth,missing-zero-check
             (bool sent,) = refundRecipient.call{value: refundAmount}("");
 
