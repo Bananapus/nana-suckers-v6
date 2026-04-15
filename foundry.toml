@@ -1,7 +1,6 @@
 [profile.default]
 solc = '0.8.28'
 evm_version = 'cancun'
-via_ir = false
 optimizer_runs = 200
 libs = ["node_modules", "lib"]
 fs_permissions = [{ access = "read-write", path = "./"}]

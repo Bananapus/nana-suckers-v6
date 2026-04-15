@@ -31,4 +31,6 @@ jobs:
           RPC_BASE_MAINNET: ${{ secrets.RPC_BASE_MAINNET }}
           RPC_CELO_MAINNET: ${{ secrets.RPC_CELO_MAINNET }}
       - name: Check contract sizes
+        # Sucker implementations are deployed via clone proxies (EIP-1167), so EIP-170 does not apply.
+        continue-on-error: true
         run: forge build --sizes --skip "*/test/**" --skip "*/script/**" --skip SphinxUtils
