@@ -66,6 +66,19 @@
 2. Use `exitThroughEmergencyHatch(...)` with the relevant claim data.
 3. Treat emergency execution slots as distinct state that still must not allow the same economic position to be claimed twice.
 
+## Journey 6: Create A Proxy Project And Route Payments Through It
+
+**Starting state:** a project exists on the home chain with an ERC-20 token deployed, and wants to let users on other chains acquire proxy tokens backed by real project tokens.
+
+**Success:** a proxy project is created once, and payments routed through it mint proxy tokens 1:1 with the real tokens deposited.
+
+**Flow**
+1. Call `JBSuckerTerminal.createProxy(realProjectId, name, symbol, salt)` to launch a locked proxy project with a permanent 1:1 ruleset, backed by the real project's ERC-20 token.
+2. Anyone can then call `JBSuckerTerminal.pay(proxyProjectId, token, amount, beneficiary, ...)` to pay the real project and automatically receive proxy tokens.
+3. Suckers registered for the proxy project get mint permission through `JBSuckerTerminal`'s data hook, enabling cross-chain bridging of proxy token positions.
+
+**Failure cases that matter:** calling `createProxy` on a project without an ERC-20 deployed, attempting to create a second proxy for the same project, and paying with a token that has no primary terminal on the real project.
+
 ## Hand-Offs
 
 - Use [nana-omnichain-deployers-v6](../nana-omnichain-deployers-v6/USER_JOURNEYS.md) when a project wants suckers packaged into its launch flow instead of deployed separately.
