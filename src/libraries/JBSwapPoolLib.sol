@@ -94,12 +94,15 @@ library JBSwapPoolLib {
     /// @param tokenIn The input token (raw address, may be NATIVE_TOKEN sentinel).
     /// @param tokenOut The output token (raw address).
     /// @param amount The amount of input tokens to swap.
+    /// @param minAmountOut Caller-provided minimum output. When non-zero, TWAP quoting is skipped and this value
+    /// is used directly as the slippage floor. When zero, the existing TWAP-based quoting logic applies.
     /// @return amountOut The amount of output tokens received.
     function executeSwap(
         SwapConfig memory config,
         address tokenIn,
         address tokenOut,
-        uint256 amount
+        uint256 amount,
+        uint256 minAmountOut
     )
         external
         returns (uint256 amountOut)
@@ -119,23 +122,46 @@ library JBSwapPoolLib {
         if (!isV4 && address(v3Pool) == address(0)) revert JBSwapPoolLib_NoPool();
 
         if (isV4) {
-            // Quote via V4 TWAP/spot and execute swap through PoolManager.
-            amountOut = _quoteAndSwapV4({
-                config: config,
-                key: v4Key,
-                normalizedTokenIn: normalizedIn,
-                normalizedTokenOut: normalizedOut,
-                amount: amount
-            });
+            if (minAmountOut > 0) {
+                // Caller-provided quote — skip TWAP, execute directly.
+                amountOut = _executeV4Swap({
+                    config: config,
+                    key: v4Key,
+                    normalizedTokenIn: normalizedIn,
+                    amount: amount,
+                    minAmountOut: minAmountOut
+                });
+            } else {
+                // Quote via V4 TWAP/spot and execute swap through PoolManager.
+                amountOut = _quoteAndSwapV4({
+                    config: config,
+                    key: v4Key,
+                    normalizedTokenIn: normalizedIn,
+                    normalizedTokenOut: normalizedOut,
+                    amount: amount
+                });
+            }
         } else {
-            // Quote via V3 TWAP and execute swap through the V3 pool.
-            amountOut = _quoteAndSwapV3({
-                pool: v3Pool,
-                normalizedTokenIn: normalizedIn,
-                normalizedTokenOut: normalizedOut,
-                amount: amount,
-                originalTokenIn: tokenIn
-            });
+            if (minAmountOut > 0) {
+                // Caller-provided quote — skip TWAP, execute directly.
+                amountOut = _executeV3Swap({
+                    pool: v3Pool,
+                    normalizedTokenIn: normalizedIn,
+                    normalizedTokenOut: normalizedOut,
+                    amount: amount,
+                    minAmountOut: minAmountOut,
+                    originalTokenIn: tokenIn
+                });
+            } else {
+                // Quote via V3 TWAP and execute swap through the V3 pool.
+                amountOut = _quoteAndSwapV3({
+                    pool: v3Pool,
+                    normalizedTokenIn: normalizedIn,
+                    normalizedTokenOut: normalizedOut,
+                    amount: amount,
+                    originalTokenIn: tokenIn
+                });
+            }
             // V3 outputs WETH for native pairs — unwrap to raw ETH.
             if (tokenOut == JBConstants.NATIVE_TOKEN) {
                 IWrappedNativeToken(config.weth).withdraw(amountOut);

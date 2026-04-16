@@ -5,6 +5,7 @@ pragma solidity 0.8.28;
 import {IJBDirectory} from "@bananapus/core-v6/src/interfaces/IJBDirectory.sol";
 import {IJBPermissions} from "@bananapus/core-v6/src/interfaces/IJBPermissions.sol";
 import {IJBTokens} from "@bananapus/core-v6/src/interfaces/IJBTokens.sol";
+import {JBMetadataResolver} from "@bananapus/core-v6/src/libraries/JBMetadataResolver.sol";
 
 // CCIP imports.
 import {Client} from "@chainlink/contracts-ccip/src/v0.8/ccip/libraries/Client.sol";
@@ -69,13 +70,15 @@ import {JBRemoteToken} from "./structs/JBRemoteToken.sol";
 /// TWAP oracle consultation, and slippage computation. Insufficient gas causes the CCIP message to
 /// fail on delivery, requiring manual re-execution via CCIP's ManualExecution mechanism.
 ///
-/// **Liveness risk**: If a swap reverts during `ccipReceive` (due to insufficient liquidity, stale
-/// TWAP observations, or extreme price impact exceeding the sigmoid slippage tolerance), the bridged
-/// tokens remain in the CCIP OffRamp contract. They are NOT permanently lost — CCIP supports manual
-/// re-execution with adjusted gas limits once swap conditions improve. However, the tokens are
-/// inaccessible until the message is successfully re-executed. This is a liveness concern, not a
-/// fund-loss risk. Operators should monitor for failed CCIP messages and trigger re-execution when
-/// liquidity or price conditions normalize.
+/// **Inbound swap resilience**: If a swap reverts during `ccipReceive` (due to insufficient
+/// liquidity, stale TWAP observations, or extreme price impact), the CCIP message still succeeds.
+/// The unswapped bridge tokens are stored in a `PendingSwap` and the merkle root is recorded
+/// normally. Claims for the affected batch are gated until `retrySwap` is called successfully.
+/// Anyone can call `retrySwap` once swap conditions improve.
+///
+/// **Outbound quote override**: Callers of `toRemote` can pass a `quoteForSwap` entry in the
+/// `metadata` parameter (via `JBMetadataResolver`) to bypass TWAP quoting for the outbound swap,
+/// matching the router terminal's convention.
 contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallback {
     using SafeERC20 for IERC20;
 
@@ -86,7 +89,21 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
     error JBSwapCCIPSucker_BatchNotReceived(uint64 nonce);
     error JBSwapCCIPSucker_CallerNotPoolManager(address caller);
     error JBSwapCCIPSucker_InvalidBridgeToken();
+    error JBSwapCCIPSucker_NoPendingSwap();
+    error JBSwapCCIPSucker_OnlySelf();
     error JBSwapCCIPSucker_SwapFailed();
+    error JBSwapCCIPSucker_SwapPending(uint64 nonce);
+
+    //*********************************************************************//
+    // ------------------------------ events ----------------------------- //
+    //*********************************************************************//
+
+    /// @notice Emitted when a previously failed inbound swap is successfully retried.
+    /// @param localToken The local token that the bridge tokens were swapped into.
+    /// @param nonce The nonce of the batch whose swap was retried.
+    /// @param bridgeAmount The amount of bridge tokens that were swapped.
+    /// @param localAmount The amount of local tokens received from the retry swap.
+    event SwapRetried(address indexed localToken, uint64 indexed nonce, uint256 bridgeAmount, uint256 localAmount);
 
     //*********************************************************************//
     // --------------- public immutable stored properties ---------------- //
@@ -108,8 +125,31 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
     IWrappedNativeToken public immutable WETH;
 
     //*********************************************************************//
+    // --------------- internal immutable stored properties --------------- //
+    //*********************************************************************//
+
+    /// @notice Pre-computed metadata ID for "quoteForSwap". Matches the router terminal convention.
+    bytes4 internal immutable _QUOTE_FOR_SWAP_ID;
+
+    //*********************************************************************//
     // ------------------- internal stored properties -------------------- //
     //*********************************************************************//
+
+    /// @notice Bridge tokens from a failed inbound swap, stored for later retry via `retrySwap`.
+    /// @custom:member bridgeToken The bridge token received from CCIP.
+    /// @custom:member bridgeAmount Amount of bridge tokens to swap.
+    /// @custom:member leafTotal Original leaf-denomination total (for conversion rate).
+    struct PendingSwap {
+        address bridgeToken;
+        uint256 bridgeAmount;
+        uint256 leafTotal;
+    }
+
+    /// @notice Pending (failed) inbound swaps, keyed by local token and batch nonce.
+    /// @dev Populated when `ccipReceive` swap fails; cleared when `retrySwap` succeeds.
+    /// @custom:param localToken The local token the swap targets.
+    /// @custom:param nonce The CCIP nonce identifying the batch.
+    mapping(address localToken => mapping(uint64 nonce => PendingSwap)) public pendingSwapOf;
 
     /// @notice Immutable conversion rate for one received root batch, keyed by nonce.
     /// @dev Each batch stores its total leaf and local amounts. Individual claims compute their
@@ -190,6 +230,8 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
         UNIV4_HOOK = swapDeployer.univ4Hook();
         WETH = IWrappedNativeToken(swapDeployer.weth());
 
+        _QUOTE_FOR_SWAP_ID = JBMetadataResolver.getId("quoteForSwap");
+
         if (address(BRIDGE_TOKEN) == address(0)) revert JBSwapCCIPSucker_InvalidBridgeToken();
         // BRIDGE_TOKEN must not be WETH — native/WETH wrapping and CCIP ERC-20 bridging conflict.
         if (address(BRIDGE_TOKEN) == address(WETH) && address(WETH) != address(0)) {
@@ -245,9 +287,24 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
                     localAmount = tokenAmount.amount;
                 } else {
                     // Swap bridge token -> local token via best V3/V4 pool.
+                    // Wrapped in try-catch so a swap failure doesn't revert the entire CCIP message
+                    // (which would leave tokens stuck in the OffRamp). On failure, bridge tokens are
+                    // stored for later retry via `retrySwap`.
                     // slither-disable-next-line reentrancy-benign,reentrancy-events
-                    localAmount =
-                        _executeSwap({tokenIn: tokenAmount.token, tokenOut: localToken, amount: tokenAmount.amount});
+                    try this.executeSwapExternal({
+                        tokenIn: tokenAmount.token, tokenOut: localToken, amount: tokenAmount.amount
+                    }) returns (
+                        uint256 swapped
+                    ) {
+                        localAmount = swapped;
+                    } catch {
+                        // Store for later retry. Merkle root and batch range still get stored below.
+                        pendingSwapOf[localToken][root.remoteRoot.nonce] = PendingSwap({
+                            bridgeToken: tokenAmount.token, bridgeAmount: tokenAmount.amount, leafTotal: root.amount
+                        });
+                        // localAmount stays 0 — the conversion rate code below will set
+                        // localTotal: 0, gating claims until retrySwap succeeds.
+                    }
                 }
             }
 
@@ -294,6 +351,44 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
         return JBSwapPoolLib.executeV4UnlockCallback({poolManager: POOL_MANAGER, data: data});
     }
 
+    /// @notice External swap entry point callable ONLY by this contract. Exists so `ccipReceive` can
+    /// wrap the swap in a try-catch (Solidity requires an external call target for try-catch).
+    /// @param tokenIn The input token address.
+    /// @param tokenOut The output token address.
+    /// @param amount The amount of input tokens to swap.
+    /// @return amountOut The amount of output tokens received.
+    function executeSwapExternal(
+        address tokenIn,
+        address tokenOut,
+        uint256 amount
+    )
+        external
+        returns (uint256 amountOut)
+    {
+        if (msg.sender != address(this)) revert JBSwapCCIPSucker_OnlySelf();
+        return _executeSwap({tokenIn: tokenIn, tokenOut: tokenOut, amount: amount});
+    }
+
+    /// @notice Retry a previously failed inbound swap. Anyone can call this once swap conditions improve.
+    /// @dev On success, updates the conversion rate so claims for this nonce's batch can proceed.
+    /// @param localToken The local token that the bridge tokens should be swapped into.
+    /// @param nonce The nonce of the batch whose swap failed.
+    /// @param minAmountOut Caller-provided minimum output (bypass TWAP). Pass 0 for TWAP quoting.
+    function retrySwap(address localToken, uint64 nonce, uint256 minAmountOut) external {
+        PendingSwap memory pending = pendingSwapOf[localToken][nonce];
+        if (pending.bridgeAmount == 0) revert JBSwapCCIPSucker_NoPendingSwap();
+
+        uint256 localAmount = _executeSwapWithQuote({
+            tokenIn: pending.bridgeToken, tokenOut: localToken, amount: pending.bridgeAmount, minAmountOut: minAmountOut
+        });
+
+        // Update the conversion rate so claims can proceed.
+        _conversionRateOf[localToken][nonce] = ConversionRate({leafTotal: pending.leafTotal, localTotal: localAmount});
+
+        delete pendingSwapOf[localToken][nonce];
+        emit SwapRetried(localToken, nonce, pending.bridgeAmount, localAmount);
+    }
+
     //*********************************************************************//
     // ----------------------- public transactions ----------------------- //
     //*********************************************************************//
@@ -330,6 +425,12 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
             if (nonce != 0) {
                 ConversionRate storage rate = _conversionRateOf[token][nonce];
                 if (rate.leafTotal > 0) {
+                    // Gate on pending swaps — if a swap failed and hasn't been retried yet,
+                    // claims must wait. Check pendingSwapOf rather than localTotal == 0 to
+                    // distinguish a pending swap from a legitimately zero-output swap.
+                    if (pendingSwapOf[token][nonce].bridgeAmount > 0) {
+                        revert JBSwapCCIPSucker_SwapPending(nonce);
+                    }
                     amount = amount * rate.localTotal / rate.leafTotal;
                 }
             }
@@ -379,6 +480,8 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
     /// @param amount The amount of local tokens to bridge.
     /// @param remoteToken The remote token configuration (including minGas).
     /// @param sucker_message The merkle root message to send to the remote chain.
+    /// @param metadata Caller-provided metadata. If it contains a `quoteForSwap` entry, the encoded
+    /// `uint256` is used as `minAmountOut` for the outbound swap, bypassing TWAP quoting.
     // forge-lint: disable-next-line(mixed-case-function)
     function _sendRootOverAMB(
         uint256 transportPayment,
@@ -387,7 +490,8 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
         uint256 amount,
         JBRemoteToken memory remoteToken,
         // forge-lint: disable-next-line(mixed-case-variable)
-        JBMessageRoot memory sucker_message
+        JBMessageRoot memory sucker_message,
+        bytes memory metadata
     )
         internal
         override
@@ -395,7 +499,6 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
         if (transportPayment == 0) revert JBSucker_ExpectedMsgValue();
 
         Client.EVMTokenAmount[] memory tokenAmounts;
-        uint256 gasLimit = MESSENGER_BASE_GAS_LIMIT + remoteToken.minGas;
         bytes memory encodedPayload;
 
         {
@@ -409,7 +512,12 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
                     bridgeAmount = amount;
                 } else {
                     // slither-disable-next-line reentrancy-events,reentrancy-benign
-                    bridgeAmount = _executeSwap({tokenIn: token, tokenOut: bridgeTokenAddr, amount: amount});
+                    bridgeAmount = _executeSwapWithQuote({
+                        tokenIn: token,
+                        tokenOut: bridgeTokenAddr,
+                        amount: amount,
+                        minAmountOut: _extractQuoteForSwap(metadata)
+                    });
                     if (bridgeAmount == 0) revert JBSwapCCIPSucker_SwapFailed();
                 }
 
@@ -427,39 +535,70 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
             encodedPayload = abi.encode(_CCIP_MSG_TYPE_ROOT, abi.encode(sucker_message, batchStart, batchEnd));
         }
 
-        (bool refundFailed, uint256 refundAmount) = JBCCIPLib.sendCCIPMessage({
-            ccipRouter: CCIP_ROUTER,
-            remoteChainSelector: REMOTE_CHAIN_SELECTOR,
-            peerAddress: _toAddress(peer()),
-            transportPayment: transportPayment,
-            gasLimit: gasLimit,
-            encodedPayload: encodedPayload,
-            tokenAmounts: tokenAmounts,
-            refundRecipient: _msgSender()
-        });
+        {
+            (bool refundFailed, uint256 refundAmount) = JBCCIPLib.sendCCIPMessage({
+                ccipRouter: CCIP_ROUTER,
+                remoteChainSelector: REMOTE_CHAIN_SELECTOR,
+                peerAddress: _toAddress(peer()),
+                transportPayment: transportPayment,
+                gasLimit: MESSENGER_BASE_GAS_LIMIT + remoteToken.minGas,
+                encodedPayload: encodedPayload,
+                tokenAmounts: tokenAmounts,
+                refundRecipient: _msgSender()
+            });
 
-        if (refundFailed) emit TransportPaymentRefundFailed(_msgSender(), refundAmount);
+            if (refundFailed) emit TransportPaymentRefundFailed(_msgSender(), refundAmount);
+        }
     }
 
     //*********************************************************************//
     // ----------------------- internal helpers -------------------------- //
     //*********************************************************************//
 
+    /// @notice Extract a `quoteForSwap` value from metadata, returning 0 if not present.
+    /// @param metadata Caller-provided bytes in `JBMetadataResolver` format.
+    /// @return minAmountOut The decoded minimum output, or 0 if no quote was provided.
+    function _extractQuoteForSwap(bytes memory metadata) internal view returns (uint256 minAmountOut) {
+        if (metadata.length == 0) return 0;
+        (bool exists, bytes memory quote) = JBMetadataResolver.getDataFor({id: _QUOTE_FOR_SWAP_ID, metadata: metadata});
+        if (exists && quote.length >= 32) minAmountOut = abi.decode(quote, (uint256));
+    }
+
     /// @notice Execute a swap between two tokens using the best available V3 or V4 pool.
-    /// @dev Delegates pool discovery, quoting, and swap execution to JBSwapPoolLib (via DELEGATECALL).
-    /// Swap callbacks (`uniswapV3SwapCallback`, `unlockCallback`) remain on this contract.
+    /// @dev Wrapper around `_executeSwapWithQuote` with `minAmountOut = 0` (TWAP quoting).
     /// @param tokenIn The input token (raw address, e.g., NATIVE_TOKEN sentinel for ETH).
     /// @param tokenOut The output token (raw address).
     /// @param amount The amount of input tokens to swap.
     /// @return amountOut The amount of output tokens received.
     function _executeSwap(address tokenIn, address tokenOut, uint256 amount) internal returns (uint256 amountOut) {
+        return _executeSwapWithQuote({tokenIn: tokenIn, tokenOut: tokenOut, amount: amount, minAmountOut: 0});
+    }
+
+    /// @notice Execute a swap with an optional caller-provided minimum output.
+    /// @dev Delegates pool discovery, quoting, and swap execution to JBSwapPoolLib (via DELEGATECALL).
+    /// Swap callbacks (`uniswapV3SwapCallback`, `unlockCallback`) remain on this contract.
+    /// @param tokenIn The input token (raw address, e.g., NATIVE_TOKEN sentinel for ETH).
+    /// @param tokenOut The output token (raw address).
+    /// @param amount The amount of input tokens to swap.
+    /// @param minAmountOut Caller-provided minimum output. When non-zero, TWAP quoting is skipped.
+    /// @return amountOut The amount of output tokens received.
+    function _executeSwapWithQuote(
+        address tokenIn,
+        address tokenOut,
+        uint256 amount,
+        uint256 minAmountOut
+    )
+        internal
+        returns (uint256 amountOut)
+    {
         return JBSwapPoolLib.executeSwap({
             config: JBSwapPoolLib.SwapConfig({
                 v3Factory: V3_FACTORY, poolManager: POOL_MANAGER, univ4Hook: UNIV4_HOOK, weth: address(WETH)
             }),
             tokenIn: tokenIn,
             tokenOut: tokenOut,
-            amount: amount
+            amount: amount,
+            minAmountOut: minAmountOut
         });
     }
 }

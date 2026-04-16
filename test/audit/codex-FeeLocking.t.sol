@@ -39,7 +39,7 @@ contract TerminalSink {
         address,
         uint256,
         string calldata,
-        bytes calldata
+        bytes memory
     )
         external
         payable
@@ -105,7 +105,8 @@ contract ZeroCostBridgeSuckerHarness is JBSucker {
         address,
         uint256,
         JBRemoteToken memory,
-        JBMessageRoot memory
+        JBMessageRoot memory,
+        bytes memory
     )
         internal
         pure
@@ -186,7 +187,7 @@ contract CCIPSuckerHarness is JBCCIPSucker {
 
 contract NonPayableCaller {
     function callToRemote(address sucker, address token) external payable {
-        JBSucker(payable(sucker)).toRemote{value: msg.value}(token);
+        JBSucker(payable(sucker)).toRemote{value: msg.value}(token, "");
     }
 }
 
@@ -260,7 +261,7 @@ contract CodexFeeLockingTest is Test {
         );
         sucker.test_insertIntoTree(1, ERC20_TOKEN, 0, bytes32(uint256(uint160(address(this)))));
 
-        sucker.toRemote{value: TO_REMOTE_FEE}(ERC20_TOKEN);
+        sucker.toRemote{value: TO_REMOTE_FEE}(ERC20_TOKEN, "");
         assertEq(address(sucker).balance, TO_REMOTE_FEE, "failed fee payment should stay in the sucker");
 
         vm.deal(address(sucker), address(sucker).balance + NATIVE_CLAIM_AMOUNT);

@@ -52,7 +52,8 @@ contract ZeroCostBridgeSucker is JBSucker {
         address,
         uint256,
         JBRemoteToken memory,
-        JBMessageRoot memory
+        JBMessageRoot memory,
+        bytes memory
     )
         internal
         override
@@ -178,7 +179,7 @@ contract FeeFallbackTest is Test {
 
         // Call toRemote with exactly the fee amount.
         // transportPayment should be msg.value - fee == 0.
-        sucker.toRemote{value: TO_REMOTE_FEE}(TOKEN);
+        sucker.toRemote{value: TO_REMOTE_FEE}(TOKEN, "");
 
         // Verify the bridge was called successfully.
         assertTrue(sucker.sendRootOverAMBCalled(), "Bridge call should succeed with transportPayment == 0");
@@ -214,7 +215,7 @@ contract FeeFallbackTest is Test {
         vm.mockCallRevert(feeTerminal, abi.encodeWithSelector(IJBTerminal.pay.selector), "fee payment failed");
 
         // Call toRemote with exactly the fee amount.
-        sucker.toRemote{value: TO_REMOTE_FEE}(TOKEN);
+        sucker.toRemote{value: TO_REMOTE_FEE}(TOKEN, "");
 
         // Verify the bridge was called successfully.
         assertTrue(sucker.sendRootOverAMBCalled(), "Bridge call should succeed even when fee terminal reverts");
@@ -254,6 +255,6 @@ contract FeeFallbackTest is Test {
         // zero-cost bridges should be called with exactly the fee amount.
         uint256 extraForBridge = 0.005 ether;
         vm.expectRevert(abi.encodeWithSelector(JBSucker.JBSucker_UnexpectedMsgValue.selector, extraForBridge));
-        sucker.toRemote{value: TO_REMOTE_FEE + extraForBridge}(TOKEN);
+        sucker.toRemote{value: TO_REMOTE_FEE + extraForBridge}(TOKEN, "");
     }
 }

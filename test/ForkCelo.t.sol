@@ -305,7 +305,7 @@ contract ForkCeloTest is TestBaseWorkflow {
 
         // Send to Celo — should wrap ETH → WETH and bridge as ERC-20.
         vm.prank(user);
-        suckerL1.toRemote(JBConstants.NATIVE_TOKEN);
+        suckerL1.toRemote(JBConstants.NATIVE_TOKEN, "");
 
         // Verify outbox cleared on L1.
         assertEq(suckerL1.outboxOf(JBConstants.NATIVE_TOKEN).balance, 0, "Outbox should be cleared");
@@ -366,7 +366,7 @@ contract ForkCeloTest is TestBaseWorkflow {
 
         // Send to L1 — bridges WETH as ERC-20 directly.
         vm.prank(user);
-        suckerL2.toRemote(CELO_WETH);
+        suckerL2.toRemote(CELO_WETH, "");
 
         // Verify outbox cleared.
         assertEq(suckerL2.outboxOf(CELO_WETH).balance, 0, "Outbox should be cleared");

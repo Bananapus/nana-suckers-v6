@@ -484,7 +484,7 @@ contract CCIPSuckerForkClaimTests is TestBaseWorkflow {
             vm.deal(rootSender, 1 ether);
 
             vm.prank(rootSender);
-            suckerL1.toRemote{value: 1 ether}(JBConstants.NATIVE_TOKEN);
+            suckerL1.toRemote{value: 1 ether}(JBConstants.NATIVE_TOKEN, "");
 
             // Verify outbox is cleared
             assertEq(

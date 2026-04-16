@@ -398,7 +398,7 @@ contract CCIPSuckerForkedTests is TestBaseWorkflow {
 
         // Initiates the bridging
         vm.prank(rootSender);
-        suckerGlobal.toRemote{value: 1 ether}(JBConstants.NATIVE_TOKEN);
+        suckerGlobal.toRemote{value: 1 ether}(JBConstants.NATIVE_TOKEN, "");
 
         // Check outbox is cleared
         uint256 outboxBalance = suckerGlobal.outboxOf(JBConstants.NATIVE_TOKEN).balance;
@@ -465,7 +465,7 @@ contract CCIPSuckerForkedTests is TestBaseWorkflow {
 
         // Initiates the bridging
         vm.prank(rootSender);
-        suckerGlobal.toRemote{value: 1 ether}(address(ccipBnM));
+        suckerGlobal.toRemote{value: 1 ether}(address(ccipBnM), "");
 
         // Fees are paid but balance isn't zero (excess msg.value is returned)
         assert(rootSender.balance < 1 ether);

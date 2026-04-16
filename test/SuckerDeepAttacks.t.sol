@@ -60,7 +60,8 @@ contract DeepAttackSucker is JBSucker {
         address,
         uint256 amount,
         JBRemoteToken memory,
-        JBMessageRoot memory
+        JBMessageRoot memory,
+        bytes memory
     )
         internal
         override
@@ -993,7 +994,7 @@ contract SuckerDeepAttacks is Test {
         );
 
         vm.expectRevert(abi.encodeWithSelector(JBSucker.JBSucker_TokenHasInvalidEmergencyHatchState.selector, TOKEN));
-        sucker.toRemote(TOKEN);
+        sucker.toRemote(TOKEN, "");
     }
 
     /// @notice toRemote with nothing to send (empty outbox, no new claims) → should revert.
@@ -1010,7 +1011,7 @@ contract SuckerDeepAttacks is Test {
 
         // Nothing in the outbox — balance is 0, count == numberOfClaimsSent == 0.
         vm.expectRevert(abi.encodeWithSelector(JBSucker.JBSucker_NothingToSend.selector));
-        sucker.toRemote(TOKEN);
+        sucker.toRemote(TOKEN, "");
     }
 
     /// @notice toRemote with insufficient msg.value for toRemoteFee → should revert.
@@ -1035,7 +1036,7 @@ contract SuckerDeepAttacks is Test {
         vm.expectRevert(
             abi.encodeWithSelector(JBSucker.JBSucker_InsufficientMsgValue.selector, 0.0005 ether, 0.001 ether)
         );
-        feeSucker.toRemote{value: 0.0005 ether}(TOKEN);
+        feeSucker.toRemote{value: 0.0005 ether}(TOKEN, "");
     }
 
     // ==================== Registry setToRemoteFee tests ====================
@@ -1151,7 +1152,7 @@ contract SuckerDeepAttacks is Test {
         assertEq(sucker.test_getOutboxBalance(TOKEN), 10 ether, "Outbox balance should be 10 ether");
 
         // Send root.
-        sucker.toRemote(TOKEN);
+        sucker.toRemote(TOKEN, "");
 
         // Balance should be cleared.
         assertEq(sucker.test_getOutboxBalance(TOKEN), 0, "Outbox balance should be 0 after sendRoot");
@@ -1178,7 +1179,7 @@ contract SuckerDeepAttacks is Test {
         // toRemote will revert, which means the entire tx reverts and balance is NOT cleared.
         // This is actually the correct behavior — the revert rolls back state.
         vm.expectRevert("AMB reverted");
-        sucker.toRemote(TOKEN);
+        sucker.toRemote(TOKEN, "");
 
         // Verify balance was NOT cleared (tx reverted).
         assertEq(sucker.test_getOutboxBalance(TOKEN), 10 ether, "Balance should remain if AMB reverts");
@@ -1313,7 +1314,7 @@ contract SuckerDeepAttacks is Test {
         assertEq(uint256(sucker.state()), uint256(JBSuckerState.DEPRECATED));
 
         vm.expectRevert(abi.encodeWithSelector(JBSucker.JBSucker_Deprecated.selector));
-        sucker.toRemote(TOKEN);
+        sucker.toRemote(TOKEN, "");
     }
 
     /// @notice toRemote when SENDING_DISABLED → _sendRoot should revert.
@@ -1327,7 +1328,7 @@ contract SuckerDeepAttacks is Test {
         assertEq(uint256(sucker.state()), uint256(JBSuckerState.SENDING_DISABLED));
 
         vm.expectRevert(abi.encodeWithSelector(JBSucker.JBSucker_Deprecated.selector));
-        sucker.toRemote(TOKEN);
+        sucker.toRemote(TOKEN, "");
     }
 
     // =========================================================================
@@ -1463,17 +1464,17 @@ contract SuckerDeepAttacks is Test {
 
         // Round 1.
         sucker.test_insertIntoTree(1 ether, TOKEN, 1 ether, bytes32(uint256(uint160(address(this)))));
-        sucker.toRemote(TOKEN);
+        sucker.toRemote(TOKEN, "");
         assertEq(sucker.test_getOutboxNonce(TOKEN), 1);
 
         // Round 2.
         sucker.test_insertIntoTree(2 ether, TOKEN, 2 ether, bytes32(uint256(uint160(address(this)))));
-        sucker.toRemote(TOKEN);
+        sucker.toRemote(TOKEN, "");
         assertEq(sucker.test_getOutboxNonce(TOKEN), 2);
 
         // Round 3.
         sucker.test_insertIntoTree(3 ether, TOKEN, 3 ether, bytes32(uint256(uint160(address(this)))));
-        sucker.toRemote(TOKEN);
+        sucker.toRemote(TOKEN, "");
         assertEq(sucker.test_getOutboxNonce(TOKEN), 3);
     }
 
@@ -1494,7 +1495,7 @@ contract SuckerDeepAttacks is Test {
         sucker.test_insertIntoTree(1 ether, TOKEN, 0, bytes32(uint256(uint160(address(this)))));
 
         // Balance is 0, but count (1) != numberOfClaimsSent (0) → passes nothing-to-send guard.
-        sucker.toRemote(TOKEN);
+        sucker.toRemote(TOKEN, "");
         assertEq(sucker.test_getOutboxNonce(TOKEN), 1);
     }
 

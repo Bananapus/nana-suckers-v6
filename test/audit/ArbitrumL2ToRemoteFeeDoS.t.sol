@@ -118,7 +118,7 @@ contract ArbitrumL2ToRemoteFeeDoSTest is Test {
     /// After the fix, transportPayment = msg.value - fee = 0, so _toL1 passes.
     function test_toRemoteSucceedsWhenMsgValueCoversFeeExactly() external {
         // msg.value = 1, fee = 1 → transportPayment = 0 → _toL1 accepts
-        sucker.toRemote{value: 1}(JBConstants.NATIVE_TOKEN);
+        sucker.toRemote{value: 1}(JBConstants.NATIVE_TOKEN, "");
     }
 
     /// @notice L2→L1 bridging reverts when msg.value exceeds the fee (excess transportPayment).
@@ -126,12 +126,12 @@ contract ArbitrumL2ToRemoteFeeDoSTest is Test {
     function test_toRemoteRevertsWhenExcessTransportPayment() external {
         // msg.value = 2, fee = 1 → transportPayment = 1 → _toL1 reverts
         vm.expectRevert(abi.encodeWithSelector(JBSucker.JBSucker_UnexpectedMsgValue.selector, 1));
-        sucker.toRemote{value: 2}(JBConstants.NATIVE_TOKEN);
+        sucker.toRemote{value: 2}(JBConstants.NATIVE_TOKEN, "");
     }
 
     /// @notice L2→L1 bridging reverts when msg.value is insufficient for the fee.
     function test_toRemoteRevertsWhenMsgValueBelowFee() external {
         vm.expectRevert(abi.encodeWithSelector(JBSucker.JBSucker_InsufficientMsgValue.selector, 0, 1));
-        sucker.toRemote{value: 0}(JBConstants.NATIVE_TOKEN);
+        sucker.toRemote{value: 0}(JBConstants.NATIVE_TOKEN, "");
     }
 }

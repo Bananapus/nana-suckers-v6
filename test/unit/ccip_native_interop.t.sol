@@ -96,7 +96,7 @@ contract CCIPTestSucker is JBCCIPSucker {
         external
         payable
     {
-        _sendRootOverAMB(transportPayment, 0, token, amount, remoteToken, message);
+        _sendRootOverAMB(transportPayment, 0, token, amount, remoteToken, message, "");
     }
 
     // forge-lint: disable-next-line(mixed-case-function)
@@ -150,7 +150,8 @@ contract BaseTestSucker is JBSucker {
         address,
         uint256,
         JBRemoteToken memory,
-        JBMessageRoot memory
+        JBMessageRoot memory,
+        bytes memory
     )
         internal
         override

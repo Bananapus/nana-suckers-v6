@@ -51,7 +51,8 @@ contract RegressionSucker is JBSucker {
         address,
         uint256,
         JBRemoteToken memory,
-        JBMessageRoot memory
+        JBMessageRoot memory,
+        bytes memory
     )
         internal
         override
@@ -200,7 +201,7 @@ contract SuckerRegressionsTest is Test {
 
         // Call toRemote -- should revert with NothingToSend (balance=0, count==numberOfClaimsSent==0).
         vm.expectRevert(abi.encodeWithSelector(JBSucker.JBSucker_NothingToSend.selector));
-        sucker.toRemote(TOKEN);
+        sucker.toRemote(TOKEN, "");
     }
 
     /// @notice Verifies that `toRemote()` still works normally when the tree has entries.
@@ -225,7 +226,7 @@ contract SuckerRegressionsTest is Test {
         sucker.test_resetSendRootOverAMBCalled();
 
         // Call toRemote -- should succeed and call the AMB.
-        sucker.toRemote(TOKEN);
+        sucker.toRemote(TOKEN, "");
 
         assertTrue(sucker.sendRootOverAMBCalled(), "sendRootOverAMB should be called on non-empty tree");
         assertEq(sucker.test_getOutboxNonce(TOKEN), 1, "Nonce should be incremented after send");

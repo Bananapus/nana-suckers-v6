@@ -45,7 +45,8 @@ contract DeprecatedDestinationSucker is JBSucker {
         address,
         uint256,
         JBRemoteToken memory,
-        JBMessageRoot memory
+        JBMessageRoot memory,
+        bytes memory
     )
         internal
         override
@@ -133,7 +134,7 @@ contract DeprecatedSuckerDestinationTest is Test {
             projectTokenCount: 10 ether, token: TOKEN, terminalTokenAmount: 1 ether, beneficiary: beneficiary
         });
 
-        source.toRemote(TOKEN);
+        source.toRemote(TOKEN, "");
 
         assertEq(source.outboxOf(TOKEN).numberOfClaimsSent, 1, "leaf must be marked sent on source");
 

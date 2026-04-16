@@ -389,7 +389,7 @@ contract OptimismSuckerForkTest is TestBaseWorkflow {
 
         // Send the outbox tree to the remote chain via the OP bridge.
         vm.prank(user);
-        sucker.toRemote(JBConstants.NATIVE_TOKEN); // Initiates bridging (OP bridge doesn't need msg.value).
+        sucker.toRemote(JBConstants.NATIVE_TOKEN, ""); // Initiates bridging (OP bridge doesn't need msg.value).
 
         // Verify the outbox was cleared after sending.
         assertEq(sucker.outboxOf(JBConstants.NATIVE_TOKEN).balance, 0, "Outbox should be cleared after toRemote()");

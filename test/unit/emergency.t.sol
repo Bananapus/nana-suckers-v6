@@ -271,7 +271,8 @@ contract TestSucker is JBSucker {
         address token,
         uint256 amount,
         JBRemoteToken memory remoteToken,
-        JBMessageRoot memory message
+        JBMessageRoot memory message,
+        bytes memory
     )
         internal
         override

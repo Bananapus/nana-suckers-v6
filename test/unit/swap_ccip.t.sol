@@ -30,7 +30,7 @@ contract MockTerminal {
         uint256 amount,
         bool,
         string calldata,
-        bytes calldata
+        bytes memory
     )
         external
         payable

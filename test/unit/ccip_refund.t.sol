@@ -61,14 +61,14 @@ contract CCIPSuckerHarness is JBCCIPSucker {
 /// @notice Non-payable contract that calls toRemote — simulates a contract caller that can't receive refunds.
 contract NonPayableCaller {
     function callToRemote(address sucker, address token) external payable {
-        JBCCIPSucker(payable(sucker)).toRemote{value: msg.value}(token);
+        JBCCIPSucker(payable(sucker)).toRemote{value: msg.value}(token, "");
     }
 }
 
 /// @notice Payable contract that calls toRemote — receives refunds normally.
 contract PayableCaller {
     function callToRemote(address sucker, address token) external payable {
-        JBCCIPSucker(payable(sucker)).toRemote{value: msg.value}(token);
+        JBCCIPSucker(payable(sucker)).toRemote{value: msg.value}(token, "");
     }
 
     receive() external payable {}
