@@ -625,15 +625,32 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         }
         uint256 transportPayment = msg.value - _toRemoteFee;
 
-        // Pay the fee into the fee project (via library DELEGATECALL to reduce bytecode).
-        // Best-effort: if the terminal doesn't exist or the pay call reverts, proceed without fee.
+        // Pay the fee into the fee project. Best-effort: proceed without fee on failure.
         // NOTE: On failure, the fee ETH is retained by this contract (not added back to transportPayment)
         // to avoid DoS on zero-cost bridges (OP, Base, Celo, Arbitrum L2→L1) that revert on non-zero
         // transportPayment.
-        // slither-disable-next-line reentrancy-benign,reentrancy-events
-        JBSuckerLib.payToRemoteFee({
-            directory: DIRECTORY, feeProjectId: FEE_PROJECT_ID, feeAmount: _toRemoteFee, sender: _msgSender()
-        });
+        {
+            // Look up the fee project's native token terminal.
+            IJBTerminal feeTerminal =
+                _primaryTerminalOf({forProjectId: FEE_PROJECT_ID, token: JBConstants.NATIVE_TOKEN});
+
+            // Only attempt to pay the fee if a terminal exists.
+            if (address(feeTerminal) != address(0)) {
+                // slither-disable-next-line unused-return,reentrancy-events,reentrancy-benign,arbitrary-send-eth
+                try feeTerminal.pay{value: _toRemoteFee}({
+                    projectId: FEE_PROJECT_ID,
+                    token: JBConstants.NATIVE_TOKEN,
+                    amount: _toRemoteFee,
+                    beneficiary: _msgSender(),
+                    minReturnedTokens: 0,
+                    memo: "",
+                    metadata: ""
+                }) returns (
+                    uint256
+                ) {}
+                    catch {}
+            }
+        }
 
         // Send the merkle root to the remote chain.
         _sendRoot({transportPayment: transportPayment, token: token, remoteToken: remoteToken});
@@ -791,7 +808,6 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     //*********************************************************************//
 
     /// @notice Adds funds to the projects balance.
-    /// @dev Delegates to JBSuckerLib.addToProjectBalance (via DELEGATECALL) to reduce bytecode.
     /// @param token The terminal token to add to the project's balance.
     /// @param amount The amount of terminal tokens to add to the project's balance.
     /// @param cachedProjectId The cached project ID to avoid redundant storage reads.
@@ -802,13 +818,53 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
             revert JBSucker_InsufficientBalance({amount: amount, balance: addableAmount});
         }
 
-        JBSuckerLib.addToProjectBalance({
-            directory: DIRECTORY, projectId: cachedProjectId, token: token, amount: amount
-        });
+        // Get the project's primary terminal for the token.
+        IJBTerminal terminal = _primaryTerminalOf({forProjectId: cachedProjectId, token: token});
+
+        // Revert if no terminal is configured for this token.
+        // slither-disable-next-line incorrect-equality
+        if (address(terminal) == address(0)) {
+            revert JBSucker_NoTerminalForToken({projectId: cachedProjectId, token: token});
+        }
+
+        // Perform the `addToBalance` for ERC-20 tokens.
+        if (token != JBConstants.NATIVE_TOKEN) {
+            // Record the balance before the transfer for the sanity check.
+            // slither-disable-next-line calls-loop
+            uint256 balanceBefore = IERC20(token).balanceOf(address(this));
+
+            // Approve the terminal to spend the ERC-20 tokens.
+            SafeERC20.forceApprove({token: IERC20(token), spender: address(terminal), value: amount});
+
+            // Add the tokens to the project's balance.
+            // slither-disable-next-line calls-loop
+            terminal.addToBalanceOf({
+                projectId: cachedProjectId,
+                token: token,
+                amount: amount,
+                shouldReturnHeldFees: false,
+                memo: "",
+                metadata: ""
+            });
+
+            // Sanity check: make sure we transferred the full amount.
+            // slither-disable-next-line calls-loop,incorrect-equality
+            assert(IERC20(token).balanceOf(address(this)) == balanceBefore - amount);
+        } else {
+            // If the token is the native token, send ETH with the call.
+            // slither-disable-next-line arbitrary-send-eth,calls-loop
+            terminal.addToBalanceOf{value: amount}({
+                projectId: cachedProjectId,
+                token: token,
+                amount: amount,
+                shouldReturnHeldFees: false,
+                memo: "",
+                metadata: ""
+            });
+        }
     }
 
     /// @notice The action(s) to perform after a user has succesfully proven their claim.
-    /// @dev Delegates minting to JBSuckerLib (via DELEGATECALL) to reduce bytecode.
     /// @param terminalToken The terminal token being sucked.
     /// @param terminalTokenAmount The amount of terminal tokens.
     /// @param projectTokenAmount The amount of project tokens.
@@ -833,13 +889,16 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         // concern, not a contract bug. Projects must ensure controller and project exist on all destination chains
         // before enabling suckers.
         //
-        // Mint the project tokens for the beneficiary (via library DELEGATECALL).
-        JBSuckerLib.mintTokensFor({
-            directory: DIRECTORY,
-            projectId: cachedProjectId,
-            tokenCount: projectTokenAmount,
-            beneficiary: _toAddress(beneficiary)
-        });
+        // Mint the project tokens for the beneficiary via the project's controller.
+        // slither-disable-next-line calls-loop,unused-return
+        IJBController(address(DIRECTORY.controllerOf(cachedProjectId)))
+            .mintTokensOf({
+                projectId: cachedProjectId,
+                tokenCount: projectTokenAmount,
+                beneficiary: _toAddress(beneficiary),
+                memo: "",
+                useReservedPercent: false
+            });
     }
 
     /// @notice Inserts a new leaf into the outbox merkle tree for the specified `token`.
@@ -963,7 +1022,6 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     }
 
     /// @notice Cash out project tokens for terminal tokens.
-    /// @dev Delegates to JBSuckerLib.pullBackingAssets (via DELEGATECALL) to reduce bytecode.
     /// @param projectToken The project token being cashed out (unused, kept for interface compatibility).
     /// @param count The number of project tokens to cash out.
     /// @param token The terminal token to cash out for.
@@ -982,13 +1040,34 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     {
         projectToken;
 
-        reclaimedAmount = JBSuckerLib.pullBackingAssets({
-            directory: DIRECTORY,
-            projectId: projectId(),
-            count: count,
-            token: token,
-            minTokensReclaimed: minTokensReclaimed
+        uint256 cachedProjectId = projectId();
+
+        // Get the project's primary terminal for `token`.
+        IJBCashOutTerminal terminal =
+            IJBCashOutTerminal(address(_primaryTerminalOf({forProjectId: cachedProjectId, token: token})));
+
+        // Revert if no terminal is configured for this token.
+        if (address(terminal) == address(0)) {
+            revert JBSucker_NoTerminalForToken({projectId: cachedProjectId, token: token});
+        }
+
+        // Record the balance before the cash out for the sanity check.
+        uint256 balanceBefore = _balanceOf({token: token, addr: address(this)});
+
+        // Cash out the project tokens for terminal tokens.
+        reclaimedAmount = terminal.cashOutTokensOf({
+            holder: address(this),
+            projectId: cachedProjectId,
+            cashOutCount: count,
+            tokenToReclaim: token,
+            minTokensReclaimed: minTokensReclaimed,
+            beneficiary: payable(address(this)),
+            metadata: bytes("")
         });
+
+        // Sanity check to make sure we received the expected amount.
+        // slither-disable-next-line incorrect-equality
+        assert(reclaimedAmount == _balanceOf({token: token, addr: address(this)}) - balanceBefore);
     }
 
     /// @notice Send the outbox root for the specified token to the remote peer.
