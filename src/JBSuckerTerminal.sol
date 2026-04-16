@@ -131,7 +131,6 @@ contract JBSuckerTerminal is ERC165, IERC721Receiver, IJBSuckerTerminal, IJBRule
     /// when the real project's ownership is transferred after proxy creation.
     mapping(uint256 realProjectId => uint256 proxyProjectId) internal _homeProxyOf;
 
-
     //*********************************************************************//
     // -------------------------- constructor ---------------------------- //
     //*********************************************************************//
