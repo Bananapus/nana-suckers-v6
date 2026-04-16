@@ -405,6 +405,14 @@ contract JBSuckerTerminal is ERC165, IERC721Receiver, IJBSuckerTerminal, IJBRule
     /// @dev On the home chain (homeChainSelector == 0), routes the payment locally.
     /// On a remote chain (homeChainSelector != 0), bridges funds via CCIP to the home chain.
     /// When called as IJBTerminal.pay(), the proxyProjectId is the projectId parameter.
+    /// @param proxyProjectId The ID of the proxy project to pay through.
+    /// @param token The token to pay with (NATIVE_TOKEN or ERC-20 address).
+    /// @param amount The amount of tokens to pay. For native tokens, must match msg.value.
+    /// @param beneficiary The address to receive proxy tokens.
+    /// @param minReturnedTokens The minimum number of proxy tokens to receive (home chain only, ignored on remote).
+    /// @param memo A memo to attach to the payment.
+    /// @param metadata Additional metadata forwarded to the payment.
+    /// @return proxyTokenCount The number of proxy tokens minted (0 on remote chains — tokens mint asynchronously).
     function pay(
         uint256 proxyProjectId,
         address token,
@@ -561,6 +569,13 @@ contract JBSuckerTerminal is ERC165, IERC721Receiver, IJBSuckerTerminal, IJBRule
     /// @notice Bridges an already-held token via CCIP to the home chain.
     /// @dev Assumes the contract already holds `amount` of `token` (or native ETH via msg.value).
     /// Transport payment for CCIP is calculated from msg.value minus the native token amount (if any).
+    /// @param proxyProjectId The ID of the proxy project (used for event emission).
+    /// @param realProjectId The ID of the real project on the home chain.
+    /// @param token The token being bridged (NATIVE_TOKEN or ERC-20 address).
+    /// @param amount The amount of tokens to bridge.
+    /// @param beneficiary The address to receive proxy tokens on the home chain.
+    /// @param memo A memo to attach to the payment on the home chain.
+    /// @param metadata Additional metadata forwarded to the home chain payment.
     function _bridgePay(
         uint256 proxyProjectId,
         uint256 realProjectId,
@@ -613,6 +628,13 @@ contract JBSuckerTerminal is ERC165, IERC721Receiver, IJBSuckerTerminal, IJBRule
     }
 
     /// @notice Transfers proxy tokens from the caller, cashes out proxy → real tokens, then real tokens → ETH.
+    /// @param proxyProjectId The ID of the proxy project whose tokens are being cashed out.
+    /// @param realProjectId The ID of the real project backing the proxy.
+    /// @param cashOutCount The number of proxy tokens to cash out.
+    /// @param tokenToReclaim The token to reclaim from the real project (typically NATIVE_TOKEN).
+    /// @param minReclaimAmount The minimum amount of tokens to reclaim (reverts if not met).
+    /// @param metadata Extra metadata forwarded to the cash out calls.
+    /// @return reclaimAmount The amount of tokens reclaimed from the real project.
     function _cashOutProxyAndReal(
         uint256 proxyProjectId,
         uint256 realProjectId,
@@ -747,6 +769,10 @@ contract JBSuckerTerminal is ERC165, IERC721Receiver, IJBSuckerTerminal, IJBRule
     }
 
     /// @notice Handles a received CCIP pay message on the home chain.
+    /// @dev Pays the real project with the bridged funds, then deposits the received real tokens into the proxy project
+    /// to mint proxy tokens for the beneficiary.
+    /// @param payload The ABI-encoded JBRelayPayMessage containing the real project ID, beneficiary, memo, and metadata.
+    /// @param destTokenAmounts The token amounts delivered by CCIP (typically WETH which gets unwrapped).
     function _handleCCIPPay(bytes memory payload, Client.EVMTokenAmount[] calldata destTokenAmounts) internal virtual {
         // Decode the pay message.
         JBRelayPayMessage memory payMsg = abi.decode(payload, (JBRelayPayMessage));
@@ -813,7 +839,18 @@ contract JBSuckerTerminal is ERC165, IERC721Receiver, IJBSuckerTerminal, IJBRule
         emit CCIPPayReceived(payMsg.realProjectId, payMsg.beneficiary, amount, proxyTokenCount);
     }
 
-    /// @notice Pays a real project locally and deposits tokens into the proxy project.
+    /// @notice Pays a real project locally and deposits received real tokens into the proxy project.
+    /// @dev Used on the home chain where no bridging is needed. Accepts the payment token from the caller,
+    /// pays the real project, then deposits the minted real tokens into the proxy project.
+    /// @param proxyProjectId The ID of the proxy project to deposit real tokens into.
+    /// @param realProjectId The ID of the real project to pay.
+    /// @param token The token to pay with (NATIVE_TOKEN or ERC-20 address).
+    /// @param amount The amount of tokens to pay.
+    /// @param beneficiary The address to receive proxy tokens.
+    /// @param minReturnedTokens The minimum number of proxy tokens to receive (reverts if not met).
+    /// @param memo A memo to attach to the payment.
+    /// @param metadata Additional metadata forwarded to the payment.
+    /// @return proxyTokenCount The number of proxy tokens minted to the beneficiary.
     function _payLocal(
         uint256 proxyProjectId,
         uint256 realProjectId,
@@ -863,6 +900,13 @@ contract JBSuckerTerminal is ERC165, IERC721Receiver, IJBSuckerTerminal, IJBRule
 
     /// @notice Bridges a payment via CCIP to the home chain.
     /// @dev Accepts the token from the caller, then delegates to `_bridgePay`.
+    /// @param proxyProjectId The ID of the proxy project (used for event emission).
+    /// @param realProjectId The ID of the real project on the home chain.
+    /// @param token The token being paid (NATIVE_TOKEN or ERC-20 address).
+    /// @param amount The amount of tokens to bridge.
+    /// @param beneficiary The address to receive proxy tokens on the home chain.
+    /// @param memo A memo to attach to the payment on the home chain.
+    /// @param metadata Additional metadata forwarded to the home chain payment.
     function _payRemote(
         uint256 proxyProjectId,
         uint256 realProjectId,
@@ -886,6 +930,10 @@ contract JBSuckerTerminal is ERC165, IERC721Receiver, IJBSuckerTerminal, IJBRule
 
     /// @notice Wraps ETH (if native) or approves the router (if ERC-20) and sends a CCIP message to deliver cash out
     /// proceeds to the remote chain.
+    /// @param proxyProjectId The ID of the proxy project (used for event emission).
+    /// @param tokenToReclaim The token being sent (NATIVE_TOKEN or ERC-20 address).
+    /// @param reclaimAmount The amount of tokens to send to the remote chain.
+    /// @param beneficiary The address to receive the tokens on the remote chain.
     function _sendCashOutClaim(
         uint256 proxyProjectId,
         address tokenToReclaim,
