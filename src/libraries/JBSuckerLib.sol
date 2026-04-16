@@ -285,6 +285,7 @@ library JBSuckerLib {
         // An empty tree has a well-known root.
         if (count == 0) return MerkleLib.Z_32;
 
+        // slither-disable-next-line incorrect-shift
         // solhint-disable-next-line no-inline-assembly
         assembly ("memory-safe") {
             // Build zero hashes on-the-fly: Z[0] = 0, Z[i+1] = keccak256(Z[i], Z[i]).

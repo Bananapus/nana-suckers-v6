@@ -1341,7 +1341,6 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
                 ++i;
             }
         }
-        // slither-disable-next-line incorrect-shift
         return JBSuckerLib.computeTreeRoot({branch: branch, count: count});
     }
 
