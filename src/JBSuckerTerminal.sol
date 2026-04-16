@@ -13,6 +13,7 @@ import {IJBProjects} from "@bananapus/core-v6/src/interfaces/IJBProjects.sol";
 import {IJBRulesetApprovalHook} from "@bananapus/core-v6/src/interfaces/IJBRulesetApprovalHook.sol";
 import {IJBRulesetDataHook} from "@bananapus/core-v6/src/interfaces/IJBRulesetDataHook.sol";
 import {IJBTerminal} from "@bananapus/core-v6/src/interfaces/IJBTerminal.sol";
+import {IJBToken} from "@bananapus/core-v6/src/interfaces/IJBToken.sol";
 import {IJBTokens} from "@bananapus/core-v6/src/interfaces/IJBTokens.sol";
 import {JBAccountingContext} from "@bananapus/core-v6/src/structs/JBAccountingContext.sol";
 import {JBBeforeCashOutRecordedContext} from "@bananapus/core-v6/src/structs/JBBeforeCashOutRecordedContext.sol";
@@ -130,17 +131,6 @@ contract JBSuckerTerminal is ERC165, IERC721Receiver, IJBSuckerTerminal, IJBRule
     /// when the real project's ownership is transferred after proxy creation.
     mapping(uint256 realProjectId => uint256 proxyProjectId) internal _homeProxyOf;
 
-    /// @dev Accounting contexts for projects using this as a terminal.
-    mapping(uint256 projectId => JBAccountingContext[]) internal _accountingContextsOf;
-
-    /// @dev Accounting context per project per token.
-    mapping(uint256 projectId => mapping(address token => JBAccountingContext)) internal _accountingContextOf;
-
-    /// @dev Whether a token has an accounting context for a project (for dedup).
-    mapping(uint256 projectId => mapping(address token => bool)) internal _hasAccountingContextFor;
-
-    /// @dev Balance tracking for addToBalanceOf.
-    mapping(uint256 projectId => mapping(address token => uint256)) internal _balanceOf;
 
     //*********************************************************************//
     // -------------------------- constructor ---------------------------- //
@@ -191,26 +181,8 @@ contract JBSuckerTerminal is ERC165, IERC721Receiver, IJBSuckerTerminal, IJBRule
     //*********************************************************************//
 
     /// @inheritdoc IJBTerminal
-    function addAccountingContextsFor(
-        uint256 projectId,
-        JBAccountingContext[] calldata accountingContexts
-    )
-        external
-        override
-    {
-        for (uint256 i; i < accountingContexts.length; i++) {
-            address token = accountingContexts[i].token;
-
-            // Skip if already added.
-            if (_hasAccountingContextFor[projectId][token]) continue;
-
-            _accountingContextsOf[projectId].push(accountingContexts[i]);
-            _accountingContextOf[projectId][token] = accountingContexts[i];
-            _hasAccountingContextFor[projectId][token] = true;
-
-            emit SetAccountingContext(projectId, accountingContexts[i], msg.sender);
-        }
-    }
+    /// @dev No-op. This terminal does not track accounting contexts.
+    function addAccountingContextsFor(uint256, JBAccountingContext[] calldata) external override {}
 
     /// @inheritdoc IJBTerminal
     function addToBalanceOf(
@@ -231,9 +203,6 @@ contract JBSuckerTerminal is ERC165, IERC721Receiver, IJBSuckerTerminal, IJBRule
         } else {
             IERC20(token).safeTransferFrom(msg.sender, address(this), amount);
         }
-
-        // Record the balance.
-        _balanceOf[projectId][token] += amount;
 
         emit AddToBalance(projectId, amount, 0, memo, metadata, msg.sender);
     }
@@ -471,12 +440,26 @@ contract JBSuckerTerminal is ERC165, IERC721Receiver, IJBSuckerTerminal, IJBRule
         override
         returns (JBAccountingContext memory)
     {
-        return _accountingContextOf[projectId][token];
+        uint8 decimals = 18;
+
+        if (token != JBConstants.NATIVE_TOKEN) {
+            try IJBToken(token).decimals() returns (uint8 resolvedDecimals) {
+                decimals = resolvedDecimals;
+            } catch {
+                // Non-standard ERC-20s that omit or break `decimals()` remain discoverable with a synthetic fallback.
+            }
+        }
+
+        projectId; // Unused.
+
+        // forge-lint: disable-next-line(unsafe-typecast)
+        return JBAccountingContext({token: token, decimals: decimals, currency: uint32(uint160(token))});
     }
 
     /// @inheritdoc IJBTerminal
-    function accountingContextsOf(uint256 projectId) external view override returns (JBAccountingContext[] memory) {
-        return _accountingContextsOf[projectId];
+    /// @dev Returns an empty array — this terminal accepts tokens dynamically.
+    function accountingContextsOf(uint256) external pure override returns (JBAccountingContext[] memory) {
+        return new JBAccountingContext[](0);
     }
 
     /// @notice Not used — `useDataHookForCashOut` is false on proxy rulesets.
@@ -500,29 +483,9 @@ contract JBSuckerTerminal is ERC165, IERC721Receiver, IJBSuckerTerminal, IJBRule
     }
 
     /// @inheritdoc IJBTerminal
-    function currentSurplusOf(
-        uint256 projectId,
-        address[] calldata tokens,
-        uint256,
-        uint256
-    )
-        external
-        view
-        override
-        returns (uint256 surplus)
-    {
-        if (tokens.length == 0) {
-            // Empty list: sum across all accounting contexts for this project.
-            JBAccountingContext[] storage contexts = _accountingContextsOf[projectId];
-            for (uint256 i; i < contexts.length; i++) {
-                surplus += _balanceOf[projectId][contexts[i].token];
-            }
-        } else {
-            // Sum the balances of the requested tokens.
-            for (uint256 i; i < tokens.length; i++) {
-                surplus += _balanceOf[projectId][tokens[i]];
-            }
-        }
+    function currentSurplusOf(uint256, address[] calldata, uint256, uint256) external pure override returns (uint256) {
+        // This terminal holds no surplus — balances are forwarded to the home chain via CCIP.
+        return 0;
     }
 
     /// @notice Returns whether an address has permission to mint a project's tokens on-demand.

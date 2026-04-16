@@ -478,21 +478,17 @@ contract JBSuckerTerminalTest is Test, TestBaseWorkflow, IERC721Receiver {
             token: JBConstants.NATIVE_TOKEN, decimals: 18, currency: uint32(uint160(JBConstants.NATIVE_TOKEN))
         });
 
+        // No-op — this terminal accepts all tokens dynamically.
         suckerTerminal.addAccountingContextsFor(1, contexts);
 
-        // Verify stored.
+        // accountingContextsOf always returns empty.
         JBAccountingContext[] memory stored = suckerTerminal.accountingContextsOf(1);
-        assertEq(stored.length, 1, "should have 1 context");
-        assertEq(stored[0].token, JBConstants.NATIVE_TOKEN, "token should match");
+        assertEq(stored.length, 0, "should return empty array");
 
-        // Verify individual lookup.
+        // accountingContextForTokenOf dynamically constructs a context for any token.
         JBAccountingContext memory ctx = suckerTerminal.accountingContextForTokenOf(1, JBConstants.NATIVE_TOKEN);
-        assertEq(ctx.token, JBConstants.NATIVE_TOKEN, "individual lookup should match");
-
-        // Adding duplicate should not create a second entry.
-        suckerTerminal.addAccountingContextsFor(1, contexts);
-        stored = suckerTerminal.accountingContextsOf(1);
-        assertEq(stored.length, 1, "should still have 1 context after duplicate add");
+        assertEq(ctx.token, JBConstants.NATIVE_TOKEN, "token should match");
+        assertEq(ctx.decimals, 18, "native token should have 18 decimals");
     }
 
     // ────────────────────────────────────────────────
@@ -502,10 +498,11 @@ contract JBSuckerTerminalTest is Test, TestBaseWorkflow, IERC721Receiver {
     function test_addToBalanceOf_nativeToken() public {
         suckerTerminal.addToBalanceOf{value: 1 ether}(1, JBConstants.NATIVE_TOKEN, 1 ether, false, "test", "");
 
+        // The terminal holds no surplus — balances are forwarded via CCIP.
         address[] memory tokens = new address[](1);
         tokens[0] = JBConstants.NATIVE_TOKEN;
         uint256 surplus = suckerTerminal.currentSurplusOf(1, tokens, 18, 0);
-        assertEq(surplus, 1 ether, "surplus should reflect deposited amount");
+        assertEq(surplus, 0, "surplus should always be zero");
     }
 
     // ────────────────────────────────────────────────
