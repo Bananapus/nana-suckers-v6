@@ -33,6 +33,7 @@ import {Client} from "@chainlink/contracts-ccip/src/v0.8/ccip/libraries/Client.s
 import {ICCIPRouter} from "./interfaces/ICCIPRouter.sol";
 import {IJBSuckerRegistry} from "./interfaces/IJBSuckerRegistry.sol";
 import {IJBSuckerTerminal} from "./interfaces/IJBSuckerTerminal.sol";
+import {CCIPHelper} from "./libraries/CCIPHelper.sol";
 import {JBCCIPLib} from "./libraries/JBCCIPLib.sol";
 import {JBProxyConfig} from "./structs/JBProxyConfig.sol";
 import {JBRelayCashOutClaimMessage} from "./structs/JBRelayCashOutClaimMessage.sol";
@@ -595,11 +596,13 @@ contract JBSuckerTerminal is ERC165, IERC721Receiver, IJBSuckerTerminal, IJBRule
         );
 
         // Send the CCIP message.
+        address feeToken = transportPayment == 0 ? CCIPHelper.linkOfChain(block.chainid) : address(0);
         (bool refundFailed, uint256 refundAmount) = JBCCIPLib.sendCCIPMessage({
             ccipRouter: CCIP_ROUTER,
             remoteChainSelector: REMOTE_CHAIN_SELECTOR,
             peerAddress: PEER,
             transportPayment: transportPayment,
+            feeToken: feeToken,
             gasLimit: _CCIP_PAY_GAS_LIMIT,
             encodedPayload: encodedPayload,
             tokenAmounts: tokenAmounts,
@@ -935,11 +938,13 @@ contract JBSuckerTerminal is ERC165, IERC721Receiver, IJBSuckerTerminal, IJBRule
         bytes memory encodedPayload =
             abi.encode(_MSG_TYPE_CASH_OUT_CLAIM, abi.encode(JBRelayCashOutClaimMessage({beneficiary: beneficiary})));
 
+        address feeToken = msg.value == 0 ? CCIPHelper.linkOfChain(block.chainid) : address(0);
         (bool refundFailed, uint256 refundAmount) = JBCCIPLib.sendCCIPMessage({
             ccipRouter: CCIP_ROUTER,
             remoteChainSelector: REMOTE_CHAIN_SELECTOR,
             peerAddress: PEER,
             transportPayment: msg.value,
+            feeToken: feeToken,
             gasLimit: _CCIP_CASH_OUT_CLAIM_GAS_LIMIT,
             encodedPayload: encodedPayload,
             tokenAmounts: tokenAmounts,

@@ -20,6 +20,7 @@ import {IJBCCIPSuckerDeployer} from "./interfaces/IJBCCIPSuckerDeployer.sol";
 import {IJBSuckerRegistry} from "./interfaces/IJBSuckerRegistry.sol";
 
 // Local: libraries (alphabetized)
+import {CCIPHelper} from "./libraries/CCIPHelper.sol";
 import {JBCCIPLib} from "./libraries/JBCCIPLib.sol";
 
 // Local: structs (alphabetized)
@@ -189,6 +190,10 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
 
     /// @notice Uses CCIP to send the root and assets over the bridge to the peer.
     /// @dev Delegates CCIP message construction and sending to JBCCIPLib (via DELEGATECALL) to reduce bytecode.
+    /// @dev Supports two fee modes:
+    ///   - `transportPayment > 0`: pay CCIP fees in native ETH (existing behavior).
+    ///   - `transportPayment == 0`: pay CCIP fees in LINK from the sucker's pre-funded balance.
+    ///     This enables chains with no meaningful native token (e.g. Tempo) to use CCIP.
     /// @param transportPayment The amount of `msg.value` that is going to get paid for sending this message.
     /// @param token The token to bridge the outbox tree for.
     /// @param amount The amount of tokens to bridge.
@@ -208,9 +213,6 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
         virtual
         override
     {
-        // Revert if no transport payment was provided.
-        if (transportPayment == 0) revert JBSucker_ExpectedMsgValue();
-
         // Start with the base gas limit for cross-chain calls.
         uint256 gasLimit = MESSENGER_BASE_GAS_LIMIT;
         Client.EVMTokenAmount[] memory tokenAmounts;
@@ -227,6 +229,11 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
             tokenAmounts = new Client.EVMTokenAmount[](0);
         }
 
+        // Determine fee payment mode: native ETH or LINK token.
+        // When transportPayment == 0, we pay in LINK from the sucker's pre-funded balance.
+        // This enables chains with no meaningful native token (e.g. Tempo).
+        address feeToken = transportPayment == 0 ? CCIPHelper.linkOfChain(block.chainid) : address(0);
+
         // Build and send the CCIP message with the root payload.
         // slither-disable-next-line reentrancy-events
         (bool refundFailed, uint256 refundAmount) = JBCCIPLib.sendCCIPMessage({
@@ -234,6 +241,7 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
             remoteChainSelector: REMOTE_CHAIN_SELECTOR,
             peerAddress: _peerAddress(),
             transportPayment: transportPayment,
+            feeToken: feeToken,
             gasLimit: gasLimit,
             encodedPayload: abi.encode(_CCIP_MSG_TYPE_ROOT, abi.encode(sucker_message)),
             tokenAmounts: tokenAmounts,

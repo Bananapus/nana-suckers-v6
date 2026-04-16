@@ -66,10 +66,15 @@ library JBCCIPLib {
 
     /// @notice Build and send a CCIP message, then handle refunds.
     /// @dev Runs via DELEGATECALL. Handles EVM2AnyMessage construction, getFee, ccipSend, and refund.
+    /// @dev Supports two fee modes:
+    ///   - `transportPayment > 0`: pay CCIP fees in native ETH (existing behavior).
+    ///   - `transportPayment == 0`: pay CCIP fees in LINK from the sucker's pre-funded balance.
+    ///     This enables chains with no meaningful native token (e.g. Tempo) to use CCIP.
     /// @param ccipRouter The CCIP router.
     /// @param remoteChainSelector The CCIP chain selector for the remote chain.
     /// @param peerAddress The peer sucker address on the remote chain.
-    /// @param transportPayment The ETH transport payment available.
+    /// @param transportPayment The ETH transport payment available (0 for LINK fee mode).
+    /// @param feeToken The fee token address: address(0) for native ETH, LINK address for LINK fee mode.
     /// @param gasLimit The gas limit for the CCIP message.
     /// @param encodedPayload The ABI-encoded payload (e.g., abi.encode(type, data)).
     /// @param tokenAmounts The token amounts to bridge (from prepareTokenAmounts).
@@ -81,6 +86,7 @@ library JBCCIPLib {
         uint64 remoteChainSelector,
         address peerAddress,
         uint256 transportPayment,
+        address feeToken,
         uint256 gasLimit,
         bytes memory encodedPayload,
         Client.EVMTokenAmount[] memory tokenAmounts,
@@ -95,27 +101,35 @@ library JBCCIPLib {
             data: encodedPayload,
             tokenAmounts: tokenAmounts,
             extraArgs: Client._argsToBytes(Client.EVMExtraArgsV1({gasLimit: gasLimit})),
-            feeToken: address(0)
+            feeToken: feeToken
         });
 
         // Get the CCIP fee for sending the message.
         // slither-disable-next-line calls-loop
         uint256 fees = ccipRouter.getFee({destinationChainSelector: remoteChainSelector, message: message});
 
-        // Send the CCIP message, paying the fee in native ETH.
-        // slither-disable-next-line calls-loop,unused-return,arbitrary-send-eth
-        ccipRouter.ccipSend{value: fees}({destinationChainSelector: remoteChainSelector, message: message});
+        if (feeToken != address(0)) {
+            // LINK fee path: approve the router to spend LINK from the sucker's balance.
+            SafeERC20.forceApprove({token: IERC20(feeToken), spender: address(ccipRouter), value: fees});
 
-        // Calculate the excess transport payment to refund.
-        refundAmount = transportPayment - fees;
+            // slither-disable-next-line calls-loop,unused-return
+            ccipRouter.ccipSend({destinationChainSelector: remoteChainSelector, message: message});
+        } else {
+            // Native ETH fee path.
+            // slither-disable-next-line calls-loop,unused-return,arbitrary-send-eth
+            ccipRouter.ccipSend{value: fees}({destinationChainSelector: remoteChainSelector, message: message});
 
-        // Refund excess transport payment to the recipient.
-        if (refundAmount != 0) {
-            // slither-disable-next-line arbitrary-send-eth,missing-zero-check
-            (bool sent,) = refundRecipient.call{value: refundAmount}("");
+            // Calculate the excess transport payment to refund.
+            refundAmount = transportPayment - fees;
 
-            // Record the refund failure if the transfer did not succeed.
-            if (!sent) refundFailed = true;
+            // Refund excess transport payment to the recipient.
+            if (refundAmount != 0) {
+                // slither-disable-next-line arbitrary-send-eth,missing-zero-check
+                (bool sent,) = refundRecipient.call{value: refundAmount}("");
+
+                // Record the refund failure if the transfer did not succeed.
+                if (!sent) refundFailed = true;
+            }
         }
     }
 

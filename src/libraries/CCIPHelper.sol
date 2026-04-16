@@ -49,6 +49,18 @@ library CCIPHelper {
     uint64 public constant TEMPO_SEL = 7_281_642_695_469_137_430;
     uint64 public constant TEMPO_MOD_SEL = 8_457_817_439_310_187_923;
 
+    /// @notice The LINK token address of each chain
+    address public constant ETH_LINK = 0x514910771AF9Ca656af840dff83E8264EcF986CA;
+    address public constant ETH_SEP_LINK = 0x779877A7B0D9E8603169DdbD7836e478b4624789;
+    address public constant OP_LINK = 0x350a791Bfc2C21F9Ed5d10980Dad2e2638ffa7f6;
+    address public constant OP_SEP_LINK = 0xE4aB69C077896252FAFBD49EFD26B5D171A32410;
+    address public constant ARB_LINK = 0xf97f4df75117a78c1A5a0DBb814Af92458539FB4;
+    address public constant ARB_SEP_LINK = 0xb1D4538B4571d411F07960EF2838Ce337FE1E80E;
+    address public constant BASE_LINK = 0x88Fb150BDc53A65fe94Dea0c9BA0a6dAf8C6e196;
+    address public constant BASE_SEP_LINK = 0xE4aB69C077896252FAFBD49EFD26B5D171A32410;
+    address public constant TEMPO_LINK = 0xE4aB69C077896252FAFBD49EFD26B5D171A32410;
+    address public constant TEMPO_MOD_LINK = 0xE4aB69C077896252FAFBD49EFD26B5D171A32410;
+
     /// @notice The WETH address of each chain
     address public constant ETH_WETH = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
     address public constant ETH_SEP_WETH = 0x097D90c9d3E0B50Ca60e1ae45F6A81010f9FB534;
@@ -164,6 +176,35 @@ library CCIPHelper {
             return TEMPO_WETH;
         } else if (chainId == TEMPO_MOD_ID) {
             return TEMPO_MOD_WETH;
+        } else {
+            revert CCIPHelper_UnsupportedChain(chainId);
+        }
+    }
+
+    /// @notice Returns the LINK token address for a given chain ID.
+    /// @param chainId The EVM chain ID to look up.
+    /// @return link The LINK token address.
+    function linkOfChain(uint256 chainId) public pure returns (address link) {
+        if (chainId == ETH_ID) {
+            return ETH_LINK;
+        } else if (chainId == OP_ID) {
+            return OP_LINK;
+        } else if (chainId == ARB_ID) {
+            return ARB_LINK;
+        } else if (chainId == BASE_ID) {
+            return BASE_LINK;
+        } else if (chainId == ETH_SEP_ID) {
+            return ETH_SEP_LINK;
+        } else if (chainId == OP_SEP_ID) {
+            return OP_SEP_LINK;
+        } else if (chainId == ARB_SEP_ID) {
+            return ARB_SEP_LINK;
+        } else if (chainId == BASE_SEP_ID) {
+            return BASE_SEP_LINK;
+        } else if (chainId == TEMPO_ID) {
+            return TEMPO_LINK;
+        } else if (chainId == TEMPO_MOD_ID) {
+            return TEMPO_MOD_LINK;
         } else {
             revert CCIPHelper_UnsupportedChain(chainId);
         }

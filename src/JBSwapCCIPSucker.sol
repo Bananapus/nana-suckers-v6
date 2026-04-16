@@ -32,6 +32,7 @@ import {IJBSwapCCIPSuckerDeployer} from "./interfaces/IJBSwapCCIPSuckerDeployer.
 import {IWrappedNativeToken} from "./interfaces/IWrappedNativeToken.sol";
 
 // Local: libraries.
+import {CCIPHelper} from "./libraries/CCIPHelper.sol";
 import {JBCCIPLib} from "./libraries/JBCCIPLib.sol";
 import {JBSwapPoolLib} from "./libraries/JBSwapPoolLib.sol";
 
@@ -517,8 +518,6 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
         internal
         override
     {
-        if (transportPayment == 0) revert JBSucker_ExpectedMsgValue();
-
         Client.EVMTokenAmount[] memory tokenAmounts;
         bytes memory encodedPayload;
 
@@ -556,11 +555,15 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
         }
 
         {
+            // Determine fee payment mode: native ETH or LINK token.
+            address feeToken = transportPayment == 0 ? CCIPHelper.linkOfChain(block.chainid) : address(0);
+
             (bool refundFailed, uint256 refundAmount) = JBCCIPLib.sendCCIPMessage({
                 ccipRouter: CCIP_ROUTER,
                 remoteChainSelector: REMOTE_CHAIN_SELECTOR,
                 peerAddress: _toAddress(peer()),
                 transportPayment: transportPayment,
+                feeToken: feeToken,
                 gasLimit: MESSENGER_BASE_GAS_LIMIT + remoteToken.minGas,
                 encodedPayload: encodedPayload,
                 tokenAmounts: tokenAmounts,
