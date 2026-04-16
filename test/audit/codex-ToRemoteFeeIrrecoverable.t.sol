@@ -52,8 +52,7 @@ contract CodexFeeIrrecoverableHarness is JBSucker {
         address,
         uint256,
         JBRemoteToken memory,
-        JBMessageRoot memory,
-        bytes memory
+        JBMessageRoot memory
     )
         internal
         override
@@ -194,7 +193,7 @@ contract CodexToRemoteFeeIrrecoverableTest is Test {
             abi.encode(IJBTerminal(address(0)))
         );
 
-        sucker.toRemote{value: FEE}(JBConstants.NATIVE_TOKEN, "");
+        sucker.toRemote{value: FEE}(JBConstants.NATIVE_TOKEN);
         assertEq(address(sucker).balance, FEE, "fee should remain in the sucker after failed fee payment");
 
         vm.deal(address(sucker), FEE + 1);

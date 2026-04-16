@@ -5,8 +5,6 @@ pragma solidity 0.8.28;
 import {IJBDirectory} from "@bananapus/core-v6/src/interfaces/IJBDirectory.sol";
 import {IJBPermissions} from "@bananapus/core-v6/src/interfaces/IJBPermissions.sol";
 import {IJBTokens} from "@bananapus/core-v6/src/interfaces/IJBTokens.sol";
-import {JBMetadataResolver} from "@bananapus/core-v6/src/libraries/JBMetadataResolver.sol";
-
 // CCIP imports.
 import {Client} from "@chainlink/contracts-ccip/src/v0.8/ccip/libraries/Client.sol";
 
@@ -75,9 +73,10 @@ import {JBRemoteToken} from "./structs/JBRemoteToken.sol";
 /// normally. Claims for the affected batch are gated until `retrySwap` is called successfully.
 /// Anyone can call `retrySwap` once swap conditions improve.
 ///
-/// **Outbound quote override**: Callers of `toRemote` can pass a `quoteForSwap` entry in the
-/// `metadata` parameter (via `JBMetadataResolver`) to bypass TWAP quoting for the outbound swap,
-/// matching the router terminal's convention.
+/// **No caller-controlled slippage**: Unlike the router terminal (where the caller spends their own
+/// funds and can accept any slippage), here the swap output determines the conversion rate for ALL
+/// claimers of the batch. Caller-controlled `minAmountOut` would allow sandwich attacks that lock
+/// in bad rates for everyone. All swaps (outbound and retry) use TWAP quoting exclusively.
 contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallback {
     using SafeERC20 for IERC20;
 
@@ -122,13 +121,6 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
 
     /// @notice The wrapped native token (e.g., WETH on Ethereum). Used for V3 native swaps.
     IWrappedNativeToken public immutable WETH;
-
-    //*********************************************************************//
-    // --------------- internal immutable stored properties --------------- //
-    //*********************************************************************//
-
-    /// @notice Pre-computed metadata ID for "quoteForSwap". Matches the router terminal convention.
-    bytes4 internal immutable _QUOTE_FOR_SWAP_ID;
 
     //*********************************************************************//
     // ------------------- internal stored properties -------------------- //
@@ -228,8 +220,6 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
         V3_FACTORY = swapDeployer.v3Factory();
         UNIV4_HOOK = swapDeployer.univ4Hook();
         WETH = IWrappedNativeToken(swapDeployer.weth());
-
-        _QUOTE_FOR_SWAP_ID = JBMetadataResolver.getId("quoteForSwap");
 
         if (address(BRIDGE_TOKEN) == address(0)) revert JBSwapCCIPSucker_InvalidBridgeToken();
         // BRIDGE_TOKEN must not be WETH — native/WETH wrapping and CCIP ERC-20 bridging conflict.
@@ -370,22 +360,27 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
 
     /// @notice Retry a previously failed inbound swap. Anyone can call this once swap conditions improve.
     /// @dev On success, updates the conversion rate so claims for this nonce's batch can proceed.
+    /// Always uses TWAP quoting — no caller-provided `minAmountOut`. Unlike the router terminal (where the
+    /// caller is spending their own funds and can accept any slippage they choose), here the swap output
+    /// determines the conversion rate for ALL claimers of this batch. Allowing a caller-controlled minimum
+    /// would let an attacker sandwich the swap with `minAmountOut = 1` and lock in a bad rate for everyone.
     /// @param localToken The local token that the bridge tokens should be swapped into.
     /// @param nonce The nonce of the batch whose swap failed.
-    /// @param minAmountOut Caller-provided minimum output (bypass TWAP). Pass 0 for TWAP quoting.
-    function retrySwap(address localToken, uint64 nonce, uint256 minAmountOut) external {
+    function retrySwap(address localToken, uint64 nonce) external {
         PendingSwap memory pending = pendingSwapOf[localToken][nonce];
         if (pending.bridgeAmount == 0) revert JBSwapCCIPSucker_NoPendingSwap();
 
+        // Delete before the swap to follow checks-effects-interactions and prevent reentrancy
+        // (the swap triggers external calls to Uniswap pools and token transfers).
+        delete pendingSwapOf[localToken][nonce];
+
         // slither-disable-next-line reentrancy-no-eth,reentrancy-benign,reentrancy-events
-        uint256 localAmount = _executeSwapWithQuote({
-            tokenIn: pending.bridgeToken, tokenOut: localToken, amount: pending.bridgeAmount, minAmountOut: minAmountOut
-        });
+        uint256 localAmount =
+            _executeSwap({tokenIn: pending.bridgeToken, tokenOut: localToken, amount: pending.bridgeAmount});
 
         // Update the conversion rate so claims can proceed.
         _conversionRateOf[localToken][nonce] = ConversionRate({leafTotal: pending.leafTotal, localTotal: localAmount});
 
-        delete pendingSwapOf[localToken][nonce];
         emit SwapRetried(localToken, nonce, pending.bridgeAmount, localAmount);
     }
 
@@ -440,8 +435,8 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
     }
 
     /// @notice Find the nonce whose batch contains the given leaf index.
-    /// @dev Uses a per-token cache for O(1) lookups when claims are batched from the same nonce.
-    /// Falls back to a reverse scan (most-recent-first) so recent claims resolve quickly.
+    /// @dev Uses a per-token cache with neighbor probing for O(1) lookups when claims are batched
+    /// sequentially. Falls back to a reverse scan (most-recent-first) so recent claims resolve quickly.
     /// @param token The local token address.
     /// @param leafIndex The leaf index from the claim.
     /// @return The nonce of the batch containing this leaf, or 0 if no conversion rates exist.
@@ -449,24 +444,42 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
         uint64 maxNonce = _highestReceivedNonce[token];
         if (maxNonce == 0) return 0;
 
-        // Fast path: check cached nonce (O(1) for batched claims from the same nonce).
+        // Fast path: check cached nonce and its neighbors (covers sequential batch claims).
         uint64 hint = _cachedNonce[token];
         if (hint != 0) {
-            uint256 end = _batchEndOf[token][hint];
-            if (end != 0 && leafIndex >= _batchStartOf[token][hint] && leafIndex < end) return hint;
+            // Check the cached nonce itself.
+            if (_nonceContainsLeaf(token, hint, leafIndex)) return hint;
+            // Check the next nonce (common pattern: claims move to the next batch).
+            if (hint < maxNonce && _nonceContainsLeaf(token, hint + 1, leafIndex)) {
+                _cachedNonce[token] = hint + 1;
+                return hint + 1;
+            }
+            // Check the previous nonce (out-of-order claim from an earlier batch).
+            if (hint > 1 && _nonceContainsLeaf(token, hint - 1, leafIndex)) {
+                _cachedNonce[token] = hint - 1;
+                return hint - 1;
+            }
         }
 
         // Slow path: scan from most recent nonce backwards (recent claims found quickly).
         for (uint64 n = maxNonce; n >= 1; n--) {
-            uint256 end = _batchEndOf[token][n];
-            if (end == 0) continue; // Not received yet — skip.
-            if (leafIndex >= _batchStartOf[token][n] && leafIndex < end) {
+            if (_nonceContainsLeaf(token, n, leafIndex)) {
                 _cachedNonce[token] = n;
                 return n;
             }
         }
         // Leaf index not found in any received batch.
         revert JBSwapCCIPSucker_BatchNotReceived(0);
+    }
+
+    /// @notice Check whether the given nonce's batch range contains the leaf index.
+    /// @param token The local token address.
+    /// @param nonce The nonce to check.
+    /// @param leafIndex The leaf index to look for.
+    /// @return True if the nonce's [start, end) range contains `leafIndex`.
+    function _nonceContainsLeaf(address token, uint64 nonce, uint256 leafIndex) internal view returns (bool) {
+        uint256 end = _batchEndOf[token][nonce];
+        return end != 0 && leafIndex >= _batchStartOf[token][nonce] && leafIndex < end;
     }
 
     /// @notice Override to swap local tokens into bridge tokens before CCIP bridging.
@@ -480,8 +493,6 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
     /// @param amount The amount of local tokens to bridge.
     /// @param remoteToken The remote token configuration (including minGas).
     /// @param sucker_message The merkle root message to send to the remote chain.
-    /// @param metadata Caller-provided metadata. If it contains a `quoteForSwap` entry, the encoded
-    /// `uint256` is used as `minAmountOut` for the outbound swap, bypassing TWAP quoting.
     // forge-lint: disable-next-line(mixed-case-function)
     function _sendRootOverAMB(
         uint256 transportPayment,
@@ -490,8 +501,7 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
         uint256 amount,
         JBRemoteToken memory remoteToken,
         // forge-lint: disable-next-line(mixed-case-variable)
-        JBMessageRoot memory sucker_message,
-        bytes memory metadata
+        JBMessageRoot memory sucker_message
     )
         internal
         override
@@ -511,13 +521,12 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
                 if (token == bridgeTokenAddr) {
                     bridgeAmount = amount;
                 } else {
+                    // Always use TWAP quoting — no caller-provided minAmountOut. Unlike the router terminal
+                    // (where the caller spends their own funds), here the swap output sets the conversion
+                    // rate for ALL claimers of the batch. Caller-controlled slippage would allow sandwich
+                    // attacks that lock in bad rates for everyone.
                     // slither-disable-next-line reentrancy-events,reentrancy-benign
-                    bridgeAmount = _executeSwapWithQuote({
-                        tokenIn: token,
-                        tokenOut: bridgeTokenAddr,
-                        amount: amount,
-                        minAmountOut: _extractQuoteForSwap(metadata)
-                    });
+                    bridgeAmount = _executeSwap({tokenIn: token, tokenOut: bridgeTokenAddr, amount: amount});
                     if (bridgeAmount == 0) revert JBSwapCCIPSucker_SwapFailed();
                 }
 
@@ -555,42 +564,15 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
     // ----------------------- internal helpers -------------------------- //
     //*********************************************************************//
 
-    /// @notice Extract a `quoteForSwap` value from metadata, returning 0 if not present.
-    /// @param metadata Caller-provided bytes in `JBMetadataResolver` format.
-    /// @return minAmountOut The decoded minimum output, or 0 if no quote was provided.
-    function _extractQuoteForSwap(bytes memory metadata) internal view returns (uint256 minAmountOut) {
-        if (metadata.length == 0) return 0;
-        (bool exists, bytes memory quote) = JBMetadataResolver.getDataFor({id: _QUOTE_FOR_SWAP_ID, metadata: metadata});
-        if (exists && quote.length >= 32) minAmountOut = abi.decode(quote, (uint256));
-    }
-
     /// @notice Execute a swap between two tokens using the best available V3 or V4 pool.
-    /// @dev Wrapper around `_executeSwapWithQuote` with `minAmountOut = 0` (TWAP quoting).
+    /// @dev Delegates pool discovery, TWAP quoting, and swap execution to JBSwapPoolLib (via DELEGATECALL).
+    /// Swap callbacks (`uniswapV3SwapCallback`, `unlockCallback`) remain on this contract.
+    /// Always uses TWAP quoting (minAmountOut = 0) — see contract NatSpec for rationale.
     /// @param tokenIn The input token (raw address, e.g., NATIVE_TOKEN sentinel for ETH).
     /// @param tokenOut The output token (raw address).
     /// @param amount The amount of input tokens to swap.
     /// @return amountOut The amount of output tokens received.
     function _executeSwap(address tokenIn, address tokenOut, uint256 amount) internal returns (uint256 amountOut) {
-        return _executeSwapWithQuote({tokenIn: tokenIn, tokenOut: tokenOut, amount: amount, minAmountOut: 0});
-    }
-
-    /// @notice Execute a swap with an optional caller-provided minimum output.
-    /// @dev Delegates pool discovery, quoting, and swap execution to JBSwapPoolLib (via DELEGATECALL).
-    /// Swap callbacks (`uniswapV3SwapCallback`, `unlockCallback`) remain on this contract.
-    /// @param tokenIn The input token (raw address, e.g., NATIVE_TOKEN sentinel for ETH).
-    /// @param tokenOut The output token (raw address).
-    /// @param amount The amount of input tokens to swap.
-    /// @param minAmountOut Caller-provided minimum output. When non-zero, TWAP quoting is skipped.
-    /// @return amountOut The amount of output tokens received.
-    function _executeSwapWithQuote(
-        address tokenIn,
-        address tokenOut,
-        uint256 amount,
-        uint256 minAmountOut
-    )
-        internal
-        returns (uint256 amountOut)
-    {
         return JBSwapPoolLib.executeSwap({
             config: JBSwapPoolLib.SwapConfig({
                 v3Factory: V3_FACTORY, poolManager: POOL_MANAGER, univ4Hook: UNIV4_HOOK, weth: address(WETH)
@@ -598,7 +580,7 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
             tokenIn: tokenIn,
             tokenOut: tokenOut,
             amount: amount,
-            minAmountOut: minAmountOut
+            minAmountOut: 0
         });
     }
 }

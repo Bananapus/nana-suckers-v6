@@ -55,8 +55,7 @@ contract PeerChainStateSucker is JBSucker {
         address,
         uint256,
         JBRemoteToken memory,
-        JBMessageRoot memory message,
-        bytes memory
+        JBMessageRoot memory message
     )
         internal
         override
@@ -393,7 +392,7 @@ contract PeerChainStateTest is Test {
         _mockSingleETHTerminal({ethBalance: 50 ether, ethSurplus: 30 ether});
 
         sucker.test_resetSendRootOverAMBCalled();
-        sucker.toRemote(TOKEN, "");
+        sucker.toRemote(TOKEN);
 
         assertTrue(sucker.sendRootOverAMBCalled(), "sendRootOverAMB should be called");
 
@@ -427,7 +426,7 @@ contract PeerChainStateTest is Test {
 
         // terminalsOf already returns empty array from setUp.
         sucker.test_resetSendRootOverAMBCalled();
-        sucker.toRemote(TOKEN, "");
+        sucker.toRemote(TOKEN);
 
         assertTrue(sucker.sendRootOverAMBCalled(), "sendRootOverAMB should be called");
 
@@ -516,7 +515,7 @@ contract PeerChainStateTest is Test {
         );
 
         sucker.test_resetSendRootOverAMBCalled();
-        sucker.toRemote(TOKEN, "");
+        sucker.toRemote(TOKEN);
 
         assertTrue(sucker.sendRootOverAMBCalled(), "sendRootOverAMB should be called");
 

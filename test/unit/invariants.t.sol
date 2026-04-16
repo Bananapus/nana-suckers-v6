@@ -47,8 +47,7 @@ contract InvariantSucker is JBSucker {
         address token,
         uint256 amount,
         JBRemoteToken memory,
-        JBMessageRoot memory,
-        bytes memory
+        JBMessageRoot memory
     )
         internal
         override
@@ -215,7 +214,7 @@ contract SuckerHandler is Test {
         if (outboxBalance == 0) return;
 
         // toRemote clears the outbox balance and _sendRootOverAMB sends the ETH to 0xdead.
-        sucker.toRemote(TOKEN, "");
+        sucker.toRemote(TOKEN);
 
         outboxBalanceCleared += outboxBalance;
         lastNonce = sucker.test_getOutboxNonce(TOKEN);

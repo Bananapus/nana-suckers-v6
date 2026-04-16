@@ -381,7 +381,7 @@ contract ForkArbitrumNativeTransferTest is TestBaseWorkflow {
         vm.recordLogs();
 
         // Send to L2 with transport payment for retryable ticket gas.
-        suckerL1.toRemote{value: 1 ether}(JBConstants.NATIVE_TOKEN, "");
+        suckerL1.toRemote{value: 1 ether}(JBConstants.NATIVE_TOKEN);
         vm.stopPrank();
 
         // Verify outbox cleared on L1.

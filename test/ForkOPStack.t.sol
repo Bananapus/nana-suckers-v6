@@ -248,7 +248,7 @@ abstract contract OPStackNativeBridgeForkTestBase is TestBaseWorkflow {
 
         // Send to L2 — OP bridge does not require msg.value for transport.
         vm.prank(user);
-        suckerL1.toRemote(JBConstants.NATIVE_TOKEN, "");
+        suckerL1.toRemote(JBConstants.NATIVE_TOKEN);
 
         // Verify outbox cleared on L1.
         assertEq(suckerL1.outboxOf(JBConstants.NATIVE_TOKEN).balance, 0, "Outbox should be cleared");
@@ -301,7 +301,7 @@ abstract contract OPStackNativeBridgeForkTestBase is TestBaseWorkflow {
 
         // Send to L1 — OP bridge does not require msg.value for transport.
         vm.prank(user);
-        suckerL2.toRemote(JBConstants.NATIVE_TOKEN, "");
+        suckerL2.toRemote(JBConstants.NATIVE_TOKEN);
 
         // Verify outbox cleared on L2.
         assertEq(suckerL2.outboxOf(JBConstants.NATIVE_TOKEN).balance, 0, "Outbox should be cleared");

@@ -51,8 +51,7 @@ contract AuditGapSucker is JBSucker {
         address,
         uint256 amount,
         JBRemoteToken memory,
-        JBMessageRoot memory,
-        bytes memory
+        JBMessageRoot memory
     )
         internal
         override
@@ -453,7 +452,7 @@ contract TestAuditGaps is Test {
         // Send the root (simulates toRemote).
         vm.deal(address(sucker), 3 ether);
         sucker.test_resetSendRootOverAMBCalled();
-        sucker.toRemote(TOKEN, "");
+        sucker.toRemote(TOKEN);
 
         // After toRemote, numberOfClaimsSent == 2 (indices 0 and 1 were sent).
         assertEq(sucker.test_getNumberOfClaimsSent(TOKEN), 2, "numberOfClaimsSent should be 2 after first send");
@@ -473,7 +472,7 @@ contract TestAuditGaps is Test {
         // Send the second root.
         vm.deal(address(sucker), 7 ether); // 3 + 4 for new leaves
         sucker.test_resetSendRootOverAMBCalled();
-        sucker.toRemote(TOKEN, "");
+        sucker.toRemote(TOKEN);
 
         // Now all 4 indices are covered.
         assertEq(sucker.test_getNumberOfClaimsSent(TOKEN), 4, "numberOfClaimsSent should be 4 after second send");
@@ -779,7 +778,7 @@ contract TestAuditGaps is Test {
         // Insert and send batch 1.
         sucker.test_insertIntoTree(1 ether, TOKEN, 1 ether, bytes32(uint256(uint160(address(0x10)))));
         vm.deal(address(sucker), 1 ether);
-        sucker.toRemote(TOKEN, "");
+        sucker.toRemote(TOKEN);
 
         assertEq(sucker.test_getOutboxNonce(TOKEN), 1, "Nonce should be 1 after first send");
         assertEq(sucker.test_getOutboxBalance(TOKEN), 0, "Balance should be 0 after send");
@@ -787,7 +786,7 @@ contract TestAuditGaps is Test {
         // Insert and send batch 2.
         sucker.test_insertIntoTree(2 ether, TOKEN, 2 ether, bytes32(uint256(uint160(address(0x20)))));
         vm.deal(address(sucker), 2 ether);
-        sucker.toRemote(TOKEN, "");
+        sucker.toRemote(TOKEN);
 
         assertEq(sucker.test_getOutboxNonce(TOKEN), 2, "Nonce should be 2 after second send");
         assertEq(sucker.test_getOutboxBalance(TOKEN), 0, "Balance should be 0 after second send");
@@ -795,7 +794,7 @@ contract TestAuditGaps is Test {
         // Insert and send batch 3.
         sucker.test_insertIntoTree(3 ether, TOKEN, 3 ether, bytes32(uint256(uint160(address(0x30)))));
         vm.deal(address(sucker), 3 ether);
-        sucker.toRemote(TOKEN, "");
+        sucker.toRemote(TOKEN);
 
         assertEq(sucker.test_getOutboxNonce(TOKEN), 3, "Nonce should be 3 after third send");
         assertEq(sucker.test_getOutboxBalance(TOKEN), 0, "Balance should be 0 after third send");
@@ -977,7 +976,7 @@ contract TestAuditGaps is Test {
 
         // Send cycle 1.
         vm.deal(address(sucker), 25 ether);
-        sucker.toRemote(TOKEN, "");
+        sucker.toRemote(TOKEN);
         assertEq(sucker.test_getOutboxBalance(TOKEN), 0, "Balance cleared after send");
 
         // Cycle 2: insert more leaves.
@@ -989,7 +988,7 @@ contract TestAuditGaps is Test {
 
         // Send cycle 2.
         vm.deal(address(sucker), 35 ether);
-        sucker.toRemote(TOKEN, "");
+        sucker.toRemote(TOKEN);
         assertEq(sucker.test_getOutboxBalance(TOKEN), 0, "Balance cleared after second send");
         assertEq(sucker.test_getOutboxNonce(TOKEN), 2, "Nonce should be 2 after two sends");
         assertEq(sucker.test_getNumberOfClaimsSent(TOKEN), 5, "All 5 claims should be marked as sent");
@@ -1067,7 +1066,7 @@ contract TestAuditGaps is Test {
 
         // toRemote should revert with NothingToSend (balance=0, count==numberOfClaimsSent==0).
         vm.expectRevert(abi.encodeWithSelector(JBSucker.JBSucker_NothingToSend.selector));
-        sucker.toRemote(TOKEN, "");
+        sucker.toRemote(TOKEN);
     }
 
     receive() external payable {}

@@ -189,8 +189,7 @@ contract MerkleUnitTest is JBSucker, Test {
         address token,
         uint256 amount,
         JBRemoteToken memory remoteToken,
-        JBMessageRoot memory message,
-        bytes memory
+        JBMessageRoot memory message
     )
         internal
         virtual

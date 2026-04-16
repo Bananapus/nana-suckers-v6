@@ -31,8 +31,7 @@ contract CodexPeerSnapshotSucker is JBSucker {
         address,
         uint256,
         JBRemoteToken memory,
-        JBMessageRoot memory,
-        bytes memory
+        JBMessageRoot memory
     )
         internal
         pure

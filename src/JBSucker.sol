@@ -586,9 +586,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     /// `_addToBalance` when the next native token claim is processed. This is by design — reverting on fee
     /// failure would block all bridging.
     /// @param token The terminal token being bridged.
-    /// @param metadata Arbitrary bytes forwarded to `_sendRootOverAMB`. Swap suckers use this to pass a
-    /// `quoteForSwap` entry (via `JBMetadataResolver`) that overrides the TWAP-derived minimum output.
-    function toRemote(address token, bytes calldata metadata) external payable override {
+    function toRemote(address token) external payable override {
         JBRemoteToken memory remoteToken = _remoteTokenFor[token];
 
         // Ensure that the token does not have an emergency hatch enabled.
@@ -639,7 +637,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         }
 
         // Send the merkle root to the remote chain.
-        _sendRoot({transportPayment: transportPayment, token: token, remoteToken: remoteToken, metadata: metadata});
+        _sendRoot({transportPayment: transportPayment, token: token, remoteToken: remoteToken});
     }
 
     //*********************************************************************//
@@ -986,9 +984,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         // (e.g., the bridge is non-functional), the project owner can call `enableEmergencyHatchFor` to allow
         // local withdrawals via `exitThroughEmergencyHatch`.
         if (map.remoteToken == bytes32(0) && _outboxOf[token].numberOfClaimsSent != _outboxOf[token].tree.count) {
-            _sendRoot({
-                transportPayment: transportPaymentValue, token: token, remoteToken: currentMapping, metadata: ""
-            });
+            _sendRoot({transportPayment: transportPaymentValue, token: token, remoteToken: currentMapping});
         }
 
         // Update the token mapping.
@@ -1065,15 +1061,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     /// derived from `msg.value`)
     /// @param token The terminal token to bridge the merkle tree of.
     /// @param remoteToken The remote token which the `token` is mapped to.
-    function _sendRoot(
-        uint256 transportPayment,
-        address token,
-        JBRemoteToken memory remoteToken,
-        bytes memory metadata
-    )
-        internal
-        virtual
-    {
+    function _sendRoot(uint256 transportPayment, address token, JBRemoteToken memory remoteToken) internal virtual {
         // Ensure the token is mapped to an address on the remote chain.
         if (remoteToken.addr == bytes32(0)) revert JBSucker_TokenNotMapped(token);
 
@@ -1127,8 +1115,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
             amount: amount,
             nonce: nonce,
             root: root,
-            index: index,
-            metadata: metadata
+            index: index
         });
     }
 
@@ -1140,7 +1127,6 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     /// @param amount The amount of terminal tokens being bridged.
     /// @param remoteToken The remote token which the terminal token is mapped to.
     /// @param message The message/root to send to the remote chain.
-    /// @param metadata Arbitrary caller-provided bytes (e.g. `quoteForSwap` for swap suckers).
     // forge-lint: disable-next-line(mixed-case-function)
     function _sendRootOverAMB(
         uint256 transportPayment,
@@ -1148,8 +1134,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         address token,
         uint256 amount,
         JBRemoteToken memory remoteToken,
-        JBMessageRoot memory message,
-        bytes memory metadata
+        JBMessageRoot memory message
     )
         internal
         virtual;
@@ -1491,8 +1476,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         uint256 amount,
         uint64 nonce,
         bytes32 root,
-        uint256 index,
-        bytes memory metadata
+        uint256 index
     )
         private
     {
@@ -1508,6 +1492,6 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         });
 
         // Send the root over the AMB (positional args — slither IR parser crashes on named args here).
-        _sendRootOverAMB(transportPayment, index, token, amount, remoteToken, message, metadata);
+        _sendRootOverAMB(transportPayment, index, token, amount, remoteToken, message);
     }
 }

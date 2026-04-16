@@ -196,7 +196,5 @@ interface IJBSucker is IERC165 {
 
     /// @notice Send the outbox tree root and bridged assets to the remote peer.
     /// @param token The terminal token to bridge.
-    /// @param metadata Arbitrary bytes forwarded to `_sendRootOverAMB`. Swap suckers use this to pass a
-    /// `quoteForSwap` entry (via `JBMetadataResolver`) that overrides the TWAP-derived minimum output.
-    function toRemote(address token, bytes calldata metadata) external payable;
+    function toRemote(address token) external payable;
 }

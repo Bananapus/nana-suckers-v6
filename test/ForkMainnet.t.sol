@@ -288,7 +288,7 @@ abstract contract CCIPSuckerMainnetForkTestBase is TestBaseWorkflow {
         // Send to remote chain — this calls the REAL mainnet CCIP router.
         vm.deal(rootSender, 1 ether);
         vm.prank(rootSender);
-        suckerL1.toRemote{value: 1 ether}(JBConstants.NATIVE_TOKEN, "");
+        suckerL1.toRemote{value: 1 ether}(JBConstants.NATIVE_TOKEN);
 
         // Verify outbox cleared on L1.
         assertEq(suckerL1.outboxOf(JBConstants.NATIVE_TOKEN).balance, 0, "Outbox should be cleared");

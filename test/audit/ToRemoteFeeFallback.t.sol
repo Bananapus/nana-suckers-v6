@@ -106,7 +106,7 @@ contract ToRemoteFeeFallbackTest is Test {
         vm.mockCall(address(0xB0B), abi.encodeWithSelector(IOPMessenger.sendMessage.selector), abi.encode());
 
         // Fee ETH stays in the contract; bridge proceeds without revert.
-        sucker.toRemote{value: 1}(JBConstants.NATIVE_TOKEN, "");
+        sucker.toRemote{value: 1}(JBConstants.NATIVE_TOKEN);
         assertEq(address(sucker).balance, 1, "fee ETH retained in contract when terminal missing");
     }
 
@@ -122,7 +122,7 @@ contract ToRemoteFeeFallbackTest is Test {
         vm.mockCall(address(0xB0B), abi.encodeWithSelector(IOPMessenger.sendMessage.selector), abi.encode());
 
         // Fee ETH stays in the contract; bridge proceeds without revert.
-        sucker.toRemote{value: 1}(JBConstants.NATIVE_TOKEN, "");
+        sucker.toRemote{value: 1}(JBConstants.NATIVE_TOKEN);
         assertEq(address(sucker).balance, 1, "fee ETH retained in contract when pay reverts");
     }
 
@@ -135,6 +135,6 @@ contract ToRemoteFeeFallbackTest is Test {
         vm.mockCall(FEE_TERMINAL, abi.encodeWithSelector(IJBTerminal.pay.selector), abi.encode(uint256(0)));
         vm.mockCall(address(0xB0B), abi.encodeWithSelector(IOPMessenger.sendMessage.selector), abi.encode());
 
-        sucker.toRemote{value: 1}(JBConstants.NATIVE_TOKEN, "");
+        sucker.toRemote{value: 1}(JBConstants.NATIVE_TOKEN);
     }
 }

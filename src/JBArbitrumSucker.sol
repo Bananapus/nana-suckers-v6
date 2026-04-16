@@ -153,8 +153,7 @@ contract JBArbitrumSucker is JBSucker, IJBArbitrumSucker {
         address token,
         uint256 amount,
         JBRemoteToken memory remoteToken,
-        JBMessageRoot memory message,
-        bytes memory
+        JBMessageRoot memory message
     )
         internal
         override
