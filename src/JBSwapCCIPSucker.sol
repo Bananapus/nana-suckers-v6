@@ -378,6 +378,7 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
         PendingSwap memory pending = pendingSwapOf[localToken][nonce];
         if (pending.bridgeAmount == 0) revert JBSwapCCIPSucker_NoPendingSwap();
 
+        // slither-disable-next-line reentrancy-no-eth,reentrancy-benign,reentrancy-events
         uint256 localAmount = _executeSwapWithQuote({
             tokenIn: pending.bridgeToken, tokenOut: localToken, amount: pending.bridgeAmount, minAmountOut: minAmountOut
         });
