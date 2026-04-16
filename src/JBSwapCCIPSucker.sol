@@ -192,6 +192,11 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
     /// Value 0 means no active claim (bypass scaling); non-zero means leafIndex = value - 1.
     uint256 transient _currentClaimLeafIndex;
 
+    /// @dev Reentrancy guard for `retrySwap`. Prevents claims from executing during the swap window
+    /// (between delete pendingSwapOf and writing the conversion rate), which would allow zero-backed
+    /// minting. Also prevents re-entry into `retrySwap` itself. Transient — auto-resets each tx.
+    bool transient _retrySwapLocked;
+
     //*********************************************************************//
     // ---------------------------- constructor -------------------------- //
     //*********************************************************************//
@@ -367,20 +372,24 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
     /// @param localToken The local token that the bridge tokens should be swapped into.
     /// @param nonce The nonce of the batch whose swap failed.
     function retrySwap(address localToken, uint64 nonce) external {
+        // Reentrancy guard: prevents re-entry into retrySwap AND prevents claims from executing
+        // during the swap window (which would see the stale {leafTotal > 0, localTotal: 0} rate
+        // and mint project tokens backed by zero terminal tokens).
+        if (_retrySwapLocked) revert JBSwapCCIPSucker_NoPendingSwap();
+        _retrySwapLocked = true;
+
         PendingSwap memory pending = pendingSwapOf[localToken][nonce];
         if (pending.bridgeAmount == 0) revert JBSwapCCIPSucker_NoPendingSwap();
-
-        // Delete before the swap to follow checks-effects-interactions and prevent reentrancy
-        // (the swap triggers external calls to Uniswap pools and token transfers).
-        delete pendingSwapOf[localToken][nonce];
 
         // slither-disable-next-line reentrancy-no-eth,reentrancy-benign,reentrancy-events
         uint256 localAmount =
             _executeSwap({tokenIn: pending.bridgeToken, tokenOut: localToken, amount: pending.bridgeAmount});
 
-        // Update the conversion rate so claims can proceed.
+        // Update the conversion rate so claims can proceed, then clear the pending swap.
         _conversionRateOf[localToken][nonce] = ConversionRate({leafTotal: pending.leafTotal, localTotal: localAmount});
+        delete pendingSwapOf[localToken][nonce];
 
+        _retrySwapLocked = false;
         emit SwapRetried(localToken, nonce, pending.bridgeAmount, localAmount);
     }
 
@@ -393,6 +402,8 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
     /// Stores leafIndex + 1 (0 = no active claim sentinel). No reset needed — transient storage auto-clears.
     /// @param claimData The claim data containing the leaf and proof.
     function claim(JBClaim calldata claimData) public override {
+        // Block claims during retrySwap to prevent zero-backed minting via reentrancy.
+        if (_retrySwapLocked) revert JBSwapCCIPSucker_SwapPending(0);
         // slither-disable-next-line events-maths
         _currentClaimLeafIndex = claimData.leaf.index + 1;
         super.claim(claimData);

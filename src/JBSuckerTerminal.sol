@@ -405,7 +405,9 @@ contract JBSuckerTerminal is ERC165, IERC721Receiver, IJBSuckerTerminal, IJBRule
 
         // On the home chain, store a deployer-independent reference for inbound CCIP payments.
         // This survives project ownership transfers (the deployer-keyed mapping does not).
+        // Only one home proxy per real project — a new owner cannot overwrite and redirect CCIP mints.
         if (homeChainSelector == 0) {
+            if (_homeProxyOf[realProjectId] != 0) revert JBSuckerTerminal_ProxyAlreadyExists(realProjectId);
             _homeProxyOf[realProjectId] = proxyProjectId;
         }
 
