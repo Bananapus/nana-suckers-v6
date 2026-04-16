@@ -16,12 +16,6 @@ import {JBSuckerDeployer} from "./JBSuckerDeployer.sol";
 /// @notice An `IJBSuckerDeployer` implementation to deploy `JBCCIPSucker` contracts.
 contract JBCCIPSuckerDeployer is JBSuckerDeployer, IJBCCIPSuckerDeployer {
     //*********************************************************************//
-    // --------------------------- custom errors ------------------------- //
-    //*********************************************************************//
-
-    error JBCCIPSuckerDeployer_InvalidCCIPRouter(address router);
-
-    //*********************************************************************//
     // ---------------------- public stored properties ------------------- //
     //*********************************************************************//
 

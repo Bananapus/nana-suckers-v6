@@ -7,7 +7,6 @@ import {IJBTokens} from "@bananapus/core-v6/src/interfaces/IJBTokens.sol";
 import {JBConstants} from "@bananapus/core-v6/src/libraries/JBConstants.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import {BitMaps} from "@openzeppelin/contracts/utils/structs/BitMaps.sol";
 
 import {JBSucker} from "./JBSucker.sol";
 import {JBOptimismSuckerDeployer} from "./deployers/JBOptimismSuckerDeployer.sol";
@@ -17,13 +16,9 @@ import {IOPMessenger} from "./interfaces/IOPMessenger.sol";
 import {IOPStandardBridge} from "./interfaces/IOPStandardBridge.sol";
 import {JBMessageRoot} from "./structs/JBMessageRoot.sol";
 import {JBRemoteToken} from "./structs/JBRemoteToken.sol";
-import {MerkleLib} from "./utils/MerkleLib.sol";
 
 /// @notice A `JBSucker` implementation to suck tokens between two chains connected by an OP Bridge.
 contract JBOptimismSucker is JBSucker, IJBOptimismSucker {
-    using BitMaps for BitMaps.BitMap;
-    using MerkleLib for MerkleLib.Tree;
-
     //*********************************************************************//
     // --------------- public immutable stored properties ---------------- //
     //*********************************************************************//

@@ -8,8 +8,6 @@ import {IJBTokens} from "@bananapus/core-v6/src/interfaces/IJBTokens.sol";
 import {JBConstants} from "@bananapus/core-v6/src/libraries/JBConstants.sol";
 import {IAny2EVMMessageReceiver} from "@chainlink/contracts-ccip/src/v0.8/ccip/interfaces/IAny2EVMMessageReceiver.sol";
 import {Client} from "@chainlink/contracts-ccip/src/v0.8/ccip/libraries/Client.sol";
-import {BitMaps} from "@openzeppelin/contracts/utils/structs/BitMaps.sol";
-
 // Local: base contracts
 import {JBSucker} from "./JBSucker.sol";
 
@@ -29,14 +27,8 @@ import {JBMessageRoot} from "./structs/JBMessageRoot.sol";
 import {JBRemoteToken} from "./structs/JBRemoteToken.sol";
 import {JBTokenMapping} from "./structs/JBTokenMapping.sol";
 
-// Local: utils
-import {MerkleLib} from "./utils/MerkleLib.sol";
-
 /// @notice A `JBSucker` implementation to suck tokens between chains with Chainlink CCIP
 contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
-    using MerkleLib for MerkleLib.Tree;
-    using BitMaps for BitMaps.BitMap;
-
     //*********************************************************************//
     // --------------------------- custom errors ------------------------- //
     //*********************************************************************//

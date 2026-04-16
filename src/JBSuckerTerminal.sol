@@ -771,8 +771,8 @@ contract JBSuckerTerminal is ERC165, IERC721Receiver, IJBSuckerTerminal, IJBRule
     /// @notice Handles a received CCIP pay message on the home chain.
     /// @dev Pays the real project with the bridged funds, then deposits the received real tokens into the proxy project
     /// to mint proxy tokens for the beneficiary.
-    /// @param payload The ABI-encoded JBRelayPayMessage containing the real project ID, beneficiary, memo, and metadata.
-    /// @param destTokenAmounts The token amounts delivered by CCIP (typically WETH which gets unwrapped).
+    /// @param payload The ABI-encoded JBRelayPayMessage containing the real project ID, beneficiary, memo, and
+    /// metadata. @param destTokenAmounts The token amounts delivered by CCIP (typically WETH which gets unwrapped).
     function _handleCCIPPay(bytes memory payload, Client.EVMTokenAmount[] calldata destTokenAmounts) internal virtual {
         // Decode the pay message.
         JBRelayPayMessage memory payMsg = abi.decode(payload, (JBRelayPayMessage));

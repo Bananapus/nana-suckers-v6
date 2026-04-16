@@ -23,12 +23,6 @@ import {MerkleLib} from "../utils/MerkleLib.sol";
 /// DELEGATECALL. This avoids duplicating the bytecode in every sucker implementation.
 library JBSuckerLib {
     //*********************************************************************//
-    // --------------------------- custom errors ------------------------- //
-    //*********************************************************************//
-
-    error JBSuckerLib_InsufficientBalance(uint256 amount, uint256 balance);
-
-    //*********************************************************************//
     // ----------------------- internal constants ------------------------ //
     //*********************************************************************//
 

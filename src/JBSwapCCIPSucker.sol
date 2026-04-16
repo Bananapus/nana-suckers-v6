@@ -29,7 +29,6 @@ import {JBCCIPSucker} from "./JBCCIPSucker.sol";
 import {JBSwapCCIPSuckerDeployer} from "./deployers/JBSwapCCIPSuckerDeployer.sol";
 
 // Local: interfaces (alphabetized).
-import {ICCIPRouter} from "./interfaces/ICCIPRouter.sol";
 import {IJBSuckerRegistry} from "./interfaces/IJBSuckerRegistry.sol";
 import {IJBSwapCCIPSuckerDeployer} from "./interfaces/IJBSwapCCIPSuckerDeployer.sol";
 import {IWrappedNativeToken} from "./interfaces/IWrappedNativeToken.sol";

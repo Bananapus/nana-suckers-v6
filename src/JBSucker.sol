@@ -5,19 +5,12 @@ pragma solidity 0.8.28;
 import {IJBCashOutTerminal} from "@bananapus/core-v6/src/interfaces/IJBCashOutTerminal.sol";
 import {IJBController} from "@bananapus/core-v6/src/interfaces/IJBController.sol";
 import {IJBDirectory} from "@bananapus/core-v6/src/interfaces/IJBDirectory.sol";
-import {IJBMultiTerminal} from "@bananapus/core-v6/src/interfaces/IJBMultiTerminal.sol";
 import {IJBPermissioned} from "@bananapus/core-v6/src/interfaces/IJBPermissioned.sol";
 import {IJBPermissions} from "@bananapus/core-v6/src/interfaces/IJBPermissions.sol";
-import {IJBPrices} from "@bananapus/core-v6/src/interfaces/IJBPrices.sol";
 import {IJBProjects} from "@bananapus/core-v6/src/interfaces/IJBProjects.sol";
 import {IJBTerminal} from "@bananapus/core-v6/src/interfaces/IJBTerminal.sol";
-import {IJBTerminalStore} from "@bananapus/core-v6/src/interfaces/IJBTerminalStore.sol";
 import {IJBTokens} from "@bananapus/core-v6/src/interfaces/IJBTokens.sol";
-import {JBAccountingContext} from "@bananapus/core-v6/src/structs/JBAccountingContext.sol";
 import {JBConstants} from "@bananapus/core-v6/src/libraries/JBConstants.sol";
-import {JBCurrencyIds} from "@bananapus/core-v6/src/libraries/JBCurrencyIds.sol";
-import {JBFixedPointNumber} from "@bananapus/core-v6/src/libraries/JBFixedPointNumber.sol";
-import {JBMetadataResolver} from "@bananapus/core-v6/src/libraries/JBMetadataResolver.sol";
 import {JBPermissioned} from "@bananapus/core-v6/src/abstract/JBPermissioned.sol";
 import {JBPermissionIds} from "@bananapus/permission-ids-v6/src/JBPermissionIds.sol";
 import {BitMaps} from "@openzeppelin/contracts/utils/structs/BitMaps.sol";
@@ -27,7 +20,6 @@ import {ERC2771Context} from "@openzeppelin/contracts/metatx/ERC2771Context.sol"
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import {mulDiv} from "@prb/math/src/Common.sol";
 
 // Local: enums
 import {JBSuckerState} from "./enums/JBSuckerState.sol";
@@ -38,7 +30,6 @@ import {IJBSuckerExtended} from "./interfaces/IJBSuckerExtended.sol";
 import {IJBSuckerRegistry} from "./interfaces/IJBSuckerRegistry.sol";
 
 // Local: libraries (alphabetized)
-import {JBRelayBeneficiary} from "./libraries/JBRelayBeneficiary.sol";
 import {JBSuckerLib} from "./libraries/JBSuckerLib.sol";
 import {MerkleLib} from "./utils/MerkleLib.sol";
 
@@ -112,13 +103,6 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     //*********************************************************************//
     // ------------------------- internal constants ----------------------- //
     //*********************************************************************//
-
-    /// @notice The currency used for cross-chain surplus/balance normalization: ETH (native token).
-    /// @dev Bridge messages always carry surplus and balance denominated in this currency at `_ETH_DECIMALS` precision.
-    uint256 internal constant _ETH_CURRENCY = JBCurrencyIds.ETH;
-
-    /// @notice The decimal precision used for cross-chain surplus/balance normalization: 18.
-    uint8 internal constant _ETH_DECIMALS = 18;
 
     /// @notice The depth of the merkle tree used to store the outbox and inbox.
     uint32 internal constant _TREE_DEPTH = 32;
@@ -1375,17 +1359,6 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         return JBSuckerLib.computeTreeRoot({branch: branch, count: count});
     }
 
-    /// @notice Build ETH-denominated aggregate surplus and balance across all terminals for the project.
-    /// @dev Delegates to `JBSuckerLib.buildETHAggregate` (deployed library, called via DELEGATECALL) to reduce
-    /// child contract bytecode.
-    /// @param _projectId The project ID to build the aggregate for.
-    /// @return ethSurplus The total surplus denominated in ETH at 18 decimals.
-    /// @return ethBalance The total balance denominated in ETH at 18 decimals.
-    // forge-lint: disable-next-line(mixed-case-function)
-    function _buildETHAggregate(uint256 _projectId) internal view returns (uint256 ethSurplus, uint256 ethBalance) {
-        (ethSurplus, ethBalance) = JBSuckerLib.buildETHAggregate({directory: DIRECTORY, projectId: _projectId});
-    }
-
     /// @notice Builds a hash as they are stored in the merkle tree.
     /// @param projectTokenCount The number of project tokens being cashed out.
     /// @param terminalTokenAmount The amount of terminal tokens being reclaimed by the cash out.
@@ -1463,13 +1436,6 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     /// @return The primary terminal.
     function _primaryTerminalOf(uint256 forProjectId, address token) internal view returns (IJBTerminal) {
         return DIRECTORY.primaryTerminalOf({projectId: forProjectId, token: token});
-    }
-
-    /// @notice Returns all terminals for a project.
-    /// @param forProjectId The project ID.
-    /// @return The terminals.
-    function _terminalsOf(uint256 forProjectId) internal view returns (IJBTerminal[] memory) {
-        return DIRECTORY.terminalsOf(forProjectId);
     }
 
     /// @notice Convert a bytes32 remote address to a local EVM address.

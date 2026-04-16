@@ -12,7 +12,6 @@ import {IJBTokens} from "@bananapus/core-v6/src/interfaces/IJBTokens.sol";
 import {JBConstants} from "@bananapus/core-v6/src/libraries/JBConstants.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import {BitMaps} from "@openzeppelin/contracts/utils/structs/BitMaps.sol";
 
 import {JBSucker} from "./JBSucker.sol";
 import {JBArbitrumSuckerDeployer} from "./deployers/JBArbitrumSuckerDeployer.sol";
@@ -25,13 +24,9 @@ import {IJBArbitrumSucker} from "./interfaces/IJBArbitrumSucker.sol";
 import {ARBChains} from "./libraries/ARBChains.sol";
 import {JBMessageRoot} from "./structs/JBMessageRoot.sol";
 import {JBRemoteToken} from "./structs/JBRemoteToken.sol";
-import {MerkleLib} from "./utils/MerkleLib.sol";
 
 /// @notice A `JBSucker` implementation to suck tokens between two chains connected by an Arbitrum bridge.
 contract JBArbitrumSucker is JBSucker, IJBArbitrumSucker {
-    using BitMaps for BitMaps.BitMap;
-    using MerkleLib for MerkleLib.Tree;
-
     //*********************************************************************//
     // --------------------------- custom errors ------------------------- //
     //*********************************************************************//
