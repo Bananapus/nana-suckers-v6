@@ -125,6 +125,11 @@ contract JBSuckerTerminal is ERC165, IERC721Receiver, IJBSuckerTerminal, IJBRule
     /// @dev Maps proxy project IDs to their configuration. Use `proxyConfigOf()` for external access.
     mapping(uint256 proxyProjectId => JBProxyConfig) internal _proxyConfigOf;
 
+    /// @dev The canonical home-chain proxy for each real project, used by inbound CCIP payments.
+    /// Stored separately from `proxyProjectIdOf` (which is keyed by deployer) to avoid breaking
+    /// when the real project's ownership is transferred after proxy creation.
+    mapping(uint256 realProjectId => uint256 proxyProjectId) internal _homeProxyOf;
+
     /// @dev Accounting contexts for projects using this as a terminal.
     mapping(uint256 projectId => JBAccountingContext[]) internal _accountingContextsOf;
 
@@ -398,6 +403,12 @@ contract JBSuckerTerminal is ERC165, IERC721Receiver, IJBSuckerTerminal, IJBRule
         // slither-disable-next-line reentrancy-no-eth
         proxyProjectIdOf[realProjectId][msg.sender] = proxyProjectId;
 
+        // On the home chain, store a deployer-independent reference for inbound CCIP payments.
+        // This survives project ownership transfers (the deployer-keyed mapping does not).
+        if (homeChainSelector == 0) {
+            _homeProxyOf[realProjectId] = proxyProjectId;
+        }
+
         emit CreateProxy(realProjectId, proxyProjectId, proxyToken, homeChainSelector, msg.sender);
     }
 
@@ -496,11 +507,20 @@ contract JBSuckerTerminal is ERC165, IERC721Receiver, IJBSuckerTerminal, IJBRule
         external
         view
         override
-        returns (uint256)
+        returns (uint256 surplus)
     {
-        // Return the balance of the first token if provided, otherwise 0.
-        if (tokens.length > 0) return _balanceOf[projectId][tokens[0]];
-        return 0;
+        if (tokens.length == 0) {
+            // Empty list: sum across all accounting contexts for this project.
+            JBAccountingContext[] storage contexts = _accountingContextsOf[projectId];
+            for (uint256 i; i < contexts.length; i++) {
+                surplus += _balanceOf[projectId][contexts[i].token];
+            }
+        } else {
+            // Sum the balances of the requested tokens.
+            for (uint256 i; i < tokens.length; i++) {
+                surplus += _balanceOf[projectId][tokens[i]];
+            }
+        }
     }
 
     /// @notice Returns whether an address has permission to mint a project's tokens on-demand.
@@ -558,8 +578,9 @@ contract JBSuckerTerminal is ERC165, IERC721Receiver, IJBSuckerTerminal, IJBRule
 
     /// @dev See {IERC165-supportsInterface}.
     function supportsInterface(bytes4 interfaceId) public view virtual override(ERC165, IERC165) returns (bool) {
-        return interfaceId == type(IJBRulesetDataHook).interfaceId || interfaceId == type(IJBTerminal).interfaceId
-            || interfaceId == type(IAny2EVMMessageReceiver).interfaceId || super.supportsInterface(interfaceId);
+        return interfaceId == type(IJBSuckerTerminal).interfaceId || interfaceId == type(IJBRulesetDataHook).interfaceId
+            || interfaceId == type(IJBTerminal).interfaceId || interfaceId == type(IAny2EVMMessageReceiver).interfaceId
+            || super.supportsInterface(interfaceId);
     }
 
     //*********************************************************************//
@@ -826,9 +847,9 @@ contract JBSuckerTerminal is ERC165, IERC721Receiver, IJBSuckerTerminal, IJBRule
         });
 
         // Deposit real tokens into the proxy project, minting proxy tokens for the beneficiary.
-        // Look up the proxy created by the project owner (the only authorized deployer on the home chain).
+        // Uses _homeProxyOf (deployer-independent) so ownership transfers don't break inbound payments.
         uint256 proxyTokenCount = _depositIntoProxy(
-            proxyProjectIdOf[payMsg.realProjectId][PROJECTS.ownerOf(payMsg.realProjectId)],
+            _homeProxyOf[payMsg.realProjectId],
             payMsg.realProjectId,
             payMsg.beneficiary,
             0,
