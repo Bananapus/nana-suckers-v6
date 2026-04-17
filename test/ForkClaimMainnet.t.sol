@@ -251,8 +251,7 @@ abstract contract CCIPSuckerClaimForkTestBase is TestBaseWorkflow {
         _metadata.baseCurrency = uint32(uint160(token));
 
         JBCurrencyAmount[] memory _surplusAllowances = new JBCurrencyAmount[](1);
-        _surplusAllowances[0] =
-            JBCurrencyAmount({amount: 5 * 10 ** 18, currency: uint32(uint160(token))});
+        _surplusAllowances[0] = JBCurrencyAmount({amount: 5 * 10 ** 18, currency: uint32(uint160(token))});
 
         JBFundAccessLimitGroup[] memory _fundAccessLimitGroup = new JBFundAccessLimitGroup[](1);
         _fundAccessLimitGroup[0] = JBFundAccessLimitGroup({
@@ -273,9 +272,7 @@ abstract contract CCIPSuckerClaimForkTestBase is TestBaseWorkflow {
         _rulesetConfigurations[0].fundAccessLimitGroups = _fundAccessLimitGroup;
 
         JBAccountingContext[] memory _tokensToAccept = new JBAccountingContext[](1);
-        _tokensToAccept[0] = JBAccountingContext({
-            token: token, decimals: 18, currency: uint32(uint160(token))
-        });
+        _tokensToAccept[0] = JBAccountingContext({token: token, decimals: 18, currency: uint32(uint160(token))});
 
         JBTerminalConfig[] memory _terminalConfigurations = new JBTerminalConfig[](1);
         _terminalConfigurations[0] =
@@ -390,12 +387,10 @@ abstract contract CCIPSuckerClaimForkTestBase is TestBaseWorkflow {
         vm.startPrank(user);
         uint256 projectTokenAmount;
         if (token == JBConstants.NATIVE_TOKEN) {
-            projectTokenAmount =
-                jbMultiTerminal().pay{value: amountToSend}(1, token, amountToSend, user, 0, "", "");
+            projectTokenAmount = jbMultiTerminal().pay{value: amountToSend}(1, token, amountToSend, user, 0, "", "");
         } else {
             IERC20(token).approve(address(jbMultiTerminal()), amountToSend);
-            projectTokenAmount =
-                jbMultiTerminal().pay(1, token, amountToSend, user, 0, "", "");
+            projectTokenAmount = jbMultiTerminal().pay(1, token, amountToSend, user, 0, "", "");
         }
 
         // Prepare: burns project tokens, cashes out terminal token, inserts leaf into outbox tree.
@@ -538,9 +533,7 @@ abstract contract CCIPSuckerClaimForkTestBase is TestBaseWorkflow {
         );
 
         // Double-claim should revert.
-        vm.expectRevert(
-            abi.encodeWithSelector(JBSucker.JBSucker_LeafAlreadyExecuted.selector, token, leaf.index)
-        );
+        vm.expectRevert(abi.encodeWithSelector(JBSucker.JBSucker_LeafAlreadyExecuted.selector, token, leaf.index));
         suckerL1.claim(claimData);
     }
 
@@ -654,11 +647,7 @@ abstract contract CCIPSuckerClaimForkTestBase is TestBaseWorkflow {
             bytes32[32] memory proofA = _zeroProof();
             proofA[0] = leafB.hashed;
 
-            vm.expectRevert(
-                abi.encodeWithSelector(
-                    JBSucker.JBSucker_LeafAlreadyExecuted.selector, token, leafA.index
-                )
-            );
+            vm.expectRevert(abi.encodeWithSelector(JBSucker.JBSucker_LeafAlreadyExecuted.selector, token, leafA.index));
             suckerL1.claim(
                 JBClaim({
                     token: token,
@@ -900,12 +889,8 @@ abstract contract CCIPSuckerClaimForkTestBase is TestBaseWorkflow {
         JBCCIPSucker(payable(address(suckerL1))).ccipReceive(_buildCCIPMessage(staleMessage));
 
         // Inbox root should be unchanged — stale nonce was rejected.
-        assertEq(
-            suckerL1.inboxOf(token).root, sentRoot, "Inbox root should NOT be updated by stale nonce"
-        );
-        assertNotEq(
-            suckerL1.inboxOf(token).root, fakeRoot, "Fake root should NOT have been accepted"
-        );
+        assertEq(suckerL1.inboxOf(token).root, sentRoot, "Inbox root should NOT be updated by stale nonce");
+        assertNotEq(suckerL1.inboxOf(token).root, fakeRoot, "Fake root should NOT have been accepted");
 
         // Original claim should still work.
         suckerL1.claim(

@@ -123,6 +123,7 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
         // Count active suckers.
         uint256 activeCount;
         for (uint256 i; i < allSuckers.length;) {
+            // slither-disable-next-line unused-return
             (, uint256 val) = _suckersOf[projectId].tryGet(allSuckers[i]);
             if (val == _SUCKER_EXISTS) activeCount++;
             unchecked {
@@ -134,15 +135,13 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
         pairs = new JBSuckersPair[](activeCount);
         uint256 j;
         for (uint256 i; i < allSuckers.length;) {
+            // slither-disable-next-line unused-return
             (, uint256 val) = _suckersOf[projectId].tryGet(allSuckers[i]);
             if (val == _SUCKER_EXISTS) {
                 IJBSucker sucker = IJBSucker(allSuckers[i]);
                 // slither-disable-next-line calls-loop
-                pairs[j] = JBSuckersPair({
-                    local: address(sucker),
-                    remote: sucker.peer(),
-                    remoteChainId: sucker.peerChainId()
-                });
+                pairs[j] =
+                    JBSuckersPair({local: address(sucker), remote: sucker.peer(), remoteChainId: sucker.peerChainId()});
                 unchecked {
                     ++j;
                 }
@@ -163,6 +162,7 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
         // Count active suckers.
         uint256 activeCount;
         for (uint256 i; i < allSuckers.length;) {
+            // slither-disable-next-line unused-return
             (, uint256 val) = _suckersOf[projectId].tryGet(allSuckers[i]);
             if (val == _SUCKER_EXISTS) activeCount++;
             unchecked {
@@ -174,6 +174,7 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
         suckers = new address[](activeCount);
         uint256 j;
         for (uint256 i; i < allSuckers.length;) {
+            // slither-disable-next-line unused-return
             (, uint256 val) = _suckersOf[projectId].tryGet(allSuckers[i]);
             if (val == _SUCKER_EXISTS) {
                 suckers[j] = allSuckers[i];
@@ -325,6 +326,7 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
         }
 
         // Mark the sucker as deprecated (retains mint permission, excluded from active listings).
+        // slither-disable-next-line unused-return
         _suckersOf[projectId].set(address(sucker), _SUCKER_DEPRECATED);
         emit SuckerDeprecated({projectId: projectId, sucker: address(sucker), caller: _msgSender()});
     }

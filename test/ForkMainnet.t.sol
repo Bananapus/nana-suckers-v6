@@ -239,8 +239,7 @@ abstract contract CCIPSuckerMainnetForkTestBase is TestBaseWorkflow {
         _metadata.baseCurrency = uint32(uint160(token));
 
         JBCurrencyAmount[] memory _surplusAllowances = new JBCurrencyAmount[](1);
-        _surplusAllowances[0] =
-            JBCurrencyAmount({amount: 5 * 10 ** 18, currency: uint32(uint160(token))});
+        _surplusAllowances[0] = JBCurrencyAmount({amount: 5 * 10 ** 18, currency: uint32(uint160(token))});
 
         JBFundAccessLimitGroup[] memory _fundAccessLimitGroup = new JBFundAccessLimitGroup[](1);
         _fundAccessLimitGroup[0] = JBFundAccessLimitGroup({
@@ -261,9 +260,7 @@ abstract contract CCIPSuckerMainnetForkTestBase is TestBaseWorkflow {
         _rulesetConfigurations[0].fundAccessLimitGroups = _fundAccessLimitGroup;
 
         JBAccountingContext[] memory _tokensToAccept = new JBAccountingContext[](1);
-        _tokensToAccept[0] = JBAccountingContext({
-            token: token, decimals: 18, currency: uint32(uint160(token))
-        });
+        _tokensToAccept[0] = JBAccountingContext({token: token, decimals: 18, currency: uint32(uint160(token))});
 
         JBTerminalConfig[] memory _terminalConfigurations = new JBTerminalConfig[](1);
         _terminalConfigurations[0] =
@@ -312,11 +309,8 @@ abstract contract CCIPSuckerMainnetForkTestBase is TestBaseWorkflow {
         }
 
         // Map terminal token.
-        JBTokenMapping memory map = JBTokenMapping({
-            localToken: token,
-            minGas: 200_000,
-            remoteToken: _remoteTerminalToken()
-        });
+        JBTokenMapping memory map =
+            JBTokenMapping({localToken: token, minGas: 200_000, remoteToken: _remoteTerminalToken()});
 
         vm.prank(multisig());
         suckerL1.mapToken(map);
@@ -325,12 +319,10 @@ abstract contract CCIPSuckerMainnetForkTestBase is TestBaseWorkflow {
         vm.startPrank(user);
         uint256 projectTokenAmount;
         if (token == JBConstants.NATIVE_TOKEN) {
-            projectTokenAmount =
-                jbMultiTerminal().pay{value: amountToSend}(1, token, amountToSend, user, 0, "", "");
+            projectTokenAmount = jbMultiTerminal().pay{value: amountToSend}(1, token, amountToSend, user, 0, "", "");
         } else {
             IERC20(token).approve(address(jbMultiTerminal()), amountToSend);
-            projectTokenAmount =
-                jbMultiTerminal().pay(1, token, amountToSend, user, 0, "", "");
+            projectTokenAmount = jbMultiTerminal().pay(1, token, amountToSend, user, 0, "", "");
         }
 
         // Prepare cash out via sucker.

@@ -66,14 +66,30 @@ abstract contract SwapCCIPSuckerForkTestBase is TestBaseWorkflow {
 
     // ── Overrides with defaults (preserve existing ETH mainnet behavior)
     // ──────────────────────────────────────────────
-    function _l1RpcUrl() internal pure virtual returns (string memory) { return "ethereum"; }
-    function _l1ChainId() internal pure virtual returns (uint256) { return 1; }
-    function _weth() internal pure virtual returns (address) { return MAINNET_WETH; }
-    function _v3Factory() internal pure virtual returns (address) { return address(MAINNET_V3_FACTORY); }
-    function _terminalToken() internal view virtual returns (address) { return JBConstants.NATIVE_TOKEN; }
+    function _l1RpcUrl() internal pure virtual returns (string memory) {
+        return "ethereum";
+    }
+
+    function _l1ChainId() internal pure virtual returns (uint256) {
+        return 1;
+    }
+
+    function _weth() internal pure virtual returns (address) {
+        return MAINNET_WETH;
+    }
+
+    function _v3Factory() internal pure virtual returns (address) {
+        return address(MAINNET_V3_FACTORY);
+    }
+
+    function _terminalToken() internal view virtual returns (address) {
+        return JBConstants.NATIVE_TOKEN;
+    }
 
     /// @dev Whether CCIP fees are paid in native ETH (true) or LINK from the sucker's balance (false).
-    function _ccipFeesInNative() internal pure virtual returns (bool) { return true; }
+    function _ccipFeesInNative() internal pure virtual returns (bool) {
+        return true;
+    }
 
     /// @dev Deploy mock ERC20 at the terminal token address if it has no code on the current fork.
     function _ensureTerminalTokenExists() internal {
@@ -179,8 +195,7 @@ abstract contract SwapCCIPSuckerForkTestBase is TestBaseWorkflow {
         _metadata.baseCurrency = uint32(uint160(token));
 
         JBCurrencyAmount[] memory _surplusAllowances = new JBCurrencyAmount[](1);
-        _surplusAllowances[0] =
-            JBCurrencyAmount({amount: 5 * 10 ** 18, currency: uint32(uint160(token))});
+        _surplusAllowances[0] = JBCurrencyAmount({amount: 5 * 10 ** 18, currency: uint32(uint160(token))});
 
         JBFundAccessLimitGroup[] memory _fundAccessLimitGroup = new JBFundAccessLimitGroup[](1);
         _fundAccessLimitGroup[0] = JBFundAccessLimitGroup({
@@ -201,9 +216,7 @@ abstract contract SwapCCIPSuckerForkTestBase is TestBaseWorkflow {
         _rulesetConfigurations[0].fundAccessLimitGroups = _fundAccessLimitGroup;
 
         JBAccountingContext[] memory _tokensToAccept = new JBAccountingContext[](1);
-        _tokensToAccept[0] = JBAccountingContext({
-            token: token, decimals: 18, currency: uint32(uint160(token))
-        });
+        _tokensToAccept[0] = JBAccountingContext({token: token, decimals: 18, currency: uint32(uint160(token))});
 
         JBTerminalConfig[] memory _terminalConfigurations = new JBTerminalConfig[](1);
         _terminalConfigurations[0] =
@@ -229,11 +242,7 @@ abstract contract SwapCCIPSuckerForkTestBase is TestBaseWorkflow {
         assertEq(address(swapSucker.V3_FACTORY()), _v3Factory(), "V3_FACTORY mismatch");
         assertEq(address(swapSucker.WETH()), _weth(), "WETH mismatch");
         assertEq(address(swapSucker.POOL_MANAGER()), address(0), "No V4 pool manager");
-        assertEq(
-            address(swapSucker.CCIP_ROUTER()),
-            CCIPHelper.routerOfChain(_l1ChainId()),
-            "CCIP router mismatch"
-        );
+        assertEq(address(swapSucker.CCIP_ROUTER()), CCIPHelper.routerOfChain(_l1ChainId()), "CCIP router mismatch");
         assertEq(swapSucker.REMOTE_CHAIN_ID(), _remoteChainId(), "Remote chain ID mismatch");
         assertEq(
             swapSucker.REMOTE_CHAIN_SELECTOR(),
@@ -266,9 +275,7 @@ abstract contract SwapCCIPSuckerForkTestBase is TestBaseWorkflow {
 
         // Map terminal token with 600k minGas (required for swap sucker's ccipReceive gas budget).
         JBTokenMapping memory map = JBTokenMapping({
-            localToken: token,
-            minGas: 600_000,
-            remoteToken: bytes32(uint256(uint160(JBConstants.NATIVE_TOKEN)))
+            localToken: token, minGas: 600_000, remoteToken: bytes32(uint256(uint160(JBConstants.NATIVE_TOKEN)))
         });
 
         vm.prank(multisig());
@@ -278,12 +285,10 @@ abstract contract SwapCCIPSuckerForkTestBase is TestBaseWorkflow {
         vm.startPrank(user);
         uint256 projectTokenAmount;
         if (token == JBConstants.NATIVE_TOKEN) {
-            projectTokenAmount =
-                jbMultiTerminal().pay{value: amountToSend}(1, token, amountToSend, user, 0, "", "");
+            projectTokenAmount = jbMultiTerminal().pay{value: amountToSend}(1, token, amountToSend, user, 0, "", "");
         } else {
             IERC20(token).approve(address(jbMultiTerminal()), amountToSend);
-            projectTokenAmount =
-                jbMultiTerminal().pay(1, token, amountToSend, user, 0, "", "");
+            projectTokenAmount = jbMultiTerminal().pay(1, token, amountToSend, user, 0, "", "");
         }
 
         // Prepare: burns project tokens, cashes out terminal token, inserts leaf into outbox tree.
@@ -340,9 +345,7 @@ abstract contract SwapCCIPSuckerForkTestBase is TestBaseWorkflow {
         // When CCIP fees are paid in LINK and LINK is the bridge token, the sucker retains
         // leftover LINK from the fee pre-funding — so we only assert zero for the native fee path.
         if (_ccipFeesInNative() || _bridgeToken() != CCIPHelper.linkOfChain(block.chainid)) {
-            assertEq(
-                IERC20(_bridgeToken()).balanceOf(address(suckerL1)), 0, "No bridge token should remain in sucker"
-            );
+            assertEq(IERC20(_bridgeToken()).balanceOf(address(suckerL1)), 0, "No bridge token should remain in sucker");
         }
     }
 
@@ -366,9 +369,7 @@ abstract contract SwapCCIPSuckerForkTestBase is TestBaseWorkflow {
 
         // Map terminal token so the sucker recognizes it.
         JBTokenMapping memory map = JBTokenMapping({
-            localToken: token,
-            minGas: 600_000,
-            remoteToken: bytes32(uint256(uint160(JBConstants.NATIVE_TOKEN)))
+            localToken: token, minGas: 600_000, remoteToken: bytes32(uint256(uint160(JBConstants.NATIVE_TOKEN)))
         });
         vm.prank(multisig());
         suckerL1.mapToken(map);
@@ -422,9 +423,7 @@ abstract contract SwapCCIPSuckerForkTestBase is TestBaseWorkflow {
         }
 
         // Verify: inbox root was set for future claims.
-        assertNotEq(
-            suckerL1.inboxOf(token).root, bytes32(0), "Inbox root should be set after ccipReceive"
-        );
+        assertNotEq(suckerL1.inboxOf(token).root, bytes32(0), "Inbox root should be set after ccipReceive");
     }
 }
 
@@ -512,7 +511,7 @@ contract TempoEthSwapForkTest is SwapCCIPSuckerForkTestBase {
         return address(0); // No Uniswap on Tempo.
     }
 
-    function _terminalToken() internal view override returns (address) {
+    function _terminalToken() internal pure override returns (address) {
         // LINK on Tempo = bridge token (no swap needed).
         return 0x15C03488B29e27d62BAf10E30b0c474bf60E0264;
     }
