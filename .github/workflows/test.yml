@@ -30,5 +30,6 @@ jobs:
           RPC_OPTIMISM_MAINNET: ${{ secrets.RPC_OPTIMISM_MAINNET }}
           RPC_BASE_MAINNET: ${{ secrets.RPC_BASE_MAINNET }}
           RPC_CELO_MAINNET: ${{ secrets.RPC_CELO_MAINNET }}
+          RPC_TEMPO_MAINNET: ${{ secrets.RPC_TEMPO_MAINNET }}
       - name: Check contract sizes
         run: forge build --sizes --skip "*/test/**" --skip "*/script/**" --skip SphinxUtils

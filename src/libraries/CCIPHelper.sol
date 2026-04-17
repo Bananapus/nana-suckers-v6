@@ -58,8 +58,8 @@ library CCIPHelper {
     address public constant ARB_SEP_LINK = 0xb1D4538B4571d411F07960EF2838Ce337FE1E80E;
     address public constant BASE_LINK = 0x88Fb150BDc53A65fe94Dea0c9BA0a6dAf8C6e196;
     address public constant BASE_SEP_LINK = 0xE4aB69C077896252FAFBD49EFD26B5D171A32410;
-    address public constant TEMPO_LINK = 0xE4aB69C077896252FAFBD49EFD26B5D171A32410;
-    address public constant TEMPO_MOD_LINK = 0xE4aB69C077896252FAFBD49EFD26B5D171A32410;
+    address public constant TEMPO_LINK = 0x15C03488B29e27d62BAf10E30b0c474bf60E0264;
+    address public constant TEMPO_MOD_LINK = 0xEAB080c724587fFC9F2EFF82e36EE4Fb27774959;
 
     /// @notice The WETH address of each chain
     address public constant ETH_WETH = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;

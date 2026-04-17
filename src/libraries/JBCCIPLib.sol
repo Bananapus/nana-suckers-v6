@@ -110,7 +110,18 @@ library JBCCIPLib {
 
         if (feeToken != address(0)) {
             // LINK fee path: approve the router to spend LINK from the sucker's balance.
-            SafeERC20.forceApprove({token: IERC20(feeToken), spender: address(ccipRouter), value: fees});
+            // When the fee token is also a bridged token (e.g. LINK on Tempo), the approval
+            // must cover both the bridged amount and the fee. prepareTokenAmounts() already
+            // approved the bridged amount, but forceApprove replaces (not adds), so we must
+            // set the total here.
+            uint256 totalApproval = fees;
+            for (uint256 i; i < tokenAmounts.length; i++) {
+                if (tokenAmounts[i].token == feeToken) {
+                    totalApproval += tokenAmounts[i].amount;
+                    break;
+                }
+            }
+            SafeERC20.forceApprove({token: IERC20(feeToken), spender: address(ccipRouter), value: totalApproval});
 
             // slither-disable-next-line calls-loop,unused-return
             ccipRouter.ccipSend({destinationChainSelector: remoteChainSelector, message: message});

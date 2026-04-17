@@ -27,6 +27,7 @@ import {JBMessageRoot} from "../src/structs/JBMessageRoot.sol";
 uint256 constant SWAP_ETH_FORK_BLOCK = 21_700_000;
 // ETH→Tempo CCIP lane + LINK token pool allowlist activated around block 24,744,000.
 uint256 constant SWAP_ETH_TEMPO_FORK_BLOCK = 24_745_000;
+uint256 constant SWAP_TEMPO_FORK_BLOCK = 15_168_000;
 
 // ── Token addresses on Ethereum mainnet
 address constant USDC = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
@@ -63,11 +64,31 @@ abstract contract SwapCCIPSuckerForkTestBase is TestBaseWorkflow {
     function _bridgeToken() internal pure virtual returns (address);
     function _bridgeTokenDecimals() internal pure virtual returns (uint8);
 
+    // ── Overrides with defaults (preserve existing ETH mainnet behavior)
+    // ──────────────────────────────────────────────
+    function _l1RpcUrl() internal pure virtual returns (string memory) { return "ethereum"; }
+    function _l1ChainId() internal pure virtual returns (uint256) { return 1; }
+    function _weth() internal pure virtual returns (address) { return MAINNET_WETH; }
+    function _v3Factory() internal pure virtual returns (address) { return address(MAINNET_V3_FACTORY); }
+    function _terminalToken() internal view virtual returns (address) { return JBConstants.NATIVE_TOKEN; }
+
+    /// @dev Whether CCIP fees are paid in native ETH (true) or LINK from the sucker's balance (false).
+    function _ccipFeesInNative() internal pure virtual returns (bool) { return true; }
+
+    /// @dev Deploy mock ERC20 at the terminal token address if it has no code on the current fork.
+    function _ensureTerminalTokenExists() internal {
+        address token = _terminalToken();
+        if (token != JBConstants.NATIVE_TOKEN && token.code.length == 0) {
+            vm.etch(token, CCIPHelper.wethOfChain(block.chainid).code);
+        }
+    }
+
     // ── Setup
     // ──────────────────────────────────────────────────────────────────
 
     function setUp() public override {
-        l1Fork = vm.createSelectFork("ethereum", _l1ForkBlock());
+        l1Fork = vm.createSelectFork(_l1RpcUrl(), _l1ForkBlock());
+        _ensureTerminalTokenExists();
 
         _metadata = JBRulesetMetadata({
             reservedPercent: JBConstants.MAX_RESERVED_PERCENT / 2,
@@ -91,7 +112,7 @@ abstract contract SwapCCIPSuckerForkTestBase is TestBaseWorkflow {
             metadata: 0
         });
 
-        // Deploy full JB infrastructure on ETH mainnet.
+        // Deploy full JB infrastructure on local chain.
         super.setUp();
         vm.stopPrank();
 
@@ -108,13 +129,13 @@ abstract contract SwapCCIPSuckerForkTestBase is TestBaseWorkflow {
             ICCIPRouter(CCIPHelper.routerOfChain(block.chainid))
         );
 
-        // Configure swap constants: bridge token, real V3 factory, real WETH.
+        // Configure swap constants: bridge token, V3 factory, WETH.
         suckerDeployer.setSwapConstants({
             _bridgeToken: IERC20(_bridgeToken()),
             _poolManager: IPoolManager(address(0)),
-            _v3Factory: MAINNET_V3_FACTORY,
+            _v3Factory: IUniswapV3Factory(_v3Factory()),
             _univ4Hook: address(0),
-            _weth: MAINNET_WETH
+            _weth: _weth()
         });
 
         // Deploy singleton and configure.
@@ -150,16 +171,21 @@ abstract contract SwapCCIPSuckerForkTestBase is TestBaseWorkflow {
         vm.mockCall(address(0), abi.encodeCall(IJBSuckerRegistry.toRemoteFee, ()), abi.encode(uint256(0)));
     }
 
-    /// @notice Launch a project that accepts only native ETH.
+    /// @notice Launch a project that accepts `_terminalToken()`.
     function _launchProject() internal {
+        address token = _terminalToken();
+
+        // Ensure baseCurrency matches the terminal token so no price feed is needed.
+        _metadata.baseCurrency = uint32(uint160(token));
+
         JBCurrencyAmount[] memory _surplusAllowances = new JBCurrencyAmount[](1);
         _surplusAllowances[0] =
-            JBCurrencyAmount({amount: 5 * 10 ** 18, currency: uint32(uint160(JBConstants.NATIVE_TOKEN))});
+            JBCurrencyAmount({amount: 5 * 10 ** 18, currency: uint32(uint160(token))});
 
         JBFundAccessLimitGroup[] memory _fundAccessLimitGroup = new JBFundAccessLimitGroup[](1);
         _fundAccessLimitGroup[0] = JBFundAccessLimitGroup({
             terminal: address(jbMultiTerminal()),
-            token: JBConstants.NATIVE_TOKEN,
+            token: token,
             payoutLimits: new JBCurrencyAmount[](0),
             surplusAllowances: _surplusAllowances
         });
@@ -176,7 +202,7 @@ abstract contract SwapCCIPSuckerForkTestBase is TestBaseWorkflow {
 
         JBAccountingContext[] memory _tokensToAccept = new JBAccountingContext[](1);
         _tokensToAccept[0] = JBAccountingContext({
-            token: JBConstants.NATIVE_TOKEN, decimals: 18, currency: uint32(uint160(JBConstants.NATIVE_TOKEN))
+            token: token, decimals: 18, currency: uint32(uint160(token))
         });
 
         JBTerminalConfig[] memory _terminalConfigurations = new JBTerminalConfig[](1);
@@ -200,10 +226,14 @@ abstract contract SwapCCIPSuckerForkTestBase is TestBaseWorkflow {
     function test_immutables() public view {
         JBSwapCCIPSucker swapSucker = JBSwapCCIPSucker(payable(address(suckerL1)));
         assertEq(address(swapSucker.BRIDGE_TOKEN()), _bridgeToken(), "BRIDGE_TOKEN mismatch");
-        assertEq(address(swapSucker.V3_FACTORY()), address(MAINNET_V3_FACTORY), "V3_FACTORY should be mainnet");
-        assertEq(address(swapSucker.WETH()), MAINNET_WETH, "WETH should be mainnet WETH");
+        assertEq(address(swapSucker.V3_FACTORY()), _v3Factory(), "V3_FACTORY mismatch");
+        assertEq(address(swapSucker.WETH()), _weth(), "WETH mismatch");
         assertEq(address(swapSucker.POOL_MANAGER()), address(0), "No V4 pool manager");
-        assertEq(address(swapSucker.CCIP_ROUTER()), CCIPHelper.routerOfChain(1), "CCIP router should be ETH mainnet");
+        assertEq(
+            address(swapSucker.CCIP_ROUTER()),
+            CCIPHelper.routerOfChain(_l1ChainId()),
+            "CCIP router mismatch"
+        );
         assertEq(swapSucker.REMOTE_CHAIN_ID(), _remoteChainId(), "Remote chain ID mismatch");
         assertEq(
             swapSucker.REMOTE_CHAIN_SELECTOR(),
@@ -212,24 +242,31 @@ abstract contract SwapCCIPSuckerForkTestBase is TestBaseWorkflow {
         );
     }
 
-    /// @notice Full send-side flow: pay ETH → prepare → toRemote.
+    /// @notice Full send-side flow: pay terminal token → prepare → toRemote.
     ///
     /// The swap sucker:
-    ///   1. Cashes out ETH from the terminal (via prepare)
-    ///   2. Swaps ETH → bridge token via real Uniswap V3 pool on mainnet
+    ///   1. Cashes out terminal token from the terminal (via prepare)
+    ///   2. Swaps terminal token → bridge token (if different) via Uniswap V3
     ///   3. Sends bridge token via CCIP through the real mainnet router
     function test_swapNativeTransfer() external {
         address rootSender = makeAddr("rootSender");
         address user = makeAddr("user");
         uint256 amountToSend = 0.05 ether;
         uint256 maxCashedOut = amountToSend / 2;
+        address token = _terminalToken();
 
         vm.selectFork(l1Fork);
-        vm.deal(user, amountToSend);
 
-        // Map native ETH with 600k minGas (required for swap sucker's ccipReceive gas budget).
+        // Fund user with terminal token.
+        if (token == JBConstants.NATIVE_TOKEN) {
+            vm.deal(user, amountToSend);
+        } else {
+            deal(token, user, amountToSend);
+        }
+
+        // Map terminal token with 600k minGas (required for swap sucker's ccipReceive gas budget).
         JBTokenMapping memory map = JBTokenMapping({
-            localToken: JBConstants.NATIVE_TOKEN,
+            localToken: token,
             minGas: 600_000,
             remoteToken: bytes32(uint256(uint160(JBConstants.NATIVE_TOKEN)))
         });
@@ -237,34 +274,59 @@ abstract contract SwapCCIPSuckerForkTestBase is TestBaseWorkflow {
         vm.prank(multisig());
         suckerL1.mapToken(map);
 
-        // Pay ETH into terminal → receive project tokens.
+        // Pay into terminal → receive project tokens.
         vm.startPrank(user);
-        uint256 projectTokenAmount =
-            jbMultiTerminal().pay{value: amountToSend}(1, JBConstants.NATIVE_TOKEN, amountToSend, user, 0, "", "");
+        uint256 projectTokenAmount;
+        if (token == JBConstants.NATIVE_TOKEN) {
+            projectTokenAmount =
+                jbMultiTerminal().pay{value: amountToSend}(1, token, amountToSend, user, 0, "", "");
+        } else {
+            IERC20(token).approve(address(jbMultiTerminal()), amountToSend);
+            projectTokenAmount =
+                jbMultiTerminal().pay(1, token, amountToSend, user, 0, "", "");
+        }
 
-        // Prepare: burns project tokens, cashes out ETH, inserts leaf into outbox tree.
+        // Prepare: burns project tokens, cashes out terminal token, inserts leaf into outbox tree.
         IERC20(address(projectToken)).approve(address(suckerL1), projectTokenAmount);
-        suckerL1.prepare(projectTokenAmount, bytes32(uint256(uint160(user))), maxCashedOut, JBConstants.NATIVE_TOKEN);
+        suckerL1.prepare(projectTokenAmount, bytes32(uint256(uint160(user))), maxCashedOut, token);
         vm.stopPrank();
 
         // Record logs to capture CCIP router events.
         vm.recordLogs();
 
-        // toRemote: swap ETH → bridge token via real Uniswap V3, send via real CCIP router.
-        vm.deal(rootSender, 1 ether);
-        vm.prank(rootSender);
-        suckerL1.toRemote{value: 1 ether}(JBConstants.NATIVE_TOKEN);
+        if (_ccipFeesInNative()) {
+            // Native ETH fee path: send ETH for CCIP fees via msg.value.
+            uint256 ccipFeeAmount = 1 ether;
+            vm.deal(rootSender, ccipFeeAmount);
+            vm.prank(rootSender);
+            suckerL1.toRemote{value: ccipFeeAmount}(token);
+
+            // Verify CCIP fees paid (some native consumed, but not all).
+            assertLt(rootSender.balance, ccipFeeAmount, "CCIP fees should have been deducted");
+            assertGt(rootSender.balance, 0, "Excess native should be returned");
+        } else {
+            // LINK fee path: pre-fund sucker with LINK, call toRemote with msg.value = 0.
+            address linkToken = CCIPHelper.linkOfChain(block.chainid);
+            deal(linkToken, address(suckerL1), IERC20(linkToken).balanceOf(address(suckerL1)) + 100 ether);
+            uint256 suckerLinkBefore = IERC20(linkToken).balanceOf(address(suckerL1));
+
+            vm.prank(rootSender);
+            suckerL1.toRemote(token);
+
+            // Verify LINK was consumed for CCIP fees.
+            assertLt(
+                IERC20(linkToken).balanceOf(address(suckerL1)),
+                suckerLinkBefore,
+                "LINK should have been consumed for CCIP fees"
+            );
+        }
 
         // Verify outbox cleared.
-        assertEq(suckerL1.outboxOf(JBConstants.NATIVE_TOKEN).balance, 0, "Outbox should be cleared");
-
-        // Verify CCIP fees paid (some ETH consumed, but not all).
-        assertLt(rootSender.balance, 1 ether, "CCIP fees should have been deducted");
-        assertGt(rootSender.balance, 0, "Excess ETH should be returned");
+        assertEq(suckerL1.outboxOf(token).balance, 0, "Outbox should be cleared");
 
         // Verify CCIP router or sucker emitted events (router delegates to OnRamp, so check both).
         Vm.Log[] memory logs = vm.getRecordedLogs();
-        address expectedRouter = CCIPHelper.routerOfChain(1);
+        address expectedRouter = CCIPHelper.routerOfChain(_l1ChainId());
         bool foundCCIPEvent;
         for (uint256 i = 0; i < logs.length; i++) {
             if (logs[i].emitter == expectedRouter || logs[i].emitter == address(suckerL1)) {
@@ -274,27 +336,37 @@ abstract contract SwapCCIPSuckerForkTestBase is TestBaseWorkflow {
         }
         assertTrue(foundCCIPEvent, "CCIP router/sucker should have emitted events");
 
-        // Verify sucker has no leftover bridge token or ETH (all swapped and sent).
-        assertEq(IERC20(_bridgeToken()).balanceOf(address(suckerL1)), 0, "No bridge token should remain in sucker");
-        assertEq(address(suckerL1).balance, 0, "No ETH should remain in sucker");
+        // Verify sucker has no leftover bridge token (all sent via CCIP).
+        // When CCIP fees are paid in LINK and LINK is the bridge token, the sucker retains
+        // leftover LINK from the fee pre-funding — so we only assert zero for the native fee path.
+        if (_ccipFeesInNative() || _bridgeToken() != CCIPHelper.linkOfChain(block.chainid)) {
+            assertEq(
+                IERC20(_bridgeToken()).balanceOf(address(suckerL1)), 0, "No bridge token should remain in sucker"
+            );
+        }
     }
 
     /// @notice Simulate receiving a CCIP message from the remote chain carrying bridge token.
     ///
     /// The swap sucker:
     ///   1. Receives bridge token via ccipReceive (simulated OffRamp delivery)
-    ///   2. Swaps bridge token → ETH via real Uniswap V3 pool on mainnet
-    ///   3. Stores conversion rate (leafTotal: bridge amount, localTotal: ETH received)
+    ///   2. Swaps bridge token → terminal token via Uniswap V3 (if different)
+    ///   3. Stores conversion rate (leafTotal: bridge amount, localTotal: terminal token received)
     ///   4. Records inbox merkle root for future claims
+    ///
+    /// When terminal token == bridge token (e.g. Tempo with LINK), no swap occurs — the bridge
+    /// token IS the terminal token, so it is stored directly.
     function test_swapReceiveFromRemote() external {
         // Use a reasonable amount for the bridge token (varies by decimals).
         uint256 bridgeAmount = 1000 * 10 ** _bridgeTokenDecimals();
+        address token = _terminalToken();
+        bool swapExpected = token != _bridgeToken();
 
         vm.selectFork(l1Fork);
 
-        // Map native token so the sucker recognizes it.
+        // Map terminal token so the sucker recognizes it.
         JBTokenMapping memory map = JBTokenMapping({
-            localToken: JBConstants.NATIVE_TOKEN,
+            localToken: token,
             minGas: 600_000,
             remoteToken: bytes32(uint256(uint160(JBConstants.NATIVE_TOKEN)))
         });
@@ -304,10 +376,10 @@ abstract contract SwapCCIPSuckerForkTestBase is TestBaseWorkflow {
         // Fund sucker with bridge token (simulates CCIP OffRamp token delivery before ccipReceive).
         deal(_bridgeToken(), address(suckerL1), bridgeAmount);
 
-        // Build CCIP message: root targets NATIVE_TOKEN (ETH), bridge token delivered.
+        // Build CCIP message: root targets terminal token, bridge token delivered.
         JBMessageRoot memory root = JBMessageRoot({
             version: 1,
-            token: bytes32(uint256(uint160(JBConstants.NATIVE_TOKEN))),
+            token: bytes32(uint256(uint160(token))),
             amount: bridgeAmount,
             remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(0xdead))}),
             sourceTotalSupply: 0,
@@ -329,24 +401,29 @@ abstract contract SwapCCIPSuckerForkTestBase is TestBaseWorkflow {
             destTokenAmounts: destTokenAmounts
         });
 
-        uint256 ethBefore = address(suckerL1).balance;
-
-        // Prank as the real mainnet CCIP router.
-        vm.prank(CCIPHelper.routerOfChain(1));
+        // Prank as the real CCIP router.
+        vm.prank(CCIPHelper.routerOfChain(_l1ChainId()));
         JBSwapCCIPSucker(payable(address(suckerL1))).ccipReceive(ccipMsg);
 
-        // Verify: swap happened — sucker now holds ETH from bridge token → ETH swap.
-        uint256 ethReceived = address(suckerL1).balance - ethBefore;
-        assertGt(ethReceived, 0, "Sucker should hold ETH from bridge->ETH swap");
-        // Conservative: 1000 units of any reasonable token > 0.001 ETH.
-        assertGt(ethReceived, 0.001 ether, "ETH amount should be reasonable");
-
-        // Verify: bridge token fully consumed by the swap.
-        assertEq(IERC20(_bridgeToken()).balanceOf(address(suckerL1)), 0, "All bridge token should be swapped");
+        if (swapExpected) {
+            // Verify: swap happened — sucker now holds terminal token from bridge token swap.
+            uint256 ethReceived = address(suckerL1).balance;
+            assertGt(ethReceived, 0, "Sucker should hold ETH from bridge->ETH swap");
+            assertGt(ethReceived, 0.001 ether, "ETH amount should be reasonable");
+            // Verify: bridge token fully consumed by the swap.
+            assertEq(IERC20(_bridgeToken()).balanceOf(address(suckerL1)), 0, "All bridge token should be swapped");
+        } else {
+            // No swap: bridge token == terminal token. Sucker holds bridge token as terminal balance.
+            assertEq(
+                IERC20(_bridgeToken()).balanceOf(address(suckerL1)),
+                bridgeAmount,
+                "Bridge token should remain (no swap when terminal == bridge)"
+            );
+        }
 
         // Verify: inbox root was set for future claims.
         assertNotEq(
-            suckerL1.inboxOf(JBConstants.NATIVE_TOKEN).root, bytes32(0), "Inbox root should be set after ccipReceive"
+            suckerL1.inboxOf(token).root, bytes32(0), "Inbox root should be set after ccipReceive"
         );
     }
 }
@@ -394,5 +471,54 @@ contract EthArbSwapForkTest is SwapCCIPSuckerForkTestBase {
 
     function _bridgeTokenDecimals() internal pure override returns (uint8) {
         return 6;
+    }
+}
+
+/// @notice Tempo mainnet → Ethereum mainnet (chain ID 1).
+/// On Tempo, the project accepts LINK directly (= bridge token, no swap needed).
+/// V3_FACTORY = address(0) is safe because no swap is ever attempted.
+/// CCIP fees are paid in Tempo's native USD token.
+contract TempoEthSwapForkTest is SwapCCIPSuckerForkTestBase {
+    function _l1RpcUrl() internal pure override returns (string memory) {
+        return "tempo";
+    }
+
+    function _l1ChainId() internal pure override returns (uint256) {
+        return 4217;
+    }
+
+    function _l1ForkBlock() internal pure override returns (uint256) {
+        return SWAP_TEMPO_FORK_BLOCK;
+    }
+
+    function _remoteChainId() internal pure override returns (uint256) {
+        return 1;
+    }
+
+    function _bridgeToken() internal pure override returns (address) {
+        // LINK on Tempo.
+        return 0x15C03488B29e27d62BAf10E30b0c474bf60E0264;
+    }
+
+    function _bridgeTokenDecimals() internal pure override returns (uint8) {
+        return 18;
+    }
+
+    function _weth() internal pure override returns (address) {
+        return CCIPHelper.TEMPO_WETH;
+    }
+
+    function _v3Factory() internal pure override returns (address) {
+        return address(0); // No Uniswap on Tempo.
+    }
+
+    function _terminalToken() internal view override returns (address) {
+        // LINK on Tempo = bridge token (no swap needed).
+        return 0x15C03488B29e27d62BAf10E30b0c474bf60E0264;
+    }
+
+    function _ccipFeesInNative() internal pure override returns (bool) {
+        // Tempo has no native token (CALLVALUE=0), CCIP fees paid in LINK.
+        return false;
     }
 }
