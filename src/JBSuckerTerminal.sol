@@ -642,7 +642,9 @@ contract JBSuckerTerminal is ERC165, IERC721Receiver, IJBSuckerTerminal, IJBRule
 
         // Cash out proxy tokens → receive real project tokens (0% tax on proxy).
         // The proxy terminal accepts the real token (not the proxy token).
+        uint256 realTokenReceived;
         {
+            uint256 realTokenBefore = IERC20(realToken).balanceOf(address(this));
             IJBTerminal proxyTerminal = DIRECTORY.primaryTerminalOf({projectId: proxyProjectId, token: realToken});
             // slither-disable-next-line unused-return
             IJBCashOutTerminal(address(proxyTerminal))
@@ -655,11 +657,11 @@ contract JBSuckerTerminal is ERC165, IERC721Receiver, IJBSuckerTerminal, IJBRule
                     beneficiary: payable(address(this)),
                     metadata: metadata
                 });
+            realTokenReceived = IERC20(realToken).balanceOf(address(this)) - realTokenBefore;
         }
 
         // Cash out real tokens → receive ETH.
         {
-            uint256 realTokenBalance = IERC20(realToken).balanceOf(address(this));
             IJBTerminal realTerminal = DIRECTORY.primaryTerminalOf({projectId: realProjectId, token: tokenToReclaim});
             if (address(realTerminal) == address(0)) {
                 revert JBSuckerTerminal_NoTerminal(realProjectId, tokenToReclaim);
@@ -668,13 +670,65 @@ contract JBSuckerTerminal is ERC165, IERC721Receiver, IJBSuckerTerminal, IJBRule
                 .cashOutTokensOf({
                     holder: address(this),
                     projectId: realProjectId,
-                    cashOutCount: realTokenBalance,
+                    cashOutCount: realTokenReceived,
                     tokenToReclaim: tokenToReclaim,
                     minTokensReclaimed: minReclaimAmount,
                     beneficiary: payable(address(this)),
                     metadata: metadata
                 });
         }
+    }
+
+    /// @notice Pays the real project and returns the delta in real tokens received.
+    /// @dev Uses a before/after balance snapshot to measure tokens minted, preventing sweeping of pre-existing
+    /// balances.
+    /// @param projectId The ID of the real project to pay.
+    /// @param payToken The token to pay with (NATIVE_TOKEN or ERC-20 address).
+    /// @param amount The amount of tokens to pay.
+    /// @param nativeValue The native ETH to forward (0 for ERC-20 payments).
+    /// @param memo A memo to attach.
+    /// @param metadata Additional metadata.
+    /// @param allowRouterFallback Whether to fall back to ROUTER_TERMINAL when no primary terminal is found.
+    /// @return realTokensReceived The number of real tokens minted to this contract.
+    function _payRealProject(
+        uint256 projectId,
+        address payToken,
+        uint256 amount,
+        uint256 nativeValue,
+        string memory memo,
+        bytes memory metadata,
+        bool allowRouterFallback
+    )
+        internal
+        returns (uint256 realTokensReceived)
+    {
+        IJBTerminal realTerminal = DIRECTORY.primaryTerminalOf({projectId: projectId, token: payToken});
+        if (address(realTerminal) == address(0)) {
+            if (!allowRouterFallback || address(ROUTER_TERMINAL) == address(0)) {
+                revert JBSuckerTerminal_NoTerminal(projectId, payToken);
+            }
+            realTerminal = ROUTER_TERMINAL;
+        }
+
+        if (payToken != JBConstants.NATIVE_TOKEN) {
+            IERC20(payToken).forceApprove(address(realTerminal), amount);
+        }
+
+        address realToken = address(TOKENS.tokenOf(projectId));
+        uint256 realTokenBefore = IERC20(realToken).balanceOf(address(this));
+
+        // slither-disable-next-line arbitrary-send-eth,unused-return
+        realTerminal.pay{value: nativeValue}({
+            projectId: projectId,
+            token: payToken,
+            amount: amount,
+            beneficiary: address(this),
+            minReturnedTokens: 0,
+            memo: memo,
+            metadata: metadata
+        });
+
+        realTokensReceived = IERC20(realToken).balanceOf(address(this)) - realTokenBefore;
     }
 
     /// @notice Deposits real tokens held by this contract into a proxy project.
@@ -684,6 +738,7 @@ contract JBSuckerTerminal is ERC165, IERC721Receiver, IJBSuckerTerminal, IJBRule
     /// @param minReturnedTokens The minimum proxy tokens to receive.
     /// @param memo A memo to attach.
     /// @param metadata Additional metadata.
+    /// @param realTokensReceived The number of real tokens to deposit (caller computes via before/after delta).
     /// @return proxyTokenCount The number of proxy tokens minted.
     function _depositIntoProxy(
         uint256 proxyProjectId,
@@ -691,14 +746,14 @@ contract JBSuckerTerminal is ERC165, IERC721Receiver, IJBSuckerTerminal, IJBRule
         address beneficiary,
         uint256 minReturnedTokens,
         string memory memo,
-        bytes memory metadata
+        bytes memory metadata,
+        uint256 realTokensReceived
     )
         internal
         returns (uint256 proxyTokenCount)
     {
-        // Get the real project's ERC-20 token and the amount we received.
+        // Get the real project's ERC-20 token address.
         address realToken = address(TOKENS.tokenOf(realProjectId));
-        uint256 realTokensReceived = IERC20(realToken).balanceOf(address(this));
 
         // Find the proxy project's terminal for the real token.
         IJBTerminal proxyTerminal = DIRECTORY.primaryTerminalOf({projectId: proxyProjectId, token: realToken});
@@ -787,30 +842,15 @@ contract JBSuckerTerminal is ERC165, IERC721Receiver, IJBSuckerTerminal, IJBRule
             }
         }
 
-        // Find the real project's terminal for the pay token.
-        IJBTerminal realTerminal = DIRECTORY.primaryTerminalOf({projectId: payMsg.realProjectId, token: payToken});
-        if (address(realTerminal) == address(0)) {
-            if (address(ROUTER_TERMINAL) == address(0)) {
-                revert JBSuckerTerminal_NoTerminal(payMsg.realProjectId, payToken);
-            }
-            realTerminal = ROUTER_TERMINAL;
-        }
-
-        // Approve the real terminal to spend ERC-20 tokens.
-        if (payToken != JBConstants.NATIVE_TOKEN) {
-            IERC20(payToken).forceApprove(address(realTerminal), amount);
-        }
-
-        // Pay the real project — real tokens minted to this contract.
-        // slither-disable-next-line arbitrary-send-eth,unused-return
-        realTerminal.pay{value: nativeValue}({
+        // Pay the real project and measure the delta in real tokens received.
+        uint256 realTokensReceived = _payRealProject({
             projectId: payMsg.realProjectId,
-            token: payToken,
+            payToken: payToken,
             amount: amount,
-            beneficiary: address(this),
-            minReturnedTokens: 0,
+            nativeValue: nativeValue,
             memo: payMsg.memo,
-            metadata: payMsg.metadata
+            metadata: payMsg.metadata,
+            allowRouterFallback: true
         });
 
         // Deposit real tokens into the proxy project, minting proxy tokens for the beneficiary.
@@ -821,7 +861,8 @@ contract JBSuckerTerminal is ERC165, IERC721Receiver, IJBSuckerTerminal, IJBRule
             payMsg.beneficiary,
             0,
             payMsg.memo,
-            payMsg.metadata
+            payMsg.metadata,
+            realTokensReceived
         );
 
         emit CCIPPayReceived(payMsg.realProjectId, payMsg.beneficiary, amount, proxyTokenCount);
@@ -860,30 +901,21 @@ contract JBSuckerTerminal is ERC165, IERC721Receiver, IJBSuckerTerminal, IJBRule
             IERC20(token).safeTransferFrom(msg.sender, address(this), amount);
         }
 
-        // Find the real project's terminal for the payment token.
-        IJBTerminal realTerminal = DIRECTORY.primaryTerminalOf({projectId: realProjectId, token: token});
-        if (address(realTerminal) == address(0)) revert JBSuckerTerminal_NoTerminal(realProjectId, token);
-
-        // Approve the real terminal to spend ERC-20 tokens.
-        if (token != JBConstants.NATIVE_TOKEN) {
-            IERC20(token).forceApprove(address(realTerminal), amount);
-        }
-
-        // Pay the real project — tokens are minted to this contract as ERC-20.
-        // slither-disable-next-line unused-return
-        realTerminal.pay{value: nativeValue}({
+        // Pay the real project and measure the delta in real tokens received.
+        uint256 realTokensReceived = _payRealProject({
             projectId: realProjectId,
-            token: token,
+            payToken: token,
             amount: amount,
-            beneficiary: address(this),
-            minReturnedTokens: 0,
+            nativeValue: nativeValue,
             memo: memo,
-            metadata: metadata
+            metadata: metadata,
+            allowRouterFallback: false
         });
 
         // Deposit received real tokens into the proxy project, minting proxy tokens for the beneficiary.
-        proxyTokenCount =
-            _depositIntoProxy(proxyProjectId, realProjectId, beneficiary, minReturnedTokens, memo, metadata);
+        proxyTokenCount = _depositIntoProxy(
+            proxyProjectId, realProjectId, beneficiary, minReturnedTokens, memo, metadata, realTokensReceived
+        );
     }
 
     /// @notice Bridges a payment via CCIP to the home chain.

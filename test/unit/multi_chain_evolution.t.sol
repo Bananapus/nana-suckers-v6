@@ -566,9 +566,12 @@ contract MultiChainEvolutionTest is Test, TestBaseWorkflow, IERC721Receiver {
         vm.warp(deprecationTime);
         assertEq(uint8(IJBSucker(oldSucker).state()), uint8(JBSuckerState.DEPRECATED));
 
-        // Remove from registry.
+        // Remove from active listings (but retain mint permission for pending claims).
         registry.removeDeprecatedSucker(projectId, oldSucker);
-        assertEq(registry.suckersOf(projectId).length, 0, "Old sucker removed");
+        assertEq(registry.suckersOf(projectId).length, 0, "Old sucker removed from active listings");
+
+        // Old sucker still recognized for mint permission (pending claims can still be fulfilled).
+        assertTrue(registry.isSuckerOf(projectId, oldSucker), "Old sucker retains mint permission");
 
         // Deploy a replacement sucker with a new salt.
         // forge-lint: disable-next-line(unsafe-typecast)
@@ -577,7 +580,6 @@ contract MultiChainEvolutionTest is Test, TestBaseWorkflow, IERC721Receiver {
 
         assertEq(registry.suckersOf(projectId).length, 1, "New sucker deployed");
         assertTrue(registry.isSuckerOf(projectId, newSucker), "New sucker registered");
-        assertFalse(registry.isSuckerOf(projectId, oldSucker), "Old sucker no longer registered");
         assertTrue(newSucker != oldSucker, "New sucker has different address");
     }
 

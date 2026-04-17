@@ -262,7 +262,7 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
             revert JBSucker_NotPeer(_toBytes32(origin));
         }
 
-        // Decode the typed message (handles backward compatibility with old format).
+        // Decode the typed message: abi.encode(uint8 type, bytes payload).
         (uint8 messageType, bytes memory payload) = JBCCIPLib.decodeTypedMessage(any2EvmMessage.data);
 
         if (messageType == _CCIP_MSG_TYPE_ROOT) {

@@ -45,6 +45,10 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
     /// @notice A constant indicating that this sucker exists and belongs to a specific project.
     uint256 internal constant _SUCKER_EXISTS = 1;
 
+    /// @notice A constant indicating that this sucker was deprecated and removed from active listings,
+    /// but still retains mint permission so pending claims can be fulfilled.
+    uint256 internal constant _SUCKER_DEPRECATED = 2;
+
     //*********************************************************************//
     // --------------- public immutable stored properties ---------------- //
     //*********************************************************************//
@@ -106,38 +110,81 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
     /// @return flag A flag indicating if the sucker belongs to the project, and was deployed through this registry.
     function isSuckerOf(uint256 projectId, address addr) external view override returns (bool) {
         (bool exists, uint256 val) = _suckersOf[projectId].tryGet(addr);
-        return exists && val == _SUCKER_EXISTS;
+        return exists && (val == _SUCKER_EXISTS || val == _SUCKER_DEPRECATED);
     }
 
     /// @notice Helper function for retrieving the projects suckers and their metadata.
     /// @param projectId The ID of the project to get the suckers of.
     /// @return pairs The pairs of suckers and their metadata.
     function suckerPairsOf(uint256 projectId) external view override returns (JBSuckersPair[] memory pairs) {
-        // Get the suckers of the project.
-        address[] memory suckers = _suckersOf[projectId].keys();
+        // Get all suckers (including deprecated).
+        address[] memory allSuckers = _suckersOf[projectId].keys();
 
-        // Initialize the array of pairs.
-        pairs = new JBSuckersPair[](suckers.length);
+        // Count active suckers.
+        uint256 activeCount;
+        for (uint256 i; i < allSuckers.length;) {
+            (, uint256 val) = _suckersOf[projectId].tryGet(allSuckers[i]);
+            if (val == _SUCKER_EXISTS) activeCount++;
+            unchecked {
+                ++i;
+            }
+        }
 
-        // Populate the array of pairs.
-        for (uint256 i; i < suckers.length;) {
-            // Get the sucker being iterated over.
-            IJBSucker sucker = IJBSucker(suckers[i]);
-
-            // slither-disable-next-line calls-loop
-            pairs[i] =
-                JBSuckersPair({local: address(sucker), remote: sucker.peer(), remoteChainId: sucker.peerChainId()});
+        // Populate only active pairs.
+        pairs = new JBSuckersPair[](activeCount);
+        uint256 j;
+        for (uint256 i; i < allSuckers.length;) {
+            (, uint256 val) = _suckersOf[projectId].tryGet(allSuckers[i]);
+            if (val == _SUCKER_EXISTS) {
+                IJBSucker sucker = IJBSucker(allSuckers[i]);
+                // slither-disable-next-line calls-loop
+                pairs[j] = JBSuckersPair({
+                    local: address(sucker),
+                    remote: sucker.peer(),
+                    remoteChainId: sucker.peerChainId()
+                });
+                unchecked {
+                    ++j;
+                }
+            }
             unchecked {
                 ++i;
             }
         }
     }
 
-    /// @notice Gets all of the specified project's suckers which were deployed through this registry.
+    /// @notice Gets all of the specified project's active suckers which were deployed through this registry.
+    /// @dev Excludes suckers that have been deprecated and removed via `removeDeprecatedSucker`.
     /// @param projectId The ID of the project to get the suckers of.
     /// @return suckers The addresses of the suckers.
-    function suckersOf(uint256 projectId) external view override returns (address[] memory) {
-        return _suckersOf[projectId].keys();
+    function suckersOf(uint256 projectId) external view override returns (address[] memory suckers) {
+        address[] memory allSuckers = _suckersOf[projectId].keys();
+
+        // Count active suckers.
+        uint256 activeCount;
+        for (uint256 i; i < allSuckers.length;) {
+            (, uint256 val) = _suckersOf[projectId].tryGet(allSuckers[i]);
+            if (val == _SUCKER_EXISTS) activeCount++;
+            unchecked {
+                ++i;
+            }
+        }
+
+        // Populate only active suckers.
+        suckers = new address[](activeCount);
+        uint256 j;
+        for (uint256 i; i < allSuckers.length;) {
+            (, uint256 val) = _suckersOf[projectId].tryGet(allSuckers[i]);
+            if (val == _SUCKER_EXISTS) {
+                suckers[j] = allSuckers[i];
+                unchecked {
+                    ++j;
+                }
+            }
+            unchecked {
+                ++i;
+            }
+        }
     }
 
     //*********************************************************************//
@@ -259,7 +306,9 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
         }
     }
 
-    /// @notice Lets anyone remove a deprecated sucker from a project.
+    /// @notice Lets anyone mark a deprecated sucker as removed from active listings.
+    /// @dev The sucker retains mint permission (`isSuckerOf` still returns true) so pending claims
+    /// can still be fulfilled. It is excluded from `suckersOf` and `suckerPairsOf`.
     /// @param projectId The ID of the project to remove the sucker from.
     /// @param sucker The address of the deprecated sucker to remove.
     function removeDeprecatedSucker(uint256 projectId, address sucker) public override {
@@ -275,9 +324,8 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
             revert JBSuckerRegistry_SuckerIsNotDeprecated(address(sucker), state);
         }
 
-        // Remove the sucker from the registry.
-        // slither-disable-next-line unused-return
-        _suckersOf[projectId].remove(address(sucker));
+        // Mark the sucker as deprecated (retains mint permission, excluded from active listings).
+        _suckersOf[projectId].set(address(sucker), _SUCKER_DEPRECATED);
         emit SuckerDeprecated({projectId: projectId, sucker: address(sucker), caller: _msgSender()});
     }
 

@@ -161,8 +161,7 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
             revert JBSucker_NotPeer(_toBytes32(origin));
         }
 
-        // Discriminate message type. New format: abi.encode(uint8 type, bytes payload).
-        // For backward compatibility with in-flight messages, try new format first, fall back to old.
+        // Discriminate message type: abi.encode(uint8 type, bytes payload).
         (uint8 messageType, bytes memory payload) = JBCCIPLib.decodeTypedMessage(any2EvmMessage.data);
 
         // Handle root messages (merkle tree updates with bridged assets).
