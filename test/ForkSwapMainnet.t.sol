@@ -183,13 +183,14 @@ abstract contract SwapCCIPSuckerForkTestBase is TestBaseWorkflow {
         _terminalConfigurations[0] =
             JBTerminalConfig({terminal: jbMultiTerminal(), accountingContextsToAccept: _tokensToAccept});
 
-        jbController().launchProjectFor({
-            owner: multisig(),
-            projectUri: "swap-fork-test",
-            rulesetConfigurations: _rulesetConfigurations,
-            terminalConfigurations: _terminalConfigurations,
-            memo: ""
-        });
+        jbController()
+            .launchProjectFor({
+                owner: multisig(),
+                projectUri: "swap-fork-test",
+                rulesetConfigurations: _rulesetConfigurations,
+                terminalConfigurations: _terminalConfigurations,
+                memo: ""
+            });
     }
 
     // ── Tests

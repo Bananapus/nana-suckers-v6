@@ -299,11 +299,7 @@ abstract contract CCIPSuckerClaimForkTestBase is TestBaseWorkflow {
     }
 
     /// @notice Builds a `Client.Any2EVMMessage` for manual ccipReceive delivery on L2.
-    function _buildCCIPMessage(JBMessageRoot memory messageRoot)
-        internal
-        view
-        returns (Client.Any2EVMMessage memory)
-    {
+    function _buildCCIPMessage(JBMessageRoot memory messageRoot) internal view returns (Client.Any2EVMMessage memory) {
         return Client.Any2EVMMessage({
             messageId: bytes32(uint256(1)),
             sourceChainSelector: CCIPHelper.selectorOfChain(_l1ChainId()),
@@ -478,9 +474,7 @@ abstract contract CCIPSuckerClaimForkTestBase is TestBaseWorkflow {
 
         // Double-claim should revert.
         vm.expectRevert(
-            abi.encodeWithSelector(
-                JBSucker.JBSucker_LeafAlreadyExecuted.selector, JBConstants.NATIVE_TOKEN, leaf.index
-            )
+            abi.encodeWithSelector(JBSucker.JBSucker_LeafAlreadyExecuted.selector, JBConstants.NATIVE_TOKEN, leaf.index)
         );
         suckerL1.claim(claimData);
     }
@@ -549,9 +543,7 @@ abstract contract CCIPSuckerClaimForkTestBase is TestBaseWorkflow {
                     proof: proofA
                 })
             );
-            assertEq(
-                jbTokens().totalBalanceOf(userA, 1), leafA.projectTokenCount, "User A should have received tokens"
-            );
+            assertEq(jbTokens().totalBalanceOf(userA, 1), leafA.projectTokenCount, "User A should have received tokens");
         }
 
         // User B claims with proof: [hashedA, Z_1, Z_2, ..., Z_31].
@@ -571,9 +563,7 @@ abstract contract CCIPSuckerClaimForkTestBase is TestBaseWorkflow {
                     proof: proofB
                 })
             );
-            assertEq(
-                jbTokens().totalBalanceOf(userB, 1), leafB.projectTokenCount, "User B should have received tokens"
-            );
+            assertEq(jbTokens().totalBalanceOf(userB, 1), leafB.projectTokenCount, "User B should have received tokens");
         }
 
         // Double-claims revert.
@@ -804,9 +794,7 @@ abstract contract CCIPSuckerClaimForkTestBase is TestBaseWorkflow {
 
         // Inbox root should be unchanged — stale nonce was rejected.
         assertEq(
-            suckerL1.inboxOf(JBConstants.NATIVE_TOKEN).root,
-            sentRoot,
-            "Inbox root should NOT be updated by stale nonce"
+            suckerL1.inboxOf(JBConstants.NATIVE_TOKEN).root, sentRoot, "Inbox root should NOT be updated by stale nonce"
         );
         assertNotEq(
             suckerL1.inboxOf(JBConstants.NATIVE_TOKEN).root, fakeRoot, "Fake root should NOT have been accepted"
