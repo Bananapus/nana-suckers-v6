@@ -17,11 +17,11 @@ jobs:
         with:
           node-version: 22.4.x
       - name: Install npm dependencies
-        run: npm install --omit=dev
+        run: npm ci --omit=dev
+      - name: Debug chainlink package
+        run: ls -la node_modules/@chainlink/ && ls node_modules/@chainlink/contracts-ccip/contracts/libraries/Client.sol || echo "CLIENT.SOL NOT FOUND"
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
-      - name: Clean forge cache
-        run: forge clean
       - name: Run tests
         run: forge test --fail-fast --summary --detailed --skip "*/script/**"
         env:
