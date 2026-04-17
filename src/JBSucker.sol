@@ -609,30 +609,29 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         }
         uint256 transportPayment = msg.value - _toRemoteFee;
 
-        // Pay the fee into the fee project. Best-effort: proceed without fee on failure.
+        // Best-effort: if the terminal doesn't exist or the pay call reverts, proceed without fee.
         // NOTE: On failure, the fee ETH is retained by this contract (not added back to transportPayment)
         // to avoid DoS on zero-cost bridges (OP, Base, Celo, Arbitrum L2→L1) that revert on non-zero
         // transportPayment.
-        {
-            // Look up the fee project's native token terminal.
-            IJBTerminal feeTerminal =
-                _primaryTerminalOf({forProjectId: FEE_PROJECT_ID, token: JBConstants.NATIVE_TOKEN});
-
-            // Only attempt to pay the fee if a terminal exists.
-            if (address(feeTerminal) != address(0)) {
-                // slither-disable-next-line unused-return,reentrancy-events,reentrancy-benign,arbitrary-send-eth
-                try feeTerminal.pay{value: _toRemoteFee}({
-                    projectId: FEE_PROJECT_ID,
-                    token: JBConstants.NATIVE_TOKEN,
-                    amount: _toRemoteFee,
-                    beneficiary: _msgSender(),
-                    minReturnedTokens: 0,
-                    memo: "",
-                    metadata: ""
-                }) returns (
-                    uint256
-                ) {}
-                    catch {}
+        IJBTerminal feeTerminal =
+            _primaryTerminalOf({forProjectId: FEE_PROJECT_ID, token: JBConstants.NATIVE_TOKEN});
+        if (address(feeTerminal) != address(0)) {
+            // slither-disable-next-line unused-return,reentrancy-events,reentrancy-benign,arbitrary-send-eth
+            try feeTerminal.pay{value: _toRemoteFee}({
+                projectId: FEE_PROJECT_ID,
+                token: JBConstants.NATIVE_TOKEN,
+                amount: _toRemoteFee,
+                beneficiary: _msgSender(),
+                minReturnedTokens: 0,
+                memo: "",
+                metadata: ""
+            }) returns (
+                uint256
+            ) {}
+                catch {
+                // Fee payment failed — fee ETH stays in this contract, transportPayment unchanged.
+                // There is no dedicated sweep path for this retained ETH. This is an accepted tradeoff
+                // to avoid DoS on zero-cost bridges that revert on non-zero transport payment.
             }
         }
 
