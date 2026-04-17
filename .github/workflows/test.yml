@@ -17,9 +17,7 @@ jobs:
         with:
           node-version: 22.4.x
       - name: Install npm dependencies
-        run: npm ci --omit=dev
-      - name: Debug chainlink package
-        run: ls -la node_modules/@chainlink/ && ls node_modules/@chainlink/contracts-ccip/contracts/libraries/Client.sol || echo "CLIENT.SOL NOT FOUND"
+        run: npm install --omit=dev
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
       - name: Run tests
