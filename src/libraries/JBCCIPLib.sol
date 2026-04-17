@@ -2,7 +2,7 @@
 pragma solidity 0.8.28;
 
 import {JBConstants} from "@bananapus/core-v6/src/libraries/JBConstants.sol";
-import {Client} from "@chainlink/contracts-ccip/src/v0.8/ccip/libraries/Client.sol";
+import {Client} from "@chainlink/contracts-ccip/contracts/libraries/Client.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 

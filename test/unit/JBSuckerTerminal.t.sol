@@ -9,8 +9,8 @@ import /* {*} from */ "@bananapus/core-v6/test/helpers/TestBaseWorkflow.sol";
 import "@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol";
 
 import {IJBRulesetDataHook} from "@bananapus/core-v6/src/interfaces/IJBRulesetDataHook.sol";
-import {IAny2EVMMessageReceiver} from "@chainlink/contracts-ccip/src/v0.8/ccip/interfaces/IAny2EVMMessageReceiver.sol";
-import {Client} from "@chainlink/contracts-ccip/src/v0.8/ccip/libraries/Client.sol";
+import {IAny2EVMMessageReceiver} from "@chainlink/contracts-ccip/contracts/interfaces/IAny2EVMMessageReceiver.sol";
+import {Client} from "@chainlink/contracts-ccip/contracts/libraries/Client.sol";
 
 import {JBSuckerTerminal} from "../../src/JBSuckerTerminal.sol";
 import {IJBSuckerTerminal} from "../../src/interfaces/IJBSuckerTerminal.sol";

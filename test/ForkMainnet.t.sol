@@ -44,6 +44,8 @@ abstract contract CCIPSuckerMainnetForkTestBase is TestBaseWorkflow {
     function _l2RpcUrl() internal pure virtual returns (string memory);
     function _l1ChainId() internal pure virtual returns (uint256);
     function _l2ChainId() internal pure virtual returns (uint256);
+    function _l1ForkBlock() internal pure virtual returns (uint256);
+    function _l2ForkBlock() internal pure virtual returns (uint256);
 
     // ── LINK token addresses per mainnet chain
     // ────────────────────────────
@@ -66,7 +68,10 @@ abstract contract CCIPSuckerMainnetForkTestBase is TestBaseWorkflow {
             linkAddress: _linkTokenOf(chainId),
             wrappedNativeAddress: CCIPHelper.wethOfChain(chainId),
             ccipBnMAddress: address(0),
-            ccipLnMAddress: address(0)
+            ccipLnMAddress: address(0),
+            rmnProxyAddress: address(0),
+            registryModuleOwnerCustomAddress: address(0),
+            tokenAdminRegistryAddress: address(0)
         });
         ccipLocalSimulatorFork.setNetworkDetails(chainId, details);
     }
@@ -77,7 +82,7 @@ abstract contract CCIPSuckerMainnetForkTestBase is TestBaseWorkflow {
     function setUp() public override {
         // ── L1
         // ────────────────────────────────────────────────────────────
-        l1Fork = vm.createSelectFork(_l1RpcUrl());
+        l1Fork = vm.createSelectFork(_l1RpcUrl(), _l1ForkBlock());
 
         ccipLocalSimulatorFork = new CCIPLocalSimulatorFork();
         vm.makePersistent(address(ccipLocalSimulatorFork));
@@ -152,7 +157,7 @@ abstract contract CCIPSuckerMainnetForkTestBase is TestBaseWorkflow {
 
         // ── L2
         // ────────────────────────────────────────────────────────────
-        l2Fork = vm.createSelectFork(_l2RpcUrl());
+        l2Fork = vm.createSelectFork(_l2RpcUrl(), _l2ForkBlock());
 
         // Deploy full JB infrastructure on L2.
         super.setUp();
@@ -318,6 +323,13 @@ abstract contract CCIPSuckerMainnetForkTestBase is TestBaseWorkflow {
 // ─── Concrete chain pair tests
 // ────────────────────────────────────────────────
 
+// ── Pinned fork blocks (matching v6 repo convention)
+// ──────────────────────────────────────────────────────
+uint256 constant ETH_FORK_BLOCK = 21_700_000;
+uint256 constant ARB_FORK_BLOCK = 300_000_000;
+uint256 constant OP_FORK_BLOCK = 130_000_000;
+uint256 constant BASE_FORK_BLOCK = 25_000_000;
+
 /// @notice Ethereum mainnet → Arbitrum mainnet.
 contract EthArbMainnetForkTest is CCIPSuckerMainnetForkTestBase {
     function _l1RpcUrl() internal pure override returns (string memory) {
@@ -334,6 +346,14 @@ contract EthArbMainnetForkTest is CCIPSuckerMainnetForkTestBase {
 
     function _l2ChainId() internal pure override returns (uint256) {
         return 42_161;
+    }
+
+    function _l1ForkBlock() internal pure override returns (uint256) {
+        return ETH_FORK_BLOCK;
+    }
+
+    function _l2ForkBlock() internal pure override returns (uint256) {
+        return ARB_FORK_BLOCK;
     }
 }
 
@@ -354,6 +374,14 @@ contract EthOpMainnetForkTest is CCIPSuckerMainnetForkTestBase {
     function _l2ChainId() internal pure override returns (uint256) {
         return 10;
     }
+
+    function _l1ForkBlock() internal pure override returns (uint256) {
+        return ETH_FORK_BLOCK;
+    }
+
+    function _l2ForkBlock() internal pure override returns (uint256) {
+        return OP_FORK_BLOCK;
+    }
 }
 
 /// @notice Ethereum mainnet → Base mainnet.
@@ -372,6 +400,14 @@ contract EthBaseMainnetForkTest is CCIPSuckerMainnetForkTestBase {
 
     function _l2ChainId() internal pure override returns (uint256) {
         return 8453;
+    }
+
+    function _l1ForkBlock() internal pure override returns (uint256) {
+        return ETH_FORK_BLOCK;
+    }
+
+    function _l2ForkBlock() internal pure override returns (uint256) {
+        return BASE_FORK_BLOCK;
     }
 }
 
@@ -392,6 +428,14 @@ contract ArbOpMainnetForkTest is CCIPSuckerMainnetForkTestBase {
     function _l2ChainId() internal pure override returns (uint256) {
         return 10;
     }
+
+    function _l1ForkBlock() internal pure override returns (uint256) {
+        return ARB_FORK_BLOCK;
+    }
+
+    function _l2ForkBlock() internal pure override returns (uint256) {
+        return OP_FORK_BLOCK;
+    }
 }
 
 /// @notice Arbitrum mainnet → Base mainnet.
@@ -411,6 +455,14 @@ contract ArbBaseMainnetForkTest is CCIPSuckerMainnetForkTestBase {
     function _l2ChainId() internal pure override returns (uint256) {
         return 8453;
     }
+
+    function _l1ForkBlock() internal pure override returns (uint256) {
+        return ARB_FORK_BLOCK;
+    }
+
+    function _l2ForkBlock() internal pure override returns (uint256) {
+        return BASE_FORK_BLOCK;
+    }
 }
 
 /// @notice Optimism mainnet → Base mainnet.
@@ -429,5 +481,13 @@ contract OpBaseMainnetForkTest is CCIPSuckerMainnetForkTestBase {
 
     function _l2ChainId() internal pure override returns (uint256) {
         return 8453;
+    }
+
+    function _l1ForkBlock() internal pure override returns (uint256) {
+        return OP_FORK_BLOCK;
+    }
+
+    function _l2ForkBlock() internal pure override returns (uint256) {
+        return BASE_FORK_BLOCK;
     }
 }
