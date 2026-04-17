@@ -613,8 +613,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         // NOTE: On failure, the fee ETH is retained by this contract (not added back to transportPayment)
         // to avoid DoS on zero-cost bridges (OP, Base, Celo, Arbitrum L2→L1) that revert on non-zero
         // transportPayment.
-        IJBTerminal feeTerminal =
-            _primaryTerminalOf({forProjectId: FEE_PROJECT_ID, token: JBConstants.NATIVE_TOKEN});
+        IJBTerminal feeTerminal = _primaryTerminalOf({forProjectId: FEE_PROJECT_ID, token: JBConstants.NATIVE_TOKEN});
         if (address(feeTerminal) != address(0)) {
             // slither-disable-next-line unused-return,reentrancy-events,reentrancy-benign,arbitrary-send-eth
             try feeTerminal.pay{value: _toRemoteFee}({
