@@ -316,7 +316,7 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
 
             // Make sure no active sucker already targets the same peer chain.
             // slither-disable-next-line calls-loop
-            _revertIfDuplicatePeerChain(projectId, sucker);
+            _revertIfDuplicatePeerChain({projectId: projectId, newSucker: sucker});
 
             // Store the sucker as being deployed for this project.
             // slither-disable-next-line unused-return
