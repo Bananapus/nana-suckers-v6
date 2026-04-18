@@ -245,7 +245,12 @@ contract JBSuckerTerminal is ERC165, IERC721Receiver, IJBSuckerTerminal, IJBRule
         emit CashOut(proxyProjectId, config.realProjectId, cashOutCount, reclaimAmount, beneficiary, msg.sender);
 
         // Step 3: Wrap ETH → WETH (if native) or approve router (if ERC-20) and CCIP send to peer on remote chain.
-        _sendCashOutClaim(proxyProjectId, tokenToReclaim, reclaimAmount, beneficiary);
+        _sendCashOutClaim({
+            proxyProjectId: proxyProjectId,
+            tokenToReclaim: tokenToReclaim,
+            reclaimAmount: reclaimAmount,
+            beneficiary: beneficiary
+        });
     }
 
     /// @notice Called by the CCIP router to deliver a cross-chain message.
@@ -264,9 +269,9 @@ contract JBSuckerTerminal is ERC165, IERC721Receiver, IJBSuckerTerminal, IJBRule
         (uint8 messageType, bytes memory payload) = abi.decode(any2EvmMessage.data, (uint8, bytes));
 
         if (messageType == _MSG_TYPE_PAY) {
-            _handleCCIPPay(payload, any2EvmMessage.destTokenAmounts);
+            _handleCCIPPay({payload: payload, destTokenAmounts: any2EvmMessage.destTokenAmounts});
         } else if (messageType == _MSG_TYPE_CASH_OUT_CLAIM) {
-            _handleCCIPCashOutClaim(payload, any2EvmMessage.destTokenAmounts);
+            _handleCCIPCashOutClaim({payload: payload, destTokenAmounts: any2EvmMessage.destTokenAmounts});
         } else {
             revert JBSuckerTerminal_UnknownMessageType(messageType);
         }
@@ -415,12 +420,27 @@ contract JBSuckerTerminal is ERC165, IERC721Receiver, IJBSuckerTerminal, IJBRule
 
         if (config.homeChainSelector == 0) {
             // ── Home chain: route locally ──
-            proxyTokenCount = _payLocal(
-                proxyProjectId, config.realProjectId, token, amount, beneficiary, minReturnedTokens, memo, metadata
-            );
+            proxyTokenCount = _payLocal({
+                proxyProjectId: proxyProjectId,
+                realProjectId: config.realProjectId,
+                token: token,
+                amount: amount,
+                beneficiary: beneficiary,
+                minReturnedTokens: minReturnedTokens,
+                memo: memo,
+                metadata: metadata
+            });
         } else {
             // ── Remote chain: bridge via CCIP ──
-            _payRemote(proxyProjectId, config.realProjectId, token, amount, beneficiary, memo, metadata);
+            _payRemote({
+                proxyProjectId: proxyProjectId,
+                realProjectId: config.realProjectId,
+                token: token,
+                amount: amount,
+                beneficiary: beneficiary,
+                memo: memo,
+                metadata: metadata
+            });
             // Returns 0 — tokens mint asynchronously on the home chain.
             proxyTokenCount = 0;
         }
@@ -855,15 +875,15 @@ contract JBSuckerTerminal is ERC165, IERC721Receiver, IJBSuckerTerminal, IJBRule
 
         // Deposit real tokens into the proxy project, minting proxy tokens for the beneficiary.
         // Uses _homeProxyOf (deployer-independent) so ownership transfers don't break inbound payments.
-        uint256 proxyTokenCount = _depositIntoProxy(
-            _homeProxyOf[payMsg.realProjectId],
-            payMsg.realProjectId,
-            payMsg.beneficiary,
-            0,
-            payMsg.memo,
-            payMsg.metadata,
-            realTokensReceived
-        );
+        uint256 proxyTokenCount = _depositIntoProxy({
+            proxyProjectId: _homeProxyOf[payMsg.realProjectId],
+            realProjectId: payMsg.realProjectId,
+            beneficiary: payMsg.beneficiary,
+            minReturnedTokens: 0,
+            memo: payMsg.memo,
+            metadata: payMsg.metadata,
+            realTokensReceived: realTokensReceived
+        });
 
         emit CCIPPayReceived(payMsg.realProjectId, payMsg.beneficiary, amount, proxyTokenCount);
     }
@@ -913,9 +933,15 @@ contract JBSuckerTerminal is ERC165, IERC721Receiver, IJBSuckerTerminal, IJBRule
         });
 
         // Deposit received real tokens into the proxy project, minting proxy tokens for the beneficiary.
-        proxyTokenCount = _depositIntoProxy(
-            proxyProjectId, realProjectId, beneficiary, minReturnedTokens, memo, metadata, realTokensReceived
-        );
+        proxyTokenCount = _depositIntoProxy({
+            proxyProjectId: proxyProjectId,
+            realProjectId: realProjectId,
+            beneficiary: beneficiary,
+            minReturnedTokens: minReturnedTokens,
+            memo: memo,
+            metadata: metadata,
+            realTokensReceived: realTokensReceived
+        });
     }
 
     /// @notice Bridges a payment via CCIP to the home chain.
@@ -945,7 +971,15 @@ contract JBSuckerTerminal is ERC165, IERC721Receiver, IJBSuckerTerminal, IJBRule
         }
 
         // Bridge the already-held token via CCIP.
-        _bridgePay(proxyProjectId, realProjectId, token, amount, beneficiary, memo, metadata);
+        _bridgePay({
+            proxyProjectId: proxyProjectId,
+            realProjectId: realProjectId,
+            token: token,
+            amount: amount,
+            beneficiary: beneficiary,
+            memo: memo,
+            metadata: metadata
+        });
     }
 
     /// @notice Wraps ETH (if native) or approves the router (if ERC-20) and sends a CCIP message to deliver cash out
