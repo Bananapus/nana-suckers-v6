@@ -8,6 +8,7 @@ import /* {*} from */ "@bananapus/core-v6/test/helpers/TestBaseWorkflow.sol";
 // forge-lint: disable-next-line(unaliased-plain-import)
 import "@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol";
 
+import {JBPermissioned} from "@bananapus/core-v6/src/abstract/JBPermissioned.sol";
 import {IJBRulesetDataHook} from "@bananapus/core-v6/src/interfaces/IJBRulesetDataHook.sol";
 import {IAny2EVMMessageReceiver} from "@chainlink/contracts-ccip/contracts/interfaces/IAny2EVMMessageReceiver.sol";
 import {Client} from "@chainlink/contracts-ccip/contracts/libraries/Client.sol";
@@ -286,6 +287,7 @@ contract JBSuckerTerminalTest is Test, TestBaseWorkflow, IERC721Receiver {
         suckerTerminal = new JBSuckerTerminal({
             controller: IJBController(address(jbController())),
             directory: IJBDirectory(address(jbDirectory())),
+            permissions: IJBPermissions(address(jbPermissions())),
             multiTerminal: IJBTerminal(address(jbMultiTerminal())),
             suckerRegistry: IJBSuckerRegistry(address(registry)),
             tokens: IJBTokens(address(jbTokens())),
@@ -388,8 +390,13 @@ contract JBSuckerTerminalTest is Test, TestBaseWorkflow, IERC721Receiver {
 
     function test_createProxy_revertsIfNotOwner() public {
         // A random address tries to create a proxy — should revert.
-        vm.prank(address(0xDEAD));
-        vm.expectRevert(abi.encodeWithSelector(JBSuckerTerminal.JBSuckerTerminal_Unauthorized.selector));
+        address unauthorized = address(0xDEAD);
+        vm.prank(unauthorized);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                JBPermissioned.JBPermissioned_Unauthorized.selector, address(this), unauthorized, realProjectId, 41
+            )
+        );
         suckerTerminal.createProxy(realProjectId, 0, "ProxyToken", "PROXY", bytes32(uint256(1)));
     }
 
@@ -402,6 +409,7 @@ contract JBSuckerTerminalTest is Test, TestBaseWorkflow, IERC721Receiver {
         JBSuckerTerminal remote = new JBSuckerTerminal({
             controller: IJBController(address(jbController())),
             directory: IJBDirectory(address(jbDirectory())),
+            permissions: IJBPermissions(address(jbPermissions())),
             multiTerminal: IJBTerminal(address(jbMultiTerminal())),
             suckerRegistry: IJBSuckerRegistry(address(registry)),
             tokens: IJBTokens(address(jbTokens())),
@@ -532,6 +540,7 @@ contract JBSuckerTerminalTest is Test, TestBaseWorkflow, IERC721Receiver {
         homeSuckerTerminal = new JBSuckerTerminal({
             controller: IJBController(address(jbController())),
             directory: IJBDirectory(address(jbDirectory())),
+            permissions: IJBPermissions(address(jbPermissions())),
             multiTerminal: IJBTerminal(address(jbMultiTerminal())),
             suckerRegistry: IJBSuckerRegistry(address(registry)),
             tokens: IJBTokens(address(jbTokens())),
@@ -556,6 +565,7 @@ contract JBSuckerTerminalTest is Test, TestBaseWorkflow, IERC721Receiver {
         homeSuckerTerminal = new JBSuckerTerminal({
             controller: IJBController(address(jbController())),
             directory: IJBDirectory(address(jbDirectory())),
+            permissions: IJBPermissions(address(jbPermissions())),
             multiTerminal: IJBTerminal(address(jbMultiTerminal())),
             suckerRegistry: IJBSuckerRegistry(address(registry)),
             tokens: IJBTokens(address(jbTokens())),
@@ -619,6 +629,7 @@ contract JBSuckerTerminalTest is Test, TestBaseWorkflow, IERC721Receiver {
         homeTerminal = new JBSuckerTerminal({
             controller: IJBController(address(jbController())),
             directory: IJBDirectory(address(jbDirectory())),
+            permissions: IJBPermissions(address(jbPermissions())),
             multiTerminal: IJBTerminal(address(jbMultiTerminal())),
             suckerRegistry: IJBSuckerRegistry(address(registry)),
             tokens: IJBTokens(address(jbTokens())),
@@ -680,6 +691,7 @@ contract JBSuckerTerminalTest is Test, TestBaseWorkflow, IERC721Receiver {
         JBSuckerTerminal remote = new JBSuckerTerminal({
             controller: IJBController(address(jbController())),
             directory: IJBDirectory(address(jbDirectory())),
+            permissions: IJBPermissions(address(jbPermissions())),
             multiTerminal: IJBTerminal(address(jbMultiTerminal())),
             suckerRegistry: IJBSuckerRegistry(address(registry)),
             tokens: IJBTokens(address(jbTokens())),
@@ -710,6 +722,7 @@ contract JBSuckerTerminalTest is Test, TestBaseWorkflow, IERC721Receiver {
         JBSuckerTerminal homeTerminal = new JBSuckerTerminal({
             controller: IJBController(address(jbController())),
             directory: IJBDirectory(address(jbDirectory())),
+            permissions: IJBPermissions(address(jbPermissions())),
             multiTerminal: IJBTerminal(address(jbMultiTerminal())),
             suckerRegistry: IJBSuckerRegistry(address(registry)),
             tokens: IJBTokens(address(jbTokens())),
@@ -739,6 +752,7 @@ contract JBSuckerTerminalTest is Test, TestBaseWorkflow, IERC721Receiver {
         JBSuckerTerminal remote = new JBSuckerTerminal({
             controller: IJBController(address(jbController())),
             directory: IJBDirectory(address(jbDirectory())),
+            permissions: IJBPermissions(address(jbPermissions())),
             multiTerminal: IJBTerminal(address(jbMultiTerminal())),
             suckerRegistry: IJBSuckerRegistry(address(registry)),
             tokens: IJBTokens(address(jbTokens())),
@@ -790,6 +804,7 @@ contract JBSuckerTerminalTest is Test, TestBaseWorkflow, IERC721Receiver {
         JBSuckerTerminal remote = new JBSuckerTerminal({
             controller: IJBController(address(jbController())),
             directory: IJBDirectory(address(jbDirectory())),
+            permissions: IJBPermissions(address(jbPermissions())),
             multiTerminal: IJBTerminal(address(jbMultiTerminal())),
             suckerRegistry: IJBSuckerRegistry(address(registry)),
             tokens: IJBTokens(address(jbTokens())),
@@ -887,6 +902,7 @@ contract JBSuckerTerminalTest is Test, TestBaseWorkflow, IERC721Receiver {
         JBSuckerTerminal homeTerminal = new JBSuckerTerminal({
             controller: IJBController(address(jbController())),
             directory: IJBDirectory(address(jbDirectory())),
+            permissions: IJBPermissions(address(jbPermissions())),
             multiTerminal: IJBTerminal(address(jbMultiTerminal())),
             suckerRegistry: IJBSuckerRegistry(address(registry)),
             tokens: IJBTokens(address(jbTokens())),
@@ -942,6 +958,7 @@ contract JBSuckerTerminalTest is Test, TestBaseWorkflow, IERC721Receiver {
         JBSuckerTerminal remote = new JBSuckerTerminal({
             controller: IJBController(address(jbController())),
             directory: IJBDirectory(address(jbDirectory())),
+            permissions: IJBPermissions(address(jbPermissions())),
             multiTerminal: IJBTerminal(address(jbMultiTerminal())),
             suckerRegistry: IJBSuckerRegistry(address(registry)),
             tokens: IJBTokens(address(jbTokens())),
@@ -991,6 +1008,7 @@ contract JBSuckerTerminalTest is Test, TestBaseWorkflow, IERC721Receiver {
         JBSuckerTerminal homeTerminal = new JBSuckerTerminal({
             controller: IJBController(address(jbController())),
             directory: IJBDirectory(address(jbDirectory())),
+            permissions: IJBPermissions(address(jbPermissions())),
             multiTerminal: IJBTerminal(address(jbMultiTerminal())),
             suckerRegistry: IJBSuckerRegistry(address(registry)),
             tokens: IJBTokens(address(jbTokens())),
@@ -1047,6 +1065,7 @@ contract JBSuckerTerminalTest is Test, TestBaseWorkflow, IERC721Receiver {
         JBSuckerTerminal homeTerminal = new JBSuckerTerminal({
             controller: IJBController(address(jbController())),
             directory: IJBDirectory(address(jbDirectory())),
+            permissions: IJBPermissions(address(jbPermissions())),
             multiTerminal: IJBTerminal(address(jbMultiTerminal())),
             suckerRegistry: IJBSuckerRegistry(address(registry)),
             tokens: IJBTokens(address(jbTokens())),

@@ -6,9 +6,11 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 import {IERC721Receiver} from "@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol";
 import {ERC165, IERC165} from "@openzeppelin/contracts/utils/introspection/ERC165.sol";
 
+import {JBPermissioned} from "@bananapus/core-v6/src/abstract/JBPermissioned.sol";
 import {IJBCashOutTerminal} from "@bananapus/core-v6/src/interfaces/IJBCashOutTerminal.sol";
 import {IJBController} from "@bananapus/core-v6/src/interfaces/IJBController.sol";
 import {IJBDirectory} from "@bananapus/core-v6/src/interfaces/IJBDirectory.sol";
+import {IJBPermissions} from "@bananapus/core-v6/src/interfaces/IJBPermissions.sol";
 import {IJBProjects} from "@bananapus/core-v6/src/interfaces/IJBProjects.sol";
 import {IJBRulesetApprovalHook} from "@bananapus/core-v6/src/interfaces/IJBRulesetApprovalHook.sol";
 import {IJBRulesetDataHook} from "@bananapus/core-v6/src/interfaces/IJBRulesetDataHook.sol";
@@ -42,7 +44,14 @@ import {JBRelayPayMessage} from "./structs/JBRelayPayMessage.sol";
 /// @notice A factory and payment router that creates proxy projects backed by real project tokens. On the home chain,
 /// routes payments locally. On remote chains, bridges funds via CCIP to the home chain. Proxy projects allow suckers to
 /// mint tokens on behalf of cross-chain bridgers through the standard JB mint permission system.
-contract JBSuckerTerminal is ERC165, IERC721Receiver, IJBSuckerTerminal, IJBRulesetDataHook, IAny2EVMMessageReceiver {
+contract JBSuckerTerminal is
+    ERC165,
+    JBPermissioned,
+    IERC721Receiver,
+    IJBSuckerTerminal,
+    IJBRulesetDataHook,
+    IAny2EVMMessageReceiver
+{
     using SafeERC20 for IERC20;
 
     //*********************************************************************//
@@ -57,13 +66,15 @@ contract JBSuckerTerminal is ERC165, IERC721Receiver, IJBSuckerTerminal, IJBRule
     error JBSuckerTerminal_NotSupported();
     error JBSuckerTerminal_NoTerminal(uint256 projectId, address token);
     error JBSuckerTerminal_ProxyAlreadyExists(uint256 realProjectId);
-    error JBSuckerTerminal_Unauthorized();
     error JBSuckerTerminal_UnknownMessageType(uint8 messageType);
     error JBSuckerTerminal_WrongChain();
 
     //*********************************************************************//
     // ----------------------- internal constants ------------------------ //
     //*********************************************************************//
+
+    /// @notice Permission ID for `createProxy`. Will move to `JBPermissionIds` once the package is published.
+    uint8 internal constant _CREATE_PROXY_PERMISSION_ID = 41;
 
     /// @notice CCIP message type for pay messages.
     uint8 internal constant _MSG_TYPE_PAY = 1;
@@ -138,6 +149,7 @@ contract JBSuckerTerminal is ERC165, IERC721Receiver, IJBSuckerTerminal, IJBRule
 
     /// @param controller The Juicebox controller.
     /// @param directory The Juicebox directory.
+    /// @param permissions A contract storing permissions.
     /// @param multiTerminal The canonical JBMultiTerminal on this chain.
     /// @param suckerRegistry The sucker registry.
     /// @param tokens The Juicebox token store.
@@ -148,6 +160,7 @@ contract JBSuckerTerminal is ERC165, IERC721Receiver, IJBSuckerTerminal, IJBRule
     constructor(
         IJBController controller,
         IJBDirectory directory,
+        IJBPermissions permissions,
         IJBTerminal multiTerminal,
         IJBSuckerRegistry suckerRegistry,
         IJBTokens tokens,
@@ -155,7 +168,9 @@ contract JBSuckerTerminal is ERC165, IERC721Receiver, IJBSuckerTerminal, IJBRule
         uint64 remoteChainSelector,
         address peer,
         IJBTerminal routerTerminal
-    ) {
+    )
+        JBPermissioned(permissions)
+    {
         CCIP_ROUTER = ccipRouter;
         CONTROLLER = controller;
         DIRECTORY = directory;
@@ -294,11 +309,13 @@ contract JBSuckerTerminal is ERC165, IERC721Receiver, IJBSuckerTerminal, IJBRule
             revert JBSuckerTerminal_ProxyAlreadyExists(realProjectId);
         }
 
-        // On the home chain, only the project owner can create a proxy.
+        // On the home chain, only the project owner (or an authorized operator) can create a proxy.
         if (homeChainSelector == 0) {
-            if (msg.sender != PROJECTS.ownerOf(realProjectId)) {
-                revert JBSuckerTerminal_Unauthorized();
-            }
+            _requirePermissionFrom({
+                account: PROJECTS.ownerOf(realProjectId),
+                projectId: realProjectId,
+                permissionId: _CREATE_PROXY_PERMISSION_ID
+            });
         }
 
         // Determine the token and terminal based on whether this is the home chain or a remote chain.

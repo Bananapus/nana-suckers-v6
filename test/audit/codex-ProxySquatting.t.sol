@@ -12,7 +12,9 @@ import {JBRulesetMetadata} from "@bananapus/core-v6/src/structs/JBRulesetMetadat
 import {JBSplitGroup} from "@bananapus/core-v6/src/structs/JBSplitGroup.sol";
 import {JBTerminalConfig} from "@bananapus/core-v6/src/structs/JBTerminalConfig.sol";
 import {IJBController} from "@bananapus/core-v6/src/interfaces/IJBController.sol";
+import {JBPermissioned} from "@bananapus/core-v6/src/abstract/JBPermissioned.sol";
 import {IJBDirectory} from "@bananapus/core-v6/src/interfaces/IJBDirectory.sol";
+import {IJBPermissions} from "@bananapus/core-v6/src/interfaces/IJBPermissions.sol";
 import {IJBRulesetApprovalHook} from "@bananapus/core-v6/src/interfaces/IJBRulesetApprovalHook.sol";
 import {IJBTerminal} from "@bananapus/core-v6/src/interfaces/IJBTerminal.sol";
 import {IJBTokens} from "@bananapus/core-v6/src/interfaces/IJBTokens.sol";
@@ -91,6 +93,7 @@ contract CodexProxySquattingTest is Test, TestBaseWorkflow, IERC721Receiver {
         terminal = new JBSuckerTerminal({
             controller: IJBController(address(jbController())),
             directory: IJBDirectory(address(jbDirectory())),
+            permissions: IJBPermissions(address(jbPermissions())),
             multiTerminal: IJBTerminal(address(jbMultiTerminal())),
             suckerRegistry: IJBSuckerRegistry(address(registry)),
             tokens: IJBTokens(address(jbTokens())),
@@ -105,7 +108,11 @@ contract CodexProxySquattingTest is Test, TestBaseWorkflow, IERC721Receiver {
     function test_squattingBlockedOnHomeChain() external {
         // Attacker tries to squat the proxy — reverts because they're not the project owner.
         vm.prank(attacker);
-        vm.expectRevert(abi.encodeWithSelector(JBSuckerTerminal.JBSuckerTerminal_Unauthorized.selector));
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                JBPermissioned.JBPermissioned_Unauthorized.selector, address(this), attacker, realProjectId, 41
+            )
+        );
         terminal.createProxy(realProjectId, 0, "FakeProxy", "FAKE", bytes32("bad"));
 
         // Owner can still create the proxy.
