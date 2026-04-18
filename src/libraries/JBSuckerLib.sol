@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.28;
 
+import {IJBController} from "@bananapus/core-v6/src/interfaces/IJBController.sol";
 import {IJBDirectory} from "@bananapus/core-v6/src/interfaces/IJBDirectory.sol";
 import {IJBMultiTerminal} from "@bananapus/core-v6/src/interfaces/IJBMultiTerminal.sol";
 import {IJBPrices} from "@bananapus/core-v6/src/interfaces/IJBPrices.sol";
@@ -10,19 +11,27 @@ import {JBAccountingContext} from "@bananapus/core-v6/src/structs/JBAccountingCo
 import {JBCurrencyIds} from "@bananapus/core-v6/src/libraries/JBCurrencyIds.sol";
 import {JBFixedPointNumber} from "@bananapus/core-v6/src/libraries/JBFixedPointNumber.sol";
 import {mulDiv} from "@prb/math/src/Common.sol";
+import {IERC165} from "@openzeppelin/contracts/utils/introspection/ERC165.sol";
 
 import {JBDenominatedAmount} from "../structs/JBDenominatedAmount.sol";
+import {JBInboxTreeRoot} from "../structs/JBInboxTreeRoot.sol";
+import {JBMessageRoot} from "../structs/JBMessageRoot.sol";
+import {MerkleLib} from "../utils/MerkleLib.sol";
 
-/// @notice Library with bytecode-heavy view functions extracted from JBSucker to reduce child contract sizes.
+/// @notice Library with bytecode-heavy functions extracted from JBSucker to reduce child contract sizes.
 /// @dev These are `external` library functions, so they are deployed as a separate contract and called via
 /// DELEGATECALL. This avoids duplicating the bytecode in every sucker implementation.
 library JBSuckerLib {
-    // ------------------------- internal constants ----------------------- //
+    //*********************************************************************//
+    // ----------------------- internal constants ------------------------ //
+    //*********************************************************************//
 
     uint256 internal constant _ETH_CURRENCY = JBCurrencyIds.ETH;
     uint8 internal constant _ETH_DECIMALS = 18;
 
+    //*********************************************************************//
     // ------------------------- external views -------------------------- //
+    //*********************************************************************//
 
     /// @notice Build ETH-denominated aggregate surplus and balance across all terminals for a project.
     /// @param directory The JB directory to look up terminals.
@@ -35,6 +44,24 @@ library JBSuckerLib {
         uint256 projectId
     )
         external
+        view
+        returns (uint256 ethSurplus, uint256 ethBalance)
+    {
+        return _buildETHAggregateInternal(directory, projectId);
+    }
+
+    //*********************************************************************//
+    // ----------------------- internal helpers -------------------------- //
+    //*********************************************************************//
+
+    /// @dev Shared implementation for ETH aggregate. Internal so it can be called from other
+    /// external library functions (libraries cannot call their own external functions).
+    // forge-lint: disable-next-line(mixed-case-function)
+    function _buildETHAggregateInternal(
+        IJBDirectory directory,
+        uint256 projectId
+    )
+        internal
         view
         returns (uint256 ethSurplus, uint256 ethBalance)
     {
@@ -176,5 +203,141 @@ library JBSuckerLib {
                 } catch {}
             } catch {}
         }
+    }
+
+    //*********************************************************************//
+    // -------------------- external state-changing ---------------------- //
+    //*********************************************************************//
+
+    /// @notice Build the cross-chain snapshot message (total supply, surplus, balance).
+    /// @dev Extracted from `JBSucker._buildSnapshotAndSend` to reduce child contract bytecode.
+    /// Called via DELEGATECALL. Includes ETH aggregate computation inline (cannot call own external fns).
+    /// @param directory The JB directory to look up controllers and terminals.
+    /// @param projectId The project ID.
+    /// @param remoteToken The remote token bytes32 address.
+    /// @param amount The amount of terminal tokens being bridged.
+    /// @param nonce The outbox nonce for this send.
+    /// @param root The merkle root of the outbox tree.
+    /// @param messageVersion The message format version.
+    /// @param snapshotNonce The snapshot nonce (caller should pre-increment).
+    /// @return message The constructed JBMessageRoot.
+    function buildSnapshotMessage(
+        IJBDirectory directory,
+        uint256 projectId,
+        bytes32 remoteToken,
+        uint256 amount,
+        uint64 nonce,
+        bytes32 root,
+        uint8 messageVersion,
+        uint64 snapshotNonce
+    )
+        external
+        view
+        returns (JBMessageRoot memory message)
+    {
+        // Will hold the total token supply (including reserved tokens) for the project.
+        uint256 localTotalSupply;
+
+        // Get the controller and verify it implements IJBController via ERC165 before querying supply.
+        // slither-disable-next-line calls-loop
+        try directory.controllerOf(projectId) returns (IERC165 controllerIERC165) {
+            if (address(controllerIERC165) != address(0)) {
+                // slither-disable-next-line calls-loop
+                try controllerIERC165.supportsInterface(type(IJBController).interfaceId) returns (bool supported) {
+                    if (supported) {
+                        // slither-disable-next-line calls-loop
+                        localTotalSupply =
+                            IJBController(address(controllerIERC165)).totalTokenSupplyWithReservedTokensOf(projectId);
+                    }
+                } catch {}
+            }
+        } catch {}
+
+        // Inline ETH aggregate computation (libraries cannot call their own external functions).
+        (uint256 ethSurplus, uint256 ethBalance) =
+            _buildETHAggregateInternal({directory: directory, projectId: projectId});
+
+        // Construct the cross-chain message with the snapshot data.
+        message = JBMessageRoot({
+            version: messageVersion,
+            token: remoteToken,
+            amount: amount,
+            remoteRoot: JBInboxTreeRoot({nonce: nonce, root: root}),
+            sourceTotalSupply: localTotalSupply,
+            sourceCurrency: _ETH_CURRENCY,
+            sourceDecimals: _ETH_DECIMALS,
+            sourceSurplus: ethSurplus,
+            sourceBalance: ethBalance,
+            snapshotNonce: snapshotNonce
+        });
+    }
+
+    //*********************************************************************//
+    // -------------------- merkle tree helpers -------------------------- //
+    //*********************************************************************//
+
+    /// @notice Compute the merkle tree root from branch and count. Loop-based replacement for the unrolled
+    /// MerkleLib.root() — saves ~3KB per sucker when called via DELEGATECALL instead of inlining.
+    /// @param branch The 32-element branch array (caller copies from storage to memory).
+    /// @param count The number of leaves inserted into the tree.
+    /// @return current The merkle root.
+    function computeTreeRoot(bytes32[32] memory branch, uint256 count) external pure returns (bytes32 current) {
+        // An empty tree has a well-known root.
+        if (count == 0) return MerkleLib.Z_32;
+
+        // slither-disable-start incorrect-shift
+        // solhint-disable-next-line no-inline-assembly
+        assembly ("memory-safe") {
+            // Build zero hashes on-the-fly: Z[0] = 0, Z[i+1] = keccak256(Z[i], Z[i]).
+            let zPtr := mload(0x40)
+            mstore(0x40, add(zPtr, 0x420)) // 33 slots × 32 bytes
+            mstore(zPtr, 0) // Z[0] = bytes32(0)
+            for { let j := 0 } lt(j, 32) { j := add(j, 1) } {
+                let prev := mload(add(zPtr, mul(j, 0x20)))
+                mstore(0x00, prev)
+                mstore(0x20, prev)
+                mstore(add(zPtr, mul(add(j, 1), 0x20)), keccak256(0x00, 0x40))
+            }
+
+            // Walk bits of `count` from LSB to MSB.
+            // First set bit → initialize current = keccak256(branch[i], Z[i]).
+            // Each subsequent level → merge branch[i] or Z[i] with current.
+            let started := 0
+            for { let i := 0 } lt(i, 32) { i := add(i, 1) } {
+                switch started
+                case 0 {
+                    if and(count, shl(i, 1)) {
+                        mstore(0x00, mload(add(branch, mul(i, 0x20))))
+                        mstore(0x20, mload(add(zPtr, mul(i, 0x20))))
+                        current := keccak256(0x00, 0x40)
+                        started := 1
+                    }
+                }
+                default {
+                    switch and(count, shl(i, 1))
+                    case 0 {
+                        mstore(0x00, current)
+                        mstore(0x20, mload(add(zPtr, mul(i, 0x20))))
+                    }
+                    default {
+                        mstore(0x00, mload(add(branch, mul(i, 0x20))))
+                        mstore(0x20, current)
+                    }
+                    current := keccak256(0x00, 0x40)
+                }
+            }
+        }
+        // slither-disable-end incorrect-shift
+    }
+
+    /// @notice Compute a branch root from a leaf, branch, and index. Wraps MerkleLib.branchRoot so its
+    /// ~170 lines of unrolled assembly live in the library's bytecode instead of each sucker's.
+    /// @param item The leaf hash.
+    /// @param branch The 32-element merkle proof branch.
+    /// @param index The leaf index.
+    /// @return The computed merkle root.
+    function computeBranchRoot(bytes32 item, bytes32[32] memory branch, uint256 index) external pure returns (bytes32) {
+        // Delegate to MerkleLib's unrolled assembly implementation.
+        return MerkleLib.branchRoot({_item: item, _branch: branch, _index: index});
     }
 }

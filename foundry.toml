@@ -1,7 +1,6 @@
 [profile.default]
 solc = '0.8.28'
 evm_version = 'cancun'
-via_ir = false
 optimizer_runs = 200
 libs = ["node_modules", "lib"]
 fs_permissions = [{ access = "read-write", path = "./"}]
@@ -30,3 +29,4 @@ arbitrum = "${RPC_ARBITRUM_MAINNET}"
 optimism = "${RPC_OPTIMISM_MAINNET}"
 base = "${RPC_BASE_MAINNET}"
 celo = "${RPC_CELO_MAINNET}"
+tempo = "${RPC_TEMPO_MAINNET}"

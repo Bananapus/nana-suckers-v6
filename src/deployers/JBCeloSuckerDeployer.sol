@@ -1,14 +1,18 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.28;
 
+// External packages (alphabetized).
 import {IJBDirectory} from "@bananapus/core-v6/src/interfaces/IJBDirectory.sol";
 import {IJBPermissions} from "@bananapus/core-v6/src/interfaces/IJBPermissions.sol";
 import {IJBTokens} from "@bananapus/core-v6/src/interfaces/IJBTokens.sol";
 
+// Local: interfaces (alphabetized).
 import {IJBCeloSuckerDeployer} from "../interfaces/IJBCeloSuckerDeployer.sol";
 import {IOPMessenger} from "../interfaces/IOPMessenger.sol";
 import {IOPStandardBridge} from "../interfaces/IOPStandardBridge.sol";
 import {IWrappedNativeToken} from "../interfaces/IWrappedNativeToken.sol";
+
+// Local: deployers.
 import {JBOptimismSuckerDeployer} from "./JBOptimismSuckerDeployer.sol";
 
 /// @notice An `IJBSuckerDeployer` implementation to deploy `JBCeloSucker` contracts.
@@ -29,6 +33,7 @@ contract JBCeloSuckerDeployer is JBOptimismSuckerDeployer, IJBCeloSuckerDeployer
     /// @param permissions The permissions contract for the deployer.
     /// @param tokens The contract that manages token minting and burning.
     /// @param configurator The address of the configurator.
+    /// @param trustedForwarder The trusted forwarder for ERC-2771 meta-transactions.
     constructor(
         IJBDirectory directory,
         IJBPermissions permissions,
@@ -44,6 +49,7 @@ contract JBCeloSuckerDeployer is JBOptimismSuckerDeployer, IJBCeloSuckerDeployer
     //*********************************************************************//
 
     /// @notice Check if the layer specific configuration is set or not. Used as a sanity check.
+    /// @return A flag indicating whether the layer specific configuration has been set.
     function _layerSpecificConfigurationIsSet() internal view override returns (bool) {
         return
             address(opMessenger) != address(0) && address(opBridge) != address(0)
@@ -65,10 +71,12 @@ contract JBCeloSuckerDeployer is JBOptimismSuckerDeployer, IJBCeloSuckerDeployer
     )
         external
     {
+        // Make sure the layer specific configuration has not already been set.
         if (_layerSpecificConfigurationIsSet()) {
             revert JBSuckerDeployer_AlreadyConfigured();
         }
 
+        // Make sure only the configurator can call this function.
         if (_msgSender() != LAYER_SPECIFIC_CONFIGURATOR) {
             revert JBSuckerDeployer_Unauthorized(_msgSender(), LAYER_SPECIFIC_CONFIGURATOR);
         }

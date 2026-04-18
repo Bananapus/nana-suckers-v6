@@ -4,8 +4,8 @@ pragma solidity ^0.8.13;
 // forge-lint: disable-next-line(unaliased-plain-import)
 import "forge-std/Test.sol";
 
-import {Client} from "@chainlink/contracts-ccip/src/v0.8/ccip/libraries/Client.sol";
-import {IRouterClient} from "@chainlink/contracts-ccip/src/v0.8/ccip/interfaces/IRouterClient.sol";
+import {Client} from "@chainlink/contracts-ccip/contracts/libraries/Client.sol";
+import {IRouterClient} from "@chainlink/contracts-ccip/contracts/interfaces/IRouterClient.sol";
 import {IJBDirectory} from "@bananapus/core-v6/src/interfaces/IJBDirectory.sol";
 import {IJBPermissions} from "@bananapus/core-v6/src/interfaces/IJBPermissions.sol";
 import {IJBTokens} from "@bananapus/core-v6/src/interfaces/IJBTokens.sol";
@@ -351,7 +351,7 @@ contract CCIPNativeInteropTest is Test {
             messageId: bytes32(uint256(1)),
             sourceChainSelector: REMOTE_CHAIN_SELECTOR,
             sender: abi.encode(address(ccipSucker)), // peer is address(this)
-            data: abi.encode(msgRoot),
+            data: abi.encode(uint8(0), abi.encode(msgRoot)),
             destTokenAmounts: tokenAmounts
         });
 
@@ -393,7 +393,7 @@ contract CCIPNativeInteropTest is Test {
             messageId: bytes32(uint256(2)),
             sourceChainSelector: REMOTE_CHAIN_SELECTOR,
             sender: abi.encode(address(ccipSucker)),
-            data: abi.encode(msgRoot),
+            data: abi.encode(uint8(0), abi.encode(msgRoot)),
             destTokenAmounts: tokenAmounts
         });
 
@@ -502,7 +502,7 @@ contract CCIPNativeInteropTest is Test {
             messageId: bytes32(uint256(3)),
             sourceChainSelector: REMOTE_CHAIN_SELECTOR,
             sender: abi.encode(address(ccipSucker)),
-            data: abi.encode(msgRoot),
+            data: abi.encode(uint8(0), abi.encode(msgRoot)),
             destTokenAmounts: new Client.EVMTokenAmount[](0)
         });
 
@@ -547,7 +547,7 @@ contract CCIPNativeInteropTest is Test {
             messageId: bytes32(uint256(4)),
             sourceChainSelector: REMOTE_CHAIN_SELECTOR,
             sender: abi.encode(address(ccipSucker)),
-            data: abi.encode(msgRoot),
+            data: abi.encode(uint8(0), abi.encode(msgRoot)),
             destTokenAmounts: tokenAmounts
         });
 
@@ -650,7 +650,7 @@ contract CCIPNativeInteropTest is Test {
             messageId: bytes32(uint256(99)),
             sourceChainSelector: REMOTE_CHAIN_SELECTOR,
             sender: abi.encode(address(ccipSucker)),
-            data: abi.encode(recvMsg),
+            data: abi.encode(uint8(0), abi.encode(recvMsg)),
             destTokenAmounts: tokenAmounts
         });
 

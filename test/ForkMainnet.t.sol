@@ -44,6 +44,25 @@ abstract contract CCIPSuckerMainnetForkTestBase is TestBaseWorkflow {
     function _l2RpcUrl() internal pure virtual returns (string memory);
     function _l1ChainId() internal pure virtual returns (uint256);
     function _l2ChainId() internal pure virtual returns (uint256);
+    function _l1ForkBlock() internal pure virtual returns (uint256);
+    function _l2ForkBlock() internal pure virtual returns (uint256);
+
+    // ── Token overrides (defaults: native token on both sides)
+    // ────────────────────────────
+
+    function _terminalToken() internal view virtual returns (address) {
+        return JBConstants.NATIVE_TOKEN;
+    }
+
+    function _remoteTerminalToken() internal view virtual returns (bytes32) {
+        return bytes32(uint256(uint160(JBConstants.NATIVE_TOKEN)));
+    }
+
+    /// @dev Whether CCIP fees are paid in native ETH (true) or LINK from the sucker's balance (false).
+    /// Tempo has no meaningful native token (CALLVALUE always returns 0), so CCIP fees are paid in LINK.
+    function _ccipFeesInNative() internal pure virtual returns (bool) {
+        return true;
+    }
 
     // ── LINK token addresses per mainnet chain
     // ────────────────────────────
@@ -53,6 +72,7 @@ abstract contract CCIPSuckerMainnetForkTestBase is TestBaseWorkflow {
         if (chainId == 42_161) return 0xf97f4df75117a78c1A5a0DBb814Af92458539FB4;
         if (chainId == 10) return 0x350a791Bfc2C21F9Ed5d10980Dad2e2638ffa7f6;
         if (chainId == 8453) return 0x88Fb150BDc53A65fe94Dea0c9BA0a6dAf8C6e196;
+        if (chainId == 4217) return 0x15C03488B29e27d62BAf10E30b0c474bf60E0264;
         revert("Unsupported chain for LINK token");
     }
 
@@ -66,9 +86,24 @@ abstract contract CCIPSuckerMainnetForkTestBase is TestBaseWorkflow {
             linkAddress: _linkTokenOf(chainId),
             wrappedNativeAddress: CCIPHelper.wethOfChain(chainId),
             ccipBnMAddress: address(0),
-            ccipLnMAddress: address(0)
+            ccipLnMAddress: address(0),
+            rmnProxyAddress: address(0),
+            registryModuleOwnerCustomAddress: address(0),
+            tokenAdminRegistryAddress: address(0)
         });
         ccipLocalSimulatorFork.setNetworkDetails(chainId, details);
+    }
+
+    /// @dev Deploy mock ERC20 at the terminal token address if it has no code on the current fork.
+    /// Some tokens (like LINK on Tempo) are not yet deployed — we etch WETH bytecode as a minimal
+    /// ERC20 substitute so fork tests can exercise the code paths.
+    function _ensureTerminalTokenExists() internal {
+        address token = _terminalToken();
+        if (token != JBConstants.NATIVE_TOKEN && token.code.length == 0) {
+            // Etch WETH bytecode as a minimal ERC20 and set 18 decimals (WETH9 slot 2).
+            vm.etch(token, CCIPHelper.wethOfChain(block.chainid).code);
+            vm.store(token, bytes32(uint256(2)), bytes32(uint256(18)));
+        }
     }
 
     // ── Setup
@@ -77,7 +112,8 @@ abstract contract CCIPSuckerMainnetForkTestBase is TestBaseWorkflow {
     function setUp() public override {
         // ── L1
         // ────────────────────────────────────────────────────────────
-        l1Fork = vm.createSelectFork(_l1RpcUrl());
+        l1Fork = vm.createSelectFork(_l1RpcUrl(), _l1ForkBlock());
+        _ensureTerminalTokenExists();
 
         ccipLocalSimulatorFork = new CCIPLocalSimulatorFork();
         vm.makePersistent(address(ccipLocalSimulatorFork));
@@ -152,7 +188,8 @@ abstract contract CCIPSuckerMainnetForkTestBase is TestBaseWorkflow {
 
         // ── L2
         // ────────────────────────────────────────────────────────────
-        l2Fork = vm.createSelectFork(_l2RpcUrl());
+        l2Fork = vm.createSelectFork(_l2RpcUrl(), _l2ForkBlock());
+        _ensureTerminalTokenExists();
 
         // Deploy full JB infrastructure on L2.
         super.setUp();
@@ -194,16 +231,20 @@ abstract contract CCIPSuckerMainnetForkTestBase is TestBaseWorkflow {
         vm.mockCall(address(0), abi.encodeCall(IJBSuckerRegistry.toRemoteFee, ()), abi.encode(uint256(0)));
     }
 
-    /// @notice Launch a project that accepts only native token.
+    /// @notice Launch a project that accepts `_terminalToken()`.
     function _launchProject() internal {
+        address token = _terminalToken();
+
+        // Ensure baseCurrency matches the terminal token so no price feed is needed.
+        _metadata.baseCurrency = uint32(uint160(token));
+
         JBCurrencyAmount[] memory _surplusAllowances = new JBCurrencyAmount[](1);
-        _surplusAllowances[0] =
-            JBCurrencyAmount({amount: 5 * 10 ** 18, currency: uint32(uint160(JBConstants.NATIVE_TOKEN))});
+        _surplusAllowances[0] = JBCurrencyAmount({amount: 5 * 10 ** 18, currency: uint32(uint160(token))});
 
         JBFundAccessLimitGroup[] memory _fundAccessLimitGroup = new JBFundAccessLimitGroup[](1);
         _fundAccessLimitGroup[0] = JBFundAccessLimitGroup({
             terminal: address(jbMultiTerminal()),
-            token: JBConstants.NATIVE_TOKEN,
+            token: token,
             payoutLimits: new JBCurrencyAmount[](0),
             surplusAllowances: _surplusAllowances
         });
@@ -219,9 +260,7 @@ abstract contract CCIPSuckerMainnetForkTestBase is TestBaseWorkflow {
         _rulesetConfigurations[0].fundAccessLimitGroups = _fundAccessLimitGroup;
 
         JBAccountingContext[] memory _tokensToAccept = new JBAccountingContext[](1);
-        _tokensToAccept[0] = JBAccountingContext({
-            token: JBConstants.NATIVE_TOKEN, decimals: 18, currency: uint32(uint160(JBConstants.NATIVE_TOKEN))
-        });
+        _tokensToAccept[0] = JBAccountingContext({token: token, decimals: 18, currency: uint32(uint160(token))});
 
         JBTerminalConfig[] memory _terminalConfigurations = new JBTerminalConfig[](1);
         _terminalConfigurations[0] =
@@ -240,12 +279,12 @@ abstract contract CCIPSuckerMainnetForkTestBase is TestBaseWorkflow {
     // ── Tests
     // ─────────────────────────────────────────────────────────────
 
-    /// @notice Test native token transfer from L1 → L2 via real mainnet CCIP routers.
+    /// @notice Test token transfer from L1 → L2 via real mainnet CCIP routers.
     ///
     /// This verifies the full send-side flow against production CCIP infrastructure:
     ///   1. Pay into JB terminal, receive project tokens
     ///   2. Prepare cash out via sucker (builds merkle tree)
-    ///   3. toRemote() wraps ETH → WETH, sends CCIP message through the real mainnet router
+    ///   3. toRemote() sends CCIP message through the real mainnet router
     ///   4. Outbox is cleared, CCIP fees are paid
     ///
     /// The L2 delivery side (switchChainAndRouteMessage) is tested in Fork.t.sol against
@@ -258,52 +297,78 @@ abstract contract CCIPSuckerMainnetForkTestBase is TestBaseWorkflow {
         uint256 amountToSend = 0.05 ether;
         uint256 maxCashedOut = amountToSend / 2;
 
-        // Start on L1.
+        // Start on L1 — must be before _terminalToken() since it uses block.chainid.
         vm.selectFork(l1Fork);
-        vm.deal(user, amountToSend);
+        address token = _terminalToken();
 
-        // Map native token.
-        JBTokenMapping memory map = JBTokenMapping({
-            localToken: JBConstants.NATIVE_TOKEN,
-            minGas: 200_000,
-            remoteToken: bytes32(uint256(uint160(JBConstants.NATIVE_TOKEN)))
-        });
+        // Fund user with terminal token.
+        if (token == JBConstants.NATIVE_TOKEN) {
+            vm.deal(user, amountToSend);
+        } else {
+            deal(token, user, amountToSend);
+        }
+
+        // Map terminal token.
+        JBTokenMapping memory map =
+            JBTokenMapping({localToken: token, minGas: 200_000, remoteToken: _remoteTerminalToken()});
 
         vm.prank(multisig());
         suckerL1.mapToken(map);
 
         // Pay into L1 terminal → receive project tokens.
         vm.startPrank(user);
-        uint256 projectTokenAmount =
-            jbMultiTerminal().pay{value: amountToSend}(1, JBConstants.NATIVE_TOKEN, amountToSend, user, 0, "", "");
+        uint256 projectTokenAmount;
+        if (token == JBConstants.NATIVE_TOKEN) {
+            projectTokenAmount = jbMultiTerminal().pay{value: amountToSend}(1, token, amountToSend, user, 0, "", "");
+        } else {
+            IERC20(token).approve(address(jbMultiTerminal()), amountToSend);
+            projectTokenAmount = jbMultiTerminal().pay(1, token, amountToSend, user, 0, "", "");
+        }
 
         // Prepare cash out via sucker.
         IERC20(address(projectToken)).approve(address(suckerL1), projectTokenAmount);
-        suckerL1.prepare(projectTokenAmount, bytes32(uint256(uint160(user))), maxCashedOut, JBConstants.NATIVE_TOKEN);
+        suckerL1.prepare(projectTokenAmount, bytes32(uint256(uint160(user))), maxCashedOut, token);
         vm.stopPrank();
 
         // Record logs to capture the CCIPSendRequested event.
         vm.recordLogs();
 
-        // Send to remote chain — this calls the REAL mainnet CCIP router.
-        vm.deal(rootSender, 1 ether);
-        vm.prank(rootSender);
-        suckerL1.toRemote{value: 1 ether}(JBConstants.NATIVE_TOKEN);
+        if (_ccipFeesInNative()) {
+            // Native ETH fee path: send ETH for CCIP fees via msg.value.
+            uint256 ccipFeeAmount = 1 ether;
+            vm.deal(rootSender, ccipFeeAmount);
+            vm.prank(rootSender);
+            suckerL1.toRemote{value: ccipFeeAmount}(token);
+
+            // Verify CCIP fees paid (some native consumed, but not all).
+            assertLt(rootSender.balance, ccipFeeAmount, "CCIP fees should have been deducted");
+            assertGt(rootSender.balance, 0, "Excess native should be returned");
+        } else {
+            // LINK fee path: pre-fund sucker with LINK, call toRemote with msg.value = 0.
+            // On Tempo, CALLVALUE always returns 0, so transportPayment = 0, triggering LINK fee mode.
+            address linkToken = _linkTokenOf(block.chainid);
+            uint256 linkForFees = 100 ether;
+            deal(linkToken, address(suckerL1), IERC20(linkToken).balanceOf(address(suckerL1)) + linkForFees);
+            uint256 suckerLinkBefore = IERC20(linkToken).balanceOf(address(suckerL1));
+
+            vm.prank(rootSender);
+            suckerL1.toRemote(token);
+
+            // Verify LINK was consumed for CCIP fees.
+            assertLt(
+                IERC20(linkToken).balanceOf(address(suckerL1)),
+                suckerLinkBefore,
+                "LINK should have been consumed for CCIP fees"
+            );
+        }
 
         // Verify outbox cleared on L1.
-        assertEq(suckerL1.outboxOf(JBConstants.NATIVE_TOKEN).balance, 0, "Outbox should be cleared");
-
-        // Verify CCIP fees paid (some ETH consumed, but not all).
-        assertLt(rootSender.balance, 1 ether, "CCIP fees should have been deducted");
-        assertGt(rootSender.balance, 0, "Excess ETH should be returned");
+        assertEq(suckerL1.outboxOf(token).balance, 0, "Outbox should be cleared");
 
         // Verify a CCIPSendRequested event was emitted (proves the mainnet router accepted our message).
         Vm.Log[] memory logs = vm.getRecordedLogs();
         // forge-lint: disable-next-line(mixed-case-variable)
         bool foundCCIPSend = false;
-        // CCIPSendRequested topic:
-        // keccak256("CCIPSendRequested(bytes32,(uint64,address,address,uint256,uint256,(address,uint256)[],bytes,bytes[]))")
-        // We just check for any log from the CCIP router address.
         address expectedRouter = CCIPHelper.routerOfChain(_l1ChainId());
         for (uint256 i = 0; i < logs.length; i++) {
             if (logs[i].emitter == expectedRouter || logs[i].emitter == address(suckerL1)) {
@@ -317,6 +382,16 @@ abstract contract CCIPSuckerMainnetForkTestBase is TestBaseWorkflow {
 
 // ─── Concrete chain pair tests
 // ────────────────────────────────────────────────
+
+// ── Pinned fork blocks (matching v6 repo convention)
+// ──────────────────────────────────────────────────────
+uint256 constant ETH_FORK_BLOCK = 21_700_000;
+uint256 constant ARB_FORK_BLOCK = 300_000_000;
+uint256 constant OP_FORK_BLOCK = 130_000_000;
+uint256 constant BASE_FORK_BLOCK = 25_000_000;
+// ETH→Tempo CCIP lane + LINK token pool allowlist activated around block 24,744,000.
+uint256 constant ETH_TEMPO_FORK_BLOCK = 24_745_000;
+uint256 constant TEMPO_FORK_BLOCK = 15_168_000;
 
 /// @notice Ethereum mainnet → Arbitrum mainnet.
 contract EthArbMainnetForkTest is CCIPSuckerMainnetForkTestBase {
@@ -334,6 +409,14 @@ contract EthArbMainnetForkTest is CCIPSuckerMainnetForkTestBase {
 
     function _l2ChainId() internal pure override returns (uint256) {
         return 42_161;
+    }
+
+    function _l1ForkBlock() internal pure override returns (uint256) {
+        return ETH_FORK_BLOCK;
+    }
+
+    function _l2ForkBlock() internal pure override returns (uint256) {
+        return ARB_FORK_BLOCK;
     }
 }
 
@@ -354,6 +437,14 @@ contract EthOpMainnetForkTest is CCIPSuckerMainnetForkTestBase {
     function _l2ChainId() internal pure override returns (uint256) {
         return 10;
     }
+
+    function _l1ForkBlock() internal pure override returns (uint256) {
+        return ETH_FORK_BLOCK;
+    }
+
+    function _l2ForkBlock() internal pure override returns (uint256) {
+        return OP_FORK_BLOCK;
+    }
 }
 
 /// @notice Ethereum mainnet → Base mainnet.
@@ -372,6 +463,14 @@ contract EthBaseMainnetForkTest is CCIPSuckerMainnetForkTestBase {
 
     function _l2ChainId() internal pure override returns (uint256) {
         return 8453;
+    }
+
+    function _l1ForkBlock() internal pure override returns (uint256) {
+        return ETH_FORK_BLOCK;
+    }
+
+    function _l2ForkBlock() internal pure override returns (uint256) {
+        return BASE_FORK_BLOCK;
     }
 }
 
@@ -392,6 +491,14 @@ contract ArbOpMainnetForkTest is CCIPSuckerMainnetForkTestBase {
     function _l2ChainId() internal pure override returns (uint256) {
         return 10;
     }
+
+    function _l1ForkBlock() internal pure override returns (uint256) {
+        return ARB_FORK_BLOCK;
+    }
+
+    function _l2ForkBlock() internal pure override returns (uint256) {
+        return OP_FORK_BLOCK;
+    }
 }
 
 /// @notice Arbitrum mainnet → Base mainnet.
@@ -411,6 +518,14 @@ contract ArbBaseMainnetForkTest is CCIPSuckerMainnetForkTestBase {
     function _l2ChainId() internal pure override returns (uint256) {
         return 8453;
     }
+
+    function _l1ForkBlock() internal pure override returns (uint256) {
+        return ARB_FORK_BLOCK;
+    }
+
+    function _l2ForkBlock() internal pure override returns (uint256) {
+        return BASE_FORK_BLOCK;
+    }
 }
 
 /// @notice Optimism mainnet → Base mainnet.
@@ -429,5 +544,98 @@ contract OpBaseMainnetForkTest is CCIPSuckerMainnetForkTestBase {
 
     function _l2ChainId() internal pure override returns (uint256) {
         return 8453;
+    }
+
+    function _l1ForkBlock() internal pure override returns (uint256) {
+        return OP_FORK_BLOCK;
+    }
+
+    function _l2ForkBlock() internal pure override returns (uint256) {
+        return BASE_FORK_BLOCK;
+    }
+}
+
+/// @notice Ethereum mainnet → Tempo mainnet.
+/// Both projects accept LINK (the only CCIP-supported token on the ETH↔Tempo lane).
+contract EthTempoMainnetForkTest is CCIPSuckerMainnetForkTestBase {
+    function _l1RpcUrl() internal pure override returns (string memory) {
+        return "ethereum";
+    }
+
+    function _l2RpcUrl() internal pure override returns (string memory) {
+        return "tempo";
+    }
+
+    function _l1ChainId() internal pure override returns (uint256) {
+        return 1;
+    }
+
+    function _l2ChainId() internal pure override returns (uint256) {
+        return 4217;
+    }
+
+    function _l1ForkBlock() internal pure override returns (uint256) {
+        return ETH_TEMPO_FORK_BLOCK;
+    }
+
+    function _l2ForkBlock() internal pure override returns (uint256) {
+        return TEMPO_FORK_BLOCK;
+    }
+
+    function _terminalToken() internal view override returns (address) {
+        return CCIPHelper.linkOfChain(block.chainid);
+    }
+
+    function _remoteTerminalToken() internal view override returns (bytes32) {
+        // LINK on the remote chain (different address, same asset via CCIP token pools).
+        uint256 remoteChain = block.chainid == _l1ChainId() ? _l2ChainId() : _l1ChainId();
+        return bytes32(uint256(uint160(CCIPHelper.linkOfChain(remoteChain))));
+    }
+
+    function _ccipFeesInNative() internal pure override returns (bool) {
+        // ETH side pays native ETH for CCIP fees.
+        return true;
+    }
+}
+
+/// @notice Tempo mainnet → Ethereum mainnet.
+/// Both projects accept LINK (the only CCIP-supported token on the Tempo↔ETH lane).
+contract TempoEthMainnetForkTest is CCIPSuckerMainnetForkTestBase {
+    function _l1RpcUrl() internal pure override returns (string memory) {
+        return "tempo";
+    }
+
+    function _l2RpcUrl() internal pure override returns (string memory) {
+        return "ethereum";
+    }
+
+    function _l1ChainId() internal pure override returns (uint256) {
+        return 4217;
+    }
+
+    function _l2ChainId() internal pure override returns (uint256) {
+        return 1;
+    }
+
+    function _l1ForkBlock() internal pure override returns (uint256) {
+        return TEMPO_FORK_BLOCK;
+    }
+
+    function _l2ForkBlock() internal pure override returns (uint256) {
+        return ETH_TEMPO_FORK_BLOCK;
+    }
+
+    function _terminalToken() internal view override returns (address) {
+        return CCIPHelper.linkOfChain(block.chainid);
+    }
+
+    function _remoteTerminalToken() internal view override returns (bytes32) {
+        uint256 remoteChain = block.chainid == _l1ChainId() ? _l2ChainId() : _l1ChainId();
+        return bytes32(uint256(uint160(CCIPHelper.linkOfChain(remoteChain))));
+    }
+
+    function _ccipFeesInNative() internal pure override returns (bool) {
+        // Tempo has no native token (CALLVALUE=0), CCIP fees paid in LINK.
+        return false;
     }
 }

@@ -27,7 +27,7 @@ contract MockMessenger is IOPMessenger {
         address to,
         uint256 amount,
         uint32,
-        bytes calldata
+        bytes memory
     )
         external
     {

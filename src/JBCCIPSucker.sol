@@ -1,36 +1,41 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.28;
 
+// External packages (alphabetized)
 import {IJBDirectory} from "@bananapus/core-v6/src/interfaces/IJBDirectory.sol";
 import {IJBPermissions} from "@bananapus/core-v6/src/interfaces/IJBPermissions.sol";
 import {IJBTokens} from "@bananapus/core-v6/src/interfaces/IJBTokens.sol";
 import {JBConstants} from "@bananapus/core-v6/src/libraries/JBConstants.sol";
-import {IAny2EVMMessageReceiver} from "@chainlink/contracts-ccip/src/v0.8/ccip/interfaces/IAny2EVMMessageReceiver.sol";
-import {Client} from "@chainlink/contracts-ccip/src/v0.8/ccip/libraries/Client.sol";
-import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import {BitMaps} from "@openzeppelin/contracts/utils/structs/BitMaps.sol";
-
+import {IAny2EVMMessageReceiver} from "@chainlink/contracts-ccip/contracts/interfaces/IAny2EVMMessageReceiver.sol";
+import {Client} from "@chainlink/contracts-ccip/contracts/libraries/Client.sol";
+// Local: base contracts
 import {JBSucker} from "./JBSucker.sol";
+
+// Local: deployers
 import {JBCCIPSuckerDeployer} from "./deployers/JBCCIPSuckerDeployer.sol";
-import {IJBSuckerRegistry} from "./interfaces/IJBSuckerRegistry.sol";
-import {ICCIPRouter, IWrappedNativeToken} from "./interfaces/ICCIPRouter.sol";
+
+// Local: interfaces (alphabetized)
+import {ICCIPRouter} from "./interfaces/ICCIPRouter.sol";
 import {IJBCCIPSuckerDeployer} from "./interfaces/IJBCCIPSuckerDeployer.sol";
+import {IJBSuckerRegistry} from "./interfaces/IJBSuckerRegistry.sol";
+
+// Local: libraries (alphabetized)
+import {CCIPHelper} from "./libraries/CCIPHelper.sol";
+import {JBCCIPLib} from "./libraries/JBCCIPLib.sol";
+
+// Local: structs (alphabetized)
 import {JBMessageRoot} from "./structs/JBMessageRoot.sol";
 import {JBRemoteToken} from "./structs/JBRemoteToken.sol";
 import {JBTokenMapping} from "./structs/JBTokenMapping.sol";
-import {MerkleLib} from "./utils/MerkleLib.sol";
 
 /// @notice A `JBSucker` implementation to suck tokens between chains with Chainlink CCIP
 contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
-    using MerkleLib for MerkleLib.Tree;
-    using BitMaps for BitMaps.BitMap;
-
     //*********************************************************************//
     // --------------------------- custom errors ------------------------- //
     //*********************************************************************//
 
     error JBCCIPSucker_InvalidRouter(address router);
+    error JBCCIPSucker_UnknownMessageType(uint8 messageType);
 
     //*********************************************************************//
     // ------------------------------ events ----------------------------- //
@@ -42,6 +47,13 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
     /// @param recipient The address that was supposed to receive the refund.
     /// @param amount The amount of the failed refund (permanently stuck in this contract).
     event TransportPaymentRefundFailed(address indexed recipient, uint256 amount);
+
+    //*********************************************************************//
+    // ----------------------- internal constants ------------------------ //
+    //*********************************************************************//
+
+    /// @notice Message type prefix for root messages (fromRemote).
+    uint8 internal constant _CCIP_MSG_TYPE_ROOT = 0;
 
     //*********************************************************************//
     // --------------- public immutable stored properties ---------------- //
@@ -60,10 +72,13 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
     // ---------------------------- constructor -------------------------- //
     //*********************************************************************//
 
-    /// @param deployer A contract that deploys the clones for this contracts.
+    /// @param deployer A contract that deploys the clones for this contract.
     /// @param directory A contract storing directories of terminals and controllers for each project.
     /// @param tokens A contract that manages token minting and burning.
     /// @param permissions A contract storing permissions.
+    /// @param feeProjectId The ID of the project that receives fees.
+    /// @param registry The sucker registry that tracks deployed suckers.
+    /// @param trustedForwarder The trusted forwarder for ERC-2771 meta-transactions.
     constructor(
         JBCCIPSuckerDeployer deployer,
         IJBDirectory directory,
@@ -75,10 +90,16 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
     )
         JBSucker(directory, permissions, tokens, feeProjectId, registry, trustedForwarder)
     {
+        // Read the remote chain ID from the deployer.
         REMOTE_CHAIN_ID = IJBCCIPSuckerDeployer(deployer).ccipRemoteChainId();
+
+        // Read the CCIP chain selector from the deployer.
         REMOTE_CHAIN_SELECTOR = IJBCCIPSuckerDeployer(deployer).ccipRemoteChainSelector();
+
+        // Read the CCIP router from the deployer.
         CCIP_ROUTER = IJBCCIPSuckerDeployer(deployer).ccipRouter();
 
+        // Ensure the CCIP router is not the zero address.
         if (address(CCIP_ROUTER) == address(0)) revert JBCCIPSucker_InvalidRouter(address(CCIP_ROUTER));
     }
 
@@ -87,9 +108,8 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
     //*********************************************************************//
 
     /// @notice Returns the chain on which the peer is located.
-    /// @return chainId of the peer.
+    /// @return chainId The chain ID of the peer.
     function peerChainId() external view virtual override returns (uint256 chainId) {
-        // Return the remote chain id
         return REMOTE_CHAIN_ID;
     }
 
@@ -97,23 +117,22 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
     // ------------------------- public views ---------------------------- //
     //*********************************************************************//
 
-    /// @notice Return the current router
-    /// @return CCIP router address
-    function getRouter() public view returns (address) {
+    /// @notice Returns the address of the current CCIP router.
+    /// @return router The CCIP router address.
+    function getRouter() public view returns (address router) {
         return address(CCIP_ROUTER);
     }
 
-    /// @notice IERC165 supports an interfaceId
-    /// @param interfaceId The interfaceId to check
-    /// @return true if the interfaceId is supported
-    /// @dev Should indicate whether the contract implements IAny2EVMMessageReceiver
-    /// e.g. return interfaceId == type(IAny2EVMMessageReceiver).interfaceId || interfaceId == type(IERC165).interfaceId
+    /// @notice Checks whether this contract supports a given interface.
+    /// @param interfaceId The interface ID to check.
+    /// @return supported Whether the interface is supported.
+    /// @dev Should indicate whether the contract implements IAny2EVMMessageReceiver.
     /// This allows CCIP to check if ccipReceive is available before calling it.
     /// If this returns false or reverts, only tokens are transferred to the receiver.
     /// If this returns true, tokens are transferred and ccipReceive is called atomically.
     /// Additionally, if the receiver address does not have code associated with
     /// it at the time of execution (EXTCODESIZE returns 0), only tokens will be transferred.
-    function supportsInterface(bytes4 interfaceId) public view virtual override returns (bool) {
+    function supportsInterface(bytes4 interfaceId) public view virtual override returns (bool supported) {
         return interfaceId == type(IAny2EVMMessageReceiver).interfaceId || super.supportsInterface(interfaceId);
     }
 
@@ -128,14 +147,13 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
     /// reverting on invalid sender/peer data is correct here because accepting and silently discarding a
     /// malformed message would lose the bridged tokens with no recovery path. A revert keeps tokens in the
     /// CCIP router where they can be retried or recovered.
-    function ccipReceive(Client.Any2EVMMessage calldata any2EvmMessage) external override {
+    function ccipReceive(Client.Any2EVMMessage calldata any2EvmMessage) external virtual override {
         // Use msg.sender (not _msgSender()) because the CCIP router never uses ERC2771 meta-transactions.
         // Using _msgSender() would allow a trusted forwarder to spoof the router address via the
         // ERC-2771 calldata suffix.
         if (msg.sender != address(CCIP_ROUTER)) revert JBSucker_NotPeer(_toBytes32(msg.sender));
 
-        // Decode the message root from the peer
-        JBMessageRoot memory root = abi.decode(any2EvmMessage.data, (JBMessageRoot));
+        // Decode the sender address from the CCIP message.
         address origin = abi.decode(any2EvmMessage.sender, (address));
 
         // Make sure that the message came from our peer.
@@ -143,55 +161,26 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
             revert JBSucker_NotPeer(_toBytes32(origin));
         }
 
-        // By design, CCIP guarantees token delivery matches the sent amount. Validating the
-        // delivered amount against the message would add gas cost for a check that the bridge itself enforces.
-        // If CCIP's guarantee fails, the bridge itself is compromised.
-        //
-        // We intentionally do NOT validate root.amount against destTokenAmounts[0].amount here.
-        // CCIP fees are paid separately (via feeToken), so delivered amounts should always match what was sent.
-        // If we reverted on a mismatch, the tokens already transferred by CCIP would be locked in the router
-        // with no recovery path — a concrete fund-loss risk that outweighs the theoretical defense-in-depth
-        // benefit against a CCIP-level failure or peer compromise.
+        // Discriminate message type: abi.encode(uint8 type, bytes payload).
+        (uint8 messageType, bytes memory payload) = JBCCIPLib.decodeTypedMessage(any2EvmMessage.data);
 
-        // We either send no tokens or a single token.
-        if (any2EvmMessage.destTokenAmounts.length == 1) {
-            // The sucker only handles ERC-20s or native. CCIP delivers wrapped native (WETH).
-            Client.EVMTokenAmount memory tokenAmount = any2EvmMessage.destTokenAmounts[0];
-            // Unwrap WETH -> ETH only when the root says the token is NATIVE_TOKEN.
-            // When root.token is an ERC-20 address (e.g., bridging to a chain where ETH is an ERC-20), no unwrap.
-            if (root.token == _toBytes32(JBConstants.NATIVE_TOKEN)) {
-                // We can (safely) assume that the token that is set in the `destTokenAmounts` is a valid wrapped
-                // native.
-                // If this ends up not being the case then our sanity check to see if we unwrapped the native asset will
-                // fail.
-                // forge-lint: disable-next-line(mixed-case-variable)
-                IWrappedNativeToken wrapped_native = IWrappedNativeToken(tokenAmount.token);
-                uint256 balanceBefore = _balanceOf({token: JBConstants.NATIVE_TOKEN, addr: address(this)});
+        // Handle root messages (merkle tree updates with bridged assets).
+        if (messageType == _CCIP_MSG_TYPE_ROOT) {
+            // Decode the root message from the payload.
+            JBMessageRoot memory root = abi.decode(payload, (JBMessageRoot));
 
-                // Withdraw the wrapped native asset.
-                wrapped_native.withdraw(tokenAmount.amount);
-
-                // Sanity check the unwrapping of the native asset.
-                // slither-disable-next-line incorrect-equality
-                assert(
-                    balanceBefore + tokenAmount.amount
-                        == _balanceOf({token: JBConstants.NATIVE_TOKEN, addr: address(this)})
-                );
+            // Only unwrap WETH -> ETH when the root targets native token (not when claiming WETH as ERC-20).
+            if (root.token == bytes32(uint256(uint160(JBConstants.NATIVE_TOKEN)))) {
+                JBCCIPLib.unwrapReceivedTokens({
+                    ccipRouter: CCIP_ROUTER, destTokenAmounts: any2EvmMessage.destTokenAmounts
+                });
             }
+
+            // Forward the root message to this contract's fromRemote handler.
+            this.fromRemote(root);
+        } else {
+            revert JBCCIPSucker_UnknownMessageType(messageType);
         }
-
-        // Call ourselves to process the root.
-        this.fromRemote(root);
-    }
-
-    //*********************************************************************//
-    // ------------------------ internal views --------------------------- //
-    //*********************************************************************//
-
-    /// @notice Unused in this context.
-    function _isRemotePeer(address sender) internal view override returns (bool _valid) {
-        // NOTICE: We do not check if its the `peer` here, as this contract is supposed to be the caller *NOT* the peer.
-        return sender == address(this);
     }
 
     //*********************************************************************//
@@ -199,14 +188,16 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
     //*********************************************************************//
 
     /// @notice Uses CCIP to send the root and assets over the bridge to the peer.
-    /// @dev CCIP transport payment refund failures emit a `TransportPaymentRefundFailed` event by design rather
-    /// than reverting. After `ccipSend` commits the bridge message and transfers tokens, reverting the transaction
-    /// would leave the CCIP message in-flight with no corresponding on-chain state update — the tokens would be
-    /// gone, the merkle root never processed, and the outbox inconsistent. Emitting an event preserves
-    /// observability while preventing a single failed refund from blocking the entire bridge operation.
-    /// @param transportPayment the amount of `msg.value` that is going to get paid for sending this message.
+    /// @dev Delegates CCIP message construction and sending to JBCCIPLib (via DELEGATECALL) to reduce bytecode.
+    /// @dev Supports two fee modes:
+    ///   - `transportPayment > 0`: pay CCIP fees in native ETH (existing behavior).
+    ///   - `transportPayment == 0`: pay CCIP fees in LINK from the sucker's pre-funded balance.
+    ///     This enables chains with no meaningful native token (e.g. Tempo) to use CCIP.
+    /// @param transportPayment The amount of `msg.value` that is going to get paid for sending this message.
     /// @param token The token to bridge the outbox tree for.
+    /// @param amount The amount of tokens to bridge.
     /// @param remoteToken Information about the remote token being bridged to.
+    /// @param sucker_message The message root to send to the remote peer.
     // forge-lint: disable-next-line(mixed-case-function)
     function _sendRootOverAMB(
         uint256 transportPayment,
@@ -218,88 +209,64 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
         JBMessageRoot memory sucker_message
     )
         internal
+        virtual
         override
     {
-        // Make sure we are attempting to pay the bridge
-        if (transportPayment == 0) revert JBSucker_ExpectedMsgValue();
-
+        // Start with the base gas limit for cross-chain calls.
         uint256 gasLimit = MESSENGER_BASE_GAS_LIMIT;
         Client.EVMTokenAmount[] memory tokenAmounts;
+
         if (amount != 0) {
-            // If we also do an asset transfer then we increase the min required gas amount.
+            // Add extra gas for the ERC-20 token transfer on the remote chain.
             gasLimit += remoteToken.minGas;
 
-            // Wrap native ETH -> WETH for CCIP bridging. CCIP only transports ERC-20s.
-            // This is why `_validateTokenMapping` enforces minGas for native tokens too.
-            if (token == JBConstants.NATIVE_TOKEN) {
-                // Get the wrapped native token.
-                // slither-disable-next-line calls-loop
-                // forge-lint: disable-next-line(mixed-case-variable)
-                IWrappedNativeToken wrapped_native = CCIP_ROUTER.getWrappedNative();
-                // Deposit the wrapped native asset.
-                // slither-disable-next-line calls-loop,arbitrary-send-eth
-                wrapped_native.deposit{value: amount}();
-                // Update the token to be the wrapped native asset.
-                token = address(wrapped_native);
-            }
-
-            // Set the token amounts
-            tokenAmounts = new Client.EVMTokenAmount[](1);
-            tokenAmounts[0] = Client.EVMTokenAmount({token: token, amount: amount});
-
-            // approve the Router to spend tokens on contract's behalf. It will spend the amount of the given token
-            SafeERC20.forceApprove({token: IERC20(token), spender: address(CCIP_ROUTER), value: amount});
+            // Wrap native ETH -> WETH if needed, build the CCIP token amounts array, and approve the router.
+            // slither-disable-next-line unused-return
+            (tokenAmounts,) = JBCCIPLib.prepareTokenAmounts({ccipRouter: CCIP_ROUTER, token: token, amount: amount});
+        } else {
+            // No tokens to bridge — use an empty array.
+            tokenAmounts = new Client.EVMTokenAmount[](0);
         }
 
-        // Create an EVM2AnyMessage struct in memory with necessary information for sending a cross-chain message
-        // CCIP requires EVM addresses, so convert the bytes32 peer to an address for the receiver field.
-        Client.EVM2AnyMessage memory message = Client.EVM2AnyMessage({
-            receiver: abi.encode(_peerAddress()),
-            data: abi.encode(sucker_message),
+        // Determine fee payment mode: native ETH or LINK token.
+        // When transportPayment == 0, we pay in LINK from the sucker's pre-funded balance.
+        // This enables chains with no meaningful native token (e.g. Tempo).
+        address feeToken = transportPayment == 0 ? CCIPHelper.linkOfChain(block.chainid) : address(0);
+
+        // Build and send the CCIP message with the root payload.
+        // slither-disable-next-line reentrancy-events
+        (bool refundFailed, uint256 refundAmount) = JBCCIPLib.sendCCIPMessage({
+            ccipRouter: CCIP_ROUTER,
+            remoteChainSelector: REMOTE_CHAIN_SELECTOR,
+            peerAddress: _peerAddress(),
+            transportPayment: transportPayment,
+            feeToken: feeToken,
+            gasLimit: gasLimit,
+            encodedPayload: abi.encode(_CCIP_MSG_TYPE_ROOT, abi.encode(sucker_message)),
             tokenAmounts: tokenAmounts,
-            extraArgs: Client._argsToBytes(
-                // Additional arguments, setting gas limit
-                Client.EVMExtraArgsV1({gasLimit: gasLimit})
-            ),
-            // Set the feeToken to a feeTokenAddress, indicating specific asset will be used for fees,
-            // We pay in the native asset.
-            feeToken: address(0)
+            refundRecipient: _msgSender()
         });
 
-        // Get the fee required to send the CCIP message
-        // slither-disable-next-line calls-loop
-        uint256 fees = CCIP_ROUTER.getFee({destinationChainSelector: REMOTE_CHAIN_SELECTOR, message: message});
-
-        if (fees > transportPayment) {
-            revert JBSucker_InsufficientMsgValue(transportPayment, fees);
-        }
-
-        // slither-disable-next-line calls-loop,unused-return
-        CCIP_ROUTER.ccipSend{value: fees}({destinationChainSelector: REMOTE_CHAIN_SELECTOR, message: message});
-
-        // Refund remaining balance. We use a low-level call that does not revert on failure because
-        // `ccipSend` above has already committed the bridge message and transferred the tokens. If we
-        // reverted here (e.g. because the caller is a non-payable contract), the entire transaction
-        // would roll back — but the CCIP message is already in-flight. The tokens would be gone, the
-        // merkle root never gets processed, and the outbox state is inconsistent.
-        //
-        // If the refund fails, the ETH (transportPayment - fees) will be permanently stuck in this
-        // contract. There is no sweep or recovery function — `_addToBalance` only
-        // moves funds tracked via `fromRemote`, not arbitrary ETH. This is an accepted tradeoff:
-        // stuck dust from a fee overpayment is far less harmful than bricking the entire bridge
-        // operation. The event provides observability so it doesn't go unnoticed.
-        //
-        uint256 refundAmount = transportPayment - fees;
-        if (refundAmount != 0) {
-            // slither-disable-next-line calls-loop,msg-value-loop,reentrancy-events
-            (bool sent,) = _msgSender().call{value: refundAmount}("");
-            if (!sent) emit TransportPaymentRefundFailed(_msgSender(), refundAmount);
-        }
+        // Emit an event if the excess transport payment refund failed.
+        if (refundFailed) emit TransportPaymentRefundFailed(_msgSender(), refundAmount);
     }
 
-    /// @notice Allow sucker implementations to add/override mapping rules to suite their specific needs.
+    //*********************************************************************//
+    // ------------------------ internal views --------------------------- //
+    //*********************************************************************//
+
+    /// @notice Checks whether the given sender is a remote peer. Unused in this context.
+    /// @param sender The address to check.
+    /// @return _valid Whether the sender is a remote peer.
+    function _isRemotePeer(address sender) internal view override returns (bool _valid) {
+        // We do not check if it is the `peer` here, as this contract is supposed to be the caller *NOT* the peer.
+        return sender == address(this);
+    }
+
+    /// @notice Validates a token mapping. Allows CCIP-specific mapping rules.
     /// @dev Unlike OP/Arbitrum suckers (which share ETH as native on both chains), this CCIP sucker can connect
     /// chains with different native tokens. This means `NATIVE_TOKEN` may map to an ERC-20 on the remote chain.
+    /// @param map The token mapping to validate.
     ///
     /// Example: ETH mainnet (native = ETH) <-> Celo (native = CELO, ETH is an ERC-20).
     ///   - On mainnet: `mapToken({localToken: NATIVE_TOKEN, remoteToken: celoETH_address})`
