@@ -26,6 +26,7 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
     // --------------------------- custom errors ------------------------- //
     //*********************************************************************//
 
+    error JBSuckerRegistry_DuplicatePeerChain(uint256 projectId, uint256 peerChainId);
     error JBSuckerRegistry_FeeExceedsMax(uint256 fee, uint256 max);
     error JBSuckerRegistry_InvalidDeployer(IJBSuckerDeployer deployer);
     error JBSuckerRegistry_SuckerDoesNotBelongToProject(uint256 projectId, address sucker);
@@ -209,6 +210,28 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
         return ERC2771Context._msgSender();
     }
 
+    /// @notice Reverts if any active sucker for the given project already targets the same peer chain as the new
+    /// sucker.
+    /// @param projectId The ID of the project to check.
+    /// @param newSucker The newly created sucker to validate.
+    function _revertIfDuplicatePeerChain(uint256 projectId, IJBSucker newSucker) internal view {
+        uint256 newPeerChainId = newSucker.peerChainId();
+        address[] memory existing = _suckersOf[projectId].keys();
+        for (uint256 i; i < existing.length;) {
+            // slither-disable-next-line unused-return
+            (, uint256 val) = _suckersOf[projectId].tryGet(existing[i]);
+            if (val == _SUCKER_EXISTS) {
+                // slither-disable-next-line calls-loop
+                if (IJBSucker(existing[i]).peerChainId() == newPeerChainId) {
+                    revert JBSuckerRegistry_DuplicatePeerChain(projectId, newPeerChainId);
+                }
+            }
+            unchecked {
+                ++i;
+            }
+        }
+    }
+
     //*********************************************************************//
     // ---------------------- public transactions ----------------------- //
     //*********************************************************************//
@@ -290,6 +313,10 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
             // slither-disable-next-line reentrancy-event,calls-loop
             IJBSucker sucker = configuration.deployer.createForSender({localProjectId: projectId, salt: salt});
             suckers[i] = address(sucker);
+
+            // Make sure no active sucker already targets the same peer chain.
+            // slither-disable-next-line calls-loop
+            _revertIfDuplicatePeerChain(projectId, sucker);
 
             // Store the sucker as being deployed for this project.
             // slither-disable-next-line unused-return

@@ -524,6 +524,71 @@ contract DeployerTests is Test, TestBaseWorkflow, IERC721Receiver {
         return sucker;
     }
 
+    /// @notice Deploying two suckers with the same peer chain ID should revert.
+    function testDuplicatePeerChainReverts(ICCIPRouter _ccipRouter) public {
+        vm.assume(uint160(address(_ccipRouter)) > 100);
+        _assumeNotDeployed(address(_ccipRouter));
+        vm.etch(address(_ccipRouter), "0x1");
+
+        uint256 remoteChainId = 10;
+        uint64 remoteSelector = 1;
+
+        _allowMapping(projectId, address(registry));
+
+        // Deploy the first sucker targeting chain 10.
+        IJBSuckerDeployer deployer1 = _addToRegistry(_setupCCIPDeployer(remoteChainId, remoteSelector, _ccipRouter));
+        _deployThroughRegistry(deployer1, projectId, bytes32("salt1"));
+
+        // Deploy a second sucker also targeting chain 10 — should revert.
+        IJBSuckerDeployer deployer2 =
+            _addToRegistry(_setupCCIPDeployer(remoteChainId, remoteSelector + 1, _ccipRouter));
+
+        JBTokenMapping[] memory mappings2 = new JBTokenMapping[](1);
+        mappings2[0] = JBTokenMapping({
+            localToken: address(JBConstants.NATIVE_TOKEN),
+            minGas: 300_000,
+            remoteToken: bytes32(uint256(uint160(JBConstants.NATIVE_TOKEN)))
+        });
+        JBSuckerDeployerConfig[] memory configs2 = new JBSuckerDeployerConfig[](1);
+        configs2[0] = JBSuckerDeployerConfig({deployer: deployer2, mappings: mappings2});
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                JBSuckerRegistry.JBSuckerRegistry_DuplicatePeerChain.selector, projectId, remoteChainId
+            )
+        );
+        registry.deploySuckersFor(projectId, bytes32("salt2"), configs2);
+    }
+
+    /// @notice After deprecating and removing a sucker, a new sucker to the same peer chain should succeed.
+    function testDuplicatePeerChainAllowedAfterDeprecation(ICCIPRouter _ccipRouter) public {
+        vm.assume(uint160(address(_ccipRouter)) > 100);
+        _assumeNotDeployed(address(_ccipRouter));
+        vm.etch(address(_ccipRouter), "0x1");
+
+        uint256 remoteChainId = 10;
+        uint64 remoteSelector = 1;
+
+        _allowMapping(projectId, address(registry));
+
+        // Deploy the first sucker.
+        IJBSuckerDeployer deployer =
+            _addToRegistry(_setupCCIPDeployer(remoteChainId, remoteSelector, _ccipRouter));
+        IJBSucker sucker = _deployThroughRegistry(deployer, projectId, bytes32("salt1"));
+        assertTrue(registry.isSuckerOf(projectId, address(sucker)));
+
+        // Deprecate and remove it.
+        JBSucker(payable(address(sucker))).setDeprecation(uint40(block.timestamp + 14 days));
+        vm.warp(block.timestamp + 14 days);
+        registry.removeDeprecatedSucker(projectId, address(sucker));
+
+        // Deploy a replacement to the same peer chain — should succeed.
+        IJBSuckerDeployer deployer2 =
+            _addToRegistry(_setupCCIPDeployer(remoteChainId, remoteSelector + 1, _ccipRouter));
+        IJBSucker sucker2 = _deployThroughRegistry(deployer2, projectId, bytes32("salt2"));
+        assertTrue(registry.isSuckerOf(projectId, address(sucker2)));
+    }
+
     /// @notice This function is called when we create a JB project.
     function onERC721Received(address, address, uint256, bytes calldata) external pure returns (bytes4) {
         return IERC721Receiver.onERC721Received.selector;
