@@ -540,8 +540,7 @@ contract DeployerTests is Test, TestBaseWorkflow, IERC721Receiver {
         _deployThroughRegistry(deployer1, projectId, bytes32("salt1"));
 
         // Deploy a second sucker also targeting chain 10 — should revert.
-        IJBSuckerDeployer deployer2 =
-            _addToRegistry(_setupCCIPDeployer(remoteChainId, remoteSelector + 1, _ccipRouter));
+        IJBSuckerDeployer deployer2 = _addToRegistry(_setupCCIPDeployer(remoteChainId, remoteSelector + 1, _ccipRouter));
 
         JBTokenMapping[] memory mappings2 = new JBTokenMapping[](1);
         mappings2[0] = JBTokenMapping({
@@ -572,8 +571,7 @@ contract DeployerTests is Test, TestBaseWorkflow, IERC721Receiver {
         _allowMapping(projectId, address(registry));
 
         // Deploy the first sucker.
-        IJBSuckerDeployer deployer =
-            _addToRegistry(_setupCCIPDeployer(remoteChainId, remoteSelector, _ccipRouter));
+        IJBSuckerDeployer deployer = _addToRegistry(_setupCCIPDeployer(remoteChainId, remoteSelector, _ccipRouter));
         IJBSucker sucker = _deployThroughRegistry(deployer, projectId, bytes32("salt1"));
         assertTrue(registry.isSuckerOf(projectId, address(sucker)));
 
@@ -583,8 +581,7 @@ contract DeployerTests is Test, TestBaseWorkflow, IERC721Receiver {
         registry.removeDeprecatedSucker(projectId, address(sucker));
 
         // Deploy a replacement to the same peer chain — should succeed.
-        IJBSuckerDeployer deployer2 =
-            _addToRegistry(_setupCCIPDeployer(remoteChainId, remoteSelector + 1, _ccipRouter));
+        IJBSuckerDeployer deployer2 = _addToRegistry(_setupCCIPDeployer(remoteChainId, remoteSelector + 1, _ccipRouter));
         IJBSucker sucker2 = _deployThroughRegistry(deployer2, projectId, bytes32("salt2"));
         assertTrue(registry.isSuckerOf(projectId, address(sucker2)));
     }
