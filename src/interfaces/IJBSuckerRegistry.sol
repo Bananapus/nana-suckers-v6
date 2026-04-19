@@ -76,6 +76,42 @@ interface IJBSuckerRegistry {
     /// @return The addresses of the suckers.
     function suckersOf(uint256 projectId) external view returns (address[] memory);
 
+    /// @notice The cumulative total supply across all remote peer chains for a project.
+    /// @dev Sums `peerChainTotalSupply` from each active sucker. Silently skips suckers that revert.
+    /// @param projectId The ID of the project.
+    /// @return totalSupply The combined peer chain total supply.
+    function remoteTotalSupplyOf(uint256 projectId) external view returns (uint256 totalSupply);
+
+    /// @notice The cumulative balance across all remote peer chains for a project, denominated in a given currency.
+    /// @dev Sums `peerChainBalanceOf` from each active sucker. Silently skips suckers that revert.
+    /// @param projectId The ID of the project.
+    /// @param decimals The decimal precision for the returned value.
+    /// @param currency The currency to normalize to.
+    /// @return balance The combined peer chain balance.
+    function remoteBalanceOf(
+        uint256 projectId,
+        uint256 decimals,
+        uint256 currency
+    )
+        external
+        view
+        returns (uint256 balance);
+
+    /// @notice The cumulative surplus across all remote peer chains for a project, denominated in a given currency.
+    /// @dev Sums `peerChainSurplusOf` from each active sucker. Silently skips suckers that revert.
+    /// @param projectId The ID of the project.
+    /// @param decimals The decimal precision for the returned value.
+    /// @param currency The currency to normalize to.
+    /// @return surplus The combined peer chain surplus.
+    function remoteSurplusOf(
+        uint256 projectId,
+        uint256 decimals,
+        uint256 currency
+    )
+        external
+        view
+        returns (uint256 surplus);
+
     /// @notice The ETH fee (in wei) paid into the fee project on each toRemote() call.
     /// @return The current fee.
     function toRemoteFee() external view returns (uint256);
