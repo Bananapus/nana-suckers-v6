@@ -22,7 +22,6 @@ import {JBBeforeCashOutRecordedContext} from "@bananapus/core-v6/src/structs/JBB
 import {JBBeforePayRecordedContext} from "@bananapus/core-v6/src/structs/JBBeforePayRecordedContext.sol";
 import {JBCashOutHookSpecification} from "@bananapus/core-v6/src/structs/JBCashOutHookSpecification.sol";
 import {JBConstants} from "@bananapus/core-v6/src/libraries/JBConstants.sol";
-import {JBMetadataResolver} from "@bananapus/core-v6/src/libraries/JBMetadataResolver.sol";
 import {JBFundAccessLimitGroup} from "@bananapus/core-v6/src/structs/JBFundAccessLimitGroup.sol";
 import {JBPayHookSpecification} from "@bananapus/core-v6/src/structs/JBPayHookSpecification.sol";
 import {JBRuleset} from "@bananapus/core-v6/src/structs/JBRuleset.sol";
@@ -38,7 +37,6 @@ import {IJBSuckerRegistry} from "./interfaces/IJBSuckerRegistry.sol";
 import {IJBSuckerTerminal} from "./interfaces/IJBSuckerTerminal.sol";
 import {CCIPHelper} from "./libraries/CCIPHelper.sol";
 import {JBCCIPLib} from "./libraries/JBCCIPLib.sol";
-import {JB721Constants} from "@bananapus/721-hook-v6/src/libraries/JB721Constants.sol";
 import {JBProxyConfig} from "./structs/JBProxyConfig.sol";
 import {JBRelayCashOutClaimMessage} from "./structs/JBRelayCashOutClaimMessage.sol";
 import {JBRelayPayMessage} from "./structs/JBRelayPayMessage.sol";
@@ -727,7 +725,6 @@ contract JBSuckerTerminal is
     /// @param payToken The token to pay with (NATIVE_TOKEN or ERC-20 address).
     /// @param amount The amount of tokens to pay.
     /// @param nativeValue The native ETH to forward (0 for ERC-20 payments).
-    /// @param beneficiary The real beneficiary of the payment (injected into metadata as relay beneficiary).
     /// @param memo A memo to attach.
     /// @param metadata Additional metadata.
     /// @param allowRouterFallback Whether to fall back to ROUTER_TERMINAL when no primary terminal is found.
@@ -737,7 +734,6 @@ contract JBSuckerTerminal is
         address payToken,
         uint256 amount,
         uint256 nativeValue,
-        address beneficiary,
         string memory memo,
         bytes memory metadata,
         bool allowRouterFallback
@@ -760,14 +756,6 @@ contract JBSuckerTerminal is
         address realToken = address(TOKENS.tokenOf(projectId));
         uint256 realTokenBefore = IERC20(realToken).balanceOf(address(this));
 
-        // Inject the real beneficiary into the metadata so that data hooks (e.g. 721 hooks) can resolve
-        // the actual user instead of seeing this contract as the beneficiary.
-        bytes memory enrichedMetadata = JBMetadataResolver.addToMetadata({
-            originalMetadata: metadata,
-                idToAdd: JB721Constants.BENEFICIARY_METADATA_ID,
-                dataToAdd: abi.encode(beneficiary)
-        });
-
         // slither-disable-next-line arbitrary-send-eth,unused-return
         realTerminal.pay{value: nativeValue}({
             projectId: projectId,
@@ -776,7 +764,7 @@ contract JBSuckerTerminal is
             beneficiary: address(this),
             minReturnedTokens: 0,
             memo: memo,
-            metadata: enrichedMetadata
+            metadata: metadata
         });
 
         realTokensReceived = IERC20(realToken).balanceOf(address(this)) - realTokenBefore;
@@ -899,7 +887,6 @@ contract JBSuckerTerminal is
             payToken: payToken,
             amount: amount,
             nativeValue: nativeValue,
-            beneficiary: payMsg.beneficiary,
             memo: payMsg.memo,
             metadata: payMsg.metadata,
             allowRouterFallback: true
@@ -959,7 +946,6 @@ contract JBSuckerTerminal is
             payToken: token,
             amount: amount,
             nativeValue: nativeValue,
-            beneficiary: beneficiary,
             memo: memo,
             metadata: metadata,
             allowRouterFallback: false
