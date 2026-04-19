@@ -350,6 +350,8 @@ contract JBSuckerTerminal is
                 reservedPercent: 0,
                 cashOutTaxRate: 0,
                 baseCurrency: uint32(uint160(proxyToken)),
+                // On remote chains, direct payments are paused — funds must bridge via CCIP to the home
+                // chain. On the home chain, pay() is open so the sucker terminal can deposit real tokens.
                 pausePay: homeChainSelector != 0,
                 pauseCreditTransfers: false,
                 allowOwnerMinting: true,
