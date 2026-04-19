@@ -60,7 +60,6 @@ contract JBSuckerTerminal is
     // --------------------------- custom errors ------------------------- //
     //*********************************************************************//
 
-    error JBSuckerTerminal_InsufficientTokens(uint256 received, uint256 minimum);
     error JBSuckerTerminal_InvalidRouter(address caller);
     error JBSuckerTerminal_NoERC20(uint256 realProjectId);
     error JBSuckerTerminal_NoPeer();
@@ -351,7 +350,7 @@ contract JBSuckerTerminal is
                 reservedPercent: 0,
                 cashOutTaxRate: 0,
                 baseCurrency: uint32(uint160(proxyToken)),
-                pausePay: true,
+                pausePay: false,
                 pauseCreditTransfers: false,
                 allowOwnerMinting: true,
                 allowSetCustomToken: false,
@@ -809,32 +808,16 @@ contract JBSuckerTerminal is
         // Approve the proxy terminal to spend the real tokens.
         IERC20(realToken).forceApprove(address(proxyTerminal), realTokensReceived);
 
-        // Deposit the real tokens into the proxy project's terminal balance.
-        // The proxy project has pausePay=true, so we add to balance and mint separately.
-        proxyTerminal.addToBalanceOf({
+        // Pay into the proxy project — proxy tokens are minted to the beneficiary.
+        proxyTokenCount = proxyTerminal.pay({
             projectId: proxyProjectId,
             token: realToken,
             amount: realTokensReceived,
-            shouldReturnHeldFees: false,
+            beneficiary: beneficiary,
+            minReturnedTokens: minReturnedTokens,
             memo: memo,
             metadata: metadata
         });
-
-        // Mint proxy tokens directly to the beneficiary via owner minting.
-        // The proxy project's weight is 1e18 (1:1), so proxyTokenCount == realTokensReceived.
-        proxyTokenCount = realTokensReceived;
-        // slither-disable-next-line unused-return
-        CONTROLLER.mintTokensOf({
-            projectId: proxyProjectId,
-            tokenCount: proxyTokenCount,
-            beneficiary: beneficiary,
-            memo: memo,
-            useReservedPercent: false
-        });
-
-        if (proxyTokenCount < minReturnedTokens) {
-            revert JBSuckerTerminal_InsufficientTokens(proxyTokenCount, minReturnedTokens);
-        }
     }
 
     /// @notice Handles a received CCIP cash out claim message on the remote chain.
