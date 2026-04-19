@@ -19,6 +19,7 @@
   },
   "dependencies": {
     "@arbitrum/nitro-contracts": "^1.2.1",
+    "@bananapus/721-hook-v6": "^0.0.33",
     "@bananapus/core-v6": "^0.0.34",
     "@bananapus/permission-ids-v6": "^0.0.17",
     "@chainlink/contracts-ccip": "^1.6.0",

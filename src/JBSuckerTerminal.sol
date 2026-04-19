@@ -38,7 +38,7 @@ import {IJBSuckerRegistry} from "./interfaces/IJBSuckerRegistry.sol";
 import {IJBSuckerTerminal} from "./interfaces/IJBSuckerTerminal.sol";
 import {CCIPHelper} from "./libraries/CCIPHelper.sol";
 import {JBCCIPLib} from "./libraries/JBCCIPLib.sol";
-import {JBRelayBeneficiary} from "./libraries/JBRelayBeneficiary.sol";
+import {JB721Constants} from "@bananapus/721-hook-v6/src/libraries/JB721Constants.sol";
 import {JBProxyConfig} from "./structs/JBProxyConfig.sol";
 import {JBRelayCashOutClaimMessage} from "./structs/JBRelayCashOutClaimMessage.sol";
 import {JBRelayPayMessage} from "./structs/JBRelayPayMessage.sol";
@@ -763,7 +763,9 @@ contract JBSuckerTerminal is
         // Inject the real beneficiary into the metadata so that data hooks (e.g. 721 hooks) can resolve
         // the actual user instead of seeing this contract as the beneficiary.
         bytes memory enrichedMetadata = JBMetadataResolver.addToMetadata({
-            originalMetadata: metadata, idToAdd: JBRelayBeneficiary.ID, dataToAdd: abi.encode(beneficiary)
+            originalMetadata: metadata,
+                idToAdd: JB721Constants.BENEFICIARY_METADATA_ID,
+                dataToAdd: abi.encode(beneficiary)
         });
 
         // slither-disable-next-line arbitrary-send-eth,unused-return
