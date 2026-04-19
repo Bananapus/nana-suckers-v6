@@ -12,6 +12,7 @@ import "@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol";
 import "../../src/JBSucker.sol";
 import {IJBSuckerDeployer} from "../../src/interfaces/IJBSuckerDeployer.sol";
 import {IJBSuckerRegistry} from "../../src/interfaces/IJBSuckerRegistry.sol";
+import {JBDenominatedAmount} from "../../src/structs/JBDenominatedAmount.sol";
 
 // forge-lint: disable-next-line(unaliased-plain-import)
 import "../../src/deployers/JBOptimismSuckerDeployer.sol";
@@ -584,6 +585,150 @@ contract DeployerTests is Test, TestBaseWorkflow, IERC721Receiver {
         IJBSuckerDeployer deployer2 = _addToRegistry(_setupCCIPDeployer(remoteChainId, remoteSelector + 1, _ccipRouter));
         IJBSucker sucker2 = _deployThroughRegistry(deployer2, projectId, bytes32("salt2"));
         assertTrue(registry.isSuckerOf(projectId, address(sucker2)));
+    }
+
+    // ------------------------------------------------------------------
+    // Remote aggregate view tests
+    // ------------------------------------------------------------------
+
+    /// @notice remoteTotalSupplyOf sums peerChainTotalSupply across active suckers.
+    function testRemoteTotalSupplyOf(ICCIPRouter _ccipRouter) public {
+        vm.assume(uint160(address(_ccipRouter)) > 100);
+        _assumeNotDeployed(address(_ccipRouter));
+        vm.etch(address(_ccipRouter), "0x1");
+
+        _allowMapping(projectId, address(registry));
+
+        // Deploy two suckers to different chains.
+        IJBSuckerDeployer deployer1 = _addToRegistry(_setupCCIPDeployer(10, 1, _ccipRouter));
+        IJBSucker sucker1 = _deployThroughRegistry(deployer1, projectId, bytes32("salt1"));
+
+        IJBSuckerDeployer deployer2 = _addToRegistry(_setupCCIPDeployer(42_161, 2, _ccipRouter));
+        IJBSucker sucker2 = _deployThroughRegistry(deployer2, projectId, bytes32("salt2"));
+
+        // Mock peerChainTotalSupply on each sucker.
+        vm.mockCall(address(sucker1), abi.encodeCall(IJBSucker.peerChainTotalSupply, ()), abi.encode(100e18));
+        vm.mockCall(address(sucker2), abi.encodeCall(IJBSucker.peerChainTotalSupply, ()), abi.encode(250e18));
+
+        assertEq(registry.remoteTotalSupplyOf(projectId), 350e18);
+    }
+
+    /// @notice remoteBalanceOf sums peerChainBalanceOf across active suckers.
+    function testRemoteBalanceOf(ICCIPRouter _ccipRouter) public {
+        vm.assume(uint160(address(_ccipRouter)) > 100);
+        _assumeNotDeployed(address(_ccipRouter));
+        vm.etch(address(_ccipRouter), "0x1");
+
+        _allowMapping(projectId, address(registry));
+
+        IJBSuckerDeployer deployer1 = _addToRegistry(_setupCCIPDeployer(10, 1, _ccipRouter));
+        IJBSucker sucker1 = _deployThroughRegistry(deployer1, projectId, bytes32("salt1"));
+
+        IJBSuckerDeployer deployer2 = _addToRegistry(_setupCCIPDeployer(42_161, 2, _ccipRouter));
+        IJBSucker sucker2 = _deployThroughRegistry(deployer2, projectId, bytes32("salt2"));
+
+        uint256 ethCurrency = uint256(uint160(JBConstants.NATIVE_TOKEN));
+
+        // Mock peerChainBalanceOf on each sucker.
+        vm.mockCall(
+            address(sucker1),
+            abi.encodeCall(IJBSucker.peerChainBalanceOf, (18, ethCurrency)),
+            abi.encode(JBDenominatedAmount({value: 5e18, currency: uint32(ethCurrency), decimals: 18}))
+        );
+        vm.mockCall(
+            address(sucker2),
+            abi.encodeCall(IJBSucker.peerChainBalanceOf, (18, ethCurrency)),
+            abi.encode(JBDenominatedAmount({value: 3e18, currency: uint32(ethCurrency), decimals: 18}))
+        );
+
+        assertEq(registry.remoteBalanceOf(projectId, 18, ethCurrency), 8e18);
+    }
+
+    /// @notice remoteSurplusOf sums peerChainSurplusOf across active suckers.
+    function testRemoteSurplusOf(ICCIPRouter _ccipRouter) public {
+        vm.assume(uint160(address(_ccipRouter)) > 100);
+        _assumeNotDeployed(address(_ccipRouter));
+        vm.etch(address(_ccipRouter), "0x1");
+
+        _allowMapping(projectId, address(registry));
+
+        IJBSuckerDeployer deployer1 = _addToRegistry(_setupCCIPDeployer(10, 1, _ccipRouter));
+        IJBSucker sucker1 = _deployThroughRegistry(deployer1, projectId, bytes32("salt1"));
+
+        IJBSuckerDeployer deployer2 = _addToRegistry(_setupCCIPDeployer(42_161, 2, _ccipRouter));
+        IJBSucker sucker2 = _deployThroughRegistry(deployer2, projectId, bytes32("salt2"));
+
+        uint256 ethCurrency = uint256(uint160(JBConstants.NATIVE_TOKEN));
+
+        // Mock peerChainSurplusOf on each sucker.
+        vm.mockCall(
+            address(sucker1),
+            abi.encodeCall(IJBSucker.peerChainSurplusOf, (18, ethCurrency)),
+            abi.encode(JBDenominatedAmount({value: 10e18, currency: uint32(ethCurrency), decimals: 18}))
+        );
+        vm.mockCall(
+            address(sucker2),
+            abi.encodeCall(IJBSucker.peerChainSurplusOf, (18, ethCurrency)),
+            abi.encode(JBDenominatedAmount({value: 7e18, currency: uint32(ethCurrency), decimals: 18}))
+        );
+
+        assertEq(registry.remoteSurplusOf(projectId, 18, ethCurrency), 17e18);
+    }
+
+    /// @notice Remote views return 0 for a project with no suckers.
+    function testRemoteViewsZeroWithNoSuckers() public view {
+        assertEq(registry.remoteTotalSupplyOf(projectId), 0);
+        assertEq(registry.remoteBalanceOf(projectId, 18, uint256(uint160(JBConstants.NATIVE_TOKEN))), 0);
+        assertEq(registry.remoteSurplusOf(projectId, 18, uint256(uint160(JBConstants.NATIVE_TOKEN))), 0);
+    }
+
+    /// @notice Remote views skip deprecated suckers.
+    function testRemoteViewsSkipDeprecatedSuckers(ICCIPRouter _ccipRouter) public {
+        vm.assume(uint160(address(_ccipRouter)) > 100);
+        _assumeNotDeployed(address(_ccipRouter));
+        vm.etch(address(_ccipRouter), "0x1");
+
+        _allowMapping(projectId, address(registry));
+
+        IJBSuckerDeployer deployer1 = _addToRegistry(_setupCCIPDeployer(10, 1, _ccipRouter));
+        IJBSucker sucker1 = _deployThroughRegistry(deployer1, projectId, bytes32("salt1"));
+
+        // Mock peerChainTotalSupply.
+        vm.mockCall(address(sucker1), abi.encodeCall(IJBSucker.peerChainTotalSupply, ()), abi.encode(100e18));
+
+        // Before deprecation: 100e18.
+        assertEq(registry.remoteTotalSupplyOf(projectId), 100e18);
+
+        // Deprecate and remove.
+        JBSucker(payable(address(sucker1))).setDeprecation(uint40(block.timestamp + 14 days));
+        vm.warp(block.timestamp + 14 days);
+        registry.removeDeprecatedSucker(projectId, address(sucker1));
+
+        // After deprecation: 0.
+        assertEq(registry.remoteTotalSupplyOf(projectId), 0);
+    }
+
+    /// @notice Remote views silently skip suckers that revert.
+    function testRemoteViewsSkipRevertingSuckers(ICCIPRouter _ccipRouter) public {
+        vm.assume(uint160(address(_ccipRouter)) > 100);
+        _assumeNotDeployed(address(_ccipRouter));
+        vm.etch(address(_ccipRouter), "0x1");
+
+        _allowMapping(projectId, address(registry));
+
+        // Deploy two suckers.
+        IJBSuckerDeployer deployer1 = _addToRegistry(_setupCCIPDeployer(10, 1, _ccipRouter));
+        IJBSucker sucker1 = _deployThroughRegistry(deployer1, projectId, bytes32("salt1"));
+
+        IJBSuckerDeployer deployer2 = _addToRegistry(_setupCCIPDeployer(42_161, 2, _ccipRouter));
+        IJBSucker sucker2 = _deployThroughRegistry(deployer2, projectId, bytes32("salt2"));
+
+        // sucker1 returns 100e18, sucker2 reverts.
+        vm.mockCall(address(sucker1), abi.encodeCall(IJBSucker.peerChainTotalSupply, ()), abi.encode(100e18));
+        vm.mockCallRevert(address(sucker2), abi.encodeCall(IJBSucker.peerChainTotalSupply, ()), "boom");
+
+        // Should still return 100e18 (sucker2's revert is silently skipped).
+        assertEq(registry.remoteTotalSupplyOf(projectId), 100e18);
     }
 
     /// @notice This function is called when we create a JB project.

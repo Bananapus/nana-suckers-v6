@@ -11,6 +11,7 @@ import {ERC2771Context} from "@openzeppelin/contracts/metatx/ERC2771Context.sol"
 import {Context} from "@openzeppelin/contracts/utils/Context.sol";
 import {EnumerableMap} from "@openzeppelin/contracts/utils/structs/EnumerableMap.sol";
 
+import {JBDenominatedAmount} from "./structs/JBDenominatedAmount.sol";
 import {JBSuckerState} from "./enums/JBSuckerState.sol";
 import {IJBSucker} from "./interfaces/IJBSucker.sol";
 import {IJBSuckerDeployer} from "./interfaces/IJBSuckerDeployer.sol";
@@ -182,6 +183,95 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
                 unchecked {
                     ++j;
                 }
+            }
+            unchecked {
+                ++i;
+            }
+        }
+    }
+
+    /// @notice The cumulative balance across all remote peer chains for a project, denominated in a given currency.
+    /// @dev Sums `peerChainBalanceOf` from each active sucker. Silently skips suckers that revert.
+    /// @param projectId The ID of the project.
+    /// @param decimals The decimal precision for the returned value.
+    /// @param currency The currency to normalize to.
+    /// @return balance The combined peer chain balance.
+    function remoteBalanceOf(
+        uint256 projectId,
+        uint256 decimals,
+        uint256 currency
+    )
+        external
+        view
+        override
+        returns (uint256 balance)
+    {
+        address[] memory allSuckers = _suckersOf[projectId].keys();
+        for (uint256 i; i < allSuckers.length;) {
+            // slither-disable-next-line unused-return
+            (, uint256 val) = _suckersOf[projectId].tryGet(allSuckers[i]);
+            if (val == _SUCKER_EXISTS) {
+                // slither-disable-next-line calls-loop
+                try IJBSucker(allSuckers[i]).peerChainBalanceOf(decimals, currency) returns (
+                    JBDenominatedAmount memory amt
+                ) {
+                    balance += amt.value;
+                } catch {}
+            }
+            unchecked {
+                ++i;
+            }
+        }
+    }
+
+    /// @notice The cumulative surplus across all remote peer chains for a project, denominated in a given currency.
+    /// @dev Sums `peerChainSurplusOf` from each active sucker. Silently skips suckers that revert.
+    /// @param projectId The ID of the project.
+    /// @param decimals The decimal precision for the returned value.
+    /// @param currency The currency to normalize to.
+    /// @return surplus The combined peer chain surplus.
+    function remoteSurplusOf(
+        uint256 projectId,
+        uint256 decimals,
+        uint256 currency
+    )
+        external
+        view
+        override
+        returns (uint256 surplus)
+    {
+        address[] memory allSuckers = _suckersOf[projectId].keys();
+        for (uint256 i; i < allSuckers.length;) {
+            // slither-disable-next-line unused-return
+            (, uint256 val) = _suckersOf[projectId].tryGet(allSuckers[i]);
+            if (val == _SUCKER_EXISTS) {
+                // slither-disable-next-line calls-loop
+                try IJBSucker(allSuckers[i]).peerChainSurplusOf(decimals, currency) returns (
+                    JBDenominatedAmount memory amt
+                ) {
+                    surplus += amt.value;
+                } catch {}
+            }
+            unchecked {
+                ++i;
+            }
+        }
+    }
+
+    /// @notice The cumulative total supply across all remote peer chains for a project.
+    /// @dev Sums `peerChainTotalSupply` from each active sucker. Silently skips suckers that revert.
+    /// @param projectId The ID of the project.
+    /// @return totalSupply The combined peer chain total supply.
+    function remoteTotalSupplyOf(uint256 projectId) external view override returns (uint256 totalSupply) {
+        address[] memory allSuckers = _suckersOf[projectId].keys();
+        for (uint256 i; i < allSuckers.length;) {
+            // slither-disable-next-line unused-return
+            (, uint256 val) = _suckersOf[projectId].tryGet(allSuckers[i]);
+            if (val == _SUCKER_EXISTS) {
+                // slither-disable-next-line calls-loop
+                try IJBSucker(allSuckers[i]).peerChainTotalSupply() returns (uint256 supply) {
+                    totalSupply += supply;
+                } catch {}
             }
             unchecked {
                 ++i;
