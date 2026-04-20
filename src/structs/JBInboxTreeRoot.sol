@@ -6,7 +6,6 @@ pragma solidity ^0.8.0;
 /// inbox tree.
 /// @custom:member nonce Tracks the nonce of the tree. The nonce cannot decrease.
 /// @custom:member root The root of the tree.
-// forge-lint: disable-next-line(pascal-case-struct)
 struct JBInboxTreeRoot {
     uint64 nonce;
     bytes32 root;

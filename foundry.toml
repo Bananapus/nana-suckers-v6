@@ -14,6 +14,7 @@ depth = 100
 fail_on_revert = false
 
 [lint]
+exclude_lints = ["pascal-case-struct", "mixed-case-variable"]
 lint_on_build = false
 
 [fmt]

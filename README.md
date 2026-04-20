@@ -2,8 +2,13 @@
 
 `@bananapus/suckers-v6` provides cross-chain bridging for Juicebox project tokens and the terminal assets that back them. A pair of suckers lets users burn on one chain, move value across a bridge, and mint the same project token representation on another chain.
 
-Docs: <https://docs.juicebox.money>
-Architecture: [ARCHITECTURE.md](./ARCHITECTURE.md)
+Docs: <https://docs.juicebox.money>  
+Architecture: [ARCHITECTURE.md](./ARCHITECTURE.md)  
+User journeys: [USER_JOURNEYS.md](./USER_JOURNEYS.md)  
+Skills: [SKILLS.md](./SKILLS.md)  
+Risks: [RISKS.md](./RISKS.md)  
+Administration: [ADMINISTRATION.md](./ADMINISTRATION.md)  
+Audit instructions: [AUDIT_INSTRUCTIONS.md](./AUDIT_INSTRUCTIONS.md)
 
 The codebase includes multiple bridge variants, but the canonical deployment and discovery tooling in this repo is narrower than the full runtime surface. Treat the deployment scripts and helper libraries as the source of truth for what is operationally supported today.
 
@@ -50,7 +55,7 @@ The shortest useful reading order is:
 | Contract | Description |
 |----------|-------------|
 | [`JBSucker`](src/JBSucker.sol) | Abstract base. Manages outbox/inbox merkle trees, `prepare`/`toRemote`/`claim` lifecycle, token mapping, deprecation, and emergency hatch. Deployed as clones via `Initializable`. Uses `ERC2771Context` for meta-transactions. Has immutable `FEE_PROJECT_ID` (typically project ID 1) and immutable `REGISTRY` reference. Reads the `toRemoteFee` from the registry via `REGISTRY.toRemoteFee()` on each `toRemote()` call. |
-| [`JBCCIPSucker`](src/JBCCIPSucker.sol) | Extends `JBSucker`. Bridges via Chainlink CCIP (`ccipSend`/`ccipReceive`). Supports any CCIP-connected chain pair. Wraps native ETH to WETH before bridging (CCIP only transports ERC-20s) and unwraps on the receiving end. Can map `NATIVE_TOKEN` to ERC-20 addresses on the remote chain (unlike OP/Arbitrum suckers). |
+| [`JBCCIPSucker`](src/JBCCIPSucker.sol) | Extends `JBSucker`. Bridges via Chainlink CCIP (`ccipSend`/`ccipReceive`) for chain pairs whose router, selector, and token mapping are configured. Wraps native ETH to WETH before bridging (CCIP only transports ERC-20s) and unwraps on the receiving end. Can map `NATIVE_TOKEN` to ERC-20 addresses on the remote chain (unlike OP/Arbitrum suckers). |
 | [`JBOptimismSucker`](src/JBOptimismSucker.sol) | Extends `JBSucker`. Bridges via OP Standard Bridge + OP Messenger. No `msg.value` required for transport. |
 | [`JBBaseSucker`](src/JBBaseSucker.sol) | Thin wrapper around `JBOptimismSucker` with Base chain IDs (Ethereum 1 <-> Base 8453, Sepolia 11155111 <-> Base Sepolia 84532). |
 | [`JBCeloSucker`](src/JBCeloSucker.sol) | Extends `JBOptimismSucker` for Celo (OP Stack, custom gas token CELO). Wraps native ETH → WETH before bridging as ERC-20. Unwraps received WETH → native ETH via `_addToBalance` override. Removes `NATIVE_TOKEN → NATIVE_TOKEN` restriction. Sends messenger messages with `nativeValue = 0` (Celo's native token is CELO, not ETH). |
@@ -63,7 +68,7 @@ The shortest useful reading order is:
 | [`JBCeloSuckerDeployer`](src/deployers/JBCeloSuckerDeployer.sol) | Deployer for `JBCeloSucker`. Extends `JBOptimismSuckerDeployer` with `wrappedNative` (`IWrappedNativeToken`) storage for the local chain's WETH address. |
 | [`JBArbitrumSuckerDeployer`](src/deployers/JBArbitrumSuckerDeployer.sol) | Deployer for `JBArbitrumSucker`. Stores Arbitrum Inbox, Gateway Router, and layer (`JBLayer.L1` or `JBLayer.L2`). |
 | [`MerkleLib`](src/utils/MerkleLib.sol) | Incremental merkle tree (depth 32, max ~4 billion leaves, modeled on eth2 deposit contract). Used for outbox/inbox trees. `insert` and `root` operate directly on `Tree storage` (not memory copies) to avoid redundant SLOAD/SSTORE round-trips. Gas-optimized with inline assembly for `root()` and `branchRoot()`. |
-| [`CCIPHelper`](src/libraries/CCIPHelper.sol) | CCIP router addresses, chain selectors, and WETH addresses per chain. Covers Ethereum, Optimism, Arbitrum, Base, Polygon, Avalanche, and BNB Chain (mainnet and testnets). |
+| [`CCIPHelper`](src/libraries/CCIPHelper.sol) | CCIP router addresses, chain selectors, and WETH addresses for the chain set currently encoded in this repo. |
 | [`ARBAddresses`](src/libraries/ARBAddresses.sol) | Arbitrum bridge contract addresses (Inbox, Gateway Router) for mainnet and Sepolia. |
 | [`ARBChains`](src/libraries/ARBChains.sol) | Arbitrum chain ID constants. |
 
@@ -90,6 +95,14 @@ The shortest useful reading order is:
 
 When reviewing a bridge incident, check local state transition correctness before blaming the transport layer.
 
+## High-Signal Tests
+
+1. `test/unit/registry.t.sol`
+2. `test/unit/multi_chain_evolution.t.sol`
+3. `test/ForkClaimMainnet.t.sol`
+4. `test/audit/codex-PeerSnapshotDesync.t.sol`
+5. `test/audit/codex-ToRemoteFeeIrrecoverable.t.sol`
+
 ## Install
 
 ```bash
@@ -112,7 +125,7 @@ Useful scripts:
 
 ## Deployment Notes
 
-This package supports multiple bridge families and is intentionally split into bridge-specific deployers. It is commonly used directly and through the Omnichain and Revnet deployer packages.
+This package supports multiple bridge families and is intentionally split into bridge-specific deployers. Operational support is narrower than "all theoretically bridgeable chains" and should be taken from the configured deployers, helper libraries, and deployment scripts in this repo.
 
 ## Repository Layout
 
@@ -142,3 +155,9 @@ script/
 - a bridge that stays live operationally still may not be economically safe for every asset or chain pair
 
 When debugging a bad cross-chain outcome, first decide whether the failure is in claim construction, message transport, inbox/outbox root progression, or remote settlement. Those are different bug classes.
+
+## For AI Agents
+
+- Do not summarize this repo as a generic token bridge; it bridges Juicebox project positions plus transported value.
+- Always separate shared sucker logic from bridge-specific transport behavior in your explanation.
+- Use the chain-specific implementation and the matching deployer together when answering operational questions.

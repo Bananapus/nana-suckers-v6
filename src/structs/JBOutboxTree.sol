@@ -10,7 +10,6 @@ import {MerkleLib} from "../utils/MerkleLib.sol";
 /// claims have been sent. Packed with `nonce` into one storage slot.
 /// @custom:member balance The balance of the outbox.
 /// @custom:member tree The merkle tree.
-// forge-lint: disable-next-line(pascal-case-struct)
 struct JBOutboxTree {
     uint64 nonce;
     uint192 numberOfClaimsSent;

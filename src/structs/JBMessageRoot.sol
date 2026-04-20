@@ -20,7 +20,6 @@ import {JBInboxTreeRoot} from "./JBInboxTreeRoot.sol";
 /// @custom:member snapshotNonce A project-wide counter that orders shared-state snapshots independently of per-token
 /// outbox nonces. Used by the receiving chain to reject stale surplus/balance/supply updates without blocking
 /// token-local inbox root updates.
-// forge-lint: disable-next-line(pascal-case-struct)
 struct JBMessageRoot {
     uint8 version;
     bytes32 token;

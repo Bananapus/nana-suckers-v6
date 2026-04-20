@@ -6,7 +6,6 @@ pragma solidity ^0.8.0;
 /// @custom:member beneficiary The beneficiary of the leaf.
 /// @custom:member projectTokenCount The number of project tokens to claim.
 /// @custom:member terminalTokenAmount The amount of terminal tokens to claim.
-// forge-lint: disable-next-line(pascal-case-struct)
 struct JBLeaf {
     uint256 index;
     bytes32 beneficiary;
