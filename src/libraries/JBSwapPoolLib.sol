@@ -327,13 +327,11 @@ library JBSwapPoolLib {
                 config: config, normalizedTokenIn: normalizedTokenIn, normalizedTokenOut: normalizedTokenOut
             });
 
-            // Prefer V4 if it has more liquidity, but only if V4 has a hook or V3 had no liquidity.
+            // Select the V4 pool if it has strictly more liquidity than the best V3 pool.
             if (v4Liquidity > bestLiquidity) {
-                if (address(v4Candidate.hooks) != address(0) || bestLiquidity == 0) {
-                    isV4 = true;
-                    v3Pool = IUniswapV3Pool(address(0));
-                    v4Key = v4Candidate;
-                }
+                isV4 = true;
+                v3Pool = IUniswapV3Pool(address(0));
+                v4Key = v4Candidate;
             }
         }
     }
