@@ -5,7 +5,6 @@ pragma solidity ^0.8.0;
 /// @custom:member value The amount.
 /// @custom:member currency The currency identifier (e.g. `JBCurrencyIds.ETH`).
 /// @custom:member decimals The decimal precision of `value`.
-// forge-lint: disable-next-line(pascal-case-struct)
 struct JBDenominatedAmount {
     uint256 value;
     uint32 currency;

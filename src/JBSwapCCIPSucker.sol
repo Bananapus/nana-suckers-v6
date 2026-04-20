@@ -512,7 +512,6 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
         address token,
         uint256 amount,
         JBRemoteToken memory remoteToken,
-        // forge-lint: disable-next-line(mixed-case-variable)
         JBMessageRoot memory sucker_message
     )
         internal
