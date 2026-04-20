@@ -2,7 +2,7 @@
 
 This repo bridges Juicebox project tokens and associated terminal assets across chains. Audit it as a conservation and replay-prevention system.
 
-## Objective
+## Audit Objective
 
 Find issues that:
 - allow double claim, replay, or claim on the wrong destination
@@ -32,7 +32,7 @@ Read in this order:
 
 That order gets you from the shared conservation model to the transport-specific deviations.
 
-## System Model
+## Security Model
 
 The bridge flow is:
 - burn or prepare project-token value on source chain
@@ -51,6 +51,21 @@ One non-obvious property to audit explicitly:
 - roots and assets do not always arrive in a perfectly ordered, synchronous way
 - the system is intentionally designed to survive some transport mismatch without deadlocking
 - those recovery choices are exactly where conservation bugs tend to hide
+
+## Roles And Privileges
+
+| Role | Powers | How constrained |
+|------|--------|-----------------|
+| Source-side caller | Prepare and bridge value to a remote chain | Must not create more claimable value than was prepared |
+| Remote peer and messenger | Install new roots and deliver assets | Must be authenticated per transport |
+| Emergency authority | Deprecate paths or enable recovery exits | Must not be able to steal in-flight funds |
+
+## Integration Assumptions
+
+| Dependency | Assumption | What breaks if wrong |
+|------------|------------|----------------------|
+| Bridge transport | Delivers only authenticated peer messages | Anyone can spoof remote state |
+| Token mapping and registry state | Remote asset identity stays stable | Users claim the wrong asset or wrong meaning |
 
 ## Critical Invariants
 
@@ -72,22 +87,7 @@ Remote token mappings must be immutable or mutable only exactly where the design
 6. Nonce progression is monotonic in the way each transport expects
 Later roots must not silently invalidate earlier user claims unless the protocol explicitly intends that recovery path.
 
-## Threat Model
-
-Prioritize:
-- out-of-order nonce arrival
-- cross-sucker replay
-- trusted-forwarder or messenger spoofing
-- emergency-exit races
-- fee fallback and bridge-payment edge cases
-- deterministic deployer assumptions for peer pairing
-
-The strongest attacker models here are:
-- a caller trying to claim from the wrong root with a structurally valid proof
-- a privileged actor abusing token mapping or emergency controls after users already prepared transfers
-- a transport delivering messages out of order and exposing assumptions hidden in the happy path
-
-## Hotspots
+## Attack Surfaces
 
 - `prepare`, `toRemote`, `fromRemote`, and `claim`
 - bitmap execution tracking
@@ -96,33 +96,18 @@ The strongest attacker models here are:
 - chain-specific messenger authentication
 - deployer address derivation and clone setup
 
-## Sequences Worth Replaying
+Replay these sequences:
+1. prepare multiple leaves, send multiple roots, receive them out of order, and attempt each claim
+2. prepare, deprecate or enable emergency hatch, then race claim and exit paths
+3. map a token, prepare a transfer, then attempt remap or peer mismatch after value is in flight
+4. replay the same logical transfer across different sucker implementations
 
-1. Prepare multiple leaves -> send multiple roots -> receive them out of order -> attempt claims for each.
-2. Prepare -> deprecate or enable emergency hatch -> claim and exit attempts racing each other.
-3. Map token -> prepare transfer -> attempt remap or peer mismatch after value is already in flight.
-4. Same logical transfer across different sucker implementations to check for replay or identity confusion.
+## Accepted Risks Or Behaviors
 
-## Finding Bar
+- Out-of-order arrival is part of the intended model, not an edge case.
 
-The strongest findings here usually show one of these:
-- a user can claim against value that was never actually prepared
-- a valid prepare becomes permanently unclaimable without the recovery path the protocol expects
-- transport-specific authentication is weaker than the shared model assumes
-- a privileged mapping or safety control can rewrite the meaning of already in-flight value
+## Verification
 
-## Build And Verification
-
-Standard workflow:
 - `npm install`
 - `forge build`
 - `forge test`
-
-The current tests already target:
-- deep attack and regression scenarios
-- trusted-forwarder spoofing
-- fee fallback behavior
-- deterministic deployment
-- chain-specific fork flows
-
-High-value findings here show a break in conservation, replay resistance, or trusted-peer boundaries.
