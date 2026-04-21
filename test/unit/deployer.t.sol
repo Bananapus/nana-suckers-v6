@@ -683,7 +683,9 @@ contract DeployerTests is Test, TestBaseWorkflow, IERC721Receiver {
     }
 
     /// @notice Remote views skip deprecated suckers.
-    function testRemoteViewsSkipDeprecatedSuckers(ICCIPRouter _ccipRouter) public {
+    /// @dev H-19 fix: deprecated suckers are now included in aggregate views so their supply
+    /// is not hidden from downstream consumers during migration windows.
+    function testRemoteViewsIncludeDeprecatedSuckers(ICCIPRouter _ccipRouter) public {
         vm.assume(uint160(address(_ccipRouter)) > 100);
         _assumeNotDeployed(address(_ccipRouter));
         vm.etch(address(_ccipRouter), "0x1");
@@ -704,8 +706,8 @@ contract DeployerTests is Test, TestBaseWorkflow, IERC721Receiver {
         vm.warp(block.timestamp + 14 days);
         registry.removeDeprecatedSucker(projectId, address(sucker1));
 
-        // After deprecation: 0.
-        assertEq(registry.remoteTotalSupplyOf(projectId), 0);
+        // After deprecation: supply is still visible (H-19 fix).
+        assertEq(registry.remoteTotalSupplyOf(projectId), 100e18);
     }
 
     /// @notice Remote views silently skip suckers that revert.

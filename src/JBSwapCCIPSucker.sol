@@ -313,12 +313,35 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
                 }
             }
 
-            // Store conversion rate whenever the batch has leaf-denomination tokens, even if
-            // localAmount == 0 (swap rounded to zero). Without this, claims for this nonce would
-            // skip scaling and use the raw leaf amount, draining backing from other batches.
+            // H-18 fix: When a swap succeeds but returns zero local tokens, the batch must NOT
+            // be marked claimable. Without this guard, `_addToBalance` would see
+            // `pendingSwapOf.bridgeAmount == 0` (no pending swap stored) and allow claims to
+            // proceed — minting the full bridged project-token amount while adding zero terminal
+            // backing, breaking cross-chain solvency.
+            //
+            // Route zero-output swaps into `pendingSwapOf` so the swap can be retried via
+            // `retrySwap` once pool conditions improve. Only store the conversion rate when
+            // the swap produced a positive local amount.
             if (root.amount > 0) {
-                _conversionRateOf[localToken][root.remoteRoot.nonce] =
-                    ConversionRate({leafTotal: root.amount, localTotal: localAmount});
+                if (localAmount == 0 && any2EvmMessage.destTokenAmounts.length == 1) {
+                    Client.EVMTokenAmount memory zeroSwapTokenAmount = any2EvmMessage.destTokenAmounts[0];
+                    // Only route to pending if there were actual bridge tokens delivered.
+                    // If bridgeAmount is also 0 (zero-value batch), store the conversion rate
+                    // normally — there is nothing to retry.
+                    if (zeroSwapTokenAmount.amount > 0) {
+                        pendingSwapOf[localToken][root.remoteRoot.nonce] = PendingSwap({
+                            bridgeToken: zeroSwapTokenAmount.token,
+                            bridgeAmount: zeroSwapTokenAmount.amount,
+                            leafTotal: root.amount
+                        });
+                    } else {
+                        _conversionRateOf[localToken][root.remoteRoot.nonce] =
+                            ConversionRate({leafTotal: root.amount, localTotal: 0});
+                    }
+                } else {
+                    _conversionRateOf[localToken][root.remoteRoot.nonce] =
+                        ConversionRate({leafTotal: root.amount, localTotal: localAmount});
+                }
             }
 
             // Store the inbox merkle root for later claims.

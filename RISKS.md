@@ -62,7 +62,7 @@ This file focuses on the bridge-like risks in the sucker system: merkle-root pro
 - **Renounced registry ownership risk.** If the registry owner calls `renounceOwnership()`, `setToRemoteFee()` becomes permanently uncallable and the fee is frozen at its current value across all suckers. This is a deliberate trade-off: it allows the registry owner to credibly commit to a fee level, but eliminates the ability to respond to future ETH price changes. The fee is still capped at `MAX_TO_REMOTE_FEE`, so the maximum downside is bounded.
 - **Immutable fee project.** `FEE_PROJECT_ID` is set at construction and cannot be changed. If the fee project is abandoned or its terminal removed, there is no way to redirect fees without deploying new suckers.
 - **Cross-reference: sucker registration path.** Suckers are deployed via `JBSuckerRegistry.deploySuckersFor`, which requires `DEPLOY_SUCKERS` permission from the project owner. The registry's `deploy` function uses `CREATE2` with a deployer-specific salt. The sucker's `peer()` address is deterministic — a misconfigured peer means the sucker accepts messages from the wrong remote address. See [nana-omnichain-deployers-v6 RISKS.md](../nana-omnichain-deployers-v6/RISKS.md) for deployer-level risks.
-- **Registry aggregate views fail open.** `JBSuckerRegistry.remoteBalanceOf`, `remoteSurplusOf`, and `remoteTotalSupplyOf` sum values across active suckers but silently skip any sucker that reverts. This preserves liveness for dashboards and cross-chain estimates, but it means the returned aggregate can understate remote state whenever one peer is broken, censored, deprecated incorrectly, or simply expensive to query.
+- **Registry aggregate views fail open.** `JBSuckerRegistry.remoteBalanceOf`, `remoteSurplusOf`, and `remoteTotalSupplyOf` include both active and deprecated suckers (H-19 fix) with per-chain deduplication (max per chain, not sum). When multiple suckers target the same peer chain (e.g., during migration), the highest reported value is used. The views silently skip any sucker that reverts. This preserves liveness for dashboards and cross-chain estimates, but it means the returned aggregate can understate remote state whenever one peer is broken, censored, or simply expensive to query.
 
 ## 6. Deprecation Lifecycle
 
@@ -130,7 +130,11 @@ The fee is paid to `FEE_PROJECT_ID` (the protocol project), not to the sucker's 
 
 ### 10.5 Registry aggregate views prioritize liveness over completeness
 
-`JBSuckerRegistry.remoteBalanceOf`, `remoteSurplusOf`, and `remoteTotalSupplyOf` intentionally use `try/catch` around each sucker and silently ignore peers that revert. This is accepted because a single bad peer should not brick every cross-chain dashboard or estimator. The trade-off is that these read surfaces are best-effort only: consumers must treat them as lower bounds, not exact reconciled totals, unless they independently verify that every active sucker responded successfully.
+`JBSuckerRegistry.remoteBalanceOf`, `remoteSurplusOf`, and `remoteTotalSupplyOf` intentionally use `try/catch` around each sucker and silently ignore peers that revert. Both active and deprecated suckers are included (H-19 fix), with per-chain deduplication: when multiple suckers target the same peer chain (e.g., during a migration window), the highest reported value is used to avoid double-counting. This is accepted because a single bad peer should not brick every cross-chain dashboard or estimator. The trade-off is that these read surfaces are best-effort only: consumers must treat them as lower bounds, not exact reconciled totals, unless they independently verify that every active sucker responded successfully.
+
+### 10.8 Zero-output swap batches route to pendingSwapOf
+
+When `JBSwapCCIPSucker.ccipReceive` receives bridge tokens and the swap succeeds but returns zero local tokens (e.g., due to extreme price impact or dust amounts), the batch is routed to `pendingSwapOf` for later retry via `retrySwap` (H-18 fix). Without this, claims would proceed with zero terminal backing, minting unbacked project tokens. The trade-off is that these batches require a manual `retrySwap` call once pool conditions improve. Anyone can call `retrySwap` — it is permissionless.
 
 ### 10.6 Hookless V4 spot pricing is sandwich-vulnerable by design
 

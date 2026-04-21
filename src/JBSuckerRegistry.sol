@@ -191,7 +191,9 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
     }
 
     /// @notice The cumulative balance across all remote peer chains for a project, denominated in a given currency.
-    /// @dev Sums `peerChainBalanceOf` from each active sucker. Silently skips suckers that revert.
+    /// @dev Includes both active and deprecated suckers to prevent undercounting during migration windows (H-19 fix).
+    /// Uses per-chain deduplication (max per chain, not sum) to prevent double-counting when both a deprecated and
+    /// active sucker exist for the same chain. Silently skips suckers that revert.
     /// @param projectId The ID of the project.
     /// @param decimals The decimal precision for the returned value.
     /// @param currency The currency to normalize to.
@@ -207,25 +209,65 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
         returns (uint256 balance)
     {
         address[] memory allSuckers = _suckersOf[projectId].keys();
-        for (uint256 i; i < allSuckers.length;) {
+        uint256 len = allSuckers.length;
+
+        // Per-chain dedup arrays. The number of suckers per project is small (typically 1-5),
+        // so a linear scan is cheaper than a mapping.
+        uint256[] memory chainIds = new uint256[](len);
+        uint256[] memory maxBalances = new uint256[](len);
+        uint256 chainCount;
+
+        for (uint256 i; i < len;) {
             // slither-disable-next-line unused-return
             (, uint256 val) = _suckersOf[projectId].tryGet(allSuckers[i]);
-            if (val == _SUCKER_EXISTS) {
+            // H-19: Include both active and deprecated suckers in aggregate economic views.
+            if (val == _SUCKER_EXISTS || val == _SUCKER_DEPRECATED) {
                 // slither-disable-next-line calls-loop
                 try IJBSucker(allSuckers[i]).peerChainBalanceOf(decimals, currency) returns (
                     JBDenominatedAmount memory amt
                 ) {
-                    balance += amt.value;
+                    // slither-disable-next-line calls-loop
+                    uint256 chainId = IJBSucker(allSuckers[i]).peerChainId();
+                    // Per-chain max: if multiple suckers target the same chain (deprecated + active
+                    // during migration), take the highest value to avoid double-counting.
+                    bool found;
+                    for (uint256 j; j < chainCount;) {
+                        if (chainIds[j] == chainId) {
+                            if (amt.value > maxBalances[j]) maxBalances[j] = amt.value;
+                            found = true;
+                            break;
+                        }
+                        unchecked {
+                            ++j;
+                        }
+                    }
+                    if (!found) {
+                        chainIds[chainCount] = chainId;
+                        maxBalances[chainCount] = amt.value;
+                        unchecked {
+                            ++chainCount;
+                        }
+                    }
                 } catch {}
             }
             unchecked {
                 ++i;
             }
         }
+
+        // Sum the per-chain max values.
+        for (uint256 k; k < chainCount;) {
+            balance += maxBalances[k];
+            unchecked {
+                ++k;
+            }
+        }
     }
 
     /// @notice The cumulative surplus across all remote peer chains for a project, denominated in a given currency.
-    /// @dev Sums `peerChainSurplusOf` from each active sucker. Silently skips suckers that revert.
+    /// @dev Includes both active and deprecated suckers to prevent undercounting during migration windows (H-19 fix).
+    /// Uses per-chain deduplication (max per chain, not sum) to prevent double-counting when both a deprecated and
+    /// active sucker exist for the same chain. Silently skips suckers that revert.
     /// @param projectId The ID of the project.
     /// @param decimals The decimal precision for the returned value.
     /// @param currency The currency to normalize to.
@@ -241,40 +283,118 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
         returns (uint256 surplus)
     {
         address[] memory allSuckers = _suckersOf[projectId].keys();
-        for (uint256 i; i < allSuckers.length;) {
+        uint256 len = allSuckers.length;
+
+        // Per-chain dedup arrays. The number of suckers per project is small (typically 1-5),
+        // so a linear scan is cheaper than a mapping.
+        uint256[] memory chainIds = new uint256[](len);
+        uint256[] memory maxSurplus = new uint256[](len);
+        uint256 chainCount;
+
+        for (uint256 i; i < len;) {
             // slither-disable-next-line unused-return
             (, uint256 val) = _suckersOf[projectId].tryGet(allSuckers[i]);
-            if (val == _SUCKER_EXISTS) {
+            // H-19: Include both active and deprecated suckers in aggregate economic views.
+            if (val == _SUCKER_EXISTS || val == _SUCKER_DEPRECATED) {
                 // slither-disable-next-line calls-loop
                 try IJBSucker(allSuckers[i]).peerChainSurplusOf(decimals, currency) returns (
                     JBDenominatedAmount memory amt
                 ) {
-                    surplus += amt.value;
+                    // slither-disable-next-line calls-loop
+                    uint256 chainId = IJBSucker(allSuckers[i]).peerChainId();
+                    // Per-chain max: if multiple suckers target the same chain (deprecated + active
+                    // during migration), take the highest value to avoid double-counting.
+                    bool found;
+                    for (uint256 j; j < chainCount;) {
+                        if (chainIds[j] == chainId) {
+                            if (amt.value > maxSurplus[j]) maxSurplus[j] = amt.value;
+                            found = true;
+                            break;
+                        }
+                        unchecked {
+                            ++j;
+                        }
+                    }
+                    if (!found) {
+                        chainIds[chainCount] = chainId;
+                        maxSurplus[chainCount] = amt.value;
+                        unchecked {
+                            ++chainCount;
+                        }
+                    }
                 } catch {}
             }
             unchecked {
                 ++i;
             }
         }
+
+        // Sum the per-chain max values.
+        for (uint256 k; k < chainCount;) {
+            surplus += maxSurplus[k];
+            unchecked {
+                ++k;
+            }
+        }
     }
 
     /// @notice The cumulative total supply across all remote peer chains for a project.
-    /// @dev Sums `peerChainTotalSupply` from each active sucker. Silently skips suckers that revert.
+    /// @dev Includes both active and deprecated suckers to prevent undercounting during migration windows (H-19 fix).
+    /// Uses per-chain deduplication (max per chain, not sum) to prevent double-counting when both a deprecated and
+    /// active sucker exist for the same chain. Silently skips suckers that revert.
     /// @param projectId The ID of the project.
     /// @return totalSupply The combined peer chain total supply.
     function remoteTotalSupplyOf(uint256 projectId) external view override returns (uint256 totalSupply) {
         address[] memory allSuckers = _suckersOf[projectId].keys();
-        for (uint256 i; i < allSuckers.length;) {
+        uint256 len = allSuckers.length;
+
+        // Per-chain dedup arrays. The number of suckers per project is small (typically 1-5),
+        // so a linear scan is cheaper than a mapping.
+        uint256[] memory chainIds = new uint256[](len);
+        uint256[] memory maxSupply = new uint256[](len);
+        uint256 chainCount;
+
+        for (uint256 i; i < len;) {
             // slither-disable-next-line unused-return
             (, uint256 val) = _suckersOf[projectId].tryGet(allSuckers[i]);
-            if (val == _SUCKER_EXISTS) {
+            // H-19: Include both active and deprecated suckers in aggregate economic views.
+            if (val == _SUCKER_EXISTS || val == _SUCKER_DEPRECATED) {
                 // slither-disable-next-line calls-loop
                 try IJBSucker(allSuckers[i]).peerChainTotalSupply() returns (uint256 supply) {
-                    totalSupply += supply;
+                    // slither-disable-next-line calls-loop
+                    uint256 chainId = IJBSucker(allSuckers[i]).peerChainId();
+                    // Per-chain max: if multiple suckers target the same chain (deprecated + active
+                    // during migration), take the highest value to avoid double-counting.
+                    bool found;
+                    for (uint256 j; j < chainCount;) {
+                        if (chainIds[j] == chainId) {
+                            if (supply > maxSupply[j]) maxSupply[j] = supply;
+                            found = true;
+                            break;
+                        }
+                        unchecked {
+                            ++j;
+                        }
+                    }
+                    if (!found) {
+                        chainIds[chainCount] = chainId;
+                        maxSupply[chainCount] = supply;
+                        unchecked {
+                            ++chainCount;
+                        }
+                    }
                 } catch {}
             }
             unchecked {
                 ++i;
+            }
+        }
+
+        // Sum the per-chain max values.
+        for (uint256 k; k < chainCount;) {
+            totalSupply += maxSupply[k];
+            unchecked {
+                ++k;
             }
         }
     }
