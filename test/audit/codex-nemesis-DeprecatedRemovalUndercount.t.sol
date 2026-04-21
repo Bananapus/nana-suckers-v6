@@ -120,7 +120,7 @@ contract CodexNemesisDeprecatedRemovalUndercountTest is Test {
         registry.deploySuckersFor(PROJECT_ID, bytes32("nemesis-deprecated"), configs);
     }
 
-    /// @dev H-19 fix: deprecated suckers are now included in aggregate views. This test verifies
+    /// @dev Deprecated suckers are now included in aggregate views. This test verifies
     /// that `removeDeprecatedSucker` does NOT hide supply from `remoteTotalSupplyOf`.
     function test_removeDeprecatedSuckerPreservesRemoteSupplyInRegistryViews() external {
         sucker.test_setPeerChainTotalSupply(1000e18);
@@ -133,7 +133,7 @@ contract CodexNemesisDeprecatedRemovalUndercountTest is Test {
 
         // After the fix, the deprecated sucker's supply is still visible.
         uint256 supplyAfterRemoval = registry.remoteTotalSupplyOf(PROJECT_ID);
-        assertEq(supplyAfterRemoval, 1000e18, "deprecated sucker supply remains visible after removal (H-19 fix)");
+        assertEq(supplyAfterRemoval, 1000e18, "deprecated sucker supply remains visible after removal");
 
         uint256 localSupply = 100e18;
         assertEq(localSupply + supplyAfterRemoval, 1100e18, "cross-chain consumer sees full supply even after removal");

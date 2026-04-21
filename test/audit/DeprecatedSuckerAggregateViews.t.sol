@@ -21,7 +21,7 @@ import {JBTokenMapping} from "../../src/structs/JBTokenMapping.sol";
 import {JBSuckerDeployerConfig} from "../../src/structs/JBSuckerDeployerConfig.sol";
 
 /// @notice A mock sucker whose peer chain ID, total supply, balance, and surplus can be set for testing.
-contract H19MockSucker is JBSucker {
+contract DeprecatedViewMockSucker is JBSucker {
     uint256 internal _peerChain;
 
     constructor(
@@ -66,7 +66,7 @@ contract H19MockSucker is JBSucker {
 }
 
 /// @notice A deployer that returns a pre-created sucker. Allows deploying multiple distinct suckers.
-contract H19MockDeployer is IJBSuckerDeployer {
+contract DeprecatedViewMockDeployer is IJBSuckerDeployer {
     IJBSucker[] internal _suckers;
     uint256 internal _index;
 
@@ -100,10 +100,10 @@ contract H19MockDeployer is IJBSuckerDeployer {
     }
 }
 
-/// @title H19_DeprecatedSuckerAggregateViewsTest
-/// @notice Tests for H-19: remoteTotalSupplyOf includes deprecated suckers and uses per-chain
+/// @title DeprecatedSuckerAggregateViewsTest
+/// @notice Tests that remoteTotalSupplyOf includes deprecated suckers and uses per-chain
 /// deduplication to prevent double-counting during migration windows.
-contract H19_DeprecatedSuckerAggregateViewsTest is Test {
+contract DeprecatedSuckerAggregateViewsTest is Test {
     address internal constant DIRECTORY = address(0xD1);
     address internal constant PERMISSIONS = address(0xD2);
     address internal constant PROJECTS = address(0xD3);
@@ -111,9 +111,9 @@ contract H19_DeprecatedSuckerAggregateViewsTest is Test {
     uint256 internal constant PROJECT_ID = 1;
 
     JBSuckerRegistry internal registry;
-    H19MockSucker internal suckerA;
-    H19MockSucker internal suckerB;
-    H19MockDeployer internal deployer;
+    DeprecatedViewMockSucker internal suckerA;
+    DeprecatedViewMockSucker internal suckerB;
+    DeprecatedViewMockDeployer internal deployer;
 
     function setUp() public {
         vm.warp(100 days);
@@ -124,22 +124,24 @@ contract H19_DeprecatedSuckerAggregateViewsTest is Test {
         registry = new JBSuckerRegistry(IJBDirectory(DIRECTORY), IJBPermissions(PERMISSIONS), address(this), address(0));
 
         // Create singleton.
-        H19MockSucker singleton =
-            new H19MockSucker(IJBDirectory(DIRECTORY), IJBPermissions(PERMISSIONS), IJBTokens(TOKENS));
+        DeprecatedViewMockSucker singleton =
+            new DeprecatedViewMockSucker(IJBDirectory(DIRECTORY), IJBPermissions(PERMISSIONS), IJBTokens(TOKENS));
 
         // Clone two suckers targeting different chains.
-        suckerA =
-            H19MockSucker(payable(address(LibClone.cloneDeterministic(address(singleton), bytes32("h19-sucker-a")))));
+        suckerA = DeprecatedViewMockSucker(
+            payable(address(LibClone.cloneDeterministic(address(singleton), bytes32("dedup-sucker-a"))))
+        );
         suckerA.initialize(PROJECT_ID);
         suckerA.test_setPeerChain(10); // Optimism
 
-        suckerB =
-            H19MockSucker(payable(address(LibClone.cloneDeterministic(address(singleton), bytes32("h19-sucker-b")))));
+        suckerB = DeprecatedViewMockSucker(
+            payable(address(LibClone.cloneDeterministic(address(singleton), bytes32("dedup-sucker-b"))))
+        );
         suckerB.initialize(PROJECT_ID);
         suckerB.test_setPeerChain(42_161); // Arbitrum
 
         // Register both via deployer.
-        deployer = new H19MockDeployer();
+        deployer = new DeprecatedViewMockDeployer();
         deployer.addSucker(IJBSucker(address(suckerA)));
         deployer.addSucker(IJBSucker(address(suckerB)));
         registry.allowSuckerDeployer(address(deployer));
@@ -147,11 +149,11 @@ contract H19_DeprecatedSuckerAggregateViewsTest is Test {
         JBSuckerDeployerConfig[] memory configs = new JBSuckerDeployerConfig[](2);
         configs[0] = JBSuckerDeployerConfig({deployer: deployer, mappings: new JBTokenMapping[](0)});
         configs[1] = JBSuckerDeployerConfig({deployer: deployer, mappings: new JBTokenMapping[](0)});
-        registry.deploySuckersFor({projectId: PROJECT_ID, salt: bytes32("h19"), configurations: configs});
+        registry.deploySuckersFor({projectId: PROJECT_ID, salt: bytes32("dedup"), configurations: configs});
     }
 
     /// @notice After removing a deprecated sucker, its supply must still be included in
-    /// remoteTotalSupplyOf (H-19 fix).
+    /// remoteTotalSupplyOf to prevent undercounting during migration windows.
     function test_deprecatedSuckerSupplyIncludedInRemoteTotalSupply() external {
         suckerA.test_setPeerChainTotalSupply(500e18);
         suckerB.test_setPeerChainTotalSupply(300e18);
@@ -166,7 +168,7 @@ contract H19_DeprecatedSuckerAggregateViewsTest is Test {
 
         // After removal: deprecated sucker A must still be counted.
         uint256 supplyAfter = registry.remoteTotalSupplyOf(PROJECT_ID);
-        assertEq(supplyAfter, 800e18, "deprecated sucker supply must still be included (H-19 fix)");
+        assertEq(supplyAfter, 800e18, "deprecated sucker supply must still be included in aggregate views");
     }
 
     /// @notice When both a deprecated and an active sucker target the same chain, the registry

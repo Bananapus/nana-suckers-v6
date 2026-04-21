@@ -191,7 +191,7 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
     }
 
     /// @notice The cumulative balance across all remote peer chains for a project, denominated in a given currency.
-    /// @dev Includes both active and deprecated suckers to prevent undercounting during migration windows (H-19 fix).
+    /// @dev Includes both active and deprecated suckers to prevent undercounting during migration windows.
     /// Uses per-chain deduplication (max per chain, not sum) to prevent double-counting when both a deprecated and
     /// active sucker exist for the same chain. Silently skips suckers that revert.
     /// @param projectId The ID of the project.
@@ -220,7 +220,7 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
         for (uint256 i; i < len;) {
             // slither-disable-next-line unused-return
             (, uint256 val) = _suckersOf[projectId].tryGet(allSuckers[i]);
-            // H-19: Include both active and deprecated suckers in aggregate economic views.
+            // Include both active and deprecated suckers in aggregate economic views.
             if (val == _SUCKER_EXISTS || val == _SUCKER_DEPRECATED) {
                 // slither-disable-next-line calls-loop
                 try IJBSucker(allSuckers[i]).peerChainBalanceOf(decimals, currency) returns (
@@ -265,7 +265,7 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
     }
 
     /// @notice The cumulative surplus across all remote peer chains for a project, denominated in a given currency.
-    /// @dev Includes both active and deprecated suckers to prevent undercounting during migration windows (H-19 fix).
+    /// @dev Includes both active and deprecated suckers to prevent undercounting during migration windows.
     /// Uses per-chain deduplication (max per chain, not sum) to prevent double-counting when both a deprecated and
     /// active sucker exist for the same chain. Silently skips suckers that revert.
     /// @param projectId The ID of the project.
@@ -294,7 +294,7 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
         for (uint256 i; i < len;) {
             // slither-disable-next-line unused-return
             (, uint256 val) = _suckersOf[projectId].tryGet(allSuckers[i]);
-            // H-19: Include both active and deprecated suckers in aggregate economic views.
+            // Include both active and deprecated suckers in aggregate economic views.
             if (val == _SUCKER_EXISTS || val == _SUCKER_DEPRECATED) {
                 // slither-disable-next-line calls-loop
                 try IJBSucker(allSuckers[i]).peerChainSurplusOf(decimals, currency) returns (
@@ -339,7 +339,7 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
     }
 
     /// @notice The cumulative total supply across all remote peer chains for a project.
-    /// @dev Includes both active and deprecated suckers to prevent undercounting during migration windows (H-19 fix).
+    /// @dev Includes both active and deprecated suckers to prevent undercounting during migration windows.
     /// Uses per-chain deduplication (max per chain, not sum) to prevent double-counting when both a deprecated and
     /// active sucker exist for the same chain. Silently skips suckers that revert.
     /// @param projectId The ID of the project.
@@ -357,7 +357,7 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
         for (uint256 i; i < len;) {
             // slither-disable-next-line unused-return
             (, uint256 val) = _suckersOf[projectId].tryGet(allSuckers[i]);
-            // H-19: Include both active and deprecated suckers in aggregate economic views.
+            // Include both active and deprecated suckers in aggregate economic views.
             if (val == _SUCKER_EXISTS || val == _SUCKER_DEPRECATED) {
                 // slither-disable-next-line calls-loop
                 try IJBSucker(allSuckers[i]).peerChainTotalSupply() returns (uint256 supply) {

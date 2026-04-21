@@ -313,8 +313,8 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
                 }
             }
 
-            // H-18 fix: When a swap succeeds but returns zero local tokens, the batch must NOT
-            // be marked claimable. Without this guard, `_addToBalance` would see
+            // Zero-output swap guard: When a swap succeeds but returns zero local tokens, the
+            // batch must NOT be marked claimable. Without this guard, `_addToBalance` would see
             // `pendingSwapOf.bridgeAmount == 0` (no pending swap stored) and allow claims to
             // proceed — minting the full bridged project-token amount while adding zero terminal
             // backing, breaking cross-chain solvency.

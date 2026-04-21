@@ -17,8 +17,8 @@ import {JBMessageRoot} from "../../src/structs/JBMessageRoot.sol";
 import {JBRemoteToken} from "../../src/structs/JBRemoteToken.sol";
 import {ERC20Mock} from "../mocks/ERC20Mock.sol";
 
-/// @notice Harness that exposes internal conversion rate state for H-18 testing.
-contract H18SwapHarness is JBSwapCCIPSucker {
+/// @notice Harness that exposes internal conversion rate state for zero-output swap testing.
+contract ZeroOutputSwapHarness is JBSwapCCIPSucker {
     constructor(
         JBSwapCCIPSuckerDeployer deployer,
         IJBDirectory directory,
@@ -42,10 +42,10 @@ contract H18SwapHarness is JBSwapCCIPSucker {
     }
 }
 
-/// @title H18_ZeroOutputSwapPendingTest
-/// @notice Tests for H-18: Zero-output CCIP swap batches must route to pendingSwapOf, not
-/// be marked claimable with a zero-backed conversion rate.
-contract H18_ZeroOutputSwapPendingTest is Test {
+/// @title ZeroOutputSwapPendingTest
+/// @notice Tests that zero-output CCIP swap batches are routed to pendingSwapOf, not
+/// marked claimable with a zero-backed conversion rate.
+contract ZeroOutputSwapPendingTest is Test {
     address internal constant MOCK_DEPLOYER = address(0xDE);
     address internal constant MOCK_DIRECTORY = address(0xD1);
     address internal constant MOCK_TOKENS = address(0xD2);
@@ -59,7 +59,7 @@ contract H18_ZeroOutputSwapPendingTest is Test {
     ERC20Mock internal usdc;
     ERC20Mock internal weth;
     ERC20Mock internal localToken;
-    H18SwapHarness internal sucker;
+    ZeroOutputSwapHarness internal sucker;
 
     function setUp() public {
         usdc = new ERC20Mock("USDC", "USDC", address(this), 0);
@@ -84,14 +84,16 @@ contract H18_ZeroOutputSwapPendingTest is Test {
         vm.mockCall(MOCK_DIRECTORY, abi.encodeWithSignature("PROJECTS()"), abi.encode(MOCK_PROJECTS));
         vm.mockCall(MOCK_PROJECTS, abi.encodeWithSignature("ownerOf(uint256)"), abi.encode(address(this)));
 
-        H18SwapHarness singleton = new H18SwapHarness(
+        ZeroOutputSwapHarness singleton = new ZeroOutputSwapHarness(
             JBSwapCCIPSuckerDeployer(MOCK_DEPLOYER),
             IJBDirectory(MOCK_DIRECTORY),
             IJBTokens(MOCK_TOKENS),
             IJBPermissions(MOCK_PERMISSIONS)
         );
 
-        sucker = H18SwapHarness(payable(LibClone.cloneDeterministic(address(singleton), bytes32("h18-test"))));
+        sucker = ZeroOutputSwapHarness(
+            payable(LibClone.cloneDeterministic(address(singleton), bytes32("zero-output-test")))
+        );
         sucker.initialize(PROJECT_ID);
     }
 
