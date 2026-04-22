@@ -119,7 +119,7 @@ library JBCCIPLib {
             // The caller must approve LINK to the sucker before calling toRemote.
             if (feeTokenPayer != address(0)) {
                 // slither-disable-next-line arbitrary-send-erc20
-                IERC20(feeToken).safeTransferFrom(feeTokenPayer, address(this), fees);
+                IERC20(feeToken).safeTransferFrom({from: feeTokenPayer, to: address(this), value: fees});
             }
 
             // Approve the router to spend LINK (fee + any bridged LINK amount).

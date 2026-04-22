@@ -422,7 +422,7 @@ abstract contract CCIPSuckerClaimForkTestBase is TestBaseWorkflow {
             uint256 linkForFees = 100 ether;
             deal(linkToken, rootSender, linkForFees);
             vm.prank(rootSender);
-            IERC20(linkToken).approve(address(suckerL1), linkForFees);
+            IERC20(linkToken).approve({spender: address(suckerL1), value: linkForFees});
             vm.prank(rootSender);
             suckerL1.toRemote(token);
         }

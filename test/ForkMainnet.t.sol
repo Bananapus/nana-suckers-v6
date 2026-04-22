@@ -351,7 +351,7 @@ abstract contract CCIPSuckerMainnetForkTestBase is TestBaseWorkflow {
             deal(linkToken, rootSender, linkForFees);
             uint256 senderLinkBefore = IERC20(linkToken).balanceOf(rootSender);
             vm.prank(rootSender);
-            IERC20(linkToken).approve(address(suckerL1), linkForFees);
+            IERC20(linkToken).approve({spender: address(suckerL1), value: linkForFees});
             vm.prank(rootSender);
             suckerL1.toRemote(token);
 
