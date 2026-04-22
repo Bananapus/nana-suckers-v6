@@ -473,7 +473,7 @@ contract SuckerAttacks is Test {
         // The sucker uses outbox.balance for validation, so large claims should fail
 
         // Set up deprecated state for emergency exit
-        uint256 deprecationTimestamp = block.timestamp + 14 days;
+        uint256 deprecationTimestamp = block.timestamp + 14 days + 1;
         // forge-lint: disable-next-line(unsafe-typecast)
         sucker.setDeprecation(uint40(deprecationTimestamp));
         vm.warp(deprecationTimestamp);

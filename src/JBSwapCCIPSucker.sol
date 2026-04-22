@@ -586,6 +586,7 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
                 peerAddress: _toAddress(peer()),
                 transportPayment: transportPayment,
                 feeToken: feeToken,
+                feeTokenPayer: feeToken != address(0) ? _msgSender() : address(0),
                 gasLimit: MESSENGER_BASE_GAS_LIMIT + remoteToken.minGas,
                 encodedPayload: encodedPayload,
                 tokenAmounts: tokenAmounts,

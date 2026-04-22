@@ -243,7 +243,7 @@ contract SuckerRegressionsTest is Test {
         uint256 projectTokenCount = 5 ether;
 
         // Set up the sucker to be deprecated so emergency exit is allowed.
-        uint256 deprecationTimestamp = block.timestamp + 14 days;
+        uint256 deprecationTimestamp = block.timestamp + 14 days + 1;
         // forge-lint: disable-next-line(unsafe-typecast)
         sucker.setDeprecation(uint40(deprecationTimestamp));
         vm.warp(deprecationTimestamp);

@@ -320,7 +320,7 @@ contract MultiChainEvolutionTest is Test, TestBaseWorkflow, IERC721Receiver {
         //          The Celo sucker continues working.
         // ---------------------------------------------------------------
 
-        uint40 deprecationTime = uint40(block.timestamp + 14 days);
+        uint40 deprecationTime = uint40(block.timestamp + 14 days + 1);
         JBOptimismSucker(payable(address(_opSucker))).setDeprecation(deprecationTime);
         vm.warp(deprecationTime);
 
@@ -561,7 +561,7 @@ contract MultiChainEvolutionTest is Test, TestBaseWorkflow, IERC721Receiver {
         assertEq(registry.suckersOf(projectId).length, 1);
 
         // Deprecate it.
-        uint40 deprecationTime = uint40(block.timestamp + 14 days);
+        uint40 deprecationTime = uint40(block.timestamp + 14 days + 1);
         JBOptimismSucker(payable(oldSucker)).setDeprecation(deprecationTime);
         vm.warp(deprecationTime);
         assertEq(uint8(IJBSucker(oldSucker).state()), uint8(JBSuckerState.DEPRECATED));

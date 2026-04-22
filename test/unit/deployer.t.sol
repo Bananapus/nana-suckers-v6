@@ -577,8 +577,8 @@ contract DeployerTests is Test, TestBaseWorkflow, IERC721Receiver {
         assertTrue(registry.isSuckerOf(projectId, address(sucker)));
 
         // Deprecate and remove it.
-        JBSucker(payable(address(sucker))).setDeprecation(uint40(block.timestamp + 14 days));
-        vm.warp(block.timestamp + 14 days);
+        JBSucker(payable(address(sucker))).setDeprecation(uint40(block.timestamp + 14 days + 1));
+        vm.warp(block.timestamp + 14 days + 1);
         registry.removeDeprecatedSucker(projectId, address(sucker));
 
         // Deploy a replacement to the same peer chain — should succeed.
@@ -701,8 +701,8 @@ contract DeployerTests is Test, TestBaseWorkflow, IERC721Receiver {
         assertEq(registry.remoteTotalSupplyOf(projectId), 100e18);
 
         // Deprecate and remove.
-        JBSucker(payable(address(sucker1))).setDeprecation(uint40(block.timestamp + 14 days));
-        vm.warp(block.timestamp + 14 days);
+        JBSucker(payable(address(sucker1))).setDeprecation(uint40(block.timestamp + 14 days + 1));
+        vm.warp(block.timestamp + 14 days + 1);
         registry.removeDeprecatedSucker(projectId, address(sucker1));
 
         // After deprecation: supply is still visible (deprecated sucker inclusion fix).
