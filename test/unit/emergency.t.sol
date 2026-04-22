@@ -51,7 +51,7 @@ contract SuckerEmergencyTest is Test {
 
         // Set the state of the sucker to be deprecated.
         if (setAsDeprecated) {
-            uint256 deprecationTimestamp = block.timestamp + 14 days;
+            uint256 deprecationTimestamp = block.timestamp + 14 days + 1;
             // forge-lint: disable-next-line(unsafe-typecast)
             sucker.setDeprecation(uint40(deprecationTimestamp));
 
@@ -103,7 +103,7 @@ contract SuckerEmergencyTest is Test {
 
         // Set the state of the sucker to be deprecated.
         if (sendDisabled) {
-            uint256 deprecationTimestamp = block.timestamp + 14 days;
+            uint256 deprecationTimestamp = block.timestamp + 14 days + 1;
             // forge-lint: disable-next-line(unsafe-typecast)
             sucker.setDeprecation(uint40(deprecationTimestamp));
 

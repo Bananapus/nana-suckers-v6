@@ -228,8 +228,9 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
         }
 
         // Determine fee payment mode: native ETH or LINK token.
-        // When transportPayment == 0, we pay in LINK from the sucker's pre-funded balance.
-        // This enables chains with no meaningful native token (e.g. Tempo).
+        // When transportPayment == 0, we pay in LINK pulled from the caller via transferFrom.
+        // This enables chains with no meaningful native token (e.g. Tempo) while keeping
+        // toRemote permissionless — the caller provides LINK inline with their bridge intent.
         address feeToken = transportPayment == 0 ? CCIPHelper.linkOfChain(block.chainid) : address(0);
 
         // Build and send the CCIP message with the root payload.
@@ -240,6 +241,7 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
             peerAddress: _peerAddress(),
             transportPayment: transportPayment,
             feeToken: feeToken,
+            feeTokenPayer: feeToken != address(0) ? _msgSender() : address(0),
             gasLimit: gasLimit,
             encodedPayload: abi.encode(_CCIP_MSG_TYPE_ROOT, abi.encode(sucker_message)),
             tokenAmounts: tokenAmounts,

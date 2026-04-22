@@ -68,13 +68,14 @@ library JBCCIPLib {
     /// @dev Runs via DELEGATECALL. Handles EVM2AnyMessage construction, getFee, ccipSend, and refund.
     /// @dev Supports two fee modes:
     ///   - `transportPayment > 0`: pay CCIP fees in native ETH (existing behavior).
-    ///   - `transportPayment == 0`: pay CCIP fees in LINK from the sucker's pre-funded balance.
+    ///   - `transportPayment == 0`: pay CCIP fees in LINK pulled from the caller via transferFrom.
     ///     This enables chains with no meaningful native token (e.g. Tempo) to use CCIP.
     /// @param ccipRouter The CCIP router.
     /// @param remoteChainSelector The CCIP chain selector for the remote chain.
     /// @param peerAddress The peer sucker address on the remote chain.
     /// @param transportPayment The ETH transport payment available (0 for LINK fee mode).
     /// @param feeToken The fee token address: address(0) for native ETH, LINK address for LINK fee mode.
+    /// @param feeTokenPayer The address to pull LINK fees from via transferFrom (0 to use sucker's own balance).
     /// @param gasLimit The gas limit for the CCIP message.
     /// @param encodedPayload The ABI-encoded payload (e.g., abi.encode(type, data)).
     /// @param tokenAmounts The token amounts to bridge (from prepareTokenAmounts).
@@ -87,6 +88,7 @@ library JBCCIPLib {
         address peerAddress,
         uint256 transportPayment,
         address feeToken,
+        address feeTokenPayer,
         uint256 gasLimit,
         bytes memory encodedPayload,
         Client.EVMTokenAmount[] memory tokenAmounts,
@@ -95,6 +97,10 @@ library JBCCIPLib {
         external
         returns (bool refundFailed, uint256 refundAmount)
     {
+        // Cache to reduce stack pressure.
+        address router = address(ccipRouter);
+        uint64 chainSel = remoteChainSelector;
+
         // Build the CCIP message.
         Client.EVM2AnyMessage memory message = Client.EVM2AnyMessage({
             receiver: abi.encode(peerAddress),
@@ -106,10 +112,16 @@ library JBCCIPLib {
 
         // Get the CCIP fee for sending the message.
         // slither-disable-next-line calls-loop
-        uint256 fees = ccipRouter.getFee({destinationChainSelector: remoteChainSelector, message: message});
+        uint256 fees = ICCIPRouter(router).getFee({destinationChainSelector: chainSel, message: message});
 
         if (feeToken != address(0)) {
-            // LINK fee path: approve the router to spend LINK from the sucker's balance.
+            // LINK fee path: pull the fee from the caller so toRemote stays permissionless.
+            // The caller must approve LINK to the sucker before calling toRemote.
+            if (feeTokenPayer != address(0)) {
+                IERC20(feeToken).safeTransferFrom(feeTokenPayer, address(this), fees);
+            }
+
+            // Approve the router to spend LINK (fee + any bridged LINK amount).
             // When the fee token is also a bridged token (e.g. LINK on Tempo), the approval
             // must cover both the bridged amount and the fee. prepareTokenAmounts() already
             // approved the bridged amount, but forceApprove replaces (not adds), so we must
@@ -121,14 +133,14 @@ library JBCCIPLib {
                     break;
                 }
             }
-            SafeERC20.forceApprove({token: IERC20(feeToken), spender: address(ccipRouter), value: totalApproval});
+            SafeERC20.forceApprove({token: IERC20(feeToken), spender: router, value: totalApproval});
 
             // slither-disable-next-line calls-loop,unused-return
-            ccipRouter.ccipSend({destinationChainSelector: remoteChainSelector, message: message});
+            ICCIPRouter(router).ccipSend({destinationChainSelector: chainSel, message: message});
         } else {
             // Native ETH fee path.
             // slither-disable-next-line calls-loop,unused-return,arbitrary-send-eth
-            ccipRouter.ccipSend{value: fees}({destinationChainSelector: remoteChainSelector, message: message});
+            ICCIPRouter(router).ccipSend{value: fees}({destinationChainSelector: chainSel, message: message});
 
             // Calculate the excess transport payment to refund.
             refundAmount = transportPayment - fees;

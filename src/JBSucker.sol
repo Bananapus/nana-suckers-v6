@@ -84,6 +84,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     error JBSucker_UnexpectedMsgValue(uint256 value);
     error JBSucker_ZeroBeneficiary();
     error JBSucker_ZeroERC20Token();
+    error JBSucker_ZeroProjectTokenCount();
 
     //*********************************************************************//
     // ------------------------- public constants ------------------------ //
@@ -498,6 +499,11 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
             revert JBSucker_ZeroBeneficiary();
         }
 
+        // Reject zero-value prepares to prevent consuming the one-time remap window with valueless leaves.
+        if (projectTokenCount == 0) {
+            revert JBSucker_ZeroProjectTokenCount();
+        }
+
         // Get the project's token.
         IERC20 projectToken = IERC20(address(TOKENS.tokenOf(projectId())));
         if (address(projectToken) == address(0)) {
@@ -561,7 +567,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         uint256 nextEarliestDeprecationTime = block.timestamp + _maxMessagingDelay();
 
         // The deprecation can be entirely disabled *or* it has to be later than the earliest possible time.
-        if (timestamp != 0 && timestamp < nextEarliestDeprecationTime) {
+        if (timestamp != 0 && timestamp <= nextEarliestDeprecationTime) {
             revert JBSucker_DeprecationTimestampTooSoon({
                 givenTime: timestamp, minimumTime: nextEarliestDeprecationTime
             });
@@ -982,6 +988,9 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         // (e.g., the bridge is non-functional), the project owner can call `enableEmergencyHatchFor` to allow
         // local withdrawals via `exitThroughEmergencyHatch`.
         if (map.remoteToken == bytes32(0) && _outboxOf[token].numberOfClaimsSent != _outboxOf[token].tree.count) {
+            // Disable before external call to prevent reentrancy via prepare().
+            // _sendRoot uses the `currentMapping` parameter, not storage, so this is safe.
+            _remoteTokenFor[token].enabled = false;
             _sendRoot({transportPayment: transportPaymentValue, token: token, remoteToken: currentMapping});
         }
 

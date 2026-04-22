@@ -20,6 +20,7 @@ import {JBLayer} from "./enums/JBLayer.sol";
 import {IArbGatewayRouter} from "./interfaces/IArbGatewayRouter.sol";
 import {IArbL1GatewayRouter} from "./interfaces/IArbL1GatewayRouter.sol";
 import {IArbL2GatewayRouter} from "./interfaces/IArbL2GatewayRouter.sol";
+import {IL1ArbitrumGateway} from "./interfaces/IL1ArbitrumGateway.sol";
 import {IJBArbitrumSucker} from "./interfaces/IJBArbitrumSucker.sol";
 import {ARBChains} from "./libraries/ARBChains.sol";
 import {JBMessageRoot} from "./structs/JBMessageRoot.sol";
@@ -256,12 +257,26 @@ contract JBArbitrumSucker is JBSucker, IJBArbitrumSucker {
         // If the token is an ERC-20, bridge it to the peer.
         // If the amount is `0` then we do not need to bridge any ERC20.
         if (token != JBConstants.NATIVE_TOKEN && amount != 0) {
-            // Calculate the cost of the ERC-20 transfer. (96 is the length of the abi encoded `data`)
-            // slither-disable-next-line calls-loop
-            uint256 maxSubmissionCostERC20 =
-                ARBINBOX.calculateRetryableSubmissionFee({dataLength: 96, baseFee: maxFeePerGas});
-
-            uint256 tokenTransportCost = maxSubmissionCostERC20 + (remoteToken.minGas * maxFeePerGas);
+            uint256 tokenTransportCost;
+            uint256 maxSubmissionCostERC20;
+            {
+                // Get the exact calldata length the gateway will create for the retryable ticket.
+                // The Arbitrum Inbox validates maxSubmissionCost against this actual payload, not the user data.
+                // slither-disable-next-line calls-loop
+                address gateway = GATEWAYROUTER.getGateway(token);
+                // slither-disable-next-line calls-loop
+                uint256 outboundCalldataLength =
+                    IL1ArbitrumGateway(gateway)
+                .getOutboundCalldata({
+                    _token: token, _from: address(this), _to: _peerAddress(), _amount: amount, _data: bytes("")
+                })
+                .length;
+                // slither-disable-next-line calls-loop
+                maxSubmissionCostERC20 = ARBINBOX.calculateRetryableSubmissionFee({
+                    dataLength: outboundCalldataLength, baseFee: maxFeePerGas
+                });
+                tokenTransportCost = maxSubmissionCostERC20 + (remoteToken.minGas * maxFeePerGas);
+            }
 
             // Ensure we bridge enough for gas costs on L2 side
             if (transportPayment < callTransportCost + tokenTransportCost) {

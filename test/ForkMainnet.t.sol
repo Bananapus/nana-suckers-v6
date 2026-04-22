@@ -344,21 +344,22 @@ abstract contract CCIPSuckerMainnetForkTestBase is TestBaseWorkflow {
             assertLt(rootSender.balance, ccipFeeAmount, "CCIP fees should have been deducted");
             assertGt(rootSender.balance, 0, "Excess native should be returned");
         } else {
-            // LINK fee path: pre-fund sucker with LINK, call toRemote with msg.value = 0.
+            // LINK fee path: caller provides LINK inline — approve + transferFrom.
             // On Tempo, CALLVALUE always returns 0, so transportPayment = 0, triggering LINK fee mode.
             address linkToken = _linkTokenOf(block.chainid);
             uint256 linkForFees = 100 ether;
-            deal(linkToken, address(suckerL1), IERC20(linkToken).balanceOf(address(suckerL1)) + linkForFees);
-            uint256 suckerLinkBefore = IERC20(linkToken).balanceOf(address(suckerL1));
-
+            deal(linkToken, rootSender, linkForFees);
+            uint256 senderLinkBefore = IERC20(linkToken).balanceOf(rootSender);
+            vm.prank(rootSender);
+            IERC20(linkToken).approve(address(suckerL1), linkForFees);
             vm.prank(rootSender);
             suckerL1.toRemote(token);
 
-            // Verify LINK was consumed for CCIP fees.
+            // Verify LINK was consumed from the caller for CCIP fees.
             assertLt(
-                IERC20(linkToken).balanceOf(address(suckerL1)),
-                suckerLinkBefore,
-                "LINK should have been consumed for CCIP fees"
+                IERC20(linkToken).balanceOf(rootSender),
+                senderLinkBefore,
+                "LINK should have been consumed from caller for CCIP fees"
             );
         }
 

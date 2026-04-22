@@ -417,9 +417,12 @@ abstract contract CCIPSuckerClaimForkTestBase is TestBaseWorkflow {
             vm.prank(rootSender);
             suckerL1.toRemote{value: ccipFeeAmount}(token);
         } else {
-            // LINK fee path: pre-fund sucker with LINK, call toRemote with msg.value = 0.
+            // LINK fee path: caller provides LINK inline — approve + transferFrom.
             address linkToken = _linkTokenOf(block.chainid);
-            deal(linkToken, address(suckerL1), IERC20(linkToken).balanceOf(address(suckerL1)) + 100 ether);
+            uint256 linkForFees = 100 ether;
+            deal(linkToken, rootSender, linkForFees);
+            vm.prank(rootSender);
+            IERC20(linkToken).approve(address(suckerL1), linkForFees);
             vm.prank(rootSender);
             suckerL1.toRemote(token);
         }
