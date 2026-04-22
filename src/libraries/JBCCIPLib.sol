@@ -118,6 +118,7 @@ library JBCCIPLib {
             // LINK fee path: pull the fee from the caller so toRemote stays permissionless.
             // The caller must approve LINK to the sucker before calling toRemote.
             if (feeTokenPayer != address(0)) {
+                // slither-disable-next-line arbitrary-send-erc20
                 IERC20(feeToken).safeTransferFrom(feeTokenPayer, address(this), fees);
             }
 
