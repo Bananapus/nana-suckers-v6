@@ -147,3 +147,7 @@ When the only available Uniswap pool for a cross-denomination swap is a hookless
 ### 10.7 `mapTokens` refunds ETH on enable-only batches
 
 `mapTokens()` only uses `msg.value` when one or more mappings are being disabled and need transport payment for the final root flush. If every mapping in the batch is enable-only (`numberToDisable == 0`), the full `msg.value` is refunded to `_msgSender()`. If the refund transfer fails (e.g., the caller is a non-payable contract), the call reverts with `JBSucker_RefundFailed`. When disables are present, any dust remainder from integer division (`msg.value % numberToDisable`) is also refunded on a best-effort basis.
+
+### 10.9 Zero-value `prepare()` is allowed
+
+`prepare()` does not reject `projectTokenCount == 0`. A zero-value check would be trivially bypassed by passing `1` instead, so it provides no real protection against remap-window consumption. The cost to create a leaf with `projectTokenCount = 1` is negligible (1 wei of project tokens). The one-time remap window is protected by the token mapping's `enabled` flag and the outbox tree count, not by minimum deposit requirements.

@@ -84,7 +84,6 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     error JBSucker_UnexpectedMsgValue(uint256 value);
     error JBSucker_ZeroBeneficiary();
     error JBSucker_ZeroERC20Token();
-    error JBSucker_ZeroProjectTokenCount();
 
     //*********************************************************************//
     // ------------------------- public constants ------------------------ //
@@ -497,11 +496,6 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         // Make sure the beneficiary is not the zero address, as this would revert when minting on the remote chain.
         if (beneficiary == bytes32(0)) {
             revert JBSucker_ZeroBeneficiary();
-        }
-
-        // Reject zero-value prepares to prevent consuming the one-time remap window with valueless leaves.
-        if (projectTokenCount == 0) {
-            revert JBSucker_ZeroProjectTokenCount();
         }
 
         // Get the project's token.

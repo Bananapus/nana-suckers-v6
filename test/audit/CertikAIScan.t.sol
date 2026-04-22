@@ -17,7 +17,6 @@ import {IJBSuckerRegistry} from "../../src/interfaces/IJBSuckerRegistry.sol";
 ///   Fix 2: CCIP LINK-fee caller-provided (placeholder — requires CCIP router setup)
 ///   Fix 3: setDeprecation boundary check (< changed to <=)
 ///   Fix 4: Reentrancy-safe token disable in _mapToken (enabled = false before _sendRoot)
-///   Fix 5: Zero-value prepare prevention (revert on projectTokenCount == 0)
 contract CertikAIScanTest is Test {
     address constant DIRECTORY = address(600);
     address constant PERMISSIONS = address(800);
@@ -205,48 +204,6 @@ contract CertikAIScanTest is Test {
         assertFalse(result.enabled, "Token should be disabled after mapToken(remoteToken=0)");
         // The addr should be preserved (not zeroed) so re-enabling maps to the same remote token.
         assertEq(result.addr, remoteA, "Remote address should be preserved after disable");
-    }
-
-    // -----------------------------------------------------------------------
-    //  Fix 5: Zero-value prepare prevention
-    // -----------------------------------------------------------------------
-
-    /// @notice Fix 5: prepare() now reverts with JBSucker_ZeroProjectTokenCount when
-    ///         projectTokenCount == 0. This prevents consuming the one-time remap window
-    ///         with valueless leaves.
-    function test_prepare_revertsOnZeroProjectTokenCount() external {
-        CertikTestSucker sucker = _createTestSucker(PROJECT_ID, "fix5-zero");
-
-        // prepare(0, ...) should revert immediately, before any other checks.
-        // We don't need to mock token/mapping setup because the revert happens first.
-        vm.expectRevert(abi.encodeWithSelector(JBSucker.JBSucker_ZeroProjectTokenCount.selector));
-        sucker.prepare({
-            projectTokenCount: 0,
-            beneficiary: bytes32(uint256(uint160(address(this)))),
-            minTokensReclaimed: 0,
-            token: tokenA
-        });
-    }
-
-    /// @notice Fix 5: prepare() should still revert on zero beneficiary before checking
-    ///         projectTokenCount (beneficiary check comes first in the code).
-    function test_prepare_revertsOnZeroBeneficiary() external {
-        CertikTestSucker sucker = _createTestSucker(PROJECT_ID, "fix5-benef");
-
-        vm.expectRevert(abi.encodeWithSelector(JBSucker.JBSucker_ZeroBeneficiary.selector));
-        sucker.prepare({projectTokenCount: 100, beneficiary: bytes32(0), minTokensReclaimed: 0, token: tokenA});
-    }
-
-    /// @notice Fix 5: prepare() with valid projectTokenCount (> 0) and zero beneficiary
-    ///         should revert with ZeroBeneficiary, not ZeroProjectTokenCount.
-    ///         This confirms the ordering of checks is correct.
-    function test_prepare_checkOrderBeneficiaryBeforeTokenCount() external {
-        CertikTestSucker sucker = _createTestSucker(PROJECT_ID, "fix5-order");
-
-        // Both beneficiary == 0 AND projectTokenCount == 0.
-        // The beneficiary check comes first, so we should get ZeroBeneficiary.
-        vm.expectRevert(abi.encodeWithSelector(JBSucker.JBSucker_ZeroBeneficiary.selector));
-        sucker.prepare({projectTokenCount: 0, beneficiary: bytes32(0), minTokensReclaimed: 0, token: tokenA});
     }
 
     // -----------------------------------------------------------------------
