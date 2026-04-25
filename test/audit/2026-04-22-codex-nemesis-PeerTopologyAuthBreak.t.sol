@@ -50,14 +50,8 @@ contract PeerTopologyAuthBreakTest is Test {
             trustedForwarder: address(0)
         });
 
-        deployerA.setChainSpecificConstants({
-            messenger: IOPMessenger(MESSENGER),
-            bridge: IOPStandardBridge(BRIDGE)
-        });
-        deployerB.setChainSpecificConstants({
-            messenger: IOPMessenger(MESSENGER),
-            bridge: IOPStandardBridge(BRIDGE)
-        });
+        deployerA.setChainSpecificConstants({messenger: IOPMessenger(MESSENGER), bridge: IOPStandardBridge(BRIDGE)});
+        deployerB.setChainSpecificConstants({messenger: IOPMessenger(MESSENGER), bridge: IOPStandardBridge(BRIDGE)});
 
         JBOptimismSucker singletonA = new JBOptimismSucker({
             deployer: deployerA,
@@ -90,7 +84,9 @@ contract PeerTopologyAuthBreakTest is Test {
         IJBSucker suckerB = deployerB.createForSender({localProjectId: 1, salt: salt});
         vm.stopPrank();
 
-        assertTrue(address(suckerA) != address(suckerB), "different deployment topologies should yield different clones");
+        assertTrue(
+            address(suckerA) != address(suckerB), "different deployment topologies should yield different clones"
+        );
         assertEq(JBOptimismSucker(payable(address(suckerA))).peer(), bytes32(uint256(uint160(address(suckerA)))));
         assertEq(JBOptimismSucker(payable(address(suckerB))).peer(), bytes32(uint256(uint160(address(suckerB)))));
 

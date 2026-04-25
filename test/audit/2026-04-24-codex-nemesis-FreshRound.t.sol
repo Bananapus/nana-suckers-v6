@@ -49,7 +49,7 @@ contract CodexNemesisMockTerminal {
 }
 
 contract CodexNemesisMockPoolManager is IPoolManager {
-    uint160 internal constant SQRT_PRICE_X96 = 79228162514264337593543950336;
+    uint160 internal constant SQRT_PRICE_X96 = 79_228_162_514_264_337_593_543_950_336;
 
     function unlock(bytes calldata) external pure override returns (bytes memory) {
         return abi.encode(uint256(0));
@@ -59,7 +59,11 @@ contract CodexNemesisMockPoolManager is IPoolManager {
         return 0;
     }
 
-    function modifyLiquidity(PoolKey memory, ModifyLiquidityParams memory, bytes calldata)
+    function modifyLiquidity(
+        PoolKey memory,
+        ModifyLiquidityParams memory,
+        bytes calldata
+    )
         external
         pure
         override
@@ -68,7 +72,11 @@ contract CodexNemesisMockPoolManager is IPoolManager {
         return (BalanceDelta.wrap(0), BalanceDelta.wrap(0));
     }
 
-    function swap(PoolKey memory, SwapParams memory, bytes calldata)
+    function swap(
+        PoolKey memory,
+        SwapParams memory,
+        bytes calldata
+    )
         external
         pure
         override
@@ -77,7 +85,12 @@ contract CodexNemesisMockPoolManager is IPoolManager {
         return BalanceDelta.wrap(0);
     }
 
-    function donate(PoolKey memory, uint256, uint256, bytes calldata)
+    function donate(
+        PoolKey memory,
+        uint256,
+        uint256,
+        bytes calldata
+    )
         external
         pure
         override
@@ -174,7 +187,11 @@ contract CodexNemesisMockPoolManager is IPoolManager {
         values = new bytes32[](0);
     }
 
-    function getSlot0(PoolId) external pure returns (uint160 sqrtPriceX96, int24 tick, uint24 protocolFee, uint24 lpFee) {
+    function getSlot0(PoolId)
+        external
+        pure
+        returns (uint160 sqrtPriceX96, int24 tick, uint24 protocolFee, uint24 lpFee)
+    {
         return (SQRT_PRICE_X96, 0, 0, 0);
     }
 
@@ -226,17 +243,9 @@ contract CodexNemesisFreshRoundTest is Test {
             abi.encodeWithSelector(IJBDirectory.primaryTerminalOf.selector),
             abi.encode(IJBTerminal(address(terminal)))
         );
-        vm.mockCall(
-            DIRECTORY,
-            abi.encodeCall(IJBDirectory.terminalsOf, (PROJECT_ID)),
-            abi.encode(new IJBTerminal[](0))
-        );
+        vm.mockCall(DIRECTORY, abi.encodeCall(IJBDirectory.terminalsOf, (PROJECT_ID)), abi.encode(new IJBTerminal[](0)));
         vm.mockCall(PERMISSIONS, abi.encodeWithSelector(IJBPermissions.hasPermission.selector), abi.encode(true));
-        vm.mockCall(
-            DIRECTORY,
-            abi.encodeCall(IJBDirectory.controllerOf, (PROJECT_ID)),
-            abi.encode(address(0xCAFE))
-        );
+        vm.mockCall(DIRECTORY, abi.encodeCall(IJBDirectory.controllerOf, (PROJECT_ID)), abi.encode(address(0xCAFE)));
         vm.mockCall(
             address(0xCAFE),
             abi.encodeWithSignature("mintTokensOf(uint256,uint256,address,string,bool)"),
@@ -296,7 +305,8 @@ contract CodexNemesisFreshRoundTest is Test {
         vm.prank(ROUTER);
         sucker.ccipReceive(message);
 
-        (address pendingBridgeToken, uint256 pendingBridgeAmount, uint256 pendingLeafTotal) = sucker.pendingSwapOf(address(localToken), 1);
+        (address pendingBridgeToken, uint256 pendingBridgeAmount, uint256 pendingLeafTotal) =
+            sucker.pendingSwapOf(address(localToken), 1);
         assertEq(pendingBridgeToken, address(bridgeToken));
         assertEq(pendingBridgeAmount, 100);
         assertEq(pendingLeafTotal, 100);

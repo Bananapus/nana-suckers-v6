@@ -120,13 +120,17 @@ contract TransientClaimContextPoC is Test {
         vm.mockCall(MOCK_DEPLOYER, abi.encodeWithSignature("weth()"), abi.encode(address(weth)));
 
         vm.mockCall(MOCK_DIRECTORY, abi.encodeWithSelector(IJBDirectory.PROJECTS.selector), abi.encode(MOCK_PROJECTS));
-        vm.mockCall(MOCK_DIRECTORY, abi.encodeWithSelector(IJBDirectory.primaryTerminalOf.selector), abi.encode(address(terminal)));
-        vm.mockCall(MOCK_DIRECTORY, abi.encodeWithSelector(IJBDirectory.controllerOf.selector), abi.encode(MOCK_CONTROLLER));
+        vm.mockCall(
+            MOCK_DIRECTORY,
+            abi.encodeWithSelector(IJBDirectory.primaryTerminalOf.selector),
+            abi.encode(address(terminal))
+        );
+        vm.mockCall(
+            MOCK_DIRECTORY, abi.encodeWithSelector(IJBDirectory.controllerOf.selector), abi.encode(MOCK_CONTROLLER)
+        );
         vm.mockCall(MOCK_PROJECTS, abi.encodeWithSignature("ownerOf(uint256)"), abi.encode(address(this)));
         vm.mockCall(
-            MOCK_CONTROLLER,
-            abi.encodeWithSelector(IJBController.mintTokensOf.selector),
-            abi.encode(uint256(0))
+            MOCK_CONTROLLER, abi.encodeWithSelector(IJBController.mintTokensOf.selector), abi.encode(uint256(0))
         );
 
         TransientContextSwapHarness singleton = new TransientContextSwapHarness(
@@ -143,20 +147,12 @@ contract TransientClaimContextPoC is Test {
         address localToken = address(token);
 
         sucker.test_setConversionRate({
-            token: localToken,
-            nonce: 1,
-            leafTotal: 100,
-            localTotal: 200,
-            batchStart: 0,
-            batchEnd: 1
+            token: localToken, nonce: 1, leafTotal: 100, localTotal: 200, batchStart: 0, batchEnd: 1
         });
         sucker.test_setRemoteToken({
             token: localToken,
             remoteToken: JBRemoteToken({
-                enabled: false,
-                emergencyHatch: true,
-                minGas: 200_000,
-                addr: bytes32(uint256(uint160(address(token))))
+                enabled: false, emergencyHatch: true, minGas: 200_000, addr: bytes32(uint256(uint160(address(token))))
             })
         });
         sucker.test_setOutboxBalance(localToken, 100);
@@ -165,13 +161,89 @@ contract TransientClaimContextPoC is Test {
 
         JBClaim memory inbound = JBClaim({
             token: localToken,
-            leaf: JBLeaf({index: 0, beneficiary: bytes32(uint256(uint160(address(this)))), projectTokenCount: 1, terminalTokenAmount: 10}),
-            proof: [bytes32(0), bytes32(0), bytes32(0), bytes32(0), bytes32(0), bytes32(0), bytes32(0), bytes32(0), bytes32(0), bytes32(0), bytes32(0), bytes32(0), bytes32(0), bytes32(0), bytes32(0), bytes32(0), bytes32(0), bytes32(0), bytes32(0), bytes32(0), bytes32(0), bytes32(0), bytes32(0), bytes32(0), bytes32(0), bytes32(0), bytes32(0), bytes32(0), bytes32(0), bytes32(0), bytes32(0), bytes32(0)]
+            leaf: JBLeaf({
+                index: 0,
+                beneficiary: bytes32(uint256(uint160(address(this)))),
+                projectTokenCount: 1,
+                terminalTokenAmount: 10
+            }),
+            proof: [
+                bytes32(0),
+                bytes32(0),
+                bytes32(0),
+                bytes32(0),
+                bytes32(0),
+                bytes32(0),
+                bytes32(0),
+                bytes32(0),
+                bytes32(0),
+                bytes32(0),
+                bytes32(0),
+                bytes32(0),
+                bytes32(0),
+                bytes32(0),
+                bytes32(0),
+                bytes32(0),
+                bytes32(0),
+                bytes32(0),
+                bytes32(0),
+                bytes32(0),
+                bytes32(0),
+                bytes32(0),
+                bytes32(0),
+                bytes32(0),
+                bytes32(0),
+                bytes32(0),
+                bytes32(0),
+                bytes32(0),
+                bytes32(0),
+                bytes32(0),
+                bytes32(0),
+                bytes32(0)
+            ]
         });
         JBClaim memory emergency = JBClaim({
             token: localToken,
-            leaf: JBLeaf({index: 1, beneficiary: bytes32(uint256(uint160(address(this)))), projectTokenCount: 1, terminalTokenAmount: 100}),
-            proof: [bytes32(0), bytes32(0), bytes32(0), bytes32(0), bytes32(0), bytes32(0), bytes32(0), bytes32(0), bytes32(0), bytes32(0), bytes32(0), bytes32(0), bytes32(0), bytes32(0), bytes32(0), bytes32(0), bytes32(0), bytes32(0), bytes32(0), bytes32(0), bytes32(0), bytes32(0), bytes32(0), bytes32(0), bytes32(0), bytes32(0), bytes32(0), bytes32(0), bytes32(0), bytes32(0), bytes32(0), bytes32(0)]
+            leaf: JBLeaf({
+                index: 1,
+                beneficiary: bytes32(uint256(uint160(address(this)))),
+                projectTokenCount: 1,
+                terminalTokenAmount: 100
+            }),
+            proof: [
+                bytes32(0),
+                bytes32(0),
+                bytes32(0),
+                bytes32(0),
+                bytes32(0),
+                bytes32(0),
+                bytes32(0),
+                bytes32(0),
+                bytes32(0),
+                bytes32(0),
+                bytes32(0),
+                bytes32(0),
+                bytes32(0),
+                bytes32(0),
+                bytes32(0),
+                bytes32(0),
+                bytes32(0),
+                bytes32(0),
+                bytes32(0),
+                bytes32(0),
+                bytes32(0),
+                bytes32(0),
+                bytes32(0),
+                bytes32(0),
+                bytes32(0),
+                bytes32(0),
+                bytes32(0),
+                bytes32(0),
+                bytes32(0),
+                bytes32(0),
+                bytes32(0),
+                bytes32(0)
+            ]
         });
 
         sucker.claim(inbound);

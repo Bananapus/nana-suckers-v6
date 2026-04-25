@@ -134,55 +134,26 @@ contract ZeroOutputRetryClaimTest is Test {
         bytes32[32] memory proof = sucker.testProofForSingleLeaf();
         bytes32 beneficiary = bytes32(uint256(uint160(BENEFICIARY)));
         bytes32 root = sucker.testRootForLeaf({
-            projectTokenCount: 10e18,
-            terminalTokenAmount: 100e6,
-            beneficiary: beneficiary,
-            index: 0,
-            proof: proof
+            projectTokenCount: 10e18, terminalTokenAmount: 100e6, beneficiary: beneficiary, index: 0, proof: proof
         });
 
         sucker.testSetInbox({token: LOCAL_TOKEN, root: root, nonce: 1});
         sucker.testSetBatchAndRate({
-            token: LOCAL_TOKEN,
-            nonce: 1,
-            leafTotal: 100e6,
-            localTotal: 0,
-            batchStart: 0,
-            batchEnd: 1
+            token: LOCAL_TOKEN, nonce: 1, leafTotal: 100e6, localTotal: 0, batchStart: 0, batchEnd: 1
         });
 
         vm.expectCall(
-            CONTROLLER,
-            abi.encodeWithSelector(
-                IJBController.mintTokensOf.selector,
-                1,
-                10e18,
-                BENEFICIARY,
-                "",
-                false
-            )
+            CONTROLLER, abi.encodeWithSelector(IJBController.mintTokensOf.selector, 1, 10e18, BENEFICIARY, "", false)
         );
         vm.expectCall(
-            TERMINAL,
-            abi.encodeWithSelector(
-                IJBTerminal.addToBalanceOf.selector,
-                1,
-                LOCAL_TOKEN,
-                0,
-                false,
-                "",
-                ""
-            )
+            TERMINAL, abi.encodeWithSelector(IJBTerminal.addToBalanceOf.selector, 1, LOCAL_TOKEN, 0, false, "", "")
         );
 
         sucker.claim(
             JBClaim({
                 token: LOCAL_TOKEN,
                 leaf: JBLeaf({
-                    index: 0,
-                    beneficiary: beneficiary,
-                    projectTokenCount: 10e18,
-                    terminalTokenAmount: 100e6
+                    index: 0, beneficiary: beneficiary, projectTokenCount: 10e18, terminalTokenAmount: 100e6
                 }),
                 proof: proof
             })

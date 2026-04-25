@@ -14,7 +14,10 @@ import {JBSuckerRegistry} from "../../src/JBSuckerRegistry.sol";
 contract RegistryHarness is JBSuckerRegistry {
     using EnumerableMap for EnumerableMap.AddressToUintMap;
 
-    constructor(address directory, address permissions)
+    constructor(
+        address directory,
+        address permissions
+    )
         JBSuckerRegistry(IJBDirectory(directory), IJBPermissions(permissions), address(this), address(0))
     {}
 
@@ -65,7 +68,7 @@ contract RegistryStaleMaxAggregationTest is Test {
     }
 
     function test_sameChainMaxAggregationPrefersStaleDeprecatedValues() public {
-        MockAggregateSucker deprecatedSucker = new MockAggregateSucker(CHAIN_ID, 1_000e18, 500e18);
+        MockAggregateSucker deprecatedSucker = new MockAggregateSucker(CHAIN_ID, 1000e18, 500e18);
         MockAggregateSucker activeSucker = new MockAggregateSucker(CHAIN_ID, 100e18, 50e18);
 
         registry.forceSet(PROJECT_ID, address(deprecatedSucker), DEPRECATED);
@@ -73,7 +76,7 @@ contract RegistryStaleMaxAggregationTest is Test {
 
         assertEq(
             registry.remoteTotalSupplyOf(PROJECT_ID),
-            1_000e18,
+            1000e18,
             "deprecated stale supply wins even though active sucker is the live route"
         );
         assertEq(

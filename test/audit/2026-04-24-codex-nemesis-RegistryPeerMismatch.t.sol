@@ -36,7 +36,9 @@ contract RegistryPeerMismatchTest is Test {
 
     function setUp() public {
         vm.mockCall(DIRECTORY, abi.encodeCall(IJBDirectory.PROJECTS, ()), abi.encode(IJBProjects(PROJECTS)));
-        vm.mockCall(PROJECTS, abi.encodeWithSelector(bytes4(keccak256("ownerOf(uint256)")), PROJECT_ID), abi.encode(OWNER));
+        vm.mockCall(
+            PROJECTS, abi.encodeWithSelector(bytes4(keccak256("ownerOf(uint256)")), PROJECT_ID), abi.encode(OWNER)
+        );
     }
 
     function test_registryDeployPathBreaksDefaultPeerSymmetry() public {
@@ -59,40 +61,30 @@ contract RegistryPeerMismatchTest is Test {
         assertEq(IJBSucker(suckerA).peer(), bytes32(uint256(uint160(suckerA))), "default peer is self address");
         assertEq(IJBSucker(suckerB).peer(), bytes32(uint256(uint160(suckerB))), "default peer is self address");
 
-        vm.mockCall(
-            MESSENGER,
-            abi.encodeWithSelector(IOPMessenger.xDomainMessageSender.selector),
-            abi.encode(suckerA)
-        );
+        vm.mockCall(MESSENGER, abi.encodeWithSelector(IOPMessenger.xDomainMessageSender.selector), abi.encode(suckerA));
 
         vm.prank(MESSENGER);
         vm.expectRevert(
-            abi.encodeWithSelector(
-                bytes4(keccak256("JBSucker_NotPeer(bytes32)")), bytes32(uint256(uint160(MESSENGER)))
-            )
+            abi.encodeWithSelector(bytes4(keccak256("JBSucker_NotPeer(bytes32)")), bytes32(uint256(uint160(MESSENGER))))
         );
-        JBOptimismSucker(payable(suckerB)).fromRemote(
-            JBMessageRoot({
-                version: 1,
-                token: bytes32(0),
-                amount: 0,
-                remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(1))}),
-                sourceTotalSupply: 0,
-                sourceCurrency: 0,
-                sourceDecimals: 0,
-                sourceSurplus: 0,
-                sourceBalance: 0,
-                snapshotNonce: 1
-            })
-        );
+        JBOptimismSucker(payable(suckerB))
+            .fromRemote(
+                JBMessageRoot({
+                    version: 1,
+                    token: bytes32(0),
+                    amount: 0,
+                    remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(1))}),
+                    sourceTotalSupply: 0,
+                    sourceCurrency: 0,
+                    sourceDecimals: 0,
+                    sourceSurplus: 0,
+                    sourceBalance: 0,
+                    snapshotNonce: 1
+                })
+            );
     }
 
-    function _deployOptimismDeployer(
-        JBSuckerRegistry registry
-    )
-        internal
-        returns (JBOptimismSuckerDeployer deployer)
-    {
+    function _deployOptimismDeployer(JBSuckerRegistry registry) internal returns (JBOptimismSuckerDeployer deployer) {
         deployer = new JBOptimismSuckerDeployer(
             IJBDirectory(DIRECTORY), IJBPermissions(PERMISSIONS), IJBTokens(TOKENS), OWNER, address(0)
         );
@@ -109,9 +101,7 @@ contract RegistryPeerMismatchTest is Test {
         registry.allowSuckerDeployer(address(deployer));
     }
 
-    function _configFor(
-        JBOptimismSuckerDeployer deployer
-    )
+    function _configFor(JBOptimismSuckerDeployer deployer)
         internal
         pure
         returns (JBSuckerDeployerConfig[] memory configs)
