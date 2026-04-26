@@ -66,6 +66,7 @@ contract ForkArbitrumDeployerTest is TestBaseWorkflow, IERC721Receiver {
 
         // ── L1 (Ethereum mainnet)
         l1Fork = vm.createSelectFork("ethereum");
+        vm.rollFork(block.number - 5);
         super.setUp();
         vm.stopPrank();
 
@@ -97,6 +98,7 @@ contract ForkArbitrumDeployerTest is TestBaseWorkflow, IERC721Receiver {
 
         // ── L2 (Arbitrum mainnet)
         l2Fork = vm.createSelectFork("arbitrum");
+        vm.rollFork(block.number - 5);
         super.setUp();
         vm.stopPrank();
 
@@ -253,6 +255,7 @@ contract ForkArbitrumNativeTransferTest is TestBaseWorkflow {
 
         // ── L1 (Ethereum mainnet)
         l1Fork = vm.createSelectFork("ethereum");
+        vm.rollFork(block.number - 5);
         super.setUp();
         vm.stopPrank();
 
