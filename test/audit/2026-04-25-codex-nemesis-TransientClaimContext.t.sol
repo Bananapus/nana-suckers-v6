@@ -252,6 +252,7 @@ contract TransientClaimContextPoC is Test {
         sucker.exitThroughEmergencyHatch(emergency);
 
         uint256 emergencyDelta = token.balanceOf(address(terminal)) - afterInboundClaim;
-        assertEq(emergencyDelta, 200, "emergency exit inherited stale 2x claim conversion rate");
+        // Fixed: emergency exit no longer inherits the stale conversion rate from the prior claim.
+        assertEq(emergencyDelta, 100, "emergency exit should use raw terminal token amount");
     }
 }

@@ -305,7 +305,7 @@ contract SuckerDeepAttacks is Test {
             sourceDecimals: 0,
             sourceSurplus: 0,
             sourceBalance: 0,
-            snapshotNonce: 1
+            sourceTimestamp: 1
         });
 
         vm.prank(address(sucker)); // peer = address(this) for clones
@@ -330,7 +330,7 @@ contract SuckerDeepAttacks is Test {
             sourceDecimals: 0,
             sourceSurplus: 0,
             sourceBalance: 0,
-            snapshotNonce: 1
+            sourceTimestamp: 1
         });
 
         vm.prank(address(sucker));
@@ -354,7 +354,7 @@ contract SuckerDeepAttacks is Test {
             sourceDecimals: 0,
             sourceSurplus: 0,
             sourceBalance: 0,
-            snapshotNonce: 1
+            sourceTimestamp: 1
         });
 
         vm.prank(address(sucker));
@@ -382,7 +382,7 @@ contract SuckerDeepAttacks is Test {
             sourceDecimals: 0,
             sourceSurplus: 0,
             sourceBalance: 0,
-            snapshotNonce: 1
+            sourceTimestamp: 1
         });
 
         // Roots are accepted in DEPRECATED state to prevent stranding tokens that were sent
@@ -416,7 +416,7 @@ contract SuckerDeepAttacks is Test {
             sourceDecimals: 0,
             sourceSurplus: 0,
             sourceBalance: 0,
-            snapshotNonce: 1
+            sourceTimestamp: 1
         });
 
         vm.prank(address(sucker));
@@ -1514,7 +1514,7 @@ contract SuckerDeepAttacks is Test {
             sourceDecimals: 0,
             sourceSurplus: 0,
             sourceBalance: 0,
-            snapshotNonce: 1
+            sourceTimestamp: 1
         });
 
         vm.expectRevert(
@@ -1536,7 +1536,7 @@ contract SuckerDeepAttacks is Test {
             sourceDecimals: 0,
             sourceSurplus: 0,
             sourceBalance: 0,
-            snapshotNonce: 1
+            sourceTimestamp: 1
         });
 
         vm.expectRevert(
@@ -1558,7 +1558,7 @@ contract SuckerDeepAttacks is Test {
             sourceDecimals: 0,
             sourceSurplus: 0,
             sourceBalance: 0,
-            snapshotNonce: 1
+            sourceTimestamp: 1
         });
 
         vm.prank(address(sucker));
@@ -1587,7 +1587,7 @@ contract SuckerDeepAttacks is Test {
             sourceDecimals: 0,
             sourceSurplus: 0,
             sourceBalance: 0,
-            snapshotNonce: 1
+            sourceTimestamp: 1
         });
 
         vm.expectEmit(true, false, false, true, address(sucker));
@@ -1723,7 +1723,7 @@ contract SuckerDeepAttacks is Test {
             sourceDecimals: 0,
             sourceSurplus: 0,
             sourceBalance: 0,
-            snapshotNonce: 1
+            sourceTimestamp: 1
         });
 
         vm.expectEmit(true, false, false, true, address(sucker));

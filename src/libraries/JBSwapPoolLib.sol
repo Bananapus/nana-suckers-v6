@@ -167,6 +167,12 @@ library JBSwapPoolLib {
                 IWrappedNativeToken(config.weth).withdraw(amountOut);
             }
         }
+
+        // V4 outputs native ETH for WETH-paired pools. If the caller requested WETH (not NATIVE_TOKEN),
+        // wrap the received ETH so the caller gets the token they expect.
+        if (isV4 && tokenOut != JBConstants.NATIVE_TOKEN && normalizedOut == config.weth) {
+            IWrappedNativeToken(config.weth).deposit{value: amountOut}();
+        }
     }
 
     /// @notice Execute the body of a V4 unlock callback. Called via DELEGATECALL from the sucker's

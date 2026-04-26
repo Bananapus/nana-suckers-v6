@@ -341,7 +341,7 @@ contract CCIPNativeInteropTest is Test {
             sourceDecimals: 0,
             sourceSurplus: 0,
             sourceBalance: 0,
-            snapshotNonce: 1
+            sourceTimestamp: 1
         });
 
         Client.EVMTokenAmount[] memory tokenAmounts = new Client.EVMTokenAmount[](1);
@@ -383,7 +383,7 @@ contract CCIPNativeInteropTest is Test {
             sourceDecimals: 0,
             sourceSurplus: 0,
             sourceBalance: 0,
-            snapshotNonce: 1
+            sourceTimestamp: 1
         });
 
         Client.EVMTokenAmount[] memory tokenAmounts = new Client.EVMTokenAmount[](1);
@@ -434,7 +434,7 @@ contract CCIPNativeInteropTest is Test {
             sourceDecimals: 0,
             sourceSurplus: 0,
             sourceBalance: 0,
-            snapshotNonce: 1
+            sourceTimestamp: 1
         });
 
         // Verify MockWETH balance is 0 before.
@@ -495,7 +495,7 @@ contract CCIPNativeInteropTest is Test {
             sourceDecimals: 0,
             sourceSurplus: 0,
             sourceBalance: 0,
-            snapshotNonce: 1
+            sourceTimestamp: 1
         });
 
         Client.Any2EVMMessage memory message = Client.Any2EVMMessage({
@@ -537,7 +537,7 @@ contract CCIPNativeInteropTest is Test {
             sourceDecimals: 0,
             sourceSurplus: 0,
             sourceBalance: 0,
-            snapshotNonce: 1
+            sourceTimestamp: 1
         });
 
         Client.EVMTokenAmount[] memory tokenAmounts = new Client.EVMTokenAmount[](1);
@@ -611,7 +611,7 @@ contract CCIPNativeInteropTest is Test {
             sourceDecimals: 0,
             sourceSurplus: 0,
             sourceBalance: 0,
-            snapshotNonce: 1
+            sourceTimestamp: 1
         });
         ccipSucker.exposed_sendRootOverAMB{value: 0.01 ether}(
             0.01 ether, JBConstants.NATIVE_TOKEN, bridgeAmount, remoteToken, sendMsg
@@ -640,7 +640,7 @@ contract CCIPNativeInteropTest is Test {
             sourceDecimals: 0,
             sourceSurplus: 0,
             sourceBalance: 0,
-            snapshotNonce: 1
+            sourceTimestamp: 1
         });
 
         Client.EVMTokenAmount[] memory tokenAmounts = new Client.EVMTokenAmount[](1);

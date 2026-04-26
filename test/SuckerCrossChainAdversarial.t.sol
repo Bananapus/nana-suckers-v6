@@ -248,7 +248,7 @@ contract SuckerCrossChainAdversarial is Test {
                 sourceDecimals: 0,
                 sourceSurplus: 0,
                 sourceBalance: 0,
-                snapshotNonce: 1
+                sourceTimestamp: 1
             })
         );
         assertEq(sucker.test_getInboxNonce(TOKEN), 1, "Nonce accepted in DEPRECATION_PENDING");
@@ -268,7 +268,7 @@ contract SuckerCrossChainAdversarial is Test {
                 sourceDecimals: 0,
                 sourceSurplus: 0,
                 sourceBalance: 0,
-                snapshotNonce: 2
+                sourceTimestamp: 2
             })
         );
         assertEq(sucker.test_getInboxNonce(TOKEN), 2, "Nonce accepted in SENDING_DISABLED");
@@ -288,7 +288,7 @@ contract SuckerCrossChainAdversarial is Test {
                 sourceDecimals: 0,
                 sourceSurplus: 0,
                 sourceBalance: 0,
-                snapshotNonce: 3
+                sourceTimestamp: 3
             })
         );
         assertEq(sucker.test_getInboxNonce(TOKEN), 3, "Nonce accepted in DEPRECATED");
@@ -329,7 +329,7 @@ contract SuckerCrossChainAdversarial is Test {
                 sourceDecimals: 0,
                 sourceSurplus: 0,
                 sourceBalance: 0,
-                snapshotNonce: 100
+                sourceTimestamp: 100
             })
         );
         assertEq(sucker.test_getInboxNonce(TOKEN), 100);
@@ -347,7 +347,7 @@ contract SuckerCrossChainAdversarial is Test {
                 sourceDecimals: 0,
                 sourceSurplus: 0,
                 sourceBalance: 0,
-                snapshotNonce: 50
+                sourceTimestamp: 50
             })
         );
         // Nonce unchanged — stale message was ignored.
@@ -380,7 +380,7 @@ contract SuckerCrossChainAdversarial is Test {
                 sourceDecimals: 0,
                 sourceSurplus: 0,
                 sourceBalance: 0,
-                snapshotNonce: 5
+                sourceTimestamp: 5
             })
         );
 
@@ -397,7 +397,7 @@ contract SuckerCrossChainAdversarial is Test {
                 sourceDecimals: 0,
                 sourceSurplus: 0,
                 sourceBalance: 0,
-                snapshotNonce: 1
+                sourceTimestamp: 1
             })
         );
 
@@ -432,7 +432,7 @@ contract SuckerCrossChainAdversarial is Test {
                 sourceDecimals: 0,
                 sourceSurplus: 0,
                 sourceBalance: 0,
-                snapshotNonce: 1
+                sourceTimestamp: 1
             })
         );
         // Give the sucker ETH to back the claim.
@@ -520,7 +520,7 @@ contract SuckerCrossChainAdversarial is Test {
                 sourceDecimals: 0,
                 sourceSurplus: 500,
                 sourceBalance: 800,
-                snapshotNonce: 1
+                sourceTimestamp: 1
             })
         );
         assertEq(sucker.peerChainTotalSupply(), 1000, "Supply after nonce 1");
@@ -538,7 +538,7 @@ contract SuckerCrossChainAdversarial is Test {
                 sourceDecimals: 0,
                 sourceSurplus: 300,
                 sourceBalance: 700,
-                snapshotNonce: 2
+                sourceTimestamp: 2
             })
         );
         assertEq(sucker.peerChainTotalSupply(), 2000, "Supply updated to 2000");
@@ -556,17 +556,17 @@ contract SuckerCrossChainAdversarial is Test {
                 sourceDecimals: 0,
                 sourceSurplus: 500,
                 sourceBalance: 800,
-                snapshotNonce: 1
+                sourceTimestamp: 1
             })
         );
         assertEq(sucker.peerChainTotalSupply(), 2000, "Supply NOT reverted by stale message");
     }
 
-    /// @notice Supply snapshot only updates when snapshotNonce is newer.
+    /// @notice Supply snapshot only updates when sourceTimestamp is newer.
     function test_supplySnapshot_skipsStaleSnapshotNonce() public {
         address peer = address(sucker);
 
-        // Nonce 3, snapshotNonce 2: supply = 500.
+        // Nonce 3, sourceTimestamp 2: supply = 500.
         vm.prank(peer);
         sucker.fromRemote(
             JBMessageRoot({
@@ -579,13 +579,13 @@ contract SuckerCrossChainAdversarial is Test {
                 sourceDecimals: 0,
                 sourceSurplus: 200,
                 sourceBalance: 400,
-                snapshotNonce: 2
+                sourceTimestamp: 2
             })
         );
-        assertEq(sucker.peerChainTotalSupply(), 500, "Supply from snapshotNonce 2");
+        assertEq(sucker.peerChainTotalSupply(), 500, "Supply from sourceTimestamp 2");
 
-        // Nonce 5, but snapshotNonce 1 (older snapshot): should the supply update?
-        // This tests whether the contract uses the inbox nonce or the snapshotNonce for supply gating.
+        // Nonce 5, but sourceTimestamp 1 (older snapshot): should the supply update?
+        // This tests whether the contract uses the inbox nonce or the sourceTimestamp for supply gating.
         vm.prank(peer);
         sucker.fromRemote(
             JBMessageRoot({
@@ -598,11 +598,11 @@ contract SuckerCrossChainAdversarial is Test {
                 sourceDecimals: 0,
                 sourceSurplus: 100,
                 sourceBalance: 200,
-                snapshotNonce: 1
+                sourceTimestamp: 1
             })
         );
-        // snapshotNonce 1 < _peerSnapshotNonce (2), so supply should NOT update.
-        assertEq(sucker.peerChainTotalSupply(), 500, "Supply NOT updated with stale snapshotNonce");
+        // sourceTimestamp 1 < snapshotTimestamp (2), so supply should NOT update.
+        assertEq(sucker.peerChainTotalSupply(), 500, "Supply NOT updated with stale sourceTimestamp");
     }
 
     // ======================================================================
@@ -648,7 +648,7 @@ contract SuckerCrossChainAdversarial is Test {
                 sourceDecimals: 0,
                 sourceSurplus: 0,
                 sourceBalance: 0,
-                snapshotNonce: 1
+                sourceTimestamp: 1
             })
         );
     }
@@ -670,7 +670,7 @@ contract SuckerCrossChainAdversarial is Test {
                 sourceDecimals: 0,
                 sourceSurplus: 0,
                 sourceBalance: 0,
-                snapshotNonce: 1
+                sourceTimestamp: 1
             })
         );
     }

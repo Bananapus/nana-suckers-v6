@@ -138,7 +138,7 @@ contract CodexSwapZeroAmountBatchGapTest is Test {
                         sourceDecimals: 18,
                         sourceSurplus: 0,
                         sourceBalance: 0,
-                        snapshotNonce: 1
+                        sourceTimestamp: 1
                     }),
                     uint256(0),
                     uint256(1)
@@ -178,7 +178,7 @@ contract CodexSwapZeroAmountBatchGapTest is Test {
                         sourceDecimals: 18,
                         sourceSurplus: 0,
                         sourceBalance: 0,
-                        snapshotNonce: 2
+                        sourceTimestamp: 2
                     }),
                     uint256(1),
                     uint256(2)

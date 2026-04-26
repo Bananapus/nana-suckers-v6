@@ -87,6 +87,7 @@ contract ForkCeloTest is TestBaseWorkflow {
         // ── L1 (Ethereum)
         // ────────────────────────────────────────────────────────────
         l1Fork = vm.createSelectFork("ethereum");
+        vm.rollFork(block.number - 5);
 
         // Deploy full JB infrastructure on L1.
         super.setUp();
@@ -131,6 +132,7 @@ contract ForkCeloTest is TestBaseWorkflow {
         // ── L2 (Celo)
         // ────────────────────────────────────────────────────────────
         l2Fork = vm.createSelectFork("celo");
+        vm.rollFork(block.number - 5);
 
         // Deploy full JB infrastructure on Celo.
         super.setUp();

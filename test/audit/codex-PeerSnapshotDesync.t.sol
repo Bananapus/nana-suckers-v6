@@ -137,7 +137,7 @@ contract CodexPeerSnapshotDesyncTest is Test {
     function _messageRoot(
         address token,
         uint64 nonce,
-        uint64 snapNonce,
+        uint64 sourceTs,
         uint256 totalSupply,
         uint256 surplus,
         uint256 balance
@@ -156,7 +156,7 @@ contract CodexPeerSnapshotDesyncTest is Test {
             sourceDecimals: ETH_DECIMALS,
             sourceSurplus: surplus,
             sourceBalance: balance,
-            snapshotNonce: snapNonce
+            sourceTimestamp: sourceTs
         });
     }
 }

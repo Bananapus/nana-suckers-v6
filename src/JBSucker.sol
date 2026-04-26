@@ -178,11 +178,10 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     /// @dev The `currency` and `decimals` fields describe the denomination; `value` is the balance amount.
     JBDenominatedAmount private _peerChainBalance;
 
-    /// @notice Outbound project-wide snapshot counter. Incremented each time `_sendRoot` is called.
-    uint64 private _snapshotNonce;
-
-    /// @notice The highest snapshot nonce received from the peer chain. Used to reject stale shared-state updates.
-    uint64 private _peerSnapshotNonce;
+    /// @notice The `block.timestamp` from the source chain when the most recent accepted peer snapshot was taken.
+    /// @dev Only snapshots with a strictly newer source timestamp are accepted, preventing stale rollbacks.
+    /// Returns 0 if no snapshot has been received yet.
+    uint256 public snapshotTimestamp;
 
     //*********************************************************************//
     // ---------------------------- constructor -------------------------- //
@@ -400,12 +399,12 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
             emit StaleRootRejected({token: localToken, receivedNonce: root.remoteRoot.nonce, currentNonce: inbox.nonce});
         }
 
-        // --- Project-wide shared state update (gated by snapshot nonce) ---
-        // The snapshot nonce is a project-wide counter independent of per-token outbox nonces.
+        // --- Project-wide shared state update (gated by source timestamp) ---
+        // Only accept snapshots whose source timestamp is strictly newer than the last accepted one.
         // This prevents a staler per-token message from rolling back shared state (surplus, balance, supply)
         // that was already updated by a fresher message for a different token.
-        if (root.snapshotNonce > _peerSnapshotNonce) {
-            _peerSnapshotNonce = root.snapshotNonce;
+        if (root.sourceTimestamp > snapshotTimestamp) {
+            snapshotTimestamp = root.sourceTimestamp;
 
             // Update unconditionally — a legitimate zero supply must clear phantom cached supply.
             peerChainTotalSupply = root.sourceTotalSupply;
@@ -1489,7 +1488,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
             nonce: nonce,
             root: root,
             messageVersion: MESSAGE_VERSION,
-            snapshotNonce: ++_snapshotNonce
+            sourceTimestamp: block.timestamp
         });
 
         // Send the root over the AMB (positional args — slither IR parser crashes on named args here).

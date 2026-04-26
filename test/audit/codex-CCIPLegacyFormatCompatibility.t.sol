@@ -67,7 +67,7 @@ contract CodexCCIPLegacyFormatCompatibilityTest is Test {
             sourceDecimals: 18,
             sourceSurplus: 1 ether,
             sourceBalance: 1 ether,
-            snapshotNonce: 1
+            sourceTimestamp: 1
         });
 
         Client.Any2EVMMessage memory message = Client.Any2EVMMessage({

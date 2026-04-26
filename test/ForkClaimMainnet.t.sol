@@ -452,7 +452,7 @@ abstract contract CCIPSuckerClaimForkTestBase is TestBaseWorkflow {
             sourceDecimals: 18,
             sourceSurplus: 0,
             sourceBalance: 0,
-            snapshotNonce: 1
+            sourceTimestamp: 1
         });
 
         vm.prank(CCIPHelper.routerOfChain(_l2ChainId()));
@@ -885,7 +885,7 @@ abstract contract CCIPSuckerClaimForkTestBase is TestBaseWorkflow {
             sourceDecimals: 18,
             sourceSurplus: 0,
             sourceBalance: 0,
-            snapshotNonce: 2
+            sourceTimestamp: 2
         });
 
         vm.prank(CCIPHelper.routerOfChain(_l2ChainId()));

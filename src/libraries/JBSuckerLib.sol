@@ -219,7 +219,7 @@ library JBSuckerLib {
     /// @param nonce The outbox nonce for this send.
     /// @param root The merkle root of the outbox tree.
     /// @param messageVersion The message format version.
-    /// @param snapshotNonce The snapshot nonce (caller should pre-increment).
+    /// @param sourceTimestamp The `block.timestamp` on the source chain when the snapshot is taken.
     /// @return message The constructed JBMessageRoot.
     function buildSnapshotMessage(
         IJBDirectory directory,
@@ -229,7 +229,7 @@ library JBSuckerLib {
         uint64 nonce,
         bytes32 root,
         uint8 messageVersion,
-        uint64 snapshotNonce
+        uint256 sourceTimestamp
     )
         external
         view
@@ -268,7 +268,7 @@ library JBSuckerLib {
             sourceDecimals: _ETH_DECIMALS,
             sourceSurplus: ethSurplus,
             sourceBalance: ethBalance,
-            snapshotNonce: snapshotNonce
+            sourceTimestamp: sourceTimestamp
         });
     }
 

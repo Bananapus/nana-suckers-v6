@@ -405,9 +405,12 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
         PendingSwap memory pending = pendingSwapOf[localToken][nonce];
         if (pending.bridgeAmount == 0) revert JBSwapCCIPSucker_NoPendingSwap();
 
-        // slither-disable-next-line reentrancy-no-eth,reentrancy-benign,reentrancy-events
+        // slither-disable-next-line reentrancy-no-eth,reentrancy-benign,reentrancy-events,reentrancy-eth
         uint256 localAmount =
             _executeSwap({tokenIn: pending.bridgeToken, tokenOut: localToken, amount: pending.bridgeAmount});
+
+        // Revert on zero output — matches outbound guard at toRemote.
+        if (localAmount == 0) revert JBSwapCCIPSucker_SwapFailed();
 
         // Update the conversion rate so claims can proceed, then clear the pending swap.
         _conversionRateOf[localToken][nonce] = ConversionRate({leafTotal: pending.leafTotal, localTotal: localAmount});
@@ -430,7 +433,10 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
         if (_retrySwapLocked) revert JBSwapCCIPSucker_SwapPending(0);
         // slither-disable-next-line events-maths
         _currentClaimLeafIndex = claimData.leaf.index + 1;
+        // slither-disable-next-line reentrancy-eth
         super.claim(claimData);
+        // Clear stale transient context to prevent leaking into same-tx emergency exits.
+        _currentClaimLeafIndex = 0;
     }
 
     //*********************************************************************//
@@ -453,14 +459,14 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
         if (_currentClaimLeafIndex != 0) {
             uint64 nonce = _findNonceForLeafIndex({token: token, leafIndex: _currentClaimLeafIndex - 1});
             if (nonce != 0) {
+                // Gate on pending swaps — if a swap failed and hasn't been retried yet,
+                // claims must wait. This check must come BEFORE the leafTotal gate so that
+                // failed swaps (where _conversionRateOf was never written) still block claims.
+                if (pendingSwapOf[token][nonce].bridgeAmount > 0) {
+                    revert JBSwapCCIPSucker_SwapPending(nonce);
+                }
                 ConversionRate storage rate = _conversionRateOf[token][nonce];
                 if (rate.leafTotal > 0) {
-                    // Gate on pending swaps — if a swap failed and hasn't been retried yet,
-                    // claims must wait. Check pendingSwapOf rather than localTotal == 0 to
-                    // distinguish a pending swap from a legitimately zero-output swap.
-                    if (pendingSwapOf[token][nonce].bridgeAmount > 0) {
-                        revert JBSwapCCIPSucker_SwapPending(nonce);
-                    }
                     amount = amount * rate.localTotal / rate.leafTotal;
                 }
             }
