@@ -390,7 +390,7 @@ abstract contract SwapCCIPSuckerForkTestBase is TestBaseWorkflow {
             sourceDecimals: 18,
             sourceSurplus: 0,
             sourceBalance: 0,
-            snapshotNonce: 1
+            sourceTimestamp: 1
         });
 
         Client.EVMTokenAmount[] memory destTokenAmounts = new Client.EVMTokenAmount[](1);

@@ -94,7 +94,7 @@ contract TrustedForwarderSpoofCCIPTest is Test {
             sourceDecimals: 0,
             sourceSurplus: 0,
             sourceBalance: 0,
-            snapshotNonce: 1
+            sourceTimestamp: 1
         });
 
         // Build a crafted CCIP message with attacker-controlled sender and chain selector.

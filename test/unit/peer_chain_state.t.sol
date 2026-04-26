@@ -566,7 +566,7 @@ contract PeerChainStateTest is Test {
             sourceDecimals: decimals,
             sourceSurplus: surplus,
             sourceBalance: balance,
-            snapshotNonce: nonce
+            sourceTimestamp: nonce
         });
     }
 

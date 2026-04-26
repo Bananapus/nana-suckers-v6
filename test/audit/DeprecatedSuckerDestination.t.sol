@@ -152,7 +152,7 @@ contract DeprecatedSuckerDestinationTest is Test {
             sourceDecimals: 0,
             sourceSurplus: 0,
             sourceBalance: 0,
-            snapshotNonce: 1
+            sourceTimestamp: 1
         });
 
         vm.prank(address(destination));

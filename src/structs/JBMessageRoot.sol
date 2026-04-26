@@ -17,9 +17,8 @@ import {JBInboxTreeRoot} from "./JBInboxTreeRoot.sol";
 /// `sourceDecimals` precision.
 /// @custom:member sourceBalance The total recorded balance on the source chain, denominated in `sourceCurrency` at
 /// `sourceDecimals` precision.
-/// @custom:member snapshotNonce A project-wide counter that orders shared-state snapshots independently of per-token
-/// outbox nonces. Used by the receiving chain to reject stale surplus/balance/supply updates without blocking
-/// token-local inbox root updates.
+/// @custom:member sourceTimestamp The `block.timestamp` on the source chain when the snapshot was taken. Used by the
+/// receiving chain to reject stale surplus/balance/supply updates without blocking token-local inbox root updates.
 struct JBMessageRoot {
     uint8 version;
     bytes32 token;
@@ -30,5 +29,5 @@ struct JBMessageRoot {
     uint8 sourceDecimals;
     uint256 sourceSurplus;
     uint256 sourceBalance;
-    uint64 snapshotNonce;
+    uint256 sourceTimestamp;
 }

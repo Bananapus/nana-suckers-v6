@@ -494,7 +494,7 @@ contract TestAuditGaps is Test {
                 sourceDecimals: 0,
                 sourceSurplus: 0,
                 sourceBalance: 0,
-                snapshotNonce: 1
+                sourceTimestamp: 1
             });
 
             vm.prank(address(sucker)); // peer = self for clones
@@ -519,7 +519,7 @@ contract TestAuditGaps is Test {
             sourceDecimals: 0,
             sourceSurplus: 0,
             sourceBalance: 0,
-            snapshotNonce: 1
+            sourceTimestamp: 1
         });
 
         vm.prank(address(sucker));
@@ -539,7 +539,7 @@ contract TestAuditGaps is Test {
             sourceDecimals: 0,
             sourceSurplus: 0,
             sourceBalance: 0,
-            snapshotNonce: 1
+            sourceTimestamp: 1
         });
 
         vm.prank(address(sucker));
@@ -707,7 +707,7 @@ contract TestAuditGaps is Test {
                 sourceDecimals: 0,
                 sourceSurplus: 0,
                 sourceBalance: 0,
-                snapshotNonce: 1
+                sourceTimestamp: 1
             })
         );
         assertEq(sucker.test_getInboxNonce(TOKEN), 1);
@@ -725,7 +725,7 @@ contract TestAuditGaps is Test {
                 sourceDecimals: 0,
                 sourceSurplus: 0,
                 sourceBalance: 0,
-                snapshotNonce: 1
+                sourceTimestamp: 1
             })
         );
         assertEq(sucker.test_getInboxNonce(TOKEN), 1, "Same nonce should not update");
@@ -744,7 +744,7 @@ contract TestAuditGaps is Test {
                 sourceDecimals: 0,
                 sourceSurplus: 0,
                 sourceBalance: 0,
-                snapshotNonce: 1
+                sourceTimestamp: 1
             })
         );
         assertEq(sucker.test_getInboxNonce(TOKEN), 5, "Higher nonce should update");
@@ -763,7 +763,7 @@ contract TestAuditGaps is Test {
                 sourceDecimals: 0,
                 sourceSurplus: 0,
                 sourceBalance: 0,
-                snapshotNonce: 1
+                sourceTimestamp: 1
             })
         );
         assertEq(sucker.test_getInboxNonce(TOKEN), 5, "Lower nonce should not update");
@@ -818,7 +818,7 @@ contract TestAuditGaps is Test {
                 sourceDecimals: 0,
                 sourceSurplus: 0,
                 sourceBalance: 0,
-                snapshotNonce: 1
+                sourceTimestamp: 1
             })
         );
 
@@ -834,7 +834,7 @@ contract TestAuditGaps is Test {
                 sourceDecimals: 0,
                 sourceSurplus: 0,
                 sourceBalance: 0,
-                snapshotNonce: 1
+                sourceTimestamp: 1
             })
         );
 
@@ -857,7 +857,7 @@ contract TestAuditGaps is Test {
                 sourceDecimals: 0,
                 sourceSurplus: 0,
                 sourceBalance: 0,
-                snapshotNonce: 1
+                sourceTimestamp: 1
             })
         );
 
@@ -952,7 +952,7 @@ contract TestAuditGaps is Test {
             sourceDecimals: 0,
             sourceSurplus: 0,
             sourceBalance: 0,
-            snapshotNonce: 1
+            sourceTimestamp: 1
         });
 
         vm.prank(address(sucker));
