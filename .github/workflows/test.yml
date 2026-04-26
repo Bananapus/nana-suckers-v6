@@ -20,6 +20,8 @@ jobs:
         run: npm install --omit=dev
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
+      - name: Clean build artifacts
+        run: forge clean
       - name: Run tests
         run: forge test --fail-fast --summary --detailed --skip "*/script/**"
         env:
