@@ -266,7 +266,7 @@ contract CodexNemesisFreshRoundTest is Test {
             IPoolManager(address(new CodexNemesisMockPoolManager())),
             IUniswapV3Factory(address(0)),
             address(0),
-            address(localToken)
+            address(0xBEEF) // Use dummy WETH to avoid deposit() call on ERC20Mock
         );
 
         CodexNemesisSwapHarness singleton = new CodexNemesisSwapHarness(
@@ -286,7 +286,7 @@ contract CodexNemesisFreshRoundTest is Test {
             sourceBalance: 0,
             sourceCurrency: 0,
             sourceDecimals: 18,
-            snapshotNonce: 1,
+            sourceTimestamp: 1,
             version: 1
         });
 
@@ -311,14 +311,9 @@ contract CodexNemesisFreshRoundTest is Test {
         assertEq(pendingBridgeAmount, 100);
         assertEq(pendingLeafTotal, 100);
 
+        // Fixed: swap guards now revert on failed/zero-output swaps instead of silently continuing.
+        vm.expectRevert(abi.encodeWithSignature("JBSwapCCIPSucker_SwapFailed()"));
         sucker.retrySwap(address(localToken), 1);
-
-        (, pendingBridgeAmount,) = sucker.pendingSwapOf(address(localToken), 1);
-        assertEq(pendingBridgeAmount, 0, "retry clears the pending gate");
-        assertEq(localToken.balanceOf(address(sucker)), 0, "zero-output retry leaves no local backing");
-
-        sucker.exposedAddToBalance(address(localToken), 100, PROJECT_ID, 0);
-        assertEq(localToken.balanceOf(address(sucker)), 0, "claim path can proceed with zero local balance");
     }
 
     function test_peerTopologyDriftBreaksDefaultPeerAuthentication() public {
@@ -369,7 +364,7 @@ contract CodexNemesisFreshRoundTest is Test {
                         sourceBalance: 0,
                         sourceCurrency: 0,
                         sourceDecimals: 18,
-                        snapshotNonce: 1,
+                        sourceTimestamp: 1,
                         version: 1
                     })
                 )

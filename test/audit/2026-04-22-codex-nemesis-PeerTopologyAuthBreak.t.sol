@@ -102,7 +102,7 @@ contract PeerTopologyAuthBreakTest is Test {
             sourceDecimals: 18,
             sourceSurplus: 0,
             sourceBalance: 0,
-            snapshotNonce: 1
+            sourceTimestamp: 1
         });
 
         vm.expectRevert();
