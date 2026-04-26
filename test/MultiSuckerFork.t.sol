@@ -33,7 +33,9 @@ contract MultiSuckerMock is JBSucker {
         IJBPermissions permissions,
         IJBTokens tokens,
         IJBSuckerRegistry registry
-    ) JBSucker(directory, permissions, tokens, 1, registry, address(0)) {}
+    )
+        JBSucker(directory, permissions, tokens, 1, registry, address(0))
+    {}
 
     function setPeerChainId(uint256 chainId) external {
         _peerChain = chainId;
@@ -52,7 +54,14 @@ contract MultiSuckerMock is JBSucker {
         return true;
     }
 
-    function _sendRootOverAMB(uint256, uint256, address, uint256, JBRemoteToken memory, JBMessageRoot memory)
+    function _sendRootOverAMB(
+        uint256,
+        uint256,
+        address,
+        uint256,
+        JBRemoteToken memory,
+        JBMessageRoot memory
+    )
         internal
         override
     {}
@@ -128,16 +137,17 @@ contract MultiSuckerForkTest is Test {
 
         // Mock JB infrastructure interfaces.
         vm.mockCall(DIRECTORY, abi.encodeWithSignature("PROJECTS()"), abi.encode(PROJECTS));
-        vm.mockCall(
-            PROJECTS, abi.encodeWithSelector(IERC721.ownerOf.selector, PROJECT_ID), abi.encode(address(this))
-        );
+        vm.mockCall(PROJECTS, abi.encodeWithSelector(IERC721.ownerOf.selector, PROJECT_ID), abi.encode(address(this)));
 
         // Deploy real registry.
         registry = new JBSuckerRegistry(IJBDirectory(DIRECTORY), IJBPermissions(PERMISSIONS), address(this), address(0));
 
         // Create mock sucker singleton.
         singleton = new MultiSuckerMock(
-            IJBDirectory(DIRECTORY), IJBPermissions(PERMISSIONS), IJBTokens(TOKENS), IJBSuckerRegistry(address(registry))
+            IJBDirectory(DIRECTORY),
+            IJBPermissions(PERMISSIONS),
+            IJBTokens(TOKENS),
+            IJBSuckerRegistry(address(registry))
         );
 
         // Create and allowlist mock deployer.
@@ -145,7 +155,8 @@ contract MultiSuckerForkTest is Test {
         registry.allowSuckerDeployer(address(deployer));
     }
 
-    // ── Helpers ──────────────────────────────────────────────────────────────
+    // ── Helpers
+    // ──────────────────────────────────────────────────────────────
 
     /// @dev Clone a mock sucker, initialize it for PROJECT_ID, and set its peer chain.
     function _createMockSucker(bytes32 salt, uint256 peerChain) internal returns (MultiSuckerMock sucker) {
@@ -159,7 +170,9 @@ contract MultiSuckerForkTest is Test {
         deployer.addSucker(IJBSucker(address(sucker)));
         JBSuckerDeployerConfig[] memory configs = new JBSuckerDeployerConfig[](1);
         configs[0] = JBSuckerDeployerConfig({deployer: deployer, mappings: new JBTokenMapping[](0)});
-        registry.deploySuckersFor({projectId: PROJECT_ID, salt: bytes32(uint256(block.timestamp)), configurations: configs});
+        registry.deploySuckersFor({
+            projectId: PROJECT_ID, salt: bytes32(uint256(block.timestamp)), configurations: configs
+        });
     }
 
     /// @dev Build a JBMessageRoot with the given state values.
@@ -168,7 +181,11 @@ contract MultiSuckerForkTest is Test {
         uint256 totalSupply,
         uint256 surplus,
         uint256 balance
-    ) internal view returns (JBMessageRoot memory) {
+    )
+        internal
+        view
+        returns (JBMessageRoot memory)
+    {
         return JBMessageRoot({
             version: 1,
             token: bytes32(uint256(uint160(JBConstants.NATIVE_TOKEN))),
@@ -190,7 +207,9 @@ contract MultiSuckerForkTest is Test {
         uint256 totalSupply,
         uint256 surplus,
         uint256 balance
-    ) internal {
+    )
+        internal
+    {
         JBMessageRoot memory root = _buildStateMessage(sourceTimestamp, totalSupply, surplus, balance);
         sucker.fromRemote(root);
     }
@@ -241,12 +260,8 @@ contract MultiSuckerForkTest is Test {
 
         // Verify registry aggregate views before deprecation.
         assertEq(registry.remoteTotalSupplyOf(PROJECT_ID), 1000e18, "registry total supply before deprecation");
-        assertEq(
-            registry.remoteBalanceOf(PROJECT_ID, 18, ETH_CURRENCY), 2000e18, "registry balance before deprecation"
-        );
-        assertEq(
-            registry.remoteSurplusOf(PROJECT_ID, 18, ETH_CURRENCY), 500e18, "registry surplus before deprecation"
-        );
+        assertEq(registry.remoteBalanceOf(PROJECT_ID, 18, ETH_CURRENCY), 2000e18, "registry balance before deprecation");
+        assertEq(registry.remoteSurplusOf(PROJECT_ID, 18, ETH_CURRENCY), 500e18, "registry surplus before deprecation");
 
         // Deprecate sucker1 and remove from active listing.
         _deprecateAndRemove(sucker1);
@@ -261,9 +276,7 @@ contract MultiSuckerForkTest is Test {
         // Registry should return MAX(sucker1, sucker2) per value.
         // sucker2 has higher values, so MAX = sucker2's values.
         assertEq(
-            registry.remoteTotalSupplyOf(PROJECT_ID),
-            1200e18,
-            "registry total supply should be MAX(1000, 1200) = 1200"
+            registry.remoteTotalSupplyOf(PROJECT_ID), 1200e18, "registry total supply should be MAX(1000, 1200) = 1200"
         );
         assertEq(
             registry.remoteBalanceOf(PROJECT_ID, 18, ETH_CURRENCY),
@@ -308,9 +321,7 @@ contract MultiSuckerForkTest is Test {
 
         // Registry should return deprecated sucker1's higher values.
         assertEq(
-            registry.remoteTotalSupplyOf(PROJECT_ID),
-            5000e18,
-            "MAX should pick deprecated sucker's higher total supply"
+            registry.remoteTotalSupplyOf(PROJECT_ID), 5000e18, "MAX should pick deprecated sucker's higher total supply"
         );
         assertEq(
             registry.remoteBalanceOf(PROJECT_ID, 18, ETH_CURRENCY),
@@ -390,15 +401,9 @@ contract MultiSuckerForkTest is Test {
             "dedup per chain + sum across: MAX(1000,800) + 300 = 1300"
         );
         assertEq(
-            registry.remoteBalanceOf(PROJECT_ID, 18, ETH_CURRENCY),
-            2800e18,
-            "balance: MAX(2000,1500) + 800 = 2800"
+            registry.remoteBalanceOf(PROJECT_ID, 18, ETH_CURRENCY), 2800e18, "balance: MAX(2000,1500) + 800 = 2800"
         );
-        assertEq(
-            registry.remoteSurplusOf(PROJECT_ID, 18, ETH_CURRENCY),
-            700e18,
-            "surplus: MAX(500,400) + 200 = 700"
-        );
+        assertEq(registry.remoteSurplusOf(PROJECT_ID, 18, ETH_CURRENCY), 700e18, "surplus: MAX(500,400) + 200 = 700");
     }
 
     // ═══════════════════════════════════════════════════════════════════
@@ -443,9 +448,7 @@ contract MultiSuckerForkTest is Test {
         // State SHOULD update to the newer (lower) values.
         assertEq(sucker.peerChainTotalSupply(), 2000e18, "nonce=2 should overwrite nonce=1 even with lower values");
         assertEq(
-            registry.remoteBalanceOf(PROJECT_ID, 18, ETH_CURRENCY),
-            4000e18,
-            "registry should reflect updated balance"
+            registry.remoteBalanceOf(PROJECT_ID, 18, ETH_CURRENCY), 4000e18, "registry should reflect updated balance"
         );
     }
 
