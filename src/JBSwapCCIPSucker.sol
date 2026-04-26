@@ -405,7 +405,7 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
         PendingSwap memory pending = pendingSwapOf[localToken][nonce];
         if (pending.bridgeAmount == 0) revert JBSwapCCIPSucker_NoPendingSwap();
 
-        // slither-disable-next-line reentrancy-no-eth,reentrancy-benign,reentrancy-events
+        // slither-disable-next-line reentrancy-no-eth,reentrancy-benign,reentrancy-events,reentrancy-eth
         uint256 localAmount =
             _executeSwap({tokenIn: pending.bridgeToken, tokenOut: localToken, amount: pending.bridgeAmount});
 
@@ -433,6 +433,7 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
         if (_retrySwapLocked) revert JBSwapCCIPSucker_SwapPending(0);
         // slither-disable-next-line events-maths
         _currentClaimLeafIndex = claimData.leaf.index + 1;
+        // slither-disable-next-line reentrancy-eth
         super.claim(claimData);
         // Clear stale transient context to prevent leaking into same-tx emergency exits.
         _currentClaimLeafIndex = 0;
