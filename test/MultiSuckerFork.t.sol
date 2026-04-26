@@ -164,7 +164,7 @@ contract MultiSuckerForkTest is Test {
 
     /// @dev Build a JBMessageRoot with the given state values.
     function _buildStateMessage(
-        uint64 snapshotNonce,
+        uint64 sourceTimestamp,
         uint256 totalSupply,
         uint256 surplus,
         uint256 balance
@@ -173,25 +173,25 @@ contract MultiSuckerForkTest is Test {
             version: 1,
             token: bytes32(uint256(uint160(JBConstants.NATIVE_TOKEN))),
             amount: 0,
-            remoteRoot: JBInboxTreeRoot({nonce: snapshotNonce, root: bytes32(0)}),
+            remoteRoot: JBInboxTreeRoot({nonce: sourceTimestamp, root: bytes32(0)}),
             sourceTotalSupply: totalSupply,
             sourceCurrency: ETH_CURRENCY,
             sourceDecimals: 18,
             sourceSurplus: surplus,
             sourceBalance: balance,
-            snapshotNonce: snapshotNonce
+            sourceTimestamp: sourceTimestamp
         });
     }
 
     /// @dev Deliver state to a sucker via `fromRemote()`.
     function _deliverState(
         MultiSuckerMock sucker,
-        uint64 snapshotNonce,
+        uint64 sourceTimestamp,
         uint256 totalSupply,
         uint256 surplus,
         uint256 balance
     ) internal {
-        JBMessageRoot memory root = _buildStateMessage(snapshotNonce, totalSupply, surplus, balance);
+        JBMessageRoot memory root = _buildStateMessage(sourceTimestamp, totalSupply, surplus, balance);
         sucker.fromRemote(root);
     }
 
