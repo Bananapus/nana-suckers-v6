@@ -184,6 +184,9 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     /// @notice The highest snapshot nonce received from the peer chain. Used to reject stale shared-state updates.
     uint64 private _peerSnapshotNonce;
 
+    /// @notice The block.timestamp when the last peer snapshot was received, for freshness tracking.
+    uint256 private _snapshotTimestamp;
+
     //*********************************************************************//
     // ---------------------------- constructor -------------------------- //
     //*********************************************************************//
@@ -406,6 +409,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         // that was already updated by a fresher message for a different token.
         if (root.snapshotNonce > _peerSnapshotNonce) {
             _peerSnapshotNonce = root.snapshotNonce;
+            _snapshotTimestamp = block.timestamp;
 
             // Update unconditionally — a legitimate zero supply must clear phantom cached supply.
             peerChainTotalSupply = root.sourceTotalSupply;
@@ -691,6 +695,12 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
             currency: uint32(currency),
             decimals: uint8(decimals)
         });
+    }
+
+    /// @notice The block.timestamp when the last peer snapshot was received. Returns 0 if no snapshot has been
+    /// received. @dev Used by off-chain consumers and the registry to assess data freshness.
+    function snapshotTimestamp() external view returns (uint256) {
+        return _snapshotTimestamp;
     }
 
     /// @notice Information about the token on the remote chain that the given token on the local chain is mapped to.
