@@ -177,12 +177,12 @@ contract MultiChainEvolutionTest is Test, TestBaseWorkflow, IERC721Receiver {
 
         projectId = jbController()
             .launchProjectFor({
-                owner: address(this),
-                projectUri: "myproject",
-                rulesetConfigurations: rulesetConfigs,
-                terminalConfigurations: terminalConfigs,
-                memo: ""
-            });
+            owner: address(this),
+            projectUri: "myproject",
+            rulesetConfigurations: rulesetConfigs,
+            terminalConfigurations: terminalConfigs,
+            memo: ""
+        });
     }
 
     // =========================================================================
@@ -530,10 +530,8 @@ contract MultiChainEvolutionTest is Test, TestBaseWorkflow, IERC721Receiver {
         IJBSucker(opSuckers[0])
             .mapToken(
                 JBTokenMapping({
-                    localToken: JBConstants.NATIVE_TOKEN,
-                    minGas: 200_000,
-                    remoteToken: bytes32(uint256(uint160(celoETH)))
-                })
+                localToken: JBConstants.NATIVE_TOKEN, minGas: 200_000, remoteToken: bytes32(uint256(uint160(celoETH)))
+            })
             );
     }
 

@@ -206,8 +206,8 @@ contract JBArbitrumSucker is JBSucker, IJBArbitrumSucker {
             // slither-disable-next-line calls-loop,unused-return
             IArbL2GatewayRouter(address(GATEWAYROUTER))
                 .outboundTransfer({
-                    l1Token: _toAddress(remoteToken.addr), to: peerAddress, amount: amount, data: bytes("")
-                });
+                l1Token: _toAddress(remoteToken.addr), to: peerAddress, amount: amount, data: bytes("")
+            });
         } else {
             // Otherwise, the token is the native token, and the amount will be sent as `msg.value`.
             nativeValue = amount;
@@ -269,8 +269,7 @@ contract JBArbitrumSucker is JBSucker, IJBArbitrumSucker {
                     IL1ArbitrumGateway(gateway)
                 .getOutboundCalldata({
                     _token: token, _from: address(this), _to: _peerAddress(), _amount: amount, _data: bytes("")
-                })
-                .length;
+                }).length;
                 // slither-disable-next-line calls-loop
                 maxSubmissionCostERC20 = ARBINBOX.calculateRetryableSubmissionFee({
                     dataLength: outboundCalldataLength, baseFee: maxFeePerGas

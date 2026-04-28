@@ -114,12 +114,12 @@ contract DeployerTests is Test, TestBaseWorkflow, IERC721Receiver {
         // Create a first project to collect fees.
         projectId = jbController()
             .launchProjectFor({
-                owner: address(this),
-                projectUri: "whatever",
-                rulesetConfigurations: _rulesetConfigurations,
-                terminalConfigurations: _terminalConfigurations, // Set terminals to receive fees.
-                memo: ""
-            });
+            owner: address(this),
+            projectUri: "whatever",
+            rulesetConfigurations: _rulesetConfigurations,
+            terminalConfigurations: _terminalConfigurations, // Set terminals to receive fees.
+            memo: ""
+        });
 
         // Setup an erc20 for the project
         jbController().deployERC20For(1, "SuckerToken", "SOOK", bytes32(0));

@@ -70,17 +70,17 @@ contract RegistryPeerMismatchTest is Test {
         JBOptimismSucker(payable(suckerB))
             .fromRemote(
                 JBMessageRoot({
-                    version: 1,
-                    token: bytes32(0),
-                    amount: 0,
-                    remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(1))}),
-                    sourceTotalSupply: 0,
-                    sourceCurrency: 0,
-                    sourceDecimals: 0,
-                    sourceSurplus: 0,
-                    sourceBalance: 0,
-                    sourceTimestamp: 1
-                })
+                version: 1,
+                token: bytes32(0),
+                amount: 0,
+                remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(1))}),
+                sourceTotalSupply: 0,
+                sourceCurrency: 0,
+                sourceDecimals: 0,
+                sourceSurplus: 0,
+                sourceBalance: 0,
+                sourceTimestamp: 1
+            })
             );
     }
 
