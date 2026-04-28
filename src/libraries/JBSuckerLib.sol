@@ -8,7 +8,7 @@ import {IJBPrices} from "@bananapus/core-v6/src/interfaces/IJBPrices.sol";
 import {IJBTerminal} from "@bananapus/core-v6/src/interfaces/IJBTerminal.sol";
 import {IJBTerminalStore} from "@bananapus/core-v6/src/interfaces/IJBTerminalStore.sol";
 import {JBAccountingContext} from "@bananapus/core-v6/src/structs/JBAccountingContext.sol";
-import {JBCurrencyIds} from "@bananapus/core-v6/src/libraries/JBCurrencyIds.sol";
+import {JBConstants} from "@bananapus/core-v6/src/libraries/JBConstants.sol";
 import {JBFixedPointNumber} from "@bananapus/core-v6/src/libraries/JBFixedPointNumber.sol";
 import {mulDiv} from "@prb/math/src/Common.sol";
 import {IERC165} from "@openzeppelin/contracts/utils/introspection/ERC165.sol";
@@ -26,7 +26,10 @@ library JBSuckerLib {
     // ----------------------- internal constants ------------------------ //
     //*********************************************************************//
 
-    uint256 internal constant _ETH_CURRENCY = JBCurrencyIds.ETH;
+    /// @dev The native-token currency used as the denomination for cross-chain snapshots.
+    /// This MUST match the token-derived currency consumers use to query (uint32(uint160(NATIVE_TOKEN)) = 61166),
+    /// NOT JBCurrencyIds.ETH (= 1) which is the baseCurrency used in ruleset metadata.
+    uint32 internal constant _NATIVE_TOKEN_CURRENCY = uint32(uint160(JBConstants.NATIVE_TOKEN));
     uint8 internal constant _ETH_DECIMALS = 18;
 
     //*********************************************************************//
@@ -77,7 +80,7 @@ library JBSuckerLib {
         // Get the surplus denominated in ETH. currentSurplusOf aggregates across all terminals internally.
         // slither-disable-next-line calls-loop
         try terminals[0].currentSurplusOf({
-            projectId: projectId, tokens: new address[](0), decimals: _ETH_DECIMALS, currency: uint32(_ETH_CURRENCY)
+            projectId: projectId, tokens: new address[](0), decimals: _ETH_DECIMALS, currency: _NATIVE_TOKEN_CURRENCY
         }) returns (
             uint256 surplus
         ) {
@@ -119,7 +122,7 @@ library JBSuckerLib {
                     ) {
                         if (bal != 0) {
                             // If the token is already ETH-denominated, adjust decimals directly.
-                            if (tokenCurrency == uint32(_ETH_CURRENCY)) {
+                            if (tokenCurrency == _NATIVE_TOKEN_CURRENCY) {
                                 ethBalance += JBFixedPointNumber.adjustDecimals({
                                     value: bal, decimals: dec, targetDecimals: _ETH_DECIMALS
                                 });
@@ -129,7 +132,7 @@ library JBSuckerLib {
                                 try prices.pricePerUnitOf({
                                     projectId: projectId,
                                     pricingCurrency: tokenCurrency,
-                                    unitCurrency: uint32(_ETH_CURRENCY),
+                                    unitCurrency: _NATIVE_TOKEN_CURRENCY,
                                     decimals: _ETH_DECIMALS
                                 }) returns (
                                     uint256 price
@@ -264,7 +267,7 @@ library JBSuckerLib {
             amount: amount,
             remoteRoot: JBInboxTreeRoot({nonce: nonce, root: root}),
             sourceTotalSupply: localTotalSupply,
-            sourceCurrency: _ETH_CURRENCY,
+            sourceCurrency: _NATIVE_TOKEN_CURRENCY,
             sourceDecimals: _ETH_DECIMALS,
             sourceSurplus: ethSurplus,
             sourceBalance: ethBalance,

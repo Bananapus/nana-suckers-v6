@@ -119,8 +119,10 @@ contract PeerChainStateTest is Test {
     uint256 constant PROJECT_ID = 1;
     address constant TOKEN = address(0x000000000000000000000000000000000000EEEe);
 
-    /// @dev ETH currency = JBCurrencyIds.ETH = 1
-    uint256 constant ETH_CURRENCY = 1;
+    /// @dev Native-token currency = uint32(uint160(NATIVE_TOKEN)) = 61166 (0xEEEe).
+    /// This is the token-derived currency that consumers (REVOwner, REVLoans) use when querying
+    /// peerChainSurplusOf / remoteSurplusOf. Must match what buildSnapshotMessage stores.
+    uint256 constant NATIVE_TOKEN_CURRENCY = uint256(uint32(uint160(TOKEN)));
     uint8 constant ETH_DECIMALS = 18;
 
     PeerChainStateSucker sucker;
@@ -176,7 +178,7 @@ contract PeerChainStateTest is Test {
             totalSupply: 500 ether,
             surplus: 100 ether,
             balance: 200 ether,
-            currency: uint256(uint32(ETH_CURRENCY)),
+            currency: uint256(uint32(NATIVE_TOKEN_CURRENCY)),
             decimals: ETH_DECIMALS
         });
 
@@ -188,15 +190,15 @@ contract PeerChainStateTest is Test {
         assertEq(sucker.peerChainTotalSupply(), 500 ether, "peerChainTotalSupply should be stored");
 
         // Verify balance via public view (query in same currency/decimals as stored).
-        JBDenominatedAmount memory storedBalance = sucker.peerChainBalanceOf(ETH_DECIMALS, ETH_CURRENCY);
+        JBDenominatedAmount memory storedBalance = sucker.peerChainBalanceOf(ETH_DECIMALS, NATIVE_TOKEN_CURRENCY);
         assertEq(storedBalance.value, 200 ether, "balance value should be stored");
-        assertEq(storedBalance.currency, uint32(ETH_CURRENCY), "balance currency should be stored");
+        assertEq(storedBalance.currency, uint32(NATIVE_TOKEN_CURRENCY), "balance currency should be stored");
         assertEq(storedBalance.decimals, ETH_DECIMALS, "balance decimals should be stored");
 
         // Verify surplus via public view.
-        JBDenominatedAmount memory storedSurplus = sucker.peerChainSurplusOf(ETH_DECIMALS, ETH_CURRENCY);
+        JBDenominatedAmount memory storedSurplus = sucker.peerChainSurplusOf(ETH_DECIMALS, NATIVE_TOKEN_CURRENCY);
         assertEq(storedSurplus.value, 100 ether, "surplus value should be stored");
-        assertEq(storedSurplus.currency, uint32(ETH_CURRENCY), "surplus currency should be stored");
+        assertEq(storedSurplus.currency, uint32(NATIVE_TOKEN_CURRENCY), "surplus currency should be stored");
         assertEq(storedSurplus.decimals, ETH_DECIMALS, "surplus decimals should be stored");
     }
 
@@ -208,7 +210,7 @@ contract PeerChainStateTest is Test {
             totalSupply: 500 ether,
             surplus: 100 ether,
             balance: 200 ether,
-            currency: uint256(uint32(ETH_CURRENCY)),
+            currency: uint256(uint32(NATIVE_TOKEN_CURRENCY)),
             decimals: ETH_DECIMALS
         });
 
@@ -221,7 +223,7 @@ contract PeerChainStateTest is Test {
             totalSupply: 999 ether,
             surplus: 999 ether,
             balance: 999 ether,
-            currency: uint256(uint32(ETH_CURRENCY)),
+            currency: uint256(uint32(NATIVE_TOKEN_CURRENCY)),
             decimals: ETH_DECIMALS
         });
 
@@ -231,10 +233,10 @@ contract PeerChainStateTest is Test {
         // State should still reflect root1 values.
         assertEq(sucker.peerChainTotalSupply(), 500 ether, "supply should not update on same nonce");
 
-        JBDenominatedAmount memory storedBalance = sucker.peerChainBalanceOf(ETH_DECIMALS, ETH_CURRENCY);
+        JBDenominatedAmount memory storedBalance = sucker.peerChainBalanceOf(ETH_DECIMALS, NATIVE_TOKEN_CURRENCY);
         assertEq(storedBalance.value, 200 ether, "balance should not update on same nonce");
 
-        JBDenominatedAmount memory storedSurplus = sucker.peerChainSurplusOf(ETH_DECIMALS, ETH_CURRENCY);
+        JBDenominatedAmount memory storedSurplus = sucker.peerChainSurplusOf(ETH_DECIMALS, NATIVE_TOKEN_CURRENCY);
         assertEq(storedSurplus.value, 100 ether, "surplus should not update on same nonce");
     }
 
@@ -246,7 +248,7 @@ contract PeerChainStateTest is Test {
             totalSupply: 500 ether,
             surplus: 100 ether,
             balance: 200 ether,
-            currency: uint256(uint32(ETH_CURRENCY)),
+            currency: uint256(uint32(NATIVE_TOKEN_CURRENCY)),
             decimals: ETH_DECIMALS
         });
 
@@ -259,7 +261,7 @@ contract PeerChainStateTest is Test {
             totalSupply: 750 ether,
             surplus: 300 ether,
             balance: 400 ether,
-            currency: uint256(uint32(ETH_CURRENCY)),
+            currency: uint256(uint32(NATIVE_TOKEN_CURRENCY)),
             decimals: ETH_DECIMALS
         });
 
@@ -269,10 +271,10 @@ contract PeerChainStateTest is Test {
         // State should reflect root2 values.
         assertEq(sucker.peerChainTotalSupply(), 750 ether, "supply should update on new nonce");
 
-        JBDenominatedAmount memory storedBalance = sucker.peerChainBalanceOf(ETH_DECIMALS, ETH_CURRENCY);
+        JBDenominatedAmount memory storedBalance = sucker.peerChainBalanceOf(ETH_DECIMALS, NATIVE_TOKEN_CURRENCY);
         assertEq(storedBalance.value, 400 ether, "balance should update on new nonce");
 
-        JBDenominatedAmount memory storedSurplus = sucker.peerChainSurplusOf(ETH_DECIMALS, ETH_CURRENCY);
+        JBDenominatedAmount memory storedSurplus = sucker.peerChainSurplusOf(ETH_DECIMALS, NATIVE_TOKEN_CURRENCY);
         assertEq(storedSurplus.value, 300 ether, "surplus should update on new nonce");
     }
 
@@ -282,23 +284,23 @@ contract PeerChainStateTest is Test {
 
     /// @notice peerChainBalanceOf with same currency returns decimal-adjusted value.
     function test_peerChainBalanceOfSameCurrency() public {
-        // Store balance via fromRemote (18 decimals ETH, currency = JBCurrencyIds.ETH = 1).
+        // Store balance via fromRemote (18 decimals ETH, currency = uint32(uint160(NATIVE_TOKEN)) = 61166).
         JBMessageRoot memory root = _makeMessageRoot({
             nonce: 1,
             totalSupply: 100 ether,
             surplus: 50 ether,
             balance: 10 ether,
-            currency: uint256(uint32(ETH_CURRENCY)),
+            currency: uint256(uint32(NATIVE_TOKEN_CURRENCY)),
             decimals: ETH_DECIMALS
         });
 
         vm.prank(address(sucker));
         sucker.fromRemote(root);
 
-        // Query balance in ETH currency (JBCurrencyIds.ETH = 1) at 18 decimals — should return exact value.
-        JBDenominatedAmount memory result = sucker.peerChainBalanceOf(18, ETH_CURRENCY);
+        // Query balance in native token currency at 18 decimals — should return exact value.
+        JBDenominatedAmount memory result = sucker.peerChainBalanceOf(18, NATIVE_TOKEN_CURRENCY);
         assertEq(result.value, 10 ether, "same currency same decimals should return exact value");
-        assertEq(result.currency, uint32(ETH_CURRENCY), "returned currency should match requested");
+        assertEq(result.currency, uint32(NATIVE_TOKEN_CURRENCY), "returned currency should match requested");
         assertEq(result.decimals, 18, "returned decimals should match requested");
     }
 
@@ -309,20 +311,95 @@ contract PeerChainStateTest is Test {
             totalSupply: 100 ether,
             surplus: 50 ether,
             balance: 10 ether,
-            currency: uint256(uint32(ETH_CURRENCY)),
+            currency: uint256(uint32(NATIVE_TOKEN_CURRENCY)),
             decimals: ETH_DECIMALS
         });
 
         vm.prank(address(sucker));
         sucker.fromRemote(root);
 
-        JBDenominatedAmount memory result = sucker.peerChainSurplusOf(18, ETH_CURRENCY);
+        JBDenominatedAmount memory result = sucker.peerChainSurplusOf(18, NATIVE_TOKEN_CURRENCY);
         assertEq(result.value, 50 ether, "same currency same decimals should return exact surplus");
+    }
+
+    /// @notice Regression: peerChainSurplusOf queried with uint256(uint160(NATIVE_TOKEN)) must return non-zero.
+    /// Before the fix, buildSnapshotMessage stored sourceCurrency = JBCurrencyIds.ETH (= 1), but consumers
+    /// (REVOwner, REVLoans) query with uint256(uint160(NATIVE_TOKEN)) (= 61166). The mismatch caused
+    /// convertPeerValue to always fail/return 0 for native ETH, making remoteSurplusOf return 0.
+    function test_peerChainSurplusOf_queriedWithNativeTokenCurrency_returnsCorrectValue() public {
+        // Simulate receiving a cross-chain message that was built with the FIXED buildSnapshotMessage.
+        // After the fix, sourceCurrency = uint32(uint160(NATIVE_TOKEN)) = 61166.
+        JBMessageRoot memory root = _makeMessageRoot({
+            nonce: 1,
+            totalSupply: 1000 ether,
+            surplus: 200 ether,
+            balance: 500 ether,
+            currency: NATIVE_TOKEN_CURRENCY, // 61166 — matches what consumers query with
+            decimals: ETH_DECIMALS
+        });
+
+        vm.prank(address(sucker));
+        sucker.fromRemote(root);
+
+        // Query surplus with the SAME currency that REVOwner / REVLoans use:
+        // uint256(uint160(JBConstants.NATIVE_TOKEN)) = 61166
+        uint256 consumerCurrency = uint256(uint160(TOKEN));
+        JBDenominatedAmount memory result = sucker.peerChainSurplusOf(18, consumerCurrency);
+
+        // With the fix: source.currency (61166) == uint32(currency) (61166) → match → returns value directly.
+        // Before the fix: source.currency was 1, would mismatch 61166, fall to price oracle, and return 0.
+        assertGt(result.value, 0, "surplus must be non-zero when queried with uint160(NATIVE_TOKEN) currency");
+        assertEq(result.value, 200 ether, "surplus should match the bridged snapshot value");
+        assertEq(result.currency, uint32(consumerCurrency), "returned currency should match requested");
+    }
+
+    /// @notice Regression: buildSnapshotMessage must set sourceCurrency = uint32(uint160(NATIVE_TOKEN)),
+    /// not JBCurrencyIds.ETH (= 1). This ensures cross-chain messages are compatible with consumer queries.
+    function test_toRemote_sourceCurrencyMatchesNativeTokenCurrency() public {
+        // Set up token mapping.
+        sucker.test_setRemoteToken(
+            TOKEN,
+            JBRemoteToken({
+                enabled: true,
+                emergencyHatch: false,
+                minGas: 200_000,
+                addr: bytes32(uint256(uint160(makeAddr("remoteToken"))))
+            })
+        );
+
+        // Insert a leaf so the outbox is non-empty.
+        vm.deal(address(sucker), 1 ether);
+        sucker.test_insertIntoTree(1 ether, TOKEN, 1 ether, bytes32(uint256(uint160(address(0xBEEF)))));
+
+        // Mock terminal.
+        _mockSingleETHTerminal({ethBalance: 50 ether, ethSurplus: 30 ether});
+
+        vm.mockCall(
+            CONTROLLER,
+            abi.encodeCall(IJBController.totalTokenSupplyWithReservedTokensOf, (PROJECT_ID)),
+            abi.encode(uint256(1000 ether))
+        );
+
+        sucker.test_resetSendRootOverAMBCalled();
+        sucker.toRemote(TOKEN);
+
+        assertTrue(sucker.sendRootOverAMBCalled(), "sendRootOverAMB should be called");
+        JBMessageRoot memory m = sucker.test_getLastSentMessage();
+
+        // The critical assertion: sourceCurrency must be uint32(uint160(NATIVE_TOKEN)) = 61166,
+        // NOT JBCurrencyIds.ETH = 1.
+        uint256 expectedCurrency = uint256(uint32(uint160(TOKEN)));
+        assertEq(
+            m.sourceCurrency,
+            expectedCurrency,
+            "sourceCurrency must be uint32(uint160(NATIVE_TOKEN)), not JBCurrencyIds.ETH"
+        );
+        assertTrue(m.sourceCurrency != 1, "sourceCurrency must NOT be JBCurrencyIds.ETH (= 1)");
     }
 
     /// @notice peerChainBalanceOf returns zero when no balance stored.
     function test_peerChainBalanceOfZeroValue() public view {
-        JBDenominatedAmount memory result = sucker.peerChainBalanceOf(18, ETH_CURRENCY);
+        JBDenominatedAmount memory result = sucker.peerChainBalanceOf(18, NATIVE_TOKEN_CURRENCY);
         assertEq(result.value, 0, "zero stored should return zero");
     }
 
@@ -334,7 +411,7 @@ contract PeerChainStateTest is Test {
             totalSupply: 100 ether,
             surplus: 50 ether,
             balance: 10 ether,
-            currency: uint256(uint32(ETH_CURRENCY)),
+            currency: uint256(uint32(NATIVE_TOKEN_CURRENCY)),
             decimals: ETH_DECIMALS
         });
 
@@ -349,7 +426,7 @@ contract PeerChainStateTest is Test {
         uint32 usdCurrency = 2;
         vm.mockCall(
             PRICES,
-            abi.encodeCall(IJBPrices.pricePerUnitOf, (PROJECT_ID, uint32(ETH_CURRENCY), usdCurrency, 18)),
+            abi.encodeCall(IJBPrices.pricePerUnitOf, (PROJECT_ID, uint32(NATIVE_TOKEN_CURRENCY), usdCurrency, 18)),
             abi.encode(uint256(2000e18))
         );
 
@@ -401,7 +478,7 @@ contract PeerChainStateTest is Test {
 
         assertEq(m.version, 1, "message version should be 1");
         assertEq(m.sourceTotalSupply, 1000 ether, "sourceTotalSupply should match mock");
-        assertEq(m.sourceCurrency, ETH_CURRENCY, "sourceCurrency should be ETH");
+        assertEq(m.sourceCurrency, NATIVE_TOKEN_CURRENCY, "sourceCurrency should be ETH");
         assertEq(m.sourceDecimals, ETH_DECIMALS, "sourceDecimals should be 18");
         assertEq(m.sourceSurplus, 30 ether, "sourceSurplus should match mock");
         assertEq(m.sourceBalance, 50 ether, "sourceBalance should match mock");
@@ -434,7 +511,7 @@ contract PeerChainStateTest is Test {
 
         assertEq(m.sourceSurplus, 0, "surplus should be 0 with no terminals");
         assertEq(m.sourceBalance, 0, "balance should be 0 with no terminals");
-        assertEq(m.sourceCurrency, ETH_CURRENCY, "currency should still be ETH");
+        assertEq(m.sourceCurrency, NATIVE_TOKEN_CURRENCY, "currency should still be ETH");
         assertEq(m.sourceDecimals, ETH_DECIMALS, "decimals should still be 18");
     }
 
@@ -467,7 +544,8 @@ contract PeerChainStateTest is Test {
         vm.mockCall(
             TERMINAL,
             abi.encodeCall(
-                IJBTerminal.currentSurplusOf, (PROJECT_ID, new address[](0), ETH_DECIMALS, uint32(ETH_CURRENCY))
+                IJBTerminal.currentSurplusOf,
+                (PROJECT_ID, new address[](0), ETH_DECIMALS, uint32(NATIVE_TOKEN_CURRENCY))
             ),
             abi.encode(uint256(25 ether))
         );
@@ -496,21 +574,15 @@ contract PeerChainStateTest is Test {
             abi.encode(uint256(5000e6))
         );
 
-        // Mock price: native token → ETH (1:1 identity since it IS ETH).
-        // buildETHAggregate compares uint32(uint160(token)) vs JBCurrencyIds.ETH — these differ,
-        // so it falls through to the price feed path for all tokens including native ETH.
-        vm.mockCall(
-            PRICES,
-            abi.encodeCall(
-                IJBPrices.pricePerUnitOf, (PROJECT_ID, nativeTokenCurrency, uint32(ETH_CURRENCY), ETH_DECIMALS)
-            ),
-            abi.encode(uint256(1e18))
-        );
+        // After the fix, native ETH is identified directly (tokenCurrency == _NATIVE_TOKEN_CURRENCY),
+        // so no price feed mock is needed for native ETH → ETH conversion. Only ERC20 tokens need price feeds.
 
         // Mock price: 1 USDC = 0.0005 ETH (at 18 decimals).
         vm.mockCall(
             PRICES,
-            abi.encodeCall(IJBPrices.pricePerUnitOf, (PROJECT_ID, erc20Currency, uint32(ETH_CURRENCY), ETH_DECIMALS)),
+            abi.encodeCall(
+                IJBPrices.pricePerUnitOf, (PROJECT_ID, erc20Currency, uint32(NATIVE_TOKEN_CURRENCY), ETH_DECIMALS)
+            ),
             abi.encode(uint256(0.0005 ether))
         );
 
@@ -580,7 +652,8 @@ contract PeerChainStateTest is Test {
         vm.mockCall(
             TERMINAL,
             abi.encodeCall(
-                IJBTerminal.currentSurplusOf, (PROJECT_ID, new address[](0), ETH_DECIMALS, uint32(ETH_CURRENCY))
+                IJBTerminal.currentSurplusOf,
+                (PROJECT_ID, new address[](0), ETH_DECIMALS, uint32(NATIVE_TOKEN_CURRENCY))
             ),
             abi.encode(ethSurplus)
         );
@@ -593,7 +666,8 @@ contract PeerChainStateTest is Test {
         vm.etch(PRICES, hex"00");
 
         // Single ETH accounting context.
-        // Note: accounting context currency = uint32(uint160(TOKEN)) which differs from JBCurrencyIds.ETH.
+        // After the fix, accounting context currency = uint32(uint160(TOKEN)) = _NATIVE_TOKEN_CURRENCY,
+        // so buildETHAggregate correctly identifies native ETH and adjusts decimals directly.
         uint32 nativeTokenCurrency = uint32(uint160(TOKEN));
         JBAccountingContext[] memory contexts = new JBAccountingContext[](1);
         contexts[0] = JBAccountingContext({token: TOKEN, decimals: 18, currency: nativeTokenCurrency});
@@ -602,17 +676,6 @@ contract PeerChainStateTest is Test {
         // Mock ETH balance.
         vm.mockCall(
             STORE, abi.encodeCall(IJBTerminalStore.balanceOf, (TERMINAL, PROJECT_ID, TOKEN)), abi.encode(ethBalance)
-        );
-
-        // Mock price feed: native token currency → ETH currency (identity conversion, 1:1 at 18 decimals).
-        // buildETHAggregate compares uint32(uint160(token)) against JBCurrencyIds.ETH — these differ for native
-        // token, so it falls through to the price feed path.
-        vm.mockCall(
-            PRICES,
-            abi.encodeCall(
-                IJBPrices.pricePerUnitOf, (PROJECT_ID, nativeTokenCurrency, uint32(ETH_CURRENCY), ETH_DECIMALS)
-            ),
-            abi.encode(uint256(1e18))
         );
     }
 }

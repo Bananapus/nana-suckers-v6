@@ -54,7 +54,9 @@ contract CodexPeerSnapshotDesyncTest is Test {
     address internal constant PROJECTS = address(1000);
 
     uint256 internal constant PROJECT_ID = 1;
-    uint256 internal constant ETH_CURRENCY = 1;
+    /// @dev After the currency fix, snapshots use the token-derived currency (61166), not JBCurrencyIds.ETH (1).
+    uint256 internal constant NATIVE_TOKEN_CURRENCY =
+        uint256(uint32(uint160(address(0x000000000000000000000000000000000000EEEe))));
     uint8 internal constant ETH_DECIMALS = 18;
 
     address internal constant TOKEN_A = address(0xA11CE);
@@ -86,8 +88,8 @@ contract CodexPeerSnapshotDesyncTest is Test {
         // Fixed: zero supply is no longer skipped — phantom supply is cleared.
         assertEq(sucker.peerChainTotalSupply(), 0, "zero supply correctly clears phantom cached supply");
 
-        JBDenominatedAmount memory balance = sucker.peerChainBalanceOf(ETH_DECIMALS, ETH_CURRENCY);
-        JBDenominatedAmount memory surplus = sucker.peerChainSurplusOf(ETH_DECIMALS, ETH_CURRENCY);
+        JBDenominatedAmount memory balance = sucker.peerChainBalanceOf(ETH_DECIMALS, NATIVE_TOKEN_CURRENCY);
+        JBDenominatedAmount memory surplus = sucker.peerChainSurplusOf(ETH_DECIMALS, NATIVE_TOKEN_CURRENCY);
         assertEq(balance.value, 75 ether, "balance updated");
         assertEq(surplus.value, 50 ether, "surplus updated");
     }
@@ -107,8 +109,8 @@ contract CodexPeerSnapshotDesyncTest is Test {
             sucker.peerChainTotalSupply(), 900 ether, "fresher token-A supply preserved despite later token-B delivery"
         );
 
-        JBDenominatedAmount memory balance = sucker.peerChainBalanceOf(ETH_DECIMALS, ETH_CURRENCY);
-        JBDenominatedAmount memory surplus = sucker.peerChainSurplusOf(ETH_DECIMALS, ETH_CURRENCY);
+        JBDenominatedAmount memory balance = sucker.peerChainBalanceOf(ETH_DECIMALS, NATIVE_TOKEN_CURRENCY);
+        JBDenominatedAmount memory surplus = sucker.peerChainSurplusOf(ETH_DECIMALS, NATIVE_TOKEN_CURRENCY);
         assertEq(balance.value, 400 ether, "fresher token-A balance preserved");
         assertEq(surplus.value, 300 ether, "fresher token-A surplus preserved");
     }
@@ -152,7 +154,7 @@ contract CodexPeerSnapshotDesyncTest is Test {
             amount: 0,
             remoteRoot: JBInboxTreeRoot({nonce: nonce, root: bytes32(uint256(nonce))}),
             sourceTotalSupply: totalSupply,
-            sourceCurrency: ETH_CURRENCY,
+            sourceCurrency: NATIVE_TOKEN_CURRENCY,
             sourceDecimals: ETH_DECIMALS,
             sourceSurplus: surplus,
             sourceBalance: balance,
