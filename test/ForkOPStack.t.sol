@@ -3,6 +3,7 @@ pragma solidity 0.8.28;
 
 // forge-lint: disable-next-line(unaliased-plain-import)
 import /* {*} from */ "@bananapus/core-v6/test/helpers/TestBaseWorkflow.sol";
+import {SuckerForkHelpers} from "./helpers/SuckerForkHelpers.sol";
 import {IJBSucker} from "../src/interfaces/IJBSucker.sol";
 import {JBConstants} from "@bananapus/core-v6/src/libraries/JBConstants.sol";
 import {JBPermissionsData} from "@bananapus/core-v6/src/structs/JBPermissionsData.sol";
@@ -30,9 +31,7 @@ import {JBBaseSucker} from "../src/JBBaseSucker.sol";
 /// Two directions are tested:
 ///   - test_l1NativeTransfer: L1 (Ethereum) → L2 via OP bridge.
 ///   - test_l2NativeTransfer: L2 → L1 (Ethereum) via OP bridge.
-abstract contract OPStackNativeBridgeForkTestBase is TestBaseWorkflow {
-    JBRulesetMetadata _metadata;
-
+abstract contract OPStackNativeBridgeForkTestBase is SuckerForkHelpers {
     // ── L1 (Ethereum) side
     JBOptimismSuckerDeployer suckerDeployerL1;
     IJBSucker suckerL1;
@@ -75,27 +74,7 @@ abstract contract OPStackNativeBridgeForkTestBase is TestBaseWorkflow {
 
     // ── Setup
     function setUp() public override {
-        _metadata = JBRulesetMetadata({
-            reservedPercent: JBConstants.MAX_RESERVED_PERCENT / 2,
-            cashOutTaxRate: 0,
-            baseCurrency: uint32(uint160(JBConstants.NATIVE_TOKEN)),
-            pausePay: false,
-            pauseCreditTransfers: false,
-            allowOwnerMinting: true,
-            allowSetCustomToken: false,
-            allowTerminalMigration: false,
-            allowSetTerminals: false,
-            allowSetController: false,
-            allowAddAccountingContext: true,
-            allowAddPriceFeed: true,
-            ownerMustSendPayouts: false,
-            holdFees: false,
-            useTotalSurplusForCashOuts: true,
-            useDataHookForPay: false,
-            useDataHookForCashOut: false,
-            dataHook: address(0),
-            metadata: 0
-        });
+        _initMetadata();
 
         // ── L1 (Ethereum, roll back a few blocks to avoid RPC race where latest block isn't fully executed)
         l1Fork = vm.createSelectFork("ethereum");
@@ -160,51 +139,7 @@ abstract contract OPStackNativeBridgeForkTestBase is TestBaseWorkflow {
         l2ProjectToken = jbController().deployERC20For(1, "SuckerToken", "SOOK", bytes32(0));
         vm.stopPrank();
 
-        // Mock the registry's toRemoteFee() to return 0 (registry is address(0) with no code).
         vm.mockCall(address(0), abi.encodeCall(IJBSuckerRegistry.toRemoteFee, ()), abi.encode(uint256(0)));
-    }
-
-    /// @notice Launch a project that accepts native ETH.
-    function _launchProject() internal {
-        JBCurrencyAmount[] memory _surplusAllowances = new JBCurrencyAmount[](1);
-        _surplusAllowances[0] =
-            JBCurrencyAmount({amount: 5 * 10 ** 18, currency: uint32(uint160(JBConstants.NATIVE_TOKEN))});
-
-        JBFundAccessLimitGroup[] memory _fundAccessLimitGroup = new JBFundAccessLimitGroup[](1);
-        _fundAccessLimitGroup[0] = JBFundAccessLimitGroup({
-            terminal: address(jbMultiTerminal()),
-            token: JBConstants.NATIVE_TOKEN,
-            payoutLimits: new JBCurrencyAmount[](0),
-            surplusAllowances: _surplusAllowances
-        });
-
-        JBRulesetConfig[] memory _rulesetConfigurations = new JBRulesetConfig[](1);
-        _rulesetConfigurations[0].mustStartAtOrAfter = 0;
-        _rulesetConfigurations[0].duration = 0;
-        _rulesetConfigurations[0].weight = 1000 * 10 ** 18;
-        _rulesetConfigurations[0].weightCutPercent = 0;
-        _rulesetConfigurations[0].approvalHook = IJBRulesetApprovalHook(address(0));
-        _rulesetConfigurations[0].metadata = _metadata;
-        _rulesetConfigurations[0].splitGroups = new JBSplitGroup[](0);
-        _rulesetConfigurations[0].fundAccessLimitGroups = _fundAccessLimitGroup;
-
-        JBAccountingContext[] memory _tokensToAccept = new JBAccountingContext[](1);
-        _tokensToAccept[0] = JBAccountingContext({
-            token: JBConstants.NATIVE_TOKEN, decimals: 18, currency: uint32(uint160(JBConstants.NATIVE_TOKEN))
-        });
-
-        JBTerminalConfig[] memory _terminalConfigurations = new JBTerminalConfig[](1);
-        _terminalConfigurations[0] =
-            JBTerminalConfig({terminal: jbMultiTerminal(), accountingContextsToAccept: _tokensToAccept});
-
-        jbController()
-            .launchProjectFor({
-                owner: multisig(),
-                projectUri: "opstack-fork-test",
-                rulesetConfigurations: _rulesetConfigurations,
-                terminalConfigurations: _terminalConfigurations,
-                memo: ""
-            });
     }
 
     // ── Tests
