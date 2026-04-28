@@ -212,12 +212,12 @@ contract ForkCeloTest is TestBaseWorkflow {
 
         jbController()
             .launchProjectFor({
-                owner: multisig(),
-                projectUri: "celo-fork-test-native",
-                rulesetConfigurations: _rulesetConfigurations,
-                terminalConfigurations: _terminalConfigurations,
-                memo: ""
-            });
+            owner: multisig(),
+            projectUri: "celo-fork-test-native",
+            rulesetConfigurations: _rulesetConfigurations,
+            terminalConfigurations: _terminalConfigurations,
+            memo: ""
+        });
     }
 
     /// @notice Launch a project on Celo that accepts WETH (ETH as ERC-20).
@@ -259,12 +259,12 @@ contract ForkCeloTest is TestBaseWorkflow {
 
         jbController()
             .launchProjectFor({
-                owner: multisig(),
-                projectUri: "celo-fork-test-weth",
-                rulesetConfigurations: _rulesetConfigurations,
-                terminalConfigurations: _terminalConfigurations,
-                memo: ""
-            });
+            owner: multisig(),
+            projectUri: "celo-fork-test-weth",
+            rulesetConfigurations: _rulesetConfigurations,
+            terminalConfigurations: _terminalConfigurations,
+            memo: ""
+        });
     }
 
     // ── Tests

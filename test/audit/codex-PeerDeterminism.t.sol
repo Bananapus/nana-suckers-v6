@@ -160,12 +160,12 @@ contract CodexPeerDeterminismTest is Test, TestBaseWorkflow, IERC721Receiver {
 
         return jbController()
             .launchProjectFor({
-                owner: address(this),
-                projectUri: "peer-determinism",
-                rulesetConfigurations: rulesets,
-                terminalConfigurations: terminals,
-                memo: ""
-            });
+            owner: address(this),
+            projectUri: "peer-determinism",
+            rulesetConfigurations: rulesets,
+            terminalConfigurations: terminals,
+            memo: ""
+        });
     }
 
     function onERC721Received(address, address, uint256, bytes calldata) external pure returns (bytes4) {

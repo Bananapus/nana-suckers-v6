@@ -268,12 +268,12 @@ abstract contract CCIPSuckerMainnetForkTestBase is TestBaseWorkflow {
 
         jbController()
             .launchProjectFor({
-                owner: multisig(),
-                projectUri: "mainnet-fork-test",
-                rulesetConfigurations: _rulesetConfigurations,
-                terminalConfigurations: _terminalConfigurations,
-                memo: ""
-            });
+            owner: multisig(),
+            projectUri: "mainnet-fork-test",
+            rulesetConfigurations: _rulesetConfigurations,
+            terminalConfigurations: _terminalConfigurations,
+            memo: ""
+        });
     }
 
     // ── Tests

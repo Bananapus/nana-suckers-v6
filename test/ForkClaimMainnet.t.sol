@@ -280,12 +280,12 @@ abstract contract CCIPSuckerClaimForkTestBase is TestBaseWorkflow {
 
         jbController()
             .launchProjectFor({
-                owner: multisig(),
-                projectUri: "claim-fork-test",
-                rulesetConfigurations: _rulesetConfigurations,
-                terminalConfigurations: _terminalConfigurations,
-                memo: ""
-            });
+            owner: multisig(),
+            projectUri: "claim-fork-test",
+            rulesetConfigurations: _rulesetConfigurations,
+            terminalConfigurations: _terminalConfigurations,
+            memo: ""
+        });
     }
 
     // ── Helpers
