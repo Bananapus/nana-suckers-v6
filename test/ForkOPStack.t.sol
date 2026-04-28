@@ -199,12 +199,12 @@ abstract contract OPStackNativeBridgeForkTestBase is TestBaseWorkflow {
 
         jbController()
             .launchProjectFor({
-                owner: multisig(),
-                projectUri: "opstack-fork-test",
-                rulesetConfigurations: _rulesetConfigurations,
-                terminalConfigurations: _terminalConfigurations,
-                memo: ""
-            });
+            owner: multisig(),
+            projectUri: "opstack-fork-test",
+            rulesetConfigurations: _rulesetConfigurations,
+            terminalConfigurations: _terminalConfigurations,
+            memo: ""
+        });
     }
 
     // ── Tests

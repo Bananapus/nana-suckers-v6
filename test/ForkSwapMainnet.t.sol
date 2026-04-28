@@ -224,12 +224,12 @@ abstract contract SwapCCIPSuckerForkTestBase is TestBaseWorkflow {
 
         jbController()
             .launchProjectFor({
-                owner: multisig(),
-                projectUri: "swap-fork-test",
-                rulesetConfigurations: _rulesetConfigurations,
-                terminalConfigurations: _terminalConfigurations,
-                memo: ""
-            });
+            owner: multisig(),
+            projectUri: "swap-fork-test",
+            rulesetConfigurations: _rulesetConfigurations,
+            terminalConfigurations: _terminalConfigurations,
+            memo: ""
+        });
     }
 
     // ── Tests

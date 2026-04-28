@@ -151,3 +151,11 @@ When the only available Uniswap pool for a cross-denomination swap is a hookless
 ### 10.9 Zero-value `prepare()` is allowed
 
 `prepare()` does not reject `projectTokenCount == 0`. A zero-value check would be trivially bypassed by passing `1` instead, so it provides no real protection against remap-window consumption. The cost to create a leaf with `projectTokenCount = 1` is negligible (1 wei of project tokens). The one-time remap window is protected by the token mapping's `enabled` flag and the outbox tree count, not by minimum deposit requirements.
+
+### 10.10 Cross-chain currency uses standardized `JBCurrencyIds.ETH` (1), not local token addresses
+
+Snapshot messages encode surplus and balance values using `JBCurrencyIds.ETH` (currency ID `1`) as the cross-chain currency identifier, not `uint32(uint160(JBConstants.NATIVE_TOKEN))` (currency ID `61166`). This is intentional: `NATIVE_TOKEN` (`0x000...EEEe`) is a local sentinel meaning "the native token on this chain," which may represent different assets on different networks (e.g., ETH on mainnet, MATIC on Polygon). A standardized semantic currency ID is required for cross-chain values to be comparable.
+
+On the consuming side, contracts like `REVOwner` and `REVLoans` query sucker-reported values using `uint32(uint160(NATIVE_TOKEN))` — the local terminal convention. The `JBPrices` oracle in `JBSuckerLib.convertPeerValue` resolves the conversion between currency ID `1` (ETH) and currency ID `61166` (native token) when a price feed is registered for the pair. If no feed exists, `convertPeerValue` returns `0`, which is acceptable: it means the project has not configured cross-chain pricing for that token pair, and remote values are simply not factored into local calculations.
+
+Projects that need accurate cross-chain surplus and supply accounting should register a price feed for the `1 ↔ 61166` pair via `JBPrices`. On chains where the native token is ETH, this is a 1:1 identity feed. On chains where the native token is not ETH, the feed should reflect the actual exchange rate.

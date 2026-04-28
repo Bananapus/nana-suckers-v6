@@ -199,12 +199,12 @@ contract ForkArbitrumDeployerTest is TestBaseWorkflow, IERC721Receiver {
 
         jbController()
             .launchProjectFor({
-                owner: address(this),
-                projectUri: "arb-fork-test",
-                rulesetConfigurations: _rulesetConfigurations,
-                terminalConfigurations: _terminalConfigurations,
-                memo: ""
-            });
+            owner: address(this),
+            projectUri: "arb-fork-test",
+            rulesetConfigurations: _rulesetConfigurations,
+            terminalConfigurations: _terminalConfigurations,
+            memo: ""
+        });
     }
 
     function onERC721Received(address, address, uint256, bytes calldata) external pure returns (bytes4) {
@@ -340,12 +340,12 @@ contract ForkArbitrumNativeTransferTest is TestBaseWorkflow {
 
         jbController()
             .launchProjectFor({
-                owner: multisig(),
-                projectUri: "arb-native-fork-test",
-                rulesetConfigurations: _rulesetConfigurations,
-                terminalConfigurations: _terminalConfigurations,
-                memo: ""
-            });
+            owner: multisig(),
+            projectUri: "arb-native-fork-test",
+            rulesetConfigurations: _rulesetConfigurations,
+            terminalConfigurations: _terminalConfigurations,
+            memo: ""
+        });
     }
 
     /// @notice Test native ETH transfer from L1 → Arbitrum L2 via the real Arbitrum inbox.

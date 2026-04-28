@@ -90,17 +90,17 @@ contract CodexNemesisRegistryPeerAuthBreakTest is Test, TestBaseWorkflow, IERC72
         JBOptimismSucker(payable(address(suckerB)))
             .fromRemote(
                 JBMessageRoot({
-                    version: 1,
-                    token: bytes32(uint256(uint160(JBConstants.NATIVE_TOKEN))),
-                    amount: 0,
-                    remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(1))}),
-                    sourceTotalSupply: 0,
-                    sourceCurrency: uint32(uint160(JBConstants.NATIVE_TOKEN)),
-                    sourceDecimals: 18,
-                    sourceSurplus: 0,
-                    sourceBalance: 0,
-                    sourceTimestamp: 1
-                })
+                version: 1,
+                token: bytes32(uint256(uint160(JBConstants.NATIVE_TOKEN))),
+                amount: 0,
+                remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(1))}),
+                sourceTotalSupply: 0,
+                sourceCurrency: uint32(uint160(JBConstants.NATIVE_TOKEN)),
+                sourceDecimals: 18,
+                sourceSurplus: 0,
+                sourceBalance: 0,
+                sourceTimestamp: 1
+            })
             );
     }
 
@@ -184,12 +184,12 @@ contract CodexNemesisRegistryPeerAuthBreakTest is Test, TestBaseWorkflow, IERC72
 
         return jbController()
             .launchProjectFor({
-                owner: address(this),
-                projectUri: "registry-peer-auth-break",
-                rulesetConfigurations: rulesets,
-                terminalConfigurations: terminals,
-                memo: ""
-            });
+            owner: address(this),
+            projectUri: "registry-peer-auth-break",
+            rulesetConfigurations: rulesets,
+            terminalConfigurations: terminals,
+            memo: ""
+        });
     }
 
     function onERC721Received(address, address, uint256, bytes calldata) external pure returns (bytes4) {

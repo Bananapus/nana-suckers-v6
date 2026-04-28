@@ -874,12 +874,12 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         // slither-disable-next-line calls-loop,unused-return
         IJBController(address(DIRECTORY.controllerOf(cachedProjectId)))
             .mintTokensOf({
-                projectId: cachedProjectId,
-                tokenCount: projectTokenAmount,
-                beneficiary: _toAddress(beneficiary),
-                memo: "",
-                useReservedPercent: false
-            });
+            projectId: cachedProjectId,
+            tokenCount: projectTokenAmount,
+            beneficiary: _toAddress(beneficiary),
+            memo: "",
+            useReservedPercent: false
+        });
     }
 
     /// @notice Inserts a new leaf into the outbox merkle tree for the specified `token`.
