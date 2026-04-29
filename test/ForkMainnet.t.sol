@@ -3,6 +3,7 @@ pragma solidity 0.8.28;
 
 // forge-lint: disable-next-line(unaliased-plain-import)
 import /* {*} from */ "@bananapus/core-v6/test/helpers/TestBaseWorkflow.sol";
+import {SuckerForkHelpers} from "./helpers/SuckerForkHelpers.sol";
 import {IJBSucker} from "../src/interfaces/IJBSucker.sol";
 import {JBConstants} from "@bananapus/core-v6/src/libraries/JBConstants.sol";
 import {JBPermissionsData} from "@bananapus/core-v6/src/structs/JBPermissionsData.sol";
@@ -16,7 +17,7 @@ import {IJBSuckerRegistry} from "../src/interfaces/IJBSuckerRegistry.sol";
 import "forge-std/Test.sol";
 import {JBCCIPSuckerDeployer} from "src/deployers/JBCCIPSuckerDeployer.sol";
 import {JBCCIPSucker} from "../src/JBCCIPSucker.sol";
-import {CCIPLocalSimulatorFork, Register} from "@chainlink/local/src/ccip/CCIPLocalSimulatorFork.sol";
+import {CCIPLocalSimulatorFork} from "@chainlink/local/src/ccip/CCIPLocalSimulatorFork.sol";
 import {CCIPHelper} from "../src/libraries/CCIPHelper.sol";
 
 /// @notice Abstract base for mainnet CCIP sucker fork tests.
@@ -25,9 +26,8 @@ import {CCIPHelper} from "../src/libraries/CCIPHelper.sol";
 ///
 /// CCIPLocalSimulatorFork only ships with testnet entries, so we register mainnet network details
 /// via `setNetworkDetails` before running the tests.
-abstract contract CCIPSuckerMainnetForkTestBase is TestBaseWorkflow {
+abstract contract CCIPSuckerMainnetForkTestBase is SuckerForkHelpers {
     CCIPLocalSimulatorFork ccipLocalSimulatorFork;
-    JBRulesetMetadata _metadata;
 
     JBCCIPSuckerDeployer suckerDeployerL1;
     JBCCIPSuckerDeployer suckerDeployerL2;
@@ -47,63 +47,13 @@ abstract contract CCIPSuckerMainnetForkTestBase is TestBaseWorkflow {
     function _l1ForkBlock() internal pure virtual returns (uint256);
     function _l2ForkBlock() internal pure virtual returns (uint256);
 
-    // ── Token overrides (defaults: native token on both sides)
-    // ────────────────────────────
-
-    function _terminalToken() internal view virtual returns (address) {
-        return JBConstants.NATIVE_TOKEN;
-    }
-
     function _remoteTerminalToken() internal view virtual returns (bytes32) {
         return bytes32(uint256(uint160(JBConstants.NATIVE_TOKEN)));
     }
 
     /// @dev Whether CCIP fees are paid in native ETH (true) or LINK from the sucker's balance (false).
-    /// Tempo has no meaningful native token (CALLVALUE always returns 0), so CCIP fees are paid in LINK.
     function _ccipFeesInNative() internal pure virtual returns (bool) {
         return true;
-    }
-
-    // ── LINK token addresses per mainnet chain
-    // ────────────────────────────
-
-    function _linkTokenOf(uint256 chainId) internal pure returns (address) {
-        if (chainId == 1) return 0x514910771AF9Ca656af840dff83E8264EcF986CA;
-        if (chainId == 42_161) return 0xf97f4df75117a78c1A5a0DBb814Af92458539FB4;
-        if (chainId == 10) return 0x350a791Bfc2C21F9Ed5d10980Dad2e2638ffa7f6;
-        if (chainId == 8453) return 0x88Fb150BDc53A65fe94Dea0c9BA0a6dAf8C6e196;
-        if (chainId == 4217) return 0x15C03488B29e27d62BAf10E30b0c474bf60E0264;
-        revert("Unsupported chain for LINK token");
-    }
-
-    // ── Register mainnet network details
-    // ──────────────────────────────────
-
-    function _registerMainnetDetails(uint256 chainId) internal {
-        Register.NetworkDetails memory details = Register.NetworkDetails({
-            chainSelector: CCIPHelper.selectorOfChain(chainId),
-            routerAddress: CCIPHelper.routerOfChain(chainId),
-            linkAddress: _linkTokenOf(chainId),
-            wrappedNativeAddress: CCIPHelper.wethOfChain(chainId),
-            ccipBnMAddress: address(0),
-            ccipLnMAddress: address(0),
-            rmnProxyAddress: address(0),
-            registryModuleOwnerCustomAddress: address(0),
-            tokenAdminRegistryAddress: address(0)
-        });
-        ccipLocalSimulatorFork.setNetworkDetails(chainId, details);
-    }
-
-    /// @dev Deploy mock ERC20 at the terminal token address if it has no code on the current fork.
-    /// Some tokens (like LINK on Tempo) are not yet deployed — we etch WETH bytecode as a minimal
-    /// ERC20 substitute so fork tests can exercise the code paths.
-    function _ensureTerminalTokenExists() internal {
-        address token = _terminalToken();
-        if (token != JBConstants.NATIVE_TOKEN && token.code.length == 0) {
-            // Etch WETH bytecode as a minimal ERC20 and set 18 decimals (WETH9 slot 2).
-            vm.etch(token, CCIPHelper.wethOfChain(block.chainid).code);
-            vm.store(token, bytes32(uint256(2)), bytes32(uint256(18)));
-        }
     }
 
     // ── Setup
@@ -111,40 +61,17 @@ abstract contract CCIPSuckerMainnetForkTestBase is TestBaseWorkflow {
 
     function setUp() public override {
         // ── L1
-        // ────────────────────────────────────────────────────────────
         l1Fork = vm.createSelectFork(_l1RpcUrl(), _l1ForkBlock());
         _ensureTerminalTokenExists();
 
         ccipLocalSimulatorFork = new CCIPLocalSimulatorFork();
         vm.makePersistent(address(ccipLocalSimulatorFork));
 
-        // Register mainnet network details (CCIPLocalSimulatorFork only ships with testnets).
-        _registerMainnetDetails(_l1ChainId());
-        _registerMainnetDetails(_l2ChainId());
+        _registerMainnetDetails(ccipLocalSimulatorFork, _l1ChainId());
+        _registerMainnetDetails(ccipLocalSimulatorFork, _l2ChainId());
 
-        _metadata = JBRulesetMetadata({
-            reservedPercent: JBConstants.MAX_RESERVED_PERCENT / 2,
-            cashOutTaxRate: 0,
-            baseCurrency: uint32(uint160(JBConstants.NATIVE_TOKEN)),
-            pausePay: false,
-            pauseCreditTransfers: false,
-            allowOwnerMinting: true,
-            allowSetCustomToken: false,
-            allowTerminalMigration: false,
-            allowSetTerminals: false,
-            allowSetController: false,
-            allowAddAccountingContext: true,
-            allowAddPriceFeed: true,
-            ownerMustSendPayouts: false,
-            holdFees: false,
-            useTotalSurplusForCashOuts: true,
-            useDataHookForPay: false,
-            useDataHookForCashOut: false,
-            dataHook: address(0),
-            metadata: 0
-        });
+        _initMetadata();
 
-        // Deploy full JB infrastructure on L1.
         super.setUp();
         vm.stopPrank();
 
@@ -187,11 +114,9 @@ abstract contract CCIPSuckerMainnetForkTestBase is TestBaseWorkflow {
         vm.stopPrank();
 
         // ── L2
-        // ────────────────────────────────────────────────────────────
         l2Fork = vm.createSelectFork(_l2RpcUrl(), _l2ForkBlock());
         _ensureTerminalTokenExists();
 
-        // Deploy full JB infrastructure on L2.
         super.setUp();
         vm.stopPrank();
 
@@ -227,53 +152,7 @@ abstract contract CCIPSuckerMainnetForkTestBase is TestBaseWorkflow {
         jbPermissions().setPermissionsFor(multisig(), permsL2);
         vm.stopPrank();
 
-        // Mock the registry's toRemoteFee() to return 0 (registry is address(0) with no code).
         vm.mockCall(address(0), abi.encodeCall(IJBSuckerRegistry.toRemoteFee, ()), abi.encode(uint256(0)));
-    }
-
-    /// @notice Launch a project that accepts `_terminalToken()`.
-    function _launchProject() internal {
-        address token = _terminalToken();
-
-        // Ensure baseCurrency matches the terminal token so no price feed is needed.
-        _metadata.baseCurrency = uint32(uint160(token));
-
-        JBCurrencyAmount[] memory _surplusAllowances = new JBCurrencyAmount[](1);
-        _surplusAllowances[0] = JBCurrencyAmount({amount: 5 * 10 ** 18, currency: uint32(uint160(token))});
-
-        JBFundAccessLimitGroup[] memory _fundAccessLimitGroup = new JBFundAccessLimitGroup[](1);
-        _fundAccessLimitGroup[0] = JBFundAccessLimitGroup({
-            terminal: address(jbMultiTerminal()),
-            token: token,
-            payoutLimits: new JBCurrencyAmount[](0),
-            surplusAllowances: _surplusAllowances
-        });
-
-        JBRulesetConfig[] memory _rulesetConfigurations = new JBRulesetConfig[](1);
-        _rulesetConfigurations[0].mustStartAtOrAfter = 0;
-        _rulesetConfigurations[0].duration = 0;
-        _rulesetConfigurations[0].weight = 1000 * 10 ** 18;
-        _rulesetConfigurations[0].weightCutPercent = 0;
-        _rulesetConfigurations[0].approvalHook = IJBRulesetApprovalHook(address(0));
-        _rulesetConfigurations[0].metadata = _metadata;
-        _rulesetConfigurations[0].splitGroups = new JBSplitGroup[](0);
-        _rulesetConfigurations[0].fundAccessLimitGroups = _fundAccessLimitGroup;
-
-        JBAccountingContext[] memory _tokensToAccept = new JBAccountingContext[](1);
-        _tokensToAccept[0] = JBAccountingContext({token: token, decimals: 18, currency: uint32(uint160(token))});
-
-        JBTerminalConfig[] memory _terminalConfigurations = new JBTerminalConfig[](1);
-        _terminalConfigurations[0] =
-            JBTerminalConfig({terminal: jbMultiTerminal(), accountingContextsToAccept: _tokensToAccept});
-
-        jbController()
-            .launchProjectFor({
-            owner: multisig(),
-            projectUri: "mainnet-fork-test",
-            rulesetConfigurations: _rulesetConfigurations,
-            terminalConfigurations: _terminalConfigurations,
-            memo: ""
-        });
     }
 
     // ── Tests

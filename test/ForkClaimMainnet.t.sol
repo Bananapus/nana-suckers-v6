@@ -3,6 +3,7 @@ pragma solidity 0.8.28;
 
 // forge-lint: disable-next-line(unaliased-plain-import)
 import /* {*} from */ "@bananapus/core-v6/test/helpers/TestBaseWorkflow.sol";
+import {SuckerForkHelpers} from "./helpers/SuckerForkHelpers.sol";
 import {IJBSucker} from "../src/interfaces/IJBSucker.sol";
 import {JBConstants} from "@bananapus/core-v6/src/libraries/JBConstants.sol";
 import {JBPermissionsData} from "@bananapus/core-v6/src/structs/JBPermissionsData.sol";
@@ -22,7 +23,7 @@ import {JBSucker} from "../src/JBSucker.sol";
 import "forge-std/Test.sol";
 import {JBCCIPSuckerDeployer} from "src/deployers/JBCCIPSuckerDeployer.sol";
 import {JBCCIPSucker} from "../src/JBCCIPSucker.sol";
-import {CCIPLocalSimulatorFork, Register} from "@chainlink/local/src/ccip/CCIPLocalSimulatorFork.sol";
+import {CCIPLocalSimulatorFork} from "@chainlink/local/src/ccip/CCIPLocalSimulatorFork.sol";
 import {CCIPHelper} from "../src/libraries/CCIPHelper.sol";
 
 /// @dev Captured leaf data from InsertToOutboxTree event.
@@ -39,9 +40,8 @@ struct LeafData {
 /// @dev Tests the full round-trip: pay → prepare → toRemote (L1) → manual ccipReceive → claim (L2).
 /// Uses the dual-fork pattern from ForkMainnet.t.sol (real CCIP router on send side) combined with
 /// the manual ccipReceive pattern from ForkSwapMainnet.t.sol (prank as router on receive side).
-abstract contract CCIPSuckerClaimForkTestBase is TestBaseWorkflow {
+abstract contract CCIPSuckerClaimForkTestBase is SuckerForkHelpers {
     CCIPLocalSimulatorFork ccipLocalSimulatorFork;
-    JBRulesetMetadata _metadata;
 
     JBCCIPSuckerDeployer suckerDeployerL1;
     JBCCIPSuckerDeployer suckerDeployerL2;
@@ -61,13 +61,6 @@ abstract contract CCIPSuckerClaimForkTestBase is TestBaseWorkflow {
     function _l1ForkBlock() internal pure virtual returns (uint256);
     function _l2ForkBlock() internal pure virtual returns (uint256);
 
-    // ── Token overrides (defaults: native token on both sides)
-    // ────────────────────────────────
-
-    function _terminalToken() internal view virtual returns (address) {
-        return JBConstants.NATIVE_TOKEN;
-    }
-
     function _remoteTerminalToken() internal view virtual returns (bytes32) {
         return bytes32(uint256(uint160(JBConstants.NATIVE_TOKEN)));
     }
@@ -77,83 +70,22 @@ abstract contract CCIPSuckerClaimForkTestBase is TestBaseWorkflow {
         return true;
     }
 
-    // ── LINK token addresses per mainnet chain
-    // ────────────────────────────────
-
-    function _linkTokenOf(uint256 chainId) internal pure returns (address) {
-        if (chainId == 1) return 0x514910771AF9Ca656af840dff83E8264EcF986CA;
-        if (chainId == 42_161) return 0xf97f4df75117a78c1A5a0DBb814Af92458539FB4;
-        if (chainId == 10) return 0x350a791Bfc2C21F9Ed5d10980Dad2e2638ffa7f6;
-        if (chainId == 8453) return 0x88Fb150BDc53A65fe94Dea0c9BA0a6dAf8C6e196;
-        if (chainId == 4217) return 0x15C03488B29e27d62BAf10E30b0c474bf60E0264;
-        revert("Unsupported chain for LINK token");
-    }
-
-    // ── Register mainnet network details
-    // ──────────────────────────────────
-
-    function _registerMainnetDetails(uint256 chainId) internal {
-        Register.NetworkDetails memory details = Register.NetworkDetails({
-            chainSelector: CCIPHelper.selectorOfChain(chainId),
-            routerAddress: CCIPHelper.routerOfChain(chainId),
-            linkAddress: _linkTokenOf(chainId),
-            wrappedNativeAddress: CCIPHelper.wethOfChain(chainId),
-            ccipBnMAddress: address(0),
-            ccipLnMAddress: address(0),
-            rmnProxyAddress: address(0),
-            registryModuleOwnerCustomAddress: address(0),
-            tokenAdminRegistryAddress: address(0)
-        });
-        ccipLocalSimulatorFork.setNetworkDetails(chainId, details);
-    }
-
-    /// @dev Deploy mock ERC20 at the terminal token address if it has no code on the current fork.
-    function _ensureTerminalTokenExists() internal {
-        address token = _terminalToken();
-        if (token != JBConstants.NATIVE_TOKEN && token.code.length == 0) {
-            vm.etch(token, CCIPHelper.wethOfChain(block.chainid).code);
-        }
-    }
-
     // ── Setup
     // ─────────────────────────────────────────────────────────────
 
     function setUp() public override {
         // ── L1
-        // ────────────────────────────────────────────────────────────
         l1Fork = vm.createSelectFork(_l1RpcUrl(), _l1ForkBlock());
         _ensureTerminalTokenExists();
 
         ccipLocalSimulatorFork = new CCIPLocalSimulatorFork();
         vm.makePersistent(address(ccipLocalSimulatorFork));
 
-        // Register mainnet network details (CCIPLocalSimulatorFork only ships with testnets).
-        _registerMainnetDetails(_l1ChainId());
-        _registerMainnetDetails(_l2ChainId());
+        _registerMainnetDetails(ccipLocalSimulatorFork, _l1ChainId());
+        _registerMainnetDetails(ccipLocalSimulatorFork, _l2ChainId());
 
-        _metadata = JBRulesetMetadata({
-            reservedPercent: JBConstants.MAX_RESERVED_PERCENT / 2,
-            cashOutTaxRate: 0,
-            baseCurrency: uint32(uint160(JBConstants.NATIVE_TOKEN)),
-            pausePay: false,
-            pauseCreditTransfers: false,
-            allowOwnerMinting: true,
-            allowSetCustomToken: false,
-            allowTerminalMigration: false,
-            allowSetTerminals: false,
-            allowSetController: false,
-            allowAddAccountingContext: true,
-            allowAddPriceFeed: true,
-            ownerMustSendPayouts: false,
-            holdFees: false,
-            useTotalSurplusForCashOuts: true,
-            useDataHookForPay: false,
-            useDataHookForCashOut: false,
-            dataHook: address(0),
-            metadata: 0
-        });
+        _initMetadata();
 
-        // Deploy full JB infrastructure on L1.
         super.setUp();
         vm.stopPrank();
 
@@ -196,11 +128,9 @@ abstract contract CCIPSuckerClaimForkTestBase is TestBaseWorkflow {
         vm.stopPrank();
 
         // ── L2
-        // ────────────────────────────────────────────────────────────
         l2Fork = vm.createSelectFork(_l2RpcUrl(), _l2ForkBlock());
         _ensureTerminalTokenExists();
 
-        // Deploy full JB infrastructure on L2.
         super.setUp();
         vm.stopPrank();
 
@@ -241,51 +171,6 @@ abstract contract CCIPSuckerClaimForkTestBase is TestBaseWorkflow {
         vm.mockCall(address(0), abi.encodeCall(IJBSuckerRegistry.toRemoteFee, ()), abi.encode(uint256(0)));
         vm.selectFork(l1Fork);
         vm.mockCall(address(0), abi.encodeCall(IJBSuckerRegistry.toRemoteFee, ()), abi.encode(uint256(0)));
-    }
-
-    /// @notice Launch a project that accepts `_terminalToken()`.
-    function _launchProject() internal {
-        address token = _terminalToken();
-
-        // Ensure baseCurrency matches the terminal token so no price feed is needed.
-        _metadata.baseCurrency = uint32(uint160(token));
-
-        JBCurrencyAmount[] memory _surplusAllowances = new JBCurrencyAmount[](1);
-        _surplusAllowances[0] = JBCurrencyAmount({amount: 5 * 10 ** 18, currency: uint32(uint160(token))});
-
-        JBFundAccessLimitGroup[] memory _fundAccessLimitGroup = new JBFundAccessLimitGroup[](1);
-        _fundAccessLimitGroup[0] = JBFundAccessLimitGroup({
-            terminal: address(jbMultiTerminal()),
-            token: token,
-            payoutLimits: new JBCurrencyAmount[](0),
-            surplusAllowances: _surplusAllowances
-        });
-
-        JBRulesetConfig[] memory _rulesetConfigurations = new JBRulesetConfig[](1);
-        _rulesetConfigurations[0].mustStartAtOrAfter = 0;
-        _rulesetConfigurations[0].duration = 0;
-        _rulesetConfigurations[0].weight = 1000 * 10 ** 18;
-        _rulesetConfigurations[0].weightCutPercent = 0;
-        _rulesetConfigurations[0].approvalHook = IJBRulesetApprovalHook(address(0));
-        _rulesetConfigurations[0].metadata = _metadata;
-        _rulesetConfigurations[0].splitGroups = new JBSplitGroup[](0);
-        _rulesetConfigurations[0].fundAccessLimitGroups = _fundAccessLimitGroup;
-
-        JBAccountingContext[] memory _tokensToAccept = new JBAccountingContext[](1);
-        _tokensToAccept[0] = JBAccountingContext({token: token, decimals: 18, currency: uint32(uint160(token))});
-
-        JBTerminalConfig[] memory _terminalConfigurations = new JBTerminalConfig[](1);
-        _terminalConfigurations[0] =
-            JBTerminalConfig({terminal: jbMultiTerminal(), accountingContextsToAccept: _tokensToAccept});
-
-        jbController()
-            .launchProjectFor({
-            owner: multisig(),
-            projectUri: "claim-fork-test",
-            rulesetConfigurations: _rulesetConfigurations,
-            terminalConfigurations: _terminalConfigurations,
-            memo: ""
-        });
     }
 
     // ── Helpers

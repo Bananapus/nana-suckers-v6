@@ -3,6 +3,7 @@ pragma solidity 0.8.28;
 
 // forge-lint: disable-next-line(unaliased-plain-import)
 import /* {*} from */ "@bananapus/core-v6/test/helpers/TestBaseWorkflow.sol";
+import {SuckerForkHelpers} from "./helpers/SuckerForkHelpers.sol";
 import {IJBSucker} from "../src/interfaces/IJBSucker.sol";
 import {JBConstants} from "@bananapus/core-v6/src/libraries/JBConstants.sol";
 import {JBPermissionsData} from "@bananapus/core-v6/src/structs/JBPermissionsData.sol";
@@ -48,9 +49,7 @@ IUniswapV3Factory constant MAINNET_V3_FACTORY = IUniswapV3Factory(0x1F98431c8aD9
 ///
 /// The bridge token varies per route (USDC for Arbitrum, LINK for Tempo) since CCIP token
 /// pool allowlists differ by destination chain.
-abstract contract SwapCCIPSuckerForkTestBase is TestBaseWorkflow {
-    JBRulesetMetadata _metadata;
-
+abstract contract SwapCCIPSuckerForkTestBase is SuckerForkHelpers {
     JBSwapCCIPSuckerDeployer suckerDeployer;
     IJBSucker suckerL1;
     IJBToken projectToken;
@@ -82,21 +81,9 @@ abstract contract SwapCCIPSuckerForkTestBase is TestBaseWorkflow {
         return address(MAINNET_V3_FACTORY);
     }
 
-    function _terminalToken() internal view virtual returns (address) {
-        return JBConstants.NATIVE_TOKEN;
-    }
-
     /// @dev Whether CCIP fees are paid in native ETH (true) or LINK from the sucker's balance (false).
     function _ccipFeesInNative() internal pure virtual returns (bool) {
         return true;
-    }
-
-    /// @dev Deploy mock ERC20 at the terminal token address if it has no code on the current fork.
-    function _ensureTerminalTokenExists() internal {
-        address token = _terminalToken();
-        if (token != JBConstants.NATIVE_TOKEN && token.code.length == 0) {
-            vm.etch(token, CCIPHelper.wethOfChain(block.chainid).code);
-        }
     }
 
     // ── Setup
@@ -106,29 +93,8 @@ abstract contract SwapCCIPSuckerForkTestBase is TestBaseWorkflow {
         l1Fork = vm.createSelectFork(_l1RpcUrl(), _l1ForkBlock());
         _ensureTerminalTokenExists();
 
-        _metadata = JBRulesetMetadata({
-            reservedPercent: JBConstants.MAX_RESERVED_PERCENT / 2,
-            cashOutTaxRate: 0,
-            baseCurrency: uint32(uint160(JBConstants.NATIVE_TOKEN)),
-            pausePay: false,
-            pauseCreditTransfers: false,
-            allowOwnerMinting: true,
-            allowSetCustomToken: false,
-            allowTerminalMigration: false,
-            allowSetTerminals: false,
-            allowSetController: false,
-            allowAddAccountingContext: true,
-            allowAddPriceFeed: true,
-            ownerMustSendPayouts: false,
-            holdFees: false,
-            useTotalSurplusForCashOuts: true,
-            useDataHookForPay: false,
-            useDataHookForCashOut: false,
-            dataHook: address(0),
-            metadata: 0
-        });
+        _initMetadata();
 
-        // Deploy full JB infrastructure on local chain.
         super.setUp();
         vm.stopPrank();
 
@@ -138,14 +104,12 @@ abstract contract SwapCCIPSuckerForkTestBase is TestBaseWorkflow {
             new JBSwapCCIPSuckerDeployer(jbDirectory(), jbPermissions(), jbTokens(), address(this), address(0));
         vm.stopPrank();
 
-        // Configure CCIP constants (remote = target chain).
         suckerDeployer.setChainSpecificConstants(
             _remoteChainId(),
             CCIPHelper.selectorOfChain(_remoteChainId()),
             ICCIPRouter(CCIPHelper.routerOfChain(block.chainid))
         );
 
-        // Configure swap constants: bridge token, V3 factory, WETH.
         suckerDeployer.setSwapConstants({
             _bridgeToken: IERC20(_bridgeToken()),
             _poolManager: IPoolManager(address(0)),
@@ -154,7 +118,6 @@ abstract contract SwapCCIPSuckerForkTestBase is TestBaseWorkflow {
             _weth: _weth()
         });
 
-        // Deploy singleton and configure.
         vm.startPrank(address(0x1112222));
         JBSwapCCIPSucker singleton = new JBSwapCCIPSucker({
             deployer: suckerDeployer,
@@ -171,7 +134,6 @@ abstract contract SwapCCIPSuckerForkTestBase is TestBaseWorkflow {
         suckerL1 = suckerDeployer.createForSender(1, "salty");
         vm.label(address(suckerL1), "swapSuckerL1");
 
-        // Grant sucker mint permission.
         uint8[] memory ids = new uint8[](1);
         ids[0] = JBPermissionIds.MINT_TOKENS;
         JBPermissionsData memory perms =
@@ -183,53 +145,7 @@ abstract contract SwapCCIPSuckerForkTestBase is TestBaseWorkflow {
         projectToken = jbController().deployERC20For(1, "SuckerToken", "SOOK", bytes32(0));
         vm.stopPrank();
 
-        // Mock the registry's toRemoteFee() (registry is address(0) in tests).
         vm.mockCall(address(0), abi.encodeCall(IJBSuckerRegistry.toRemoteFee, ()), abi.encode(uint256(0)));
-    }
-
-    /// @notice Launch a project that accepts `_terminalToken()`.
-    function _launchProject() internal {
-        address token = _terminalToken();
-
-        // Ensure baseCurrency matches the terminal token so no price feed is needed.
-        _metadata.baseCurrency = uint32(uint160(token));
-
-        JBCurrencyAmount[] memory _surplusAllowances = new JBCurrencyAmount[](1);
-        _surplusAllowances[0] = JBCurrencyAmount({amount: 5 * 10 ** 18, currency: uint32(uint160(token))});
-
-        JBFundAccessLimitGroup[] memory _fundAccessLimitGroup = new JBFundAccessLimitGroup[](1);
-        _fundAccessLimitGroup[0] = JBFundAccessLimitGroup({
-            terminal: address(jbMultiTerminal()),
-            token: token,
-            payoutLimits: new JBCurrencyAmount[](0),
-            surplusAllowances: _surplusAllowances
-        });
-
-        JBRulesetConfig[] memory _rulesetConfigurations = new JBRulesetConfig[](1);
-        _rulesetConfigurations[0].mustStartAtOrAfter = 0;
-        _rulesetConfigurations[0].duration = 0;
-        _rulesetConfigurations[0].weight = 1000 * 10 ** 18;
-        _rulesetConfigurations[0].weightCutPercent = 0;
-        _rulesetConfigurations[0].approvalHook = IJBRulesetApprovalHook(address(0));
-        _rulesetConfigurations[0].metadata = _metadata;
-        _rulesetConfigurations[0].splitGroups = new JBSplitGroup[](0);
-        _rulesetConfigurations[0].fundAccessLimitGroups = _fundAccessLimitGroup;
-
-        JBAccountingContext[] memory _tokensToAccept = new JBAccountingContext[](1);
-        _tokensToAccept[0] = JBAccountingContext({token: token, decimals: 18, currency: uint32(uint160(token))});
-
-        JBTerminalConfig[] memory _terminalConfigurations = new JBTerminalConfig[](1);
-        _terminalConfigurations[0] =
-            JBTerminalConfig({terminal: jbMultiTerminal(), accountingContextsToAccept: _tokensToAccept});
-
-        jbController()
-            .launchProjectFor({
-            owner: multisig(),
-            projectUri: "swap-fork-test",
-            rulesetConfigurations: _rulesetConfigurations,
-            terminalConfigurations: _terminalConfigurations,
-            memo: ""
-        });
     }
 
     // ── Tests
