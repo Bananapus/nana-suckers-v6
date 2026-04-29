@@ -273,6 +273,7 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
 
             address localToken = _toAddress(root.token);
             uint256 localAmount;
+            bool swapFailed;
 
             if (any2EvmMessage.destTokenAmounts.length == 1) {
                 Client.EVMTokenAmount memory tokenAmount = any2EvmMessage.destTokenAmounts[0];
@@ -284,7 +285,7 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
                     // Swap bridge token -> local token via best V3/V4 pool.
                     // Wrapped in try-catch so a swap failure doesn't revert the entire CCIP message
                     // (which would leave tokens stuck in the OffRamp). On failure, bridge tokens are
-                    // stored for later retry via `retrySwap`.
+                    // stored for later retry via `retrySwap` (written below, after nonce validation).
                     // slither-disable-next-line reentrancy-benign,reentrancy-events
                     try this.executeSwapExternal({
                         tokenIn: tokenAmount.token, tokenOut: localToken, amount: tokenAmount.amount
@@ -293,59 +294,78 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
                     ) {
                         localAmount = swapped;
                     } catch {
-                        // Store for later retry. Merkle root and batch range still get stored below.
-                        pendingSwapOf[localToken][root.remoteRoot.nonce] = PendingSwap({
-                            bridgeToken: tokenAmount.token, bridgeAmount: tokenAmount.amount, leafTotal: root.amount
-                        });
-                        // localAmount stays 0 — the conversion rate code below will set
-                        // localTotal: 0, gating claims until retrySwap succeeds.
+                        swapFailed = true;
+                        // localAmount stays 0 — pendingSwapOf and conversion rate are written
+                        // below, after fromRemote validates the nonce.
                     }
                 }
             }
 
-            // Record the batch range so _findNonceForLeafIndex can resolve leaf ownership
-            // independently of nonce ordering. Each nonce is self-describing: [start, end).
-            if (batchEnd > 0) {
-                _batchStartOf[localToken][root.remoteRoot.nonce] = batchStart;
-                _batchEndOf[localToken][root.remoteRoot.nonce] = batchEnd;
-                if (root.remoteRoot.nonce > _highestReceivedNonce[localToken]) {
-                    _highestReceivedNonce[localToken] = root.remoteRoot.nonce;
-                }
-            }
-
-            // Zero-output swap guard: When a swap succeeds but returns zero local tokens, the
-            // batch must NOT be marked claimable. Without this guard, `_addToBalance` would see
-            // `pendingSwapOf.bridgeAmount == 0` (no pending swap stored) and allow claims to
-            // proceed — minting the full bridged project-token amount while adding zero terminal
-            // backing, breaking cross-chain solvency.
-            //
-            // Route zero-output swaps into `pendingSwapOf` so the swap can be retried via
-            // `retrySwap` once pool conditions improve. Only store the conversion rate when
-            // the swap produced a positive local amount.
-            if (root.amount > 0) {
-                if (localAmount == 0 && any2EvmMessage.destTokenAmounts.length == 1) {
-                    Client.EVMTokenAmount memory zeroSwapTokenAmount = any2EvmMessage.destTokenAmounts[0];
-                    // Only route to pending if there were actual bridge tokens delivered.
-                    // If bridgeAmount is also 0 (zero-value batch), store the conversion rate
-                    // normally — there is nothing to retry.
-                    if (zeroSwapTokenAmount.amount > 0) {
-                        pendingSwapOf[localToken][root.remoteRoot.nonce] = PendingSwap({
-                            bridgeToken: zeroSwapTokenAmount.token,
-                            bridgeAmount: zeroSwapTokenAmount.amount,
-                            leafTotal: root.amount
-                        });
-                    } else {
-                        _conversionRateOf[localToken][root.remoteRoot.nonce] =
-                            ConversionRate({leafTotal: root.amount, localTotal: 0});
-                    }
-                } else {
-                    _conversionRateOf[localToken][root.remoteRoot.nonce] =
-                        ConversionRate({leafTotal: root.amount, localTotal: localAmount});
-                }
-            }
+            // Capture the inbox nonce before fromRemote to detect whether the root was accepted.
+            uint64 inboxNonceBefore = _inboxOf[localToken].nonce;
 
             // Store the inbox merkle root for later claims.
+            // Must be called BEFORE writing batch metadata and conversion rates so that stale
+            // (duplicate/replayed) roots that fromRemote silently rejects do not overwrite
+            // metadata from the original accepted delivery.
             this.fromRemote(root);
+
+            // Only write batch metadata and conversion rates if fromRemote accepted this root.
+            // fromRemote updates _inboxOf[localToken].nonce when the root's nonce is strictly
+            // greater than the current inbox nonce; stale roots are silently rejected.
+            // We detect acceptance by checking if the nonce actually changed.
+            if (_inboxOf[localToken].nonce > inboxNonceBefore) {
+                // Record the batch range so _findNonceForLeafIndex can resolve leaf ownership
+                // independently of nonce ordering. Each nonce is self-describing: [start, end).
+                if (batchEnd > 0) {
+                    _batchStartOf[localToken][root.remoteRoot.nonce] = batchStart;
+                    _batchEndOf[localToken][root.remoteRoot.nonce] = batchEnd;
+                    if (root.remoteRoot.nonce > _highestReceivedNonce[localToken]) {
+                        _highestReceivedNonce[localToken] = root.remoteRoot.nonce;
+                    }
+                }
+
+                // Store pendingSwapOf for failed swaps now that nonce is validated.
+                if (swapFailed) {
+                    Client.EVMTokenAmount memory failedTokenAmount = any2EvmMessage.destTokenAmounts[0];
+                    pendingSwapOf[localToken][root.remoteRoot.nonce] = PendingSwap({
+                        bridgeToken: failedTokenAmount.token,
+                        bridgeAmount: failedTokenAmount.amount,
+                        leafTotal: root.amount
+                    });
+                }
+
+                // Zero-output swap guard: When a swap succeeds but returns zero local tokens, the
+                // batch must NOT be marked claimable. Without this guard, `_addToBalance` would see
+                // `pendingSwapOf.bridgeAmount == 0` (no pending swap stored) and allow claims to
+                // proceed — minting the full bridged project-token amount while adding zero terminal
+                // backing, breaking cross-chain solvency.
+                //
+                // Route zero-output swaps into `pendingSwapOf` so the swap can be retried via
+                // `retrySwap` once pool conditions improve. Only store the conversion rate when
+                // the swap produced a positive local amount.
+                if (root.amount > 0 && !swapFailed) {
+                    if (localAmount == 0 && any2EvmMessage.destTokenAmounts.length == 1) {
+                        Client.EVMTokenAmount memory zeroSwapTokenAmount = any2EvmMessage.destTokenAmounts[0];
+                        // Only route to pending if there were actual bridge tokens delivered.
+                        // If bridgeAmount is also 0 (zero-value batch), store the conversion rate
+                        // normally — there is nothing to retry.
+                        if (zeroSwapTokenAmount.amount > 0) {
+                            pendingSwapOf[localToken][root.remoteRoot.nonce] = PendingSwap({
+                                bridgeToken: zeroSwapTokenAmount.token,
+                                bridgeAmount: zeroSwapTokenAmount.amount,
+                                leafTotal: root.amount
+                            });
+                        } else {
+                            _conversionRateOf[localToken][root.remoteRoot.nonce] =
+                                ConversionRate({leafTotal: root.amount, localTotal: 0});
+                        }
+                    } else {
+                        _conversionRateOf[localToken][root.remoteRoot.nonce] =
+                            ConversionRate({leafTotal: root.amount, localTotal: localAmount});
+                    }
+                }
+            }
         } else {
             revert JBCCIPSucker_UnknownMessageType(messageType);
         }
