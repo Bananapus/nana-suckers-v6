@@ -17,8 +17,8 @@ import {JBInboxTreeRoot} from "../../src/structs/JBInboxTreeRoot.sol";
 import {JBMessageRoot} from "../../src/structs/JBMessageRoot.sol";
 import {ERC20Mock} from "../mocks/ERC20Mock.sol";
 
-/// @notice Harness exposing JBSwapCCIPSucker internals for testing L-21 fix.
-contract L21TestHarness is JBSwapCCIPSucker {
+/// @notice Harness exposing JBSwapCCIPSucker internals for testing stale nonce fix.
+contract StaleNonceTestHarness is JBSwapCCIPSucker {
     constructor(
         JBSwapCCIPSuckerDeployer deployer,
         IJBDirectory directory,
@@ -58,7 +58,7 @@ contract L21TestHarness is JBSwapCCIPSucker {
 }
 
 /// @title StaleNonceMetadataOverwriteTest
-/// @notice Test for L-21 fix: verifies that replaying a CCIP message with a stale nonce
+/// @notice Verifies that replaying a CCIP message with a stale nonce
 /// does NOT overwrite the conversion rate or batch metadata written by the original delivery.
 /// Before the fix, batch metadata and conversion rate writes happened BEFORE fromRemote
 /// validated the nonce, so a replayed stale message could corrupt the original accepted data.
@@ -76,7 +76,7 @@ contract StaleNonceMetadataOverwriteTest is Test {
 
     ERC20Mock internal usdc;
     ERC20Mock internal weth;
-    L21TestHarness internal sucker;
+    StaleNonceTestHarness internal sucker;
 
     function setUp() external {
         usdc = new ERC20Mock("USDC", "USDC", address(this), 0);
@@ -104,13 +104,15 @@ contract StaleNonceMetadataOverwriteTest is Test {
         vm.mockCall(MOCK_PROJECTS, abi.encodeWithSignature("ownerOf(uint256)"), abi.encode(address(this)));
 
         // Deploy singleton and clone.
-        L21TestHarness singleton = new L21TestHarness(
+        StaleNonceTestHarness singleton = new StaleNonceTestHarness(
             JBSwapCCIPSuckerDeployer(MOCK_DEPLOYER),
             IJBDirectory(MOCK_DIRECTORY),
             IJBTokens(MOCK_TOKENS),
             IJBPermissions(MOCK_PERMISSIONS)
         );
-        sucker = L21TestHarness(payable(LibClone.cloneDeterministic(address(singleton), bytes32("l21-test"))));
+        sucker = StaleNonceTestHarness(
+            payable(LibClone.cloneDeterministic(address(singleton), bytes32("stale-nonce-test")))
+        );
         sucker.initialize(PROJECT_ID);
     }
 
@@ -190,7 +192,7 @@ contract StaleNonceMetadataOverwriteTest is Test {
     // Test: stale nonce replay does NOT overwrite conversion rate
     // =========================================================================
 
-    /// @notice The core L-21 test: replaying a CCIP message with a stale nonce must not
+    /// @notice Replaying a CCIP message with a stale nonce must not
     /// overwrite the conversion rate or batch metadata from the original accepted delivery.
     function test_staleNonceReplay_doesNotOverwriteConversionRate() external {
         address token = address(usdc);
