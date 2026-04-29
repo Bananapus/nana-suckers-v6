@@ -183,40 +183,50 @@ library JBSwapPoolLib {
     /// @return Encoded output amount.
     function executeV4UnlockCallback(IPoolManager poolManager, bytes calldata data) external returns (bytes memory) {
         // Decode the swap parameters packed during _executeV4Swap.
-        (PoolKey memory key, bool zeroForOne, int256 amountSpecified, uint160 sqrtPriceLimitX96, uint256 minAmountOut) =
-            abi.decode(data, (PoolKey, bool, int256, uint160, uint256));
+        (
+            PoolKey memory key,
+            bool zeroForOne,
+            int256 amountSpecified,
+            uint160 sqrtPriceLimitX96,
+            uint256 minAmountOut,
+            address weth
+        ) = abi.decode(data, (PoolKey, bool, int256, uint160, uint256, address));
 
-        // Execute the swap through the V4 PoolManager.
-        BalanceDelta delta = poolManager.swap({
-            key: key,
-            params: SwapParams({
-                zeroForOne: zeroForOne, amountSpecified: amountSpecified, sqrtPriceLimitX96: sqrtPriceLimitX96
-            }),
-            hookData: ""
-        });
-
-        // V4 sign convention: negative = we owe (input), positive = we're owed (output).
-        int128 delta0 = delta.amount0();
-        int128 delta1 = delta.amount1();
         uint256 amountIn;
         uint256 amountOut;
 
-        // Extract input and output amounts based on swap direction.
-        if (zeroForOne) {
-            amountIn = uint256(uint128(-delta0));
-            amountOut = uint256(uint128(delta1));
-        } else {
-            amountIn = uint256(uint128(-delta1));
-            amountOut = uint256(uint128(delta0));
-        }
+        {
+            // Execute the swap through the V4 PoolManager.
+            BalanceDelta delta = poolManager.swap({
+                key: key,
+                params: SwapParams({
+                    zeroForOne: zeroForOne, amountSpecified: amountSpecified, sqrtPriceLimitX96: sqrtPriceLimitX96
+                }),
+                hookData: ""
+            });
 
-        // Enforce the minimum output from the TWAP quote.
-        if (amountOut < minAmountOut) revert JBSwapPoolLib_SlippageExceeded(amountOut, minAmountOut);
+            // V4 sign convention: negative = we owe (input), positive = we're owed (output).
+            int128 delta0 = delta.amount0();
+            int128 delta1 = delta.amount1();
+
+            // Extract input and output amounts based on swap direction.
+            if (zeroForOne) {
+                amountIn = uint256(uint128(-delta0));
+                amountOut = uint256(uint128(delta1));
+            } else {
+                amountIn = uint256(uint128(-delta1));
+                amountOut = uint256(uint128(delta0));
+            }
+
+            // Enforce the minimum output from the TWAP quote.
+            if (amountOut < minAmountOut) revert JBSwapPoolLib_SlippageExceeded(amountOut, minAmountOut);
+        }
 
         // Settle input (pay what we owe to the PoolManager).
         Currency inputCurrency = zeroForOne ? key.currency0 : key.currency1;
         if (Currency.unwrap(inputCurrency) == address(0)) {
-            // Native ETH: settle by sending ETH value directly.
+            // Native ETH: unwrap WETH if needed, then settle by sending ETH value directly.
+            if (weth != address(0)) IWrappedNativeToken(weth).withdraw(amountIn);
             // slither-disable-next-line unused-return,arbitrary-send-eth
             poolManager.settle{value: amountIn}();
         } else {
@@ -832,17 +842,22 @@ library JBSwapPoolLib {
         // Determine swap direction based on currency ordering in the pool key.
         bool zeroForOne = Currency.unwrap(key.currency0) == v4In;
 
-        // Compute the sqrt price limit from the expected amounts.
-        uint160 sqrtPriceLimitX96 = JBSwapLib.sqrtPriceLimitFromAmounts({
-            amountIn: amount, minimumAmountOut: minAmountOut, zeroForOne: zeroForOne
-        });
+        // Build the encoded unlock data in a scoped block to avoid stack-too-deep.
+        bytes memory unlockData;
+        {
+            // Compute the sqrt price limit from the expected amounts.
+            uint160 sqrtPriceLimitX96 = JBSwapLib.sqrtPriceLimitFromAmounts({
+                amountIn: amount, minimumAmountOut: minAmountOut, zeroForOne: zeroForOne
+            });
 
-        // V4 uses negative amounts for exact-input swaps.
-        int256 exactInputAmount = -int256(amount);
+            // V4 uses negative amounts for exact-input swaps.
+            int256 exactInputAmount = -int256(amount);
+
+            unlockData = abi.encode(key, zeroForOne, exactInputAmount, sqrtPriceLimitX96, minAmountOut, config.weth);
+        }
 
         // Unlock the PoolManager and encode the swap parameters for the callback.
-        bytes memory result =
-            config.poolManager.unlock(abi.encode(key, zeroForOne, exactInputAmount, sqrtPriceLimitX96, minAmountOut));
+        bytes memory result = config.poolManager.unlock(unlockData);
 
         // Decode the output amount returned by the unlock callback.
         amountOut = abi.decode(result, (uint256));
