@@ -227,6 +227,6 @@ contract DeployerUnitTest is Test {
         _deployer.configureSingleton(_sucker);
 
         // Create a sucker for a project.
-        _deployer.createForSender(1, bytes32(0));
+        _deployer.createForSender(1, bytes32(0), bytes32(0));
     }
 }

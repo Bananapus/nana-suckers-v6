@@ -89,7 +89,9 @@ contract CodexPeerDeterminismTest is Test, TestBaseWorkflow, IERC721Receiver {
         });
 
         JBSuckerDeployerConfig[] memory configs = new JBSuckerDeployerConfig[](1);
-        configs[0] = JBSuckerDeployerConfig({deployer: IJBSuckerDeployer(address(deployer)), mappings: mappings});
+        configs[0] = JBSuckerDeployerConfig({
+            deployer: IJBSuckerDeployer(address(deployer)), peer: bytes32(0), mappings: mappings
+        });
 
         sucker = IJBSucker(registry.deploySuckersFor(projectId, salt, configs)[0]);
     }

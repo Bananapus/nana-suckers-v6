@@ -77,6 +77,8 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     error JBSucker_NoTerminalForToken(uint256 projectId, address token);
     error JBSucker_NotPeer(bytes32 caller);
     error JBSucker_NothingToSend();
+    error JBSucker_NoRetainedToRemoteFee(address account);
+    error JBSucker_NoRetainedTransportPaymentRefund(address account);
     error JBSucker_RefundFailed();
     error JBSucker_TokenAlreadyMapped(address localToken, bytes32 mappedTo);
     error JBSucker_TokenHasInvalidEmergencyHatchState(address token);
@@ -138,6 +140,18 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     /// suckers, preventing cash out tax bypass on chains where a holder dominates the local supply.
     uint256 public peerChainTotalSupply;
 
+    /// @notice The total retained failed-fee ETH excluded from native add-to-balance accounting.
+    uint256 public retainedToRemoteFeeBalance;
+
+    /// @notice The total retained failed transport-payment refund ETH excluded from native add-to-balance accounting.
+    uint256 public retainedTransportPaymentRefundBalance;
+
+    /// @notice The retained failed-fee ETH owed to each original `toRemote` caller.
+    mapping(address account => uint256 amount) public retainedToRemoteFeeOf;
+
+    /// @notice The retained failed transport-payment refund ETH owed to each original bridge caller.
+    mapping(address account => uint256 amount) public retainedTransportPaymentRefundOf;
+
     //*********************************************************************//
     // -------------------- internal stored properties ------------------- //
     //*********************************************************************//
@@ -174,14 +188,22 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     /// @dev The `currency` and `decimals` fields describe the denomination; `value` is the surplus amount.
     JBDenominatedAmount private _peerChainSurplus;
 
+    /// @notice Optional explicit peer sucker address on the remote chain.
+    /// @dev A zero value preserves the default same-address deterministic peer.
+    bytes32 private _peer;
+
     /// @notice The last known total recorded balance on the peer chain. Updated each time a bridge message is received.
     /// @dev The `currency` and `decimals` fields describe the denomination; `value` is the balance amount.
     JBDenominatedAmount private _peerChainBalance;
 
-    /// @notice The `block.timestamp` from the source chain when the most recent accepted peer snapshot was taken.
-    /// @dev Only snapshots with a strictly newer source timestamp are accepted, preventing stale rollbacks.
+    /// @notice The source chain freshness key for the most recent accepted peer snapshot.
+    /// @dev Only snapshots with a strictly newer source freshness key are accepted, preventing stale rollbacks.
+    /// The historical name is retained for ABI compatibility with the `JBMessageRoot.sourceTimestamp` field.
     /// Returns 0 if no snapshot has been received yet.
     uint256 public snapshotTimestamp;
+
+    /// @notice Monotonically increasing source freshness key assigned to outbound project-wide snapshots.
+    uint256 private _outboundSnapshotSequence;
 
     //*********************************************************************//
     // ---------------------------- constructor -------------------------- //
@@ -399,8 +421,8 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
             emit StaleRootRejected({token: localToken, receivedNonce: root.remoteRoot.nonce, currentNonce: inbox.nonce});
         }
 
-        // --- Project-wide shared state update (gated by source timestamp) ---
-        // Only accept snapshots whose source timestamp is strictly newer than the last accepted one.
+        // --- Project-wide shared state update (gated by source freshness key) ---
+        // Only accept snapshots whose source freshness key is strictly newer than the last accepted one.
         // This prevents a staler per-token message from rolling back shared state (surplus, balance, supply)
         // that was already updated by a fresher message for a different token.
         if (root.sourceTimestamp > snapshotTimestamp) {
@@ -575,15 +597,10 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     /// chain.
     /// @dev This sends the outbox root for the specified `token` to the remote chain.
     /// @dev Fee payment failure handling: The registry fee payment uses a best-effort pattern (try/catch). If the
-    /// fee project's terminal doesn't exist or the `pay` call reverts, the fee ETH is retained by this contract
-    /// (not added back to `transportPayment`) to avoid reverting the entire transaction. This preserves
+    /// fee project's terminal doesn't exist or the `pay` call reverts, the fee ETH is retained as a refundable balance
+    /// for the original caller instead of being added back to `transportPayment`. This preserves
     /// `transportPayment = msg.value - fee`, which is critical for zero-cost bridges (OP, Base, Celo, Arb L2->L1)
-    /// that revert on non-zero transport payment. The fee amount is typically small (max 0.001 ETH).
-    /// @dev Retained fee ETH is absorbed by future native token claims. Because `amountToAddToBalanceOf` computes
-    /// `_balanceOf(token, address(this)) - _outboxOf[token].balance`, any extra ETH in the contract (including
-    /// retained fees) increases the claimable amount and will be forwarded to the project's terminal via
-    /// `_addToBalance` when the next native token claim is processed. This is by design — reverting on fee
-    /// failure would block all bridging.
+    /// that revert on non-zero transport payment. The retained fee is excluded from `amountToAddToBalanceOf`.
     /// @param token The terminal token being bridged.
     function toRemote(address token) external payable override {
         JBRemoteToken memory remoteToken = _remoteTokenFor[token];
@@ -609,11 +626,11 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         uint256 transportPayment = msg.value - _toRemoteFee;
 
         // Best-effort: if the terminal doesn't exist or the pay call reverts, proceed without fee.
-        // NOTE: On failure, the fee ETH is retained by this contract (not added back to transportPayment)
-        // to avoid DoS on zero-cost bridges (OP, Base, Celo, Arbitrum L2→L1) that revert on non-zero
-        // transportPayment.
+        // On failure, the fee ETH is retained as refundable caller credit instead of being added back to
+        // transportPayment, avoiding DoS on zero-cost bridges that revert on non-zero transportPayment.
         IJBTerminal feeTerminal = _primaryTerminalOf({forProjectId: FEE_PROJECT_ID, token: JBConstants.NATIVE_TOKEN});
-        if (address(feeTerminal) != address(0)) {
+        bool feePaid;
+        if (address(feeTerminal) != address(0) && _toRemoteFee != 0) {
             // slither-disable-next-line unused-return,reentrancy-events,reentrancy-benign,arbitrary-send-eth
             try feeTerminal.pay{value: _toRemoteFee}({
                 projectId: FEE_PROJECT_ID,
@@ -625,13 +642,13 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
                 metadata: ""
             }) returns (
                 uint256
-            ) {}
-                catch {
-                // Fee payment failed — fee ETH stays in this contract, transportPayment unchanged.
-                // There is no dedicated sweep path for this retained ETH. This is an accepted tradeoff
-                // to avoid DoS on zero-cost bridges that revert on non-zero transport payment.
+            ) {
+                feePaid = true;
+            } catch {
+                // Fee payment failed. Keep transportPayment unchanged and retain the fee for caller refund below.
             }
         }
+        if (!feePaid && _toRemoteFee != 0) _retainToRemoteFee({account: _msgSender(), amount: _toRemoteFee});
 
         // Send the merkle root to the remote chain.
         _sendRoot({transportPayment: transportPayment, token: token, remoteToken: remoteToken});
@@ -708,20 +725,28 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     /// @return The amount of terminal tokens available to add to the project's balance.
     function amountToAddToBalanceOf(address token) public view override returns (uint256) {
         // Get the amount that is in this sucker to be bridged.
-        return _balanceOf({token: token, addr: address(this)}) - _outboxOf[token].balance;
+        uint256 amount = _balanceOf({token: token, addr: address(this)}) - _outboxOf[token].balance;
+        if (token == JBConstants.NATIVE_TOKEN) {
+            uint256 retainedFeeBalance = retainedToRemoteFeeBalance;
+            if (amount <= retainedFeeBalance) return 0;
+            amount -= retainedFeeBalance;
+
+            uint256 retainedRefundBalance = retainedTransportPaymentRefundBalance;
+            if (amount <= retainedRefundBalance) return 0;
+            amount -= retainedRefundBalance;
+        }
+        return amount;
     }
 
     /// @notice The peer sucker on the remote chain, as a bytes32 for cross-VM compatibility.
     /// @dev Defaults to `_toBytes32(address(this))`, assuming deterministic cross-chain deployment via CREATE2. The
     /// deployer (`JBSuckerDeployer`) uses `salt = keccak256(abi.encodePacked(_msgSender(), salt))` to ensure
-    /// sender-specific determinism. This assumption breaks if CREATE2 conditions differ across chains (e.g.,
-    /// different factory nonces, different init code, or different deployer addresses). In such cases, subclasses
-    /// must override this function to return the correct peer address (e.g., a Solana program/PDA address for
-    /// EVM-SVM deployments). Note that overriding `peer()` is fully supported by the sucker implementation and
-    /// off-chain infrastructure, but for revnets it breaks the assumption of matching configurations on both
-    /// chains -- for this reason the default same-address behavior is preferred.
+    /// sender-specific determinism. An explicit peer can be set during clone initialization for deployments where
+    /// the legitimate remote sucker address is known but does not match the local clone address.
     /// @return The bytes32 representation of the peer sucker address.
     function peer() public view virtual returns (bytes32) {
+        bytes32 configuredPeer = _peer;
+        if (configuredPeer != bytes32(0)) return configuredPeer;
         return _toBytes32(address(this));
     }
 
@@ -768,11 +793,68 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     // ----------------------- public transactions ----------------------- //
     //*********************************************************************//
 
-    /// @notice Initializes the sucker with the project ID and peer address.
+    /// @notice Claim retained failed-fee ETH.
+    /// @param beneficiary The address that should receive the retained ETH.
+    function claimRetainedToRemoteFee(address payable beneficiary) external override {
+        if (beneficiary == address(0)) revert JBSucker_ZeroBeneficiary();
+
+        address account = _msgSender();
+        uint256 amount = retainedToRemoteFeeOf[account];
+        if (amount == 0) revert JBSucker_NoRetainedToRemoteFee(account);
+
+        retainedToRemoteFeeOf[account] = 0;
+        retainedToRemoteFeeBalance -= amount;
+
+        // slither-disable-next-line arbitrary-send-eth
+        (bool success,) = beneficiary.call{value: amount}("");
+        if (!success) revert JBSucker_RefundFailed();
+
+        emit RetainedToRemoteFeeClaimed({
+            account: account, beneficiary: beneficiary, amount: amount, caller: _msgSender()
+        });
+    }
+
+    /// @notice Claim retained failed transport-payment refund ETH.
+    /// @param beneficiary The address that should receive the retained ETH.
+    function claimRetainedTransportPaymentRefund(address payable beneficiary) external override {
+        if (beneficiary == address(0)) revert JBSucker_ZeroBeneficiary();
+
+        address account = _msgSender();
+        uint256 amount = retainedTransportPaymentRefundOf[account];
+        if (amount == 0) revert JBSucker_NoRetainedTransportPaymentRefund(account);
+
+        retainedTransportPaymentRefundOf[account] = 0;
+        retainedTransportPaymentRefundBalance -= amount;
+
+        // slither-disable-next-line arbitrary-send-eth
+        (bool success,) = beneficiary.call{value: amount}("");
+        if (!success) revert JBSucker_RefundFailed();
+
+        emit RetainedTransportPaymentRefundClaimed({
+            account: account, beneficiary: beneficiary, amount: amount, caller: _msgSender()
+        });
+    }
+
+    /// @notice Initializes the sucker with the project ID.
     /// @param _projectId The ID of the project (on the local chain) that this sucker is associated with.
     function initialize(uint256 _projectId) public initializer {
+        _initialize({_projectId: _projectId, remotePeer: bytes32(0)});
+    }
+
+    /// @notice Initializes the sucker with the project ID and an explicit peer address.
+    /// @param localProjectId The ID of the project (on the local chain) that this sucker is associated with.
+    /// @param remotePeer The remote peer address. Leave zero to use the default deterministic same-address peer.
+    function initialize(uint256 localProjectId, bytes32 remotePeer) public initializer {
+        _initialize({_projectId: localProjectId, remotePeer: remotePeer});
+    }
+
+    /// @notice Initializes the sucker's project and optional peer address.
+    /// @param _projectId The ID of the project (on the local chain) that this sucker is associated with.
+    /// @param remotePeer The remote peer address. Leave zero to use the default deterministic same-address peer.
+    function _initialize(uint256 _projectId, bytes32 remotePeer) internal {
         // slither-disable-next-line missing-zero-check
         _localProjectId = _projectId;
+        _peer = remotePeer;
         deployer = _msgSender();
     }
 
@@ -954,10 +1036,16 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         // Reference the project id.
         uint256 _projectId = projectId();
 
-        // slither-disable-next-line calls-loop
-        _requirePermissionFrom({
-            account: PROJECTS.ownerOf(_projectId), projectId: _projectId, permissionId: JBPermissionIds.MAP_SUCKER_TOKEN
-        });
+        // The registry may map tokens while deploying a freshly authorized sucker. Other callers must have the
+        // project's explicit mapping permission.
+        if (_msgSender() != address(REGISTRY)) {
+            // slither-disable-next-line calls-loop
+            _requirePermissionFrom({
+                account: PROJECTS.ownerOf(_projectId),
+                projectId: _projectId,
+                permissionId: JBPermissionIds.MAP_SUCKER_TOKEN
+            });
+        }
 
         // Make sure that the token does not get remapped to another remote token.
         // As this would cause the funds for this token to be double spendable on the other side.
@@ -1409,6 +1497,24 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         return ERC2771Context._msgSender();
     }
 
+    /// @notice Retain a failed `toRemoteFee` payment for later caller refund.
+    /// @param account The account that can reclaim the retained fee.
+    /// @param amount The retained fee amount.
+    function _retainToRemoteFee(address account, uint256 amount) internal {
+        retainedToRemoteFeeOf[account] += amount;
+        retainedToRemoteFeeBalance += amount;
+        emit RetainedToRemoteFee({account: account, amount: amount});
+    }
+
+    /// @notice Retains a failed transport-payment refund as account-scoped native credit.
+    /// @param account The account that can reclaim the retained refund.
+    /// @param amount The retained refund amount.
+    function _retainTransportPaymentRefund(address account, uint256 amount) internal {
+        retainedTransportPaymentRefundOf[account] += amount;
+        retainedTransportPaymentRefundBalance += amount;
+        emit RetainedTransportPaymentRefund({account: account, amount: amount});
+    }
+
     /// @notice Returns the peer address as an EVM address.
     /// @return The peer address.
     function _peerAddress() internal view returns (address) {
@@ -1480,6 +1586,11 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     )
         private
     {
+        uint256 sourceTimestamp;
+        unchecked {
+            sourceTimestamp = ++_outboundSnapshotSequence;
+        }
+
         JBMessageRoot memory message = JBSuckerLib.buildSnapshotMessage({
             directory: DIRECTORY,
             projectId: projectId(),
@@ -1488,7 +1599,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
             nonce: nonce,
             root: root,
             messageVersion: MESSAGE_VERSION,
-            sourceTimestamp: block.timestamp
+            sourceTimestamp: sourceTimestamp
         });
 
         // Send the root over the AMB (positional args — slither IR parser crashes on named args here).

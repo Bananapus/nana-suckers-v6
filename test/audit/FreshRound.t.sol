@@ -342,8 +342,10 @@ contract CodexNemesisFreshRoundTest is Test {
         deployerA.configureSingleton(singletonA);
         deployerB.configureSingleton(singletonB);
 
-        JBCCIPSucker suckerA = JBCCIPSucker(payable(address(deployerA.createForSender(PROJECT_ID, bytes32("peer")))));
-        JBCCIPSucker suckerB = JBCCIPSucker(payable(address(deployerB.createForSender(PROJECT_ID, bytes32("peer")))));
+        JBCCIPSucker suckerA =
+            JBCCIPSucker(payable(address(deployerA.createForSender(PROJECT_ID, bytes32("peer"), bytes32(0)))));
+        JBCCIPSucker suckerB =
+            JBCCIPSucker(payable(address(deployerB.createForSender(PROJECT_ID, bytes32("peer"), bytes32(0)))));
 
         assertTrue(address(suckerA) != address(suckerB), "topology drift produces different sucker addresses");
         assertEq(uint256(suckerA.peer()), uint256(uint160(address(suckerA))), "default peer tracks local address");

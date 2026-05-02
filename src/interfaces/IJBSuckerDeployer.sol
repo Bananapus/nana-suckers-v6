@@ -29,9 +29,10 @@ interface IJBSuckerDeployer {
 
     // State-changing functions
 
-    /// @notice Deploy a new sucker for the given project.
+    /// @notice Deploy a new sucker for the given project with an explicit remote peer.
     /// @param localProjectId The project's ID on the local chain.
     /// @param salt The salt for deterministic deployment.
+    /// @param peer The remote peer address. Leave zero to use the default deterministic same-address peer.
     /// @return sucker The newly deployed sucker.
-    function createForSender(uint256 localProjectId, bytes32 salt) external returns (IJBSucker sucker);
+    function createForSender(uint256 localProjectId, bytes32 salt, bytes32 peer) external returns (IJBSucker sucker);
 }

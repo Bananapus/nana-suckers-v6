@@ -31,7 +31,63 @@ interface IJBSuckerExtended is IJBSucker {
     /// @param caller The address that opened the emergency hatch.
     event EmergencyHatchOpened(address[] tokens, address caller);
 
+    /// @notice Emitted when a failed `toRemoteFee` payment is retained for later refund.
+    /// @param account The account that can reclaim the retained fee.
+    /// @param amount The retained fee amount.
+    event RetainedToRemoteFee(address indexed account, uint256 amount);
+
+    /// @notice Emitted when a failed transport-payment refund is retained for later refund.
+    /// @param account The account that can reclaim the retained refund.
+    /// @param amount The retained refund amount.
+    event RetainedTransportPaymentRefund(address indexed account, uint256 amount);
+
+    /// @notice Emitted when an account claims retained `toRemoteFee` ETH.
+    /// @param account The account whose retained fee balance was claimed.
+    /// @param beneficiary The address that received the ETH.
+    /// @param amount The amount claimed.
+    /// @param caller The address that triggered the claim.
+    event RetainedToRemoteFeeClaimed(
+        address indexed account, address indexed beneficiary, uint256 amount, address caller
+    );
+
+    /// @notice Emitted when an account claims retained transport-payment refund ETH.
+    /// @param account The account whose retained refund balance was claimed.
+    /// @param beneficiary The address that received the ETH.
+    /// @param amount The amount claimed.
+    /// @param caller The address that triggered the claim.
+    event RetainedTransportPaymentRefundClaimed(
+        address indexed account, address indexed beneficiary, uint256 amount, address caller
+    );
+
+    // View functions
+
+    /// @notice The retained failed-fee ETH owed to an account.
+    /// @param account The account to look up.
+    /// @return amount The retained fee amount.
+    function retainedToRemoteFeeOf(address account) external view returns (uint256 amount);
+
+    /// @notice The total retained failed-fee ETH excluded from native add-to-balance accounting.
+    /// @return amount The retained fee amount.
+    function retainedToRemoteFeeBalance() external view returns (uint256 amount);
+
+    /// @notice The retained failed transport-payment refund ETH owed to an account.
+    /// @param account The account to look up.
+    /// @return amount The retained refund amount.
+    function retainedTransportPaymentRefundOf(address account) external view returns (uint256 amount);
+
+    /// @notice The total retained failed transport-payment refund ETH excluded from native add-to-balance accounting.
+    /// @return amount The retained refund amount.
+    function retainedTransportPaymentRefundBalance() external view returns (uint256 amount);
+
     // State-changing functions
+
+    /// @notice Claim retained failed-fee ETH.
+    /// @param beneficiary The address that should receive the retained ETH.
+    function claimRetainedToRemoteFee(address payable beneficiary) external;
+
+    /// @notice Claim retained failed transport-payment refund ETH.
+    /// @param beneficiary The address that should receive the retained ETH.
+    function claimRetainedTransportPaymentRefund(address payable beneficiary) external;
 
     /// @notice Open the emergency hatch for the specified tokens, allowing direct claims without bridging.
     /// @param tokens The tokens to enable the emergency hatch for.

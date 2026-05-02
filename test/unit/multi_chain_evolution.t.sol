@@ -218,8 +218,9 @@ contract MultiChainEvolutionTest is Test, TestBaseWorkflow, IERC721Receiver {
             });
 
             JBSuckerDeployerConfig[] memory opConfig = new JBSuckerDeployerConfig[](1);
-            opConfig[0] =
-                JBSuckerDeployerConfig({deployer: IJBSuckerDeployer(address(opDeployer)), mappings: opMappings});
+            opConfig[0] = JBSuckerDeployerConfig({
+                deployer: IJBSuckerDeployer(address(opDeployer)), peer: bytes32(0), mappings: opMappings
+            });
 
             // forge-lint: disable-next-line(unsafe-typecast)
             _opSucker = IJBSucker(registry.deploySuckersFor(projectId, bytes32("op_salt"), opConfig)[0]);
@@ -269,8 +270,9 @@ contract MultiChainEvolutionTest is Test, TestBaseWorkflow, IERC721Receiver {
             });
 
             JBSuckerDeployerConfig[] memory celoConfig = new JBSuckerDeployerConfig[](1);
-            celoConfig[0] =
-                JBSuckerDeployerConfig({deployer: IJBSuckerDeployer(address(ccipDeployer)), mappings: celoMappings});
+            celoConfig[0] = JBSuckerDeployerConfig({
+                deployer: IJBSuckerDeployer(address(ccipDeployer)), peer: bytes32(0), mappings: celoMappings
+            });
 
             // forge-lint: disable-next-line(unsafe-typecast)
             _celoSucker = IJBSucker(registry.deploySuckersFor(projectId, bytes32("celo_salt"), celoConfig)[0]);
@@ -362,9 +364,12 @@ contract MultiChainEvolutionTest is Test, TestBaseWorkflow, IERC721Receiver {
             localToken: JBConstants.NATIVE_TOKEN, minGas: 200_000, remoteToken: bytes32(uint256(uint160(celoETH)))
         });
 
-        configs[0] = JBSuckerDeployerConfig({deployer: IJBSuckerDeployer(address(opDeployer)), mappings: opMappings});
-        configs[1] =
-            JBSuckerDeployerConfig({deployer: IJBSuckerDeployer(address(ccipDeployer)), mappings: celoMappings});
+        configs[0] = JBSuckerDeployerConfig({
+            deployer: IJBSuckerDeployer(address(opDeployer)), peer: bytes32(0), mappings: opMappings
+        });
+        configs[1] = JBSuckerDeployerConfig({
+            deployer: IJBSuckerDeployer(address(ccipDeployer)), peer: bytes32(0), mappings: celoMappings
+        });
 
         // forge-lint: disable-next-line(unsafe-typecast)
         address[] memory suckers = registry.deploySuckersFor(projectId, bytes32("both"), configs);
@@ -402,8 +407,9 @@ contract MultiChainEvolutionTest is Test, TestBaseWorkflow, IERC721Receiver {
         });
 
         JBSuckerDeployerConfig[] memory config = new JBSuckerDeployerConfig[](1);
-        config[0] =
-            JBSuckerDeployerConfig({deployer: IJBSuckerDeployer(address(ccipDeployer)), mappings: initialMappings});
+        config[0] = JBSuckerDeployerConfig({
+            deployer: IJBSuckerDeployer(address(ccipDeployer)), peer: bytes32(0), mappings: initialMappings
+        });
 
         // forge-lint: disable-next-line(unsafe-typecast)
         address[] memory suckers = registry.deploySuckersFor(projectId, bytes32("incr"), config);
@@ -440,8 +446,9 @@ contract MultiChainEvolutionTest is Test, TestBaseWorkflow, IERC721Receiver {
         });
 
         JBSuckerDeployerConfig[] memory opConfig = new JBSuckerDeployerConfig[](1);
-        opConfig[0] =
-            JBSuckerDeployerConfig({deployer: IJBSuckerDeployer(address(opDeployer)), mappings: nativeMappings});
+        opConfig[0] = JBSuckerDeployerConfig({
+            deployer: IJBSuckerDeployer(address(opDeployer)), peer: bytes32(0), mappings: nativeMappings
+        });
 
         JBTokenMapping[] memory celoNativeMappings = new JBTokenMapping[](1);
         celoNativeMappings[0] = JBTokenMapping({
@@ -449,8 +456,9 @@ contract MultiChainEvolutionTest is Test, TestBaseWorkflow, IERC721Receiver {
         });
 
         JBSuckerDeployerConfig[] memory celoConfig = new JBSuckerDeployerConfig[](1);
-        celoConfig[0] =
-            JBSuckerDeployerConfig({deployer: IJBSuckerDeployer(address(ccipDeployer)), mappings: celoNativeMappings});
+        celoConfig[0] = JBSuckerDeployerConfig({
+            deployer: IJBSuckerDeployer(address(ccipDeployer)), peer: bytes32(0), mappings: celoNativeMappings
+        });
 
         // forge-lint: disable-next-line(unsafe-typecast)
         address[] memory opSuckers = registry.deploySuckersFor(projectId, bytes32("ind_op"), opConfig);
@@ -497,8 +505,9 @@ contract MultiChainEvolutionTest is Test, TestBaseWorkflow, IERC721Receiver {
         });
 
         JBSuckerDeployerConfig[] memory opConfig = new JBSuckerDeployerConfig[](1);
-        opConfig[0] =
-            JBSuckerDeployerConfig({deployer: IJBSuckerDeployer(address(opDeployer)), mappings: nativeMappings});
+        opConfig[0] = JBSuckerDeployerConfig({
+            deployer: IJBSuckerDeployer(address(opDeployer)), peer: bytes32(0), mappings: nativeMappings
+        });
         // forge-lint: disable-next-line(unsafe-typecast)
         address[] memory opSuckers = registry.deploySuckersFor(projectId, bytes32("natv_op"), opConfig);
 
@@ -509,8 +518,9 @@ contract MultiChainEvolutionTest is Test, TestBaseWorkflow, IERC721Receiver {
         });
 
         JBSuckerDeployerConfig[] memory celoConfig = new JBSuckerDeployerConfig[](1);
-        celoConfig[0] =
-            JBSuckerDeployerConfig({deployer: IJBSuckerDeployer(address(ccipDeployer)), mappings: celoEthMappings});
+        celoConfig[0] = JBSuckerDeployerConfig({
+            deployer: IJBSuckerDeployer(address(ccipDeployer)), peer: bytes32(0), mappings: celoEthMappings
+        });
 
         // This should succeed — CCIP allows NATIVE -> ERC-20.
         // forge-lint: disable-next-line(unsafe-typecast)
@@ -551,7 +561,9 @@ contract MultiChainEvolutionTest is Test, TestBaseWorkflow, IERC721Receiver {
         });
 
         JBSuckerDeployerConfig[] memory config = new JBSuckerDeployerConfig[](1);
-        config[0] = JBSuckerDeployerConfig({deployer: IJBSuckerDeployer(address(opDeployer)), mappings: mappings});
+        config[0] = JBSuckerDeployerConfig({
+            deployer: IJBSuckerDeployer(address(opDeployer)), peer: bytes32(0), mappings: mappings
+        });
 
         // forge-lint: disable-next-line(unsafe-typecast)
         address[] memory firstDeploy = registry.deploySuckersFor(projectId, bytes32("v1"), config);

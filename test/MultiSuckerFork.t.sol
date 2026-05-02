@@ -95,7 +95,7 @@ contract MultiSuckerMockDeployer is IJBSuckerDeployer {
         return false;
     }
 
-    function createForSender(uint256, bytes32) external returns (IJBSucker) {
+    function createForSender(uint256, bytes32, bytes32) external returns (IJBSucker) {
         IJBSucker sucker = _suckers[_index];
         _index++;
         return sucker;
@@ -169,7 +169,7 @@ contract MultiSuckerForkTest is Test {
     function _deployViaRegistry(MultiSuckerMock sucker) internal {
         deployer.addSucker(IJBSucker(address(sucker)));
         JBSuckerDeployerConfig[] memory configs = new JBSuckerDeployerConfig[](1);
-        configs[0] = JBSuckerDeployerConfig({deployer: deployer, mappings: new JBTokenMapping[](0)});
+        configs[0] = JBSuckerDeployerConfig({deployer: deployer, peer: bytes32(0), mappings: new JBTokenMapping[](0)});
         registry.deploySuckersFor({
             projectId: PROJECT_ID, salt: bytes32(uint256(block.timestamp)), configurations: configs
         });
@@ -234,7 +234,7 @@ contract MultiSuckerForkTest is Test {
         // Deploy second sucker for Arbitrum — should revert.
         deployer.addSucker(IJBSucker(address(sucker2)));
         JBSuckerDeployerConfig[] memory configs = new JBSuckerDeployerConfig[](1);
-        configs[0] = JBSuckerDeployerConfig({deployer: deployer, mappings: new JBTokenMapping[](0)});
+        configs[0] = JBSuckerDeployerConfig({deployer: deployer, peer: bytes32(0), mappings: new JBTokenMapping[](0)});
 
         vm.expectRevert(
             abi.encodeWithSelector(JBSuckerRegistry.JBSuckerRegistry_DuplicatePeerChain.selector, PROJECT_ID, ARBITRUM)
@@ -470,7 +470,7 @@ contract MultiSuckerForkTest is Test {
         MultiSuckerMock sucker2 = _createMockSucker("lifecycle-b", ARBITRUM);
         deployer.addSucker(IJBSucker(address(sucker2)));
         JBSuckerDeployerConfig[] memory configs = new JBSuckerDeployerConfig[](1);
-        configs[0] = JBSuckerDeployerConfig({deployer: deployer, mappings: new JBTokenMapping[](0)});
+        configs[0] = JBSuckerDeployerConfig({deployer: deployer, peer: bytes32(0), mappings: new JBTokenMapping[](0)});
 
         vm.expectRevert(
             abi.encodeWithSelector(JBSuckerRegistry.JBSuckerRegistry_DuplicatePeerChain.selector, PROJECT_ID, ARBITRUM)

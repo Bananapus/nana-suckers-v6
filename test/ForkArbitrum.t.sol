@@ -94,7 +94,7 @@ contract ForkArbitrumDeployerTest is TestBaseWorkflow, IERC721Receiver {
 
         deployerL1.configureSingleton(singletonL1);
         _launchProject();
-        suckerL1 = deployerL1.createForSender(1, "arb-l1");
+        suckerL1 = deployerL1.createForSender(1, "arb-l1", bytes32(0));
 
         // ── L2 (Arbitrum mainnet)
         l2Fork = vm.createSelectFork("arbitrum");
@@ -127,7 +127,7 @@ contract ForkArbitrumDeployerTest is TestBaseWorkflow, IERC721Receiver {
 
         deployerL2.configureSingleton(singletonL2);
         _launchProject();
-        suckerL2 = deployerL2.createForSender(1, "arb-l2");
+        suckerL2 = deployerL2.createForSender(1, "arb-l2", bytes32(0));
 
         // Mock the registry's toRemoteFee() on both forks (registry is address(0) in tests).
         vm.selectFork(l1Fork);
@@ -286,7 +286,7 @@ contract ForkArbitrumNativeTransferTest is TestBaseWorkflow {
         vm.stopPrank();
 
         deployerL1.configureSingleton(singletonL1);
-        suckerL1 = deployerL1.createForSender(1, "arb-native");
+        suckerL1 = deployerL1.createForSender(1, "arb-native", bytes32(0));
         vm.label(address(suckerL1), "suckerL1");
 
         // Grant sucker mint permission.

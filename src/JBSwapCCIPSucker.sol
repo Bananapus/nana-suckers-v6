@@ -619,7 +619,10 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
                 refundRecipient: _msgSender()
             });
 
-            if (refundFailed) emit TransportPaymentRefundFailed(_msgSender(), refundAmount);
+            if (refundFailed) {
+                _retainTransportPaymentRefund({account: _msgSender(), amount: refundAmount});
+                emit TransportPaymentRefundFailed(_msgSender(), refundAmount);
+            }
         }
     }
 

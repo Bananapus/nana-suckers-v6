@@ -10,9 +10,13 @@ import {IJBTerminalStore} from "@bananapus/core-v6/src/interfaces/IJBTerminalSto
 import {JBAccountingContext} from "@bananapus/core-v6/src/structs/JBAccountingContext.sol";
 import {JBCurrencyIds} from "@bananapus/core-v6/src/libraries/JBCurrencyIds.sol";
 import {JBFixedPointNumber} from "@bananapus/core-v6/src/libraries/JBFixedPointNumber.sol";
+import {JBRulesetMetadataResolver} from "@bananapus/core-v6/src/libraries/JBRulesetMetadataResolver.sol";
+import {JBRuleset} from "@bananapus/core-v6/src/structs/JBRuleset.sol";
+import {JBRulesetMetadata} from "@bananapus/core-v6/src/structs/JBRulesetMetadata.sol";
 import {mulDiv} from "@prb/math/src/Common.sol";
 import {IERC165} from "@openzeppelin/contracts/utils/introspection/ERC165.sol";
 
+import {IJBPeerChainAccountingContext} from "../interfaces/IJBPeerChainAccountingContext.sol";
 import {JBDenominatedAmount} from "../structs/JBDenominatedAmount.sol";
 import {JBInboxTreeRoot} from "../structs/JBInboxTreeRoot.sol";
 import {JBMessageRoot} from "../structs/JBMessageRoot.sol";
@@ -22,12 +26,15 @@ import {MerkleLib} from "../utils/MerkleLib.sol";
 /// @dev These are `external` library functions, so they are deployed as a separate contract and called via
 /// DELEGATECALL. This avoids duplicating the bytecode in every sucker implementation.
 library JBSuckerLib {
+    using JBRulesetMetadataResolver for JBRuleset;
+
     //*********************************************************************//
     // ----------------------- internal constants ------------------------ //
     //*********************************************************************//
 
     uint256 internal constant _ETH_CURRENCY = JBCurrencyIds.ETH;
     uint8 internal constant _ETH_DECIMALS = 18;
+    uint256 internal constant _CURRENT_RULESET_OF_RETURN_BYTES = (9 + 19) * 32;
 
     //*********************************************************************//
     // ------------------------- external views -------------------------- //
@@ -74,28 +81,23 @@ library JBSuckerLib {
         // If there are no terminals, return zeros.
         if (numTerminals == 0) return (0, 0);
 
-        // Get the surplus denominated in ETH. currentSurplusOf aggregates across all terminals internally.
-        // slither-disable-next-line calls-loop
-        try terminals[0].currentSurplusOf({
-            projectId: projectId, tokens: new address[](0), decimals: _ETH_DECIMALS, currency: uint32(_ETH_CURRENCY)
-        }) returns (
-            uint256 surplus
-        ) {
-            ethSurplus = surplus;
-        } catch {}
-
-        // Get a reference to JBPrices for balance conversion.
-        IJBPrices prices;
-        {
+        for (uint256 i; i < numTerminals;) {
             // slither-disable-next-line calls-loop
-            try IJBMultiTerminal(address(terminals[0])).STORE() returns (IJBTerminalStore store) {
-                // Get the price oracle from the terminal store.
-                prices = store.PRICES();
-            } catch {
-                // If the store lookup fails, return surplus only with zero balance.
-                return (ethSurplus, 0);
+            try terminals[i].currentSurplusOf({
+                projectId: projectId, tokens: new address[](0), decimals: _ETH_DECIMALS, currency: uint32(_ETH_CURRENCY)
+            }) returns (
+                uint256 surplus
+            ) {
+                ethSurplus += surplus;
+            } catch {}
+
+            unchecked {
+                ++i;
             }
         }
+
+        // Get a reference to JBPrices for balance conversion.
+        IJBPrices prices = _pricesOf(terminals);
 
         // Aggregate balance from each terminal, converting each token to ETH.
         for (uint256 i; i < numTerminals;) {
@@ -109,8 +111,8 @@ library JBSuckerLib {
                     // Get the decimal precision for this token.
                     uint8 dec = contexts[j].decimals;
 
-                    // Derive the currency ID from the token address.
-                    uint32 tokenCurrency = uint32(uint160(tkn));
+                    // Get the currency ID for this context.
+                    uint32 tokenCurrency = contexts[j].currency;
 
                     // slither-disable-next-line calls-loop
                     try IJBMultiTerminal(address(terminals[i])).STORE()
@@ -123,7 +125,7 @@ library JBSuckerLib {
                                 ethBalance += JBFixedPointNumber.adjustDecimals({
                                     value: bal, decimals: dec, targetDecimals: _ETH_DECIMALS
                                 });
-                            } else {
+                            } else if (address(prices) != address(0)) {
                                 // Otherwise, convert the balance to ETH using the price oracle.
                                 // slither-disable-next-line calls-loop
                                 try prices.pricePerUnitOf({
@@ -184,24 +186,40 @@ library JBSuckerLib {
             // If there are no terminals, return zero.
             if (terminals.length == 0) return 0;
 
-            // slither-disable-next-line calls-loop
-            try IJBMultiTerminal(address(terminals[0])).STORE() returns (IJBTerminalStore store) {
-                // Get the price oracle from the terminal store.
-                IJBPrices prices = store.PRICES();
+            IJBPrices prices = _pricesOf(terminals);
+            if (address(prices) == address(0)) return 0;
 
-                // Convert using the price oracle.
+            // Convert using the price oracle.
+            // slither-disable-next-line calls-loop
+            try prices.pricePerUnitOf({
+                projectId: projectId,
+                pricingCurrency: source.currency,
+                unitCurrency: uint32(currency),
+                decimals: uint8(decimals)
+            }) returns (
+                uint256 price
+            ) {
+                converted = mulDiv({x: source.value, y: price, denominator: 10 ** source.decimals});
+            } catch {}
+        }
+    }
+
+    /// @notice Find a price oracle from any terminal that exposes one.
+    /// @param terminals The terminals to scan.
+    /// @return prices The first usable price oracle found.
+    function _pricesOf(IJBTerminal[] memory terminals) internal view returns (IJBPrices prices) {
+        for (uint256 i; i < terminals.length;) {
+            // slither-disable-next-line calls-loop
+            try IJBMultiTerminal(address(terminals[i])).STORE() returns (IJBTerminalStore store) {
                 // slither-disable-next-line calls-loop
-                try prices.pricePerUnitOf({
-                    projectId: projectId,
-                    pricingCurrency: source.currency,
-                    unitCurrency: uint32(currency),
-                    decimals: uint8(decimals)
-                }) returns (
-                    uint256 price
-                ) {
-                    converted = mulDiv({x: source.value, y: price, denominator: 10 ** source.decimals});
+                try store.PRICES() returns (IJBPrices terminalPrices) {
+                    if (address(terminalPrices) != address(0)) return terminalPrices;
                 } catch {}
             } catch {}
+
+            unchecked {
+                ++i;
+            }
         }
     }
 
@@ -219,7 +237,7 @@ library JBSuckerLib {
     /// @param nonce The outbox nonce for this send.
     /// @param root The merkle root of the outbox tree.
     /// @param messageVersion The message format version.
-    /// @param sourceTimestamp The `block.timestamp` on the source chain when the snapshot is taken.
+    /// @param sourceTimestamp The monotonic source freshness key for this snapshot.
     /// @return message The constructed JBMessageRoot.
     function buildSnapshotMessage(
         IJBDirectory directory,
@@ -237,6 +255,7 @@ library JBSuckerLib {
     {
         // Will hold the total token supply (including reserved tokens) for the project.
         uint256 localTotalSupply;
+        IJBController controller;
 
         // Get the controller and verify it implements IJBController via ERC165 before querying supply.
         // slither-disable-next-line calls-loop
@@ -245,9 +264,9 @@ library JBSuckerLib {
                 // slither-disable-next-line calls-loop
                 try controllerIERC165.supportsInterface(type(IJBController).interfaceId) returns (bool supported) {
                     if (supported) {
+                        controller = IJBController(address(controllerIERC165));
                         // slither-disable-next-line calls-loop
-                        localTotalSupply =
-                            IJBController(address(controllerIERC165)).totalTokenSupplyWithReservedTokensOf(projectId);
+                        localTotalSupply = controller.totalTokenSupplyWithReservedTokensOf(projectId);
                     }
                 } catch {}
             }
@@ -256,6 +275,14 @@ library JBSuckerLib {
         // Inline ETH aggregate computation (libraries cannot call their own external functions).
         (uint256 ethSurplus, uint256 ethBalance) =
             _buildETHAggregateInternal({directory: directory, projectId: projectId});
+
+        if (address(controller) != address(0) && address(controller).code.length != 0) {
+            (uint256 additionalSupply, uint256 additionalSurplus) =
+                _peerChainAccountingContextOf({controller: controller, projectId: projectId});
+
+            localTotalSupply += additionalSupply;
+            ethSurplus += additionalSurplus;
+        }
 
         // Construct the cross-chain message with the snapshot data.
         message = JBMessageRoot({
@@ -270,6 +297,38 @@ library JBSuckerLib {
             sourceBalance: ethBalance,
             sourceTimestamp: sourceTimestamp
         });
+    }
+
+    /// @notice Optional project-specific accounting to add to peer-chain snapshots.
+    /// @param controller The controller for the project being snapshotted.
+    /// @param projectId The project being snapshotted.
+    /// @return additionalSupply The supply to add to `sourceTotalSupply`.
+    /// @return additionalSurplus The surplus to add to `sourceSurplus`, denominated in ETH at 18 decimals.
+    function _peerChainAccountingContextOf(
+        IJBController controller,
+        uint256 projectId
+    )
+        internal
+        view
+        returns (uint256 additionalSupply, uint256 additionalSurplus)
+    {
+        (bool rulesetCallSucceeded, bytes memory rulesetData) =
+            address(controller).staticcall(abi.encodeCall(IJBController.currentRulesetOf, (projectId)));
+        if (!rulesetCallSucceeded || rulesetData.length < _CURRENT_RULESET_OF_RETURN_BYTES) return (0, 0);
+
+        (JBRuleset memory ruleset,) = abi.decode(rulesetData, (JBRuleset, JBRulesetMetadata));
+
+        address dataHook = ruleset.dataHook();
+        if (dataHook == address(0) || dataHook.code.length == 0) return (0, 0);
+
+        (bool success, bytes memory data) = dataHook.staticcall(
+            abi.encodeCall(
+                IJBPeerChainAccountingContext.peerChainAccountingContextOf, (projectId, _ETH_DECIMALS, _ETH_CURRENCY)
+            )
+        );
+        if (!success || data.length < 64) return (0, 0);
+
+        return abi.decode(data, (uint256, uint256));
     }
 
     //*********************************************************************//

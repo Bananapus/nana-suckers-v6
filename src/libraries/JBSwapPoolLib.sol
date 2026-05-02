@@ -6,6 +6,7 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {IUniswapV3Factory} from "@uniswap/v3-core/contracts/interfaces/IUniswapV3Factory.sol";
 import {IUniswapV3Pool} from "@uniswap/v3-core/contracts/interfaces/IUniswapV3Pool.sol";
+import {IUniswapV3PoolState} from "@uniswap/v3-core/contracts/interfaces/pool/IUniswapV3PoolState.sol";
 import {OracleLibrary} from "@uniswap/v3-periphery/contracts/libraries/OracleLibrary.sol";
 import {BalanceDelta, BalanceDeltaLibrary} from "@uniswap/v4-core/src/types/BalanceDelta.sol";
 import {Currency} from "@uniswap/v4-core/src/types/Currency.sol";
@@ -329,22 +330,23 @@ library JBSwapPoolLib {
         view
         returns (bool isV4, IUniswapV3Pool v3Pool, PoolKey memory v4Key)
     {
-        // Track the best liquidity found across both protocols.
+        // Track the best TWAP-ready liquidity found across both protocols.
         uint128 bestLiquidity;
 
-        // Search V3 pools across all fee tiers.
+        // Search V3 pools across all fee tiers. Only pools with the full TWAP window are eligible.
         (v3Pool, bestLiquidity) = _discoverV3Pool({
             v3Factory: config.v3Factory, normalizedTokenIn: normalizedTokenIn, normalizedTokenOut: normalizedTokenOut
         });
 
         // If a V4 pool manager is configured, also search V4 pools.
         if (address(config.poolManager) != address(0)) {
-            (PoolKey memory v4Candidate, uint128 v4Liquidity) = _discoverV4Pool({
+            (PoolKey memory v4Candidate, uint128 v4Liquidity, bool v4UsesTwap) = _discoverV4Pool({
                 config: config, normalizedTokenIn: normalizedTokenIn, normalizedTokenOut: normalizedTokenOut
             });
 
-            // Select the V4 pool if it has strictly more liquidity than the best V3 pool.
-            if (v4Liquidity > bestLiquidity) {
+            // Select V4 if no TWAP-ready V3 exists, or if a TWAP-ready V4 beats the V3 route.
+            // Hookless V4 spot pools remain a last-resort fallback and cannot outrank V3 TWAP.
+            if (v4Liquidity != 0 && (bestLiquidity == 0 || (v4UsesTwap && v4Liquidity > bestLiquidity))) {
                 isV4 = true;
                 v3Pool = IUniswapV3Pool(address(0));
                 v4Key = v4Candidate;
@@ -377,6 +379,13 @@ library JBSwapPoolLib {
                 v3Factory.getPool({tokenA: normalizedTokenIn, tokenB: normalizedTokenOut, fee: _feeTier(i)});
 
             if (poolAddr != address(0)) {
+                if (!_v3PoolHasFullTwapHistory(IUniswapV3Pool(poolAddr))) {
+                    unchecked {
+                        ++i;
+                    }
+                    continue;
+                }
+
                 // Query the pool's current in-range liquidity.
                 // slither-disable-next-line calls-loop
                 uint128 poolLiquidity = IUniswapV3Pool(poolAddr).liquidity();
@@ -394,12 +403,14 @@ library JBSwapPoolLib {
         }
     }
 
-    /// @notice Search V4 pools across 4 fee tiers and 2 hook configs for the highest liquidity.
+    /// @notice Search V4 pools across 4 fee tiers and 2 hook configs for the best eligible liquidity.
+    /// @dev TWAP-capable hooked pools are preferred over hookless spot pools. Broken hooked pools are skipped.
     /// @param config The swap configuration (pool manager, hook, WETH addresses).
     /// @param normalizedTokenIn The normalized input token address.
     /// @param normalizedTokenOut The normalized output token address.
-    /// @return bestKey The pool key of the V4 pool with the highest liquidity.
+    /// @return bestKey The selected V4 pool key.
     /// @return bestLiquidity The liquidity of the best V4 pool found.
+    /// @return bestUsesTwap Whether the selected V4 pool has a working TWAP hook.
     function _discoverV4Pool(
         SwapConfig memory config,
         address normalizedTokenIn,
@@ -407,8 +418,11 @@ library JBSwapPoolLib {
     )
         internal
         view
-        returns (PoolKey memory bestKey, uint128 bestLiquidity)
+        returns (PoolKey memory bestKey, uint128 bestLiquidity, bool bestUsesTwap)
     {
+        PoolKey memory bestSpotKey;
+        uint128 bestSpotLiquidity;
+
         // Convert to V4 convention: WETH -> address(0) for native ETH.
         address sorted0;
         address sorted1;
@@ -445,10 +459,19 @@ library JBSwapPoolLib {
                     tierIndex: i
                 });
 
-                // Track the pool with the highest liquidity.
-                if (liq > bestLiquidity) {
-                    bestLiquidity = liq;
-                    bestKey = key;
+                if (liq != 0) {
+                    if (hookAddr == address(0)) {
+                        if (liq > bestSpotLiquidity) {
+                            bestSpotLiquidity = liq;
+                            bestSpotKey = key;
+                        }
+                    } else if (_v4PoolHasTwap(key)) {
+                        if (liq > bestLiquidity) {
+                            bestLiquidity = liq;
+                            bestKey = key;
+                            bestUsesTwap = true;
+                        }
+                    }
                 }
 
                 unchecked {
@@ -459,6 +482,11 @@ library JBSwapPoolLib {
             unchecked {
                 ++i;
             }
+        }
+
+        if (bestLiquidity == 0) {
+            bestKey = bestSpotKey;
+            bestLiquidity = bestSpotLiquidity;
         }
     }
 
@@ -532,16 +560,12 @@ library JBSwapPoolLib {
         // Revert if the pool has no TWAP history at all.
         if (oldestObservation == 0) revert JBSwapPoolLib_InsufficientTwapHistory();
 
-        // Use the default window, clamped to the oldest available observation.
-        uint256 twapWindow = _DEFAULT_TWAP_WINDOW;
-        if (oldestObservation < twapWindow) twapWindow = oldestObservation;
-
-        // Revert if the available history is too short for a reliable TWAP.
-        if (twapWindow < _MIN_TWAP_WINDOW) revert JBSwapPoolLib_InsufficientTwapHistory();
+        // Revert if the available history cannot serve the full default TWAP window.
+        if (oldestObservation < _DEFAULT_TWAP_WINDOW) revert JBSwapPoolLib_InsufficientTwapHistory();
 
         // Consult the V3 oracle for the arithmetic mean tick and harmonic mean liquidity.
         (int24 arithmeticMeanTick, uint128 liquidity) =
-            OracleLibrary.consult({pool: address(pool), secondsAgo: uint32(twapWindow)});
+            OracleLibrary.consult({pool: address(pool), secondsAgo: uint32(_DEFAULT_TWAP_WINDOW)});
 
         // Revert if the pool has no in-range liquidity.
         if (liquidity == 0) revert JBSwapPoolLib_NoLiquidity();
@@ -557,7 +581,7 @@ library JBSwapPoolLib {
         });
     }
 
-    /// @notice Get a V4 quote with dynamic slippage. Prefers hook TWAP, falls back to spot tick.
+    /// @notice Get a V4 quote with dynamic slippage. Hooked pools must serve TWAP; hookless pools use spot fallback.
     /// @param config The swap configuration (pool manager, WETH addresses).
     /// @param key The V4 pool key to quote against.
     /// @param normalizedTokenIn The normalized input token address.
@@ -583,28 +607,22 @@ library JBSwapPoolLib {
         {
             // Derive the pool ID from the key.
             PoolId id = key.toId();
-            bool usedTwap;
-
-            // If the pool has a hook, try to get a TWAP from the geomean oracle.
+            // If the pool has a hook, require a TWAP from the geomean oracle.
             if (address(key.hooks) != address(0)) {
                 // Build the observation window: [_V4_TWAP_WINDOW seconds ago, now].
                 uint32[] memory secondsAgos = new uint32[](2);
                 secondsAgos[0] = _V4_TWAP_WINDOW;
                 secondsAgos[1] = 0;
 
-                // Attempt to read the TWAP from the hook's geomean oracle.
-                // slither-disable-next-line unused-return
-                try IGeomeanOracle(address(key.hooks)).observe({key: key, secondsAgos: secondsAgos}) returns (
-                    int56[] memory tickCumulatives, uint160[] memory
-                ) {
-                    // Compute the arithmetic mean tick from the cumulative tick difference.
-                    tick = int24((tickCumulatives[1] - tickCumulatives[0]) / int56(int32(_V4_TWAP_WINDOW)));
-                    usedTwap = true;
-                } catch {}
-            }
+                // Read the TWAP from the hook's geomean oracle.
+                (int56[] memory tickCumulatives,) =
+                    IGeomeanOracle(address(key.hooks)).observe({key: key, secondsAgos: secondsAgos});
+                if (tickCumulatives.length < 2) revert JBSwapPoolLib_InsufficientTwapHistory();
 
-            // Fall back to the current spot tick if the TWAP oracle was unavailable.
-            if (!usedTwap) {
+                // Compute the arithmetic mean tick from the cumulative tick difference.
+                tick = int24((tickCumulatives[1] - tickCumulatives[0]) / int56(int32(_V4_TWAP_WINDOW)));
+            } else {
+                // Hookless V4 spot pools are only selected when no TWAP-capable route exists.
                 // slither-disable-next-line unused-return
                 (, tick,,) = config.poolManager.getSlot0(id);
             }
@@ -625,6 +643,80 @@ library JBSwapPoolLib {
             tick: tick,
             poolFeeBps: feeBps
         });
+    }
+
+    /// @notice Checks whether a V3 pool can serve the full default TWAP window.
+    function _v3PoolHasFullTwapHistory(IUniswapV3Pool pool) internal view returns (bool) {
+        (bool slot0Ok, uint16 observationIndex, uint16 observationCardinality) = _v3ObservationStateOf(pool);
+        if (!slot0Ok || observationCardinality == 0) return false;
+
+        uint256 oldestIndex = (uint256(observationIndex) + 1) % uint256(observationCardinality);
+        (bool observationOk, uint32 observationTimestamp, bool initialized) = _v3ObservationOf(pool, oldestIndex);
+        if (!observationOk) return false;
+
+        if (!initialized) {
+            (observationOk, observationTimestamp, initialized) = _v3ObservationOf(pool, 0);
+            if (!observationOk || !initialized) return false;
+        }
+
+        return _observationIsOldEnough(observationTimestamp, _DEFAULT_TWAP_WINDOW);
+    }
+
+    /// @notice Reads the observation cursor and cardinality from a V3 pool's slot0.
+    function _v3ObservationStateOf(
+        IUniswapV3Pool pool
+    )
+        internal
+        view
+        returns (bool ok, uint16 observationIndex, uint16 observationCardinality)
+    {
+        (bool success, bytes memory data) =
+            address(pool).staticcall(abi.encodeWithSelector(IUniswapV3PoolState.slot0.selector));
+        if (!success || data.length < 224) return (false, 0, 0);
+
+        (, , observationIndex, observationCardinality,,,) =
+            abi.decode(data, (uint160, int24, uint16, uint16, uint16, uint8, bool));
+        ok = true;
+    }
+
+    /// @notice Reads one V3 observation.
+    function _v3ObservationOf(
+        IUniswapV3Pool pool,
+        uint256 index
+    )
+        internal
+        view
+        returns (bool ok, uint32 observationTimestamp, bool initialized)
+    {
+        (bool success, bytes memory data) =
+            address(pool).staticcall(abi.encodeWithSelector(IUniswapV3PoolState.observations.selector, index));
+        if (!success || data.length < 128) return (false, 0, false);
+
+        (observationTimestamp,,, initialized) = abi.decode(data, (uint32, int56, uint160, bool));
+        ok = true;
+    }
+
+    /// @notice Returns true when a timestamp is at least `window` seconds old.
+    function _observationIsOldEnough(uint32 observationTimestamp, uint256 window) internal view returns (bool) {
+        if (observationTimestamp >= block.timestamp) return false;
+        return block.timestamp - observationTimestamp >= window;
+    }
+
+    /// @notice Checks whether a V4 hooked pool can serve the required TWAP window.
+    function _v4PoolHasTwap(PoolKey memory key) internal view returns (bool) {
+        if (address(key.hooks) == address(0)) return false;
+
+        uint32[] memory secondsAgos = new uint32[](2);
+        secondsAgos[0] = _V4_TWAP_WINDOW;
+        secondsAgos[1] = 0;
+
+        try IGeomeanOracle(address(key.hooks)).observe({key: key, secondsAgos: secondsAgos}) returns (
+            int56[] memory tickCumulatives, uint160[] memory
+        ) {
+            return tickCumulatives.length >= 2;
+        } catch {
+            return false;
+        }
     }
 
     /// @notice Compute the minimum acceptable output using sigmoid slippage at the given tick.

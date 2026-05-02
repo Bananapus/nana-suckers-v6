@@ -107,6 +107,6 @@ contract RegistryPeerMismatchTest is Test {
         returns (JBSuckerDeployerConfig[] memory configs)
     {
         configs = new JBSuckerDeployerConfig[](1);
-        configs[0] = JBSuckerDeployerConfig({deployer: deployer, mappings: new JBTokenMapping[](0)});
+        configs[0] = JBSuckerDeployerConfig({deployer: deployer, peer: bytes32(0), mappings: new JBTokenMapping[](0)});
     }
 }

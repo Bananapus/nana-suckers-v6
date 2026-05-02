@@ -81,7 +81,7 @@ contract CodexNemesisDeprecatedLiveDeployer is IJBSuckerDeployer {
         return addr == address(sucker);
     }
 
-    function createForSender(uint256, bytes32) external view returns (IJBSucker) {
+    function createForSender(uint256, bytes32, bytes32) external view returns (IJBSucker) {
         return sucker;
     }
 }
@@ -116,7 +116,7 @@ contract CodexNemesisDeprecatedRemovalUndercountTest is Test {
         registry.allowSuckerDeployer(address(deployer));
 
         JBSuckerDeployerConfig[] memory configs = new JBSuckerDeployerConfig[](1);
-        configs[0] = JBSuckerDeployerConfig({deployer: deployer, mappings: new JBTokenMapping[](0)});
+        configs[0] = JBSuckerDeployerConfig({deployer: deployer, peer: bytes32(0), mappings: new JBTokenMapping[](0)});
         registry.deploySuckersFor(PROJECT_ID, bytes32("nemesis-deprecated"), configs);
     }
 

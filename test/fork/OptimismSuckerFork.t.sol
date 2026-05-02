@@ -153,7 +153,7 @@ contract OptimismSuckerForkTest is TestBaseWorkflow {
         suckerDeployer.configureSingleton(singleton);
 
         // Create a sucker clone for project ID 1.
-        sucker = suckerDeployer.createForSender(1, "op-fork-salt");
+        sucker = suckerDeployer.createForSender(1, "op-fork-salt", bytes32(0));
 
         // Label the sucker address for trace readability.
         vm.label(address(sucker), "optimismSucker");

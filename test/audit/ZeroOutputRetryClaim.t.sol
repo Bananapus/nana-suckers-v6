@@ -125,7 +125,8 @@ contract ZeroOutputRetryClaimTest is Test {
         });
         deployer.configureSingleton(singleton);
 
-        sucker = ZeroOutputRetryHarness(payable(address(deployer.createForSender(1, bytes32("ZERO_OUTPUT")))));
+        sucker =
+            ZeroOutputRetryHarness(payable(address(deployer.createForSender(1, bytes32("ZERO_OUTPUT"), bytes32(0)))));
 
         vm.mockCall(LOCAL_TOKEN, abi.encodeWithSignature("balanceOf(address)", address(sucker)), abi.encode(uint256(0)));
     }

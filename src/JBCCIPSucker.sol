@@ -42,10 +42,10 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
     //*********************************************************************//
 
     /// @notice Emitted when a transport payment refund fails after a successful CCIP send.
-    /// @dev The refunded ETH is permanently stuck in this contract — there is no recovery function.
-    /// This is an accepted tradeoff to avoid reverting after CCIP has committed the bridge message.
+    /// @dev The refunded ETH is retained as account-scoped credit so the CCIP send does not revert after
+    /// committing the bridge message.
     /// @param recipient The address that was supposed to receive the refund.
-    /// @param amount The amount of the failed refund (permanently stuck in this contract).
+    /// @param amount The amount of the failed refund.
     event TransportPaymentRefundFailed(address indexed recipient, uint256 amount);
 
     //*********************************************************************//
@@ -248,8 +248,11 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
             refundRecipient: _msgSender()
         });
 
-        // Emit an event if the excess transport payment refund failed.
-        if (refundFailed) emit TransportPaymentRefundFailed(_msgSender(), refundAmount);
+        // Retain failed refunds as caller credit instead of leaving them project-addable or stranded.
+        if (refundFailed) {
+            _retainTransportPaymentRefund({account: _msgSender(), amount: refundAmount});
+            emit TransportPaymentRefundFailed(_msgSender(), refundAmount);
+        }
     }
 
     //*********************************************************************//

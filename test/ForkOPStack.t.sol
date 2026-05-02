@@ -94,7 +94,7 @@ abstract contract OPStackNativeBridgeForkTestBase is SuckerForkHelpers {
         vm.stopPrank();
 
         suckerDeployerL1.configureSingleton(singletonL1);
-        suckerL1 = suckerDeployerL1.createForSender(1, "l1-salt");
+        suckerL1 = suckerDeployerL1.createForSender(1, "l1-salt", bytes32(0));
         vm.label(address(suckerL1), "suckerL1");
 
         // Grant sucker mint permission on L1.
@@ -126,7 +126,7 @@ abstract contract OPStackNativeBridgeForkTestBase is SuckerForkHelpers {
         vm.stopPrank();
 
         suckerDeployerL2.configureSingleton(singletonL2);
-        suckerL2 = suckerDeployerL2.createForSender(1, "l2-salt");
+        suckerL2 = suckerDeployerL2.createForSender(1, "l2-salt", bytes32(0));
         vm.label(address(suckerL2), "suckerL2");
 
         // Grant L2 sucker mint permission and launch L2 project.
