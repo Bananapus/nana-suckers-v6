@@ -663,9 +663,7 @@ library JBSwapPoolLib {
     }
 
     /// @notice Reads the observation cursor and cardinality from a V3 pool's slot0.
-    function _v3ObservationStateOf(
-        IUniswapV3Pool pool
-    )
+    function _v3ObservationStateOf(IUniswapV3Pool pool)
         internal
         view
         returns (bool ok, uint16 observationIndex, uint16 observationCardinality)
@@ -674,7 +672,7 @@ library JBSwapPoolLib {
             address(pool).staticcall(abi.encodeWithSelector(IUniswapV3PoolState.slot0.selector));
         if (!success || data.length < 224) return (false, 0, 0);
 
-        (, , observationIndex, observationCardinality,,,) =
+        (,, observationIndex, observationCardinality,,,) =
             abi.decode(data, (uint160, int24, uint16, uint16, uint16, uint8, bool));
         ok = true;
     }

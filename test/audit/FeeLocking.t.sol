@@ -354,9 +354,7 @@ contract CodexFeeLockingTest is Test {
 
         assertEq(address(sucker).balance, 0, "retained CCIP refund should be reclaimable");
         assertEq(refundRecipient.balance, stuckRefund, "refund recipient should receive retained CCIP refund");
-        assertEq(
-            sucker.retainedTransportPaymentRefundOf(address(caller)), 0, "caller refund credit should be cleared"
-        );
+        assertEq(sucker.retainedTransportPaymentRefundOf(address(caller)), 0, "caller refund credit should be cleared");
         assertEq(sucker.retainedTransportPaymentRefundBalance(), 0, "global refund total should be cleared");
     }
 }
