@@ -82,7 +82,7 @@ contract JBCeloSucker is JBOptimismSucker {
             // Check addable amount against WETH balance before unwrapping.
             uint256 addableAmount = amountToAddToBalanceOf(token);
             if (amount > addableAmount) {
-                revert JBSucker_InsufficientBalance(amount, addableAmount);
+                revert JBSucker_InsufficientBalance({amount: amount, balance: addableAmount});
             }
 
             // Unwrap WETH → native ETH.
@@ -95,7 +95,7 @@ contract JBCeloSucker is JBOptimismSucker {
                 DIRECTORY.primaryTerminalOf({projectId: cachedProjectId, token: JBConstants.NATIVE_TOKEN});
 
             if (address(terminal) == address(0)) {
-                revert JBSucker_NoTerminalForToken(cachedProjectId, JBConstants.NATIVE_TOKEN);
+                revert JBSucker_NoTerminalForToken({projectId: cachedProjectId, token: JBConstants.NATIVE_TOKEN});
             }
 
             // Add native ETH to the project's balance.
@@ -186,7 +186,7 @@ contract JBCeloSucker is JBOptimismSucker {
         // Enforce a reasonable minimum gas limit for bridging. Since we always bridge as ERC-20
         // (wrapping native ETH to WETH), all tokens need sufficient gas for an ERC-20 transfer.
         if (map.minGas < MESSENGER_ERC20_MIN_GAS_LIMIT) {
-            revert JBSucker_BelowMinGas(map.minGas, MESSENGER_ERC20_MIN_GAS_LIMIT);
+            revert JBSucker_BelowMinGas({minGas: map.minGas, minGasLimit: MESSENGER_ERC20_MIN_GAS_LIMIT});
         }
     }
 }

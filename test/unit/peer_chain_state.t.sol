@@ -24,7 +24,7 @@ import {LibClone} from "solady/src/utils/LibClone.sol";
 // forge-lint: disable-next-line(unaliased-plain-import)
 import "../../src/JBSucker.sol";
 
-import {IJBPeerChainAccountingContext} from "../../src/interfaces/IJBPeerChainAccountingContext.sol";
+import {IJBPeerChainAdjustedAccounts} from "../../src/interfaces/IJBPeerChainAdjustedAccounts.sol";
 import {IJBSuckerRegistry} from "../../src/interfaces/IJBSuckerRegistry.sol";
 import {JBDenominatedAmount} from "../../src/structs/JBDenominatedAmount.sol";
 import {JBInboxTreeRoot} from "../../src/structs/JBInboxTreeRoot.sol";
@@ -107,7 +107,7 @@ contract PeerChainStateSucker is JBSucker {
     }
 }
 
-contract PeerChainAccountingHookMock is IJBPeerChainAccountingContext {
+contract PeerChainAdjustedAccountsHookMock is IJBPeerChainAdjustedAccounts {
     uint256 internal immutable _supply;
     uint256 internal immutable _surplus;
 
@@ -116,7 +116,7 @@ contract PeerChainAccountingHookMock is IJBPeerChainAccountingContext {
         _surplus = surplus;
     }
 
-    function peerChainAccountingContextOf(
+    function peerChainAdjustedAccountsOf(
         uint256,
         uint256,
         uint256
@@ -179,6 +179,7 @@ contract PeerChainStateTest is Test {
             abi.encodeCall(IJBController.totalTokenSupplyWithReservedTokensOf, (PROJECT_ID)),
             abi.encode(uint256(0))
         );
+        vm.mockCall(CONTROLLER, abi.encodeCall(IJBController.PRICES, ()), abi.encode(PRICES));
         vm.mockCall(
             DIRECTORY, abi.encodeCall(IJBDirectory.primaryTerminalOf, (PROJECT_ID, TOKEN)), abi.encode(TERMINAL)
         );
@@ -435,7 +436,7 @@ contract PeerChainStateTest is Test {
     }
 
     /// @notice toRemote includes optional data-hook accounting in the peer-chain supply and surplus snapshot.
-    function test_toRemoteAddsDataHookPeerChainAccounting() public {
+    function test_toRemoteAddsDataHookPeerChainAdjustedAccounts() public {
         sucker.test_setRemoteToken(
             TOKEN,
             JBRemoteToken({
@@ -456,8 +457,8 @@ contract PeerChainStateTest is Test {
         );
         _mockSingleETHTerminal({ethBalance: 50 ether, ethSurplus: 30 ether});
 
-        PeerChainAccountingHookMock accountingHook =
-            new PeerChainAccountingHookMock({supply: 12 ether, surplus: 3 ether});
+        PeerChainAdjustedAccountsHookMock accountingHook =
+            new PeerChainAdjustedAccountsHookMock({supply: 12 ether, surplus: 3 ether});
         vm.etch(CONTROLLER, hex"00");
         JBRulesetMetadata memory metadata;
         metadata.dataHook = address(accountingHook);

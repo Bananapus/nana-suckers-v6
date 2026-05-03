@@ -6,7 +6,6 @@ import {IJBDirectory} from "@bananapus/core-v6/src/interfaces/IJBDirectory.sol";
 import {IJBMultiTerminal} from "@bananapus/core-v6/src/interfaces/IJBMultiTerminal.sol";
 import {IJBPrices} from "@bananapus/core-v6/src/interfaces/IJBPrices.sol";
 import {IJBTerminal} from "@bananapus/core-v6/src/interfaces/IJBTerminal.sol";
-import {IJBTerminalStore} from "@bananapus/core-v6/src/interfaces/IJBTerminalStore.sol";
 import {JBAccountingContext} from "@bananapus/core-v6/src/structs/JBAccountingContext.sol";
 import {JBCurrencyIds} from "@bananapus/core-v6/src/libraries/JBCurrencyIds.sol";
 import {JBFixedPointNumber} from "@bananapus/core-v6/src/libraries/JBFixedPointNumber.sol";
@@ -16,7 +15,7 @@ import {JBRulesetMetadata} from "@bananapus/core-v6/src/structs/JBRulesetMetadat
 import {mulDiv} from "@prb/math/src/Common.sol";
 import {IERC165} from "@openzeppelin/contracts/utils/introspection/ERC165.sol";
 
-import {IJBPeerChainAccountingContext} from "../interfaces/IJBPeerChainAccountingContext.sol";
+import {IJBPeerChainAdjustedAccounts} from "../interfaces/IJBPeerChainAdjustedAccounts.sol";
 import {JBDenominatedAmount} from "../structs/JBDenominatedAmount.sol";
 import {JBInboxTreeRoot} from "../structs/JBInboxTreeRoot.sol";
 import {JBMessageRoot} from "../structs/JBMessageRoot.sol";
@@ -54,7 +53,10 @@ library JBSuckerLib {
         view
         returns (uint256 ethSurplus, uint256 ethBalance)
     {
-        return _buildETHAggregateInternal(directory, projectId);
+        IJBController controller = _controllerOf({directory: directory, projectId: projectId});
+        IJBPrices prices = _pricesOf(controller);
+
+        return _buildETHAggregateInternal({directory: directory, projectId: projectId, prices: prices});
     }
 
     //*********************************************************************//
@@ -66,7 +68,8 @@ library JBSuckerLib {
     // forge-lint: disable-next-line(mixed-case-function)
     function _buildETHAggregateInternal(
         IJBDirectory directory,
-        uint256 projectId
+        uint256 projectId,
+        IJBPrices prices
     )
         internal
         view
@@ -95,9 +98,6 @@ library JBSuckerLib {
                 ++i;
             }
         }
-
-        // Get a reference to JBPrices for balance conversion.
-        IJBPrices prices = _pricesOf(terminals);
 
         // Aggregate balance from each terminal, converting each token to ETH.
         for (uint256 i; i < numTerminals;) {
@@ -180,13 +180,7 @@ library JBSuckerLib {
                 value: source.value, decimals: source.decimals, targetDecimals: decimals
             });
         } else {
-            // Look up terminals to access the price oracle.
-            IJBTerminal[] memory terminals = directory.terminalsOf(projectId);
-
-            // If there are no terminals, return zero.
-            if (terminals.length == 0) return 0;
-
-            IJBPrices prices = _pricesOf(terminals);
+            IJBPrices prices = _pricesOf(_controllerOf({directory: directory, projectId: projectId}));
             if (address(prices) == address(0)) return 0;
 
             // Convert using the price oracle.
@@ -204,23 +198,32 @@ library JBSuckerLib {
         }
     }
 
-    /// @notice Find a price oracle from any terminal that exposes one.
-    /// @param terminals The terminals to scan.
-    /// @return prices The first usable price oracle found.
-    function _pricesOf(IJBTerminal[] memory terminals) internal view returns (IJBPrices prices) {
-        for (uint256 i; i < terminals.length;) {
-            // slither-disable-next-line calls-loop
-            try IJBMultiTerminal(address(terminals[i])).STORE() returns (IJBTerminalStore store) {
-                // slither-disable-next-line calls-loop
-                try store.PRICES() returns (IJBPrices terminalPrices) {
-                    if (address(terminalPrices) != address(0)) return terminalPrices;
-                } catch {}
-            } catch {}
+    /// @notice Return the project's controller if it exists and advertises the controller interface.
+    /// @param directory The JB directory to look up the controller.
+    /// @param projectId The project ID.
+    /// @return controller The project's controller, or zero if the lookup is not supported.
+    function _controllerOf(IJBDirectory directory, uint256 projectId) internal view returns (IJBController controller) {
+        // slither-disable-next-line calls-loop
+        try directory.controllerOf(projectId) returns (IERC165 controllerIERC165) {
+            if (address(controllerIERC165) == address(0)) return IJBController(address(0));
 
-            unchecked {
-                ++i;
-            }
-        }
+            // slither-disable-next-line calls-loop
+            try controllerIERC165.supportsInterface(type(IJBController).interfaceId) returns (bool supported) {
+                if (supported) controller = IJBController(address(controllerIERC165));
+            } catch {}
+        } catch {}
+    }
+
+    /// @notice Return the price oracle wired into the project's controller.
+    /// @param controller The project's controller.
+    /// @return prices The controller's price oracle, or zero if the controller cannot expose one.
+    function _pricesOf(IJBController controller) internal view returns (IJBPrices prices) {
+        if (address(controller) == address(0) || address(controller).code.length == 0) return IJBPrices(address(0));
+
+        // slither-disable-next-line calls-loop
+        try controller.PRICES() returns (IJBPrices controllerPrices) {
+            prices = controllerPrices;
+        } catch {}
     }
 
     //*********************************************************************//
@@ -253,33 +256,28 @@ library JBSuckerLib {
         view
         returns (JBMessageRoot memory message)
     {
+        // Use the controller as the single source for project supply and price conversion.
+        IJBController controller = _controllerOf({directory: directory, projectId: projectId});
+
         // Will hold the total token supply (including reserved tokens) for the project.
         uint256 localTotalSupply;
-        IJBController controller;
-
-        // Get the controller and verify it implements IJBController via ERC165 before querying supply.
-        // slither-disable-next-line calls-loop
-        try directory.controllerOf(projectId) returns (IERC165 controllerIERC165) {
-            if (address(controllerIERC165) != address(0)) {
-                // slither-disable-next-line calls-loop
-                try controllerIERC165.supportsInterface(type(IJBController).interfaceId) returns (bool supported) {
-                    if (supported) {
-                        controller = IJBController(address(controllerIERC165));
-                        // slither-disable-next-line calls-loop
-                        localTotalSupply = controller.totalTokenSupplyWithReservedTokensOf(projectId);
-                    }
-                } catch {}
-            }
-        } catch {}
+        if (address(controller) != address(0)) {
+            // slither-disable-next-line calls-loop
+            try controller.totalTokenSupplyWithReservedTokensOf(projectId) returns (uint256 supply) {
+                localTotalSupply = supply;
+            } catch {}
+        }
 
         // Inline ETH aggregate computation (libraries cannot call their own external functions).
         (uint256 ethSurplus, uint256 ethBalance) =
-            _buildETHAggregateInternal({directory: directory, projectId: projectId});
+            _buildETHAggregateInternal({directory: directory, projectId: projectId, prices: _pricesOf(controller)});
 
         if (address(controller) != address(0) && address(controller).code.length != 0) {
             (uint256 additionalSupply, uint256 additionalSurplus) =
-                _peerChainAccountingContextOf({controller: controller, projectId: projectId});
+                _peerChainAdjustedAccountsOf({controller: controller, projectId: projectId});
 
+            // Some projects keep supply or surplus out of the normal local terminal/controller accounting. Fold in
+            // only the data hook's explicit adjustment so peer-chain snapshots match the project-specific model.
             localTotalSupply += additionalSupply;
             ethSurplus += additionalSurplus;
         }
@@ -299,12 +297,14 @@ library JBSuckerLib {
         });
     }
 
-    /// @notice Optional project-specific accounting to add to peer-chain snapshots.
+    /// @notice Optional project-specific adjusted accounts to add to peer-chain snapshots.
+    /// @dev Reads the current ruleset's data hook and asks it for extra supply/surplus. Non-supporting hooks,
+    /// broken hooks, and short return data are ignored so a project's baseline snapshot remains usable.
     /// @param controller The controller for the project being snapshotted.
     /// @param projectId The project being snapshotted.
     /// @return additionalSupply The supply to add to `sourceTotalSupply`.
     /// @return additionalSurplus The surplus to add to `sourceSurplus`, denominated in ETH at 18 decimals.
-    function _peerChainAccountingContextOf(
+    function _peerChainAdjustedAccountsOf(
         IJBController controller,
         uint256 projectId
     )
@@ -312,18 +312,22 @@ library JBSuckerLib {
         view
         returns (uint256 additionalSupply, uint256 additionalSurplus)
     {
+        // Use staticcall because older/downstream controllers may not expose the exact typed return expected here.
         (bool rulesetCallSucceeded, bytes memory rulesetData) =
             address(controller).staticcall(abi.encodeCall(IJBController.currentRulesetOf, (projectId)));
         if (!rulesetCallSucceeded || rulesetData.length < _CURRENT_RULESET_OF_RETURN_BYTES) return (0, 0);
 
+        // The ruleset metadata packs the active data hook; projects without a hook need no adjustment.
         (JBRuleset memory ruleset,) = abi.decode(rulesetData, (JBRuleset, JBRulesetMetadata));
 
         address dataHook = ruleset.dataHook();
         if (dataHook == address(0) || dataHook.code.length == 0) return (0, 0);
 
+        // Ask the hook for optional extra accounts denominated the same way this library snapshots surplus: ETH, 18
+        // decimals. The hook decides what project-specific remote or hidden balances should be included.
         (bool success, bytes memory data) = dataHook.staticcall(
             abi.encodeCall(
-                IJBPeerChainAccountingContext.peerChainAccountingContextOf, (projectId, _ETH_DECIMALS, _ETH_CURRENCY)
+                IJBPeerChainAdjustedAccounts.peerChainAdjustedAccountsOf, (projectId, _ETH_DECIMALS, _ETH_CURRENCY)
             )
         );
         if (!success || data.length < 64) return (0, 0);

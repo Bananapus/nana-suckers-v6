@@ -437,7 +437,9 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
         delete pendingSwapOf[localToken][nonce];
 
         _retrySwapLocked = false;
-        emit SwapRetried(localToken, nonce, pending.bridgeAmount, localAmount);
+        emit SwapRetried({
+            localToken: localToken, nonce: nonce, bridgeAmount: pending.bridgeAmount, localAmount: localAmount
+        });
     }
 
     //*********************************************************************//
@@ -621,7 +623,7 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
 
             if (refundFailed) {
                 _retainTransportPaymentRefund({account: _msgSender(), amount: refundAmount});
-                emit TransportPaymentRefundFailed(_msgSender(), refundAmount);
+                emit TransportPaymentRefundFailed({recipient: _msgSender(), amount: refundAmount});
             }
         }
     }

@@ -251,7 +251,7 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
         // Retain failed refunds as caller credit instead of leaving them project-addable or stranded.
         if (refundFailed) {
             _retainTransportPaymentRefund({account: _msgSender(), amount: refundAmount});
-            emit TransportPaymentRefundFailed(_msgSender(), refundAmount);
+            emit TransportPaymentRefundFailed({recipient: _msgSender(), amount: refundAmount});
         }
     }
 
@@ -285,7 +285,7 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
         // funds. CCIP wraps native tokens to WETH before bridging (see `_sendRootOverAMB`), so ALL tokens —
         // including native — need sufficient gas for an ERC-20 transfer on the remote chain.
         if (map.minGas < MESSENGER_ERC20_MIN_GAS_LIMIT) {
-            revert JBSucker_BelowMinGas(map.minGas, MESSENGER_ERC20_MIN_GAS_LIMIT);
+            revert JBSucker_BelowMinGas({minGas: map.minGas, minGasLimit: MESSENGER_ERC20_MIN_GAS_LIMIT});
         }
     }
 }

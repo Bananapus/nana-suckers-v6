@@ -46,12 +46,12 @@ library JBSwapPoolLib {
     // --------------------------- custom errors ------------------------- //
     //*********************************************************************//
 
-    error JBSwapPoolLib_NoPool();
-    error JBSwapPoolLib_NoLiquidity();
-    error JBSwapPoolLib_InsufficientTwapHistory();
     error JBSwapPoolLib_AmountOverflow(uint256 amount);
-    error JBSwapPoolLib_SlippageExceeded(uint256 amountOut, uint256 minAmountOut);
     error JBSwapPoolLib_CallerNotPool(address caller);
+    error JBSwapPoolLib_InsufficientTwapHistory();
+    error JBSwapPoolLib_NoLiquidity();
+    error JBSwapPoolLib_NoPool();
+    error JBSwapPoolLib_SlippageExceeded(uint256 amountOut, uint256 minAmountOut);
 
     //*********************************************************************//
     // ------------------------ private constants ------------------------ //
@@ -220,7 +220,9 @@ library JBSwapPoolLib {
             }
 
             // Enforce the minimum output from the TWAP quote.
-            if (amountOut < minAmountOut) revert JBSwapPoolLib_SlippageExceeded(amountOut, minAmountOut);
+            if (amountOut < minAmountOut) {
+                revert JBSwapPoolLib_SlippageExceeded({amountOut: amountOut, minAmountOut: minAmountOut});
+            }
         }
 
         // Settle input (pay what we owe to the PoolManager).
@@ -379,6 +381,8 @@ library JBSwapPoolLib {
                 v3Factory.getPool({tokenA: normalizedTokenIn, tokenB: normalizedTokenOut, fee: _feeTier(i)});
 
             if (poolAddr != address(0)) {
+                // Skip young V3 pools instead of falling back to spot. No-quote programmatic swaps rely on the TWAP
+                // floor, so a pool must already cover the full observation window before it can route funds.
                 if (!_v3PoolHasFullTwapHistory(IUniswapV3Pool(poolAddr))) {
                     unchecked {
                         ++i;
@@ -646,20 +650,28 @@ library JBSwapPoolLib {
     }
 
     /// @notice Checks whether a V3 pool can serve the full default TWAP window.
+    /// @dev Reads the observation ring directly so discovery can skip young pools without reverting. The oldest
+    /// initialized observation must be at least `_DEFAULT_TWAP_WINDOW` seconds old.
+    /// @param pool The V3 pool to inspect.
+    /// @return True if the pool has enough initialized history for a default-window TWAP.
     function _v3PoolHasFullTwapHistory(IUniswapV3Pool pool) internal view returns (bool) {
+        // slot0 gives the current observation cursor and total initialized/available observation slots.
         (bool slot0Ok, uint16 observationIndex, uint16 observationCardinality) = _v3ObservationStateOf(pool);
         if (!slot0Ok || observationCardinality == 0) return false;
 
+        // In a full ring, the next slot after the cursor is the oldest observation.
         uint256 oldestIndex = (uint256(observationIndex) + 1) % uint256(observationCardinality);
-        (bool observationOk, uint32 observationTimestamp, bool initialized) = _v3ObservationOf(pool, oldestIndex);
+        (bool observationOk, uint32 observationTimestamp, bool initialized) =
+            _v3ObservationOf({pool: pool, index: oldestIndex});
         if (!observationOk) return false;
 
+        // If the ring has not wrapped yet, slot 0 is the oldest initialized observation.
         if (!initialized) {
-            (observationOk, observationTimestamp, initialized) = _v3ObservationOf(pool, 0);
+            (observationOk, observationTimestamp, initialized) = _v3ObservationOf({pool: pool, index: 0});
             if (!observationOk || !initialized) return false;
         }
 
-        return _observationIsOldEnough(observationTimestamp, _DEFAULT_TWAP_WINDOW);
+        return _observationIsOldEnough({observationTimestamp: observationTimestamp, window: _DEFAULT_TWAP_WINDOW});
     }
 
     /// @notice Reads the observation cursor and cardinality from a V3 pool's slot0.
@@ -906,7 +918,9 @@ library JBSwapPoolLib {
         amountOut = uint256(-(zeroForOne ? amount1 : amount0));
 
         // Enforce the minimum output from the TWAP quote.
-        if (amountOut < minAmountOut) revert JBSwapPoolLib_SlippageExceeded(amountOut, minAmountOut);
+        if (amountOut < minAmountOut) {
+            revert JBSwapPoolLib_SlippageExceeded({amountOut: amountOut, minAmountOut: minAmountOut});
+        }
     }
 
     /// @notice Execute a swap through a V4 pool via `PoolManager.unlock()`.

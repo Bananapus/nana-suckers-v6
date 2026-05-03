@@ -342,7 +342,7 @@ contract JBSwapPoolLib_PoolDiscoveryTest is Test {
     // =========================================================================
 
     /// @notice When neither V3 nor V4 has any pools, discoverPool returns zeros.
-    function test_poolDiscovery_noPools_returnsZeros() public {
+    function test_poolDiscovery_noPools_returnsZeros() public view {
         // No pools configured (default setUp has all V3 returning address(0)).
         (bool isV4, IUniswapV3Pool v3Pool,) = harness.discoverPool(_config(), TOKEN_A, TOKEN_B);
 

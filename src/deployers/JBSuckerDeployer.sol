@@ -153,19 +153,6 @@ abstract contract JBSuckerDeployer is ERC2771Context, JBPermissioned, IJBSuckerD
         override(IJBSuckerDeployer)
         returns (IJBSucker sucker)
     {
-        return _createForSender({localProjectId: localProjectId, salt: salt, peer: peer});
-    }
-
-    //*********************************************************************//
-    // --------------------- internal transactions ----------------------- //
-    //*********************************************************************//
-
-    /// @notice Create a new `JBSucker` for a specific project.
-    /// @param localProjectId The project's ID on the local chain.
-    /// @param salt The salt to use for the `create2` address.
-    /// @param peer The remote peer address. Leave zero to use the default deterministic same-address peer.
-    /// @return sucker The address of the new sucker.
-    function _createForSender(uint256 localProjectId, bytes32 salt, bytes32 peer) internal returns (IJBSucker sucker) {
         // Make sure that this deployer is configured properly.
         if (address(singleton) == address(0)) {
             revert JBSuckerDeployer_DeployerIsNotConfigured();

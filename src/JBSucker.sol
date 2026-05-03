@@ -202,7 +202,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     /// Returns 0 if no snapshot has been received yet.
     uint256 public snapshotTimestamp;
 
-    /// @notice Monotonically increasing source freshness key assigned to outbound project-wide snapshots.
+    /// @notice Tie-breaker mixed into outbound snapshot freshness keys when multiple roots are sent at one timestamp.
     uint256 private _outboundSnapshotSequence;
 
     //*********************************************************************//
@@ -1036,16 +1036,14 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         // Reference the project id.
         uint256 _projectId = projectId();
 
-        // The registry may map tokens while deploying a freshly authorized sucker. Other callers must have the
-        // project's explicit mapping permission.
-        if (_msgSender() != address(REGISTRY)) {
-            // slither-disable-next-line calls-loop
-            _requirePermissionFrom({
-                account: PROJECTS.ownerOf(_projectId),
-                projectId: _projectId,
-                permissionId: JBPermissionIds.MAP_SUCKER_TOKEN
-            });
-        }
+        // The registry can map during authorized deployment. Otherwise, require the project's mapping permission.
+        // slither-disable-next-line calls-loop
+        _requirePermissionAllowingOverrideFrom({
+            account: PROJECTS.ownerOf(_projectId),
+            projectId: _projectId,
+            permissionId: JBPermissionIds.MAP_SUCKER_TOKEN,
+            alsoGrantAccessIf: _msgSender() == address(REGISTRY)
+        });
 
         // Make sure that the token does not get remapped to another remote token.
         // As this would cause the funds for this token to be double spendable on the other side.
@@ -1588,7 +1586,9 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     {
         uint256 sourceTimestamp;
         unchecked {
-            sourceTimestamp = ++_outboundSnapshotSequence;
+            // High bits preserve the source-chain timestamp for operators/indexers. Low bits make same-timestamp
+            // roots distinct so the receiver can still reject stale project-wide snapshots with a strict `>`.
+            sourceTimestamp = (block.timestamp << 128) | ++_outboundSnapshotSequence;
         }
 
         JBMessageRoot memory message = JBSuckerLib.buildSnapshotMessage({
