@@ -165,11 +165,6 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
     /// @custom:param nonce The CCIP nonce identifying the batch.
     mapping(address token => mapping(uint64 nonce => uint256)) internal _batchStartOf;
 
-    /// @notice Cached nonce from the last successful `_findNonceForLeafIndex` lookup.
-    /// @dev Batched claims from the same nonce hit this cache and skip the scan entirely.
-    /// @custom:param token The local token address.
-    mapping(address token => uint64) internal _cachedNonce;
-
     /// @notice Conversion rate for each received root batch, keyed by token and nonce.
     /// @custom:param token The local token address.
     /// @custom:param nonce The CCIP nonce identifying the batch.
@@ -498,38 +493,17 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
     }
 
     /// @notice Find the nonce whose batch contains the given leaf index.
-    /// @dev Uses a per-token cache with neighbor probing for O(1) lookups when claims are batched
-    /// sequentially. Falls back to a reverse scan (most-recent-first) so recent claims resolve quickly.
+    /// @dev Scans from the newest nonce backwards so recent batches resolve first without storing extra cache state.
     /// @param token The local token address.
     /// @param leafIndex The leaf index from the claim.
     /// @return The nonce of the batch containing this leaf, or 0 if no conversion rates exist.
-    function _findNonceForLeafIndex(address token, uint256 leafIndex) internal returns (uint64) {
+    function _findNonceForLeafIndex(address token, uint256 leafIndex) internal view returns (uint64) {
         uint64 maxNonce = _highestReceivedNonce[token];
         if (maxNonce == 0) return 0;
 
-        // Fast path: check cached nonce and its neighbors (covers sequential batch claims).
-        uint64 hint = _cachedNonce[token];
-        if (hint != 0) {
-            // Check the cached nonce itself.
-            if (_nonceContainsLeaf(token, hint, leafIndex)) return hint;
-            // Check the next nonce (common pattern: claims move to the next batch).
-            if (hint < maxNonce && _nonceContainsLeaf(token, hint + 1, leafIndex)) {
-                _cachedNonce[token] = hint + 1;
-                return hint + 1;
-            }
-            // Check the previous nonce (out-of-order claim from an earlier batch).
-            if (hint > 1 && _nonceContainsLeaf(token, hint - 1, leafIndex)) {
-                _cachedNonce[token] = hint - 1;
-                return hint - 1;
-            }
-        }
-
-        // Slow path: scan from most recent nonce backwards (recent claims found quickly).
+        // Scan from most recent nonce backwards (recent claims found quickly).
         for (uint64 n = maxNonce; n >= 1; n--) {
-            if (_nonceContainsLeaf(token, n, leafIndex)) {
-                _cachedNonce[token] = n;
-                return n;
-            }
+            if (_nonceContainsLeaf(token, n, leafIndex)) return n;
         }
         // Leaf index not found in any received batch.
         revert JBSwapCCIPSucker_BatchNotReceived(0);

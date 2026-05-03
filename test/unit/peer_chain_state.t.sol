@@ -516,8 +516,11 @@ contract PeerChainStateTest is Test {
         sucker.toRemote(TOKEN);
         JBMessageRoot memory second = sucker.test_getLastSentMessage();
 
-        assertEq(first.sourceTimestamp, 1, "first same-block snapshot freshness key");
-        assertEq(second.sourceTimestamp, 2, "second same-block snapshot freshness key");
+        assertEq(first.sourceTimestamp >> 128, block.timestamp, "first freshness key includes source timestamp");
+        assertEq(uint128(first.sourceTimestamp), 1, "first freshness key sequence");
+        assertEq(second.sourceTimestamp >> 128, block.timestamp, "second freshness key includes source timestamp");
+        assertEq(uint128(second.sourceTimestamp), 2, "second freshness key sequence");
+        assertGt(second.sourceTimestamp, first.sourceTimestamp, "same-block freshness key increases");
         assertEq(block.timestamp, 100 days, "test stayed in one block timestamp");
     }
 

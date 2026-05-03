@@ -117,9 +117,11 @@ contract RegistryFirstTerminalSnapshotGapTest is Test {
 
         vm.mockCall(PROJECTS, abi.encodeCall(IERC721.ownerOf, (PROJECT_ID)), abi.encode(address(this)));
         vm.mockCall(DIRECTORY, abi.encodeCall(IJBDirectory.controllerOf, (PROJECT_ID)), abi.encode(CONTROLLER));
+        vm.etch(CONTROLLER, hex"00");
         vm.mockCall(
             CONTROLLER, abi.encodeCall(IERC165.supportsInterface, (type(IJBController).interfaceId)), abi.encode(true)
         );
+        vm.mockCall(CONTROLLER, abi.encodeCall(IJBController.PRICES, ()), abi.encode(PRICES));
         vm.mockCall(
             CONTROLLER,
             abi.encodeCall(IJBController.totalTokenSupplyWithReservedTokensOf, (PROJECT_ID)),
@@ -162,7 +164,6 @@ contract RegistryFirstTerminalSnapshotGapTest is Test {
             abi.encode(uint256(40 ether))
         );
         vm.mockCall(REAL_TERMINAL, abi.encodeCall(IJBMultiTerminal.STORE, ()), abi.encode(STORE));
-        vm.mockCall(STORE, abi.encodeCall(IJBTerminalStore.PRICES, ()), abi.encode(PRICES));
         vm.etch(PRICES, hex"00");
 
         JBAccountingContext[] memory contexts = new JBAccountingContext[](1);

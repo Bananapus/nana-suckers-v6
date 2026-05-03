@@ -220,10 +220,10 @@ library JBSuckerLib {
     function _pricesOf(IJBController controller) internal view returns (IJBPrices prices) {
         if (address(controller) == address(0) || address(controller).code.length == 0) return IJBPrices(address(0));
 
-        // slither-disable-next-line calls-loop
-        try controller.PRICES() returns (IJBPrices controllerPrices) {
-            prices = controllerPrices;
-        } catch {}
+        // Use a low-level call so nonstandard mocks or downstream controllers that return malformed data are treated
+        // the same as controllers without prices instead of bubbling an ABI decode failure into snapshot building.
+        (bool success, bytes memory data) = address(controller).staticcall(abi.encodeCall(IJBController.PRICES, ()));
+        if (success && data.length >= 32) prices = abi.decode(data, (IJBPrices));
     }
 
     //*********************************************************************//
