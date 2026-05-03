@@ -809,6 +809,8 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         (bool success,) = beneficiary.call{value: amount}("");
         if (!success) revert JBSucker_RefundFailed();
 
+        // State was cleared before sending ETH; the event is emitted after the transfer so failed sends do not log.
+        // slither-disable-next-line reentrancy-events
         emit RetainedToRemoteFeeClaimed({
             account: account, beneficiary: beneficiary, amount: amount, caller: _msgSender()
         });
@@ -830,6 +832,8 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         (bool success,) = beneficiary.call{value: amount}("");
         if (!success) revert JBSucker_RefundFailed();
 
+        // State was cleared before sending ETH; the event is emitted after the transfer so failed sends do not log.
+        // slither-disable-next-line reentrancy-events
         emit RetainedTransportPaymentRefundClaimed({
             account: account, beneficiary: beneficiary, amount: amount, caller: _msgSender()
         });
@@ -1524,6 +1528,8 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     /// @param token The token address.
     /// @return The primary terminal.
     function _primaryTerminalOf(uint256 forProjectId, address token) internal view returns (IJBTerminal) {
+        // Claim processing may call this through a bounded claim list; each lookup must use the live directory state.
+        // slither-disable-next-line calls-loop
         return DIRECTORY.primaryTerminalOf({projectId: forProjectId, token: token});
     }
 

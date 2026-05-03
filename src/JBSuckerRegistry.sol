@@ -440,6 +440,8 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
     /// @param projectId The ID of the project to check.
     /// @param newSucker The newly created sucker to validate.
     function _revertIfDuplicatePeerChain(uint256 projectId, IJBSucker newSucker) internal view {
+        // The new sucker is registry-deployed and trusted for this validation.
+        // slither-disable-next-line calls-loop
         uint256 newPeerChainId = newSucker.peerChainId();
         address[] memory existing = _suckersOf[projectId].keys();
         for (uint256 i; i < existing.length;) {

@@ -618,7 +618,9 @@ library JBSwapPoolLib {
                 secondsAgos[0] = _V4_TWAP_WINDOW;
                 secondsAgos[1] = 0;
 
-                // Read the TWAP from the hook's geomean oracle.
+                // Read the TWAP from the hook's geomean oracle. The seconds-per-liquidity array is not used for
+                // price checks.
+                // slither-disable-next-line unused-return
                 (int56[] memory tickCumulatives,) =
                     IGeomeanOracle(address(key.hooks)).observe({key: key, secondsAgos: secondsAgos});
                 if (tickCumulatives.length < 2) revert JBSwapPoolLib_InsufficientTwapHistory();
@@ -680,6 +682,8 @@ library JBSwapPoolLib {
         view
         returns (bool ok, uint16 observationIndex, uint16 observationCardinality)
     {
+        // Pool discovery intentionally probes candidate pools in a bounded fee-tier list.
+        // slither-disable-next-line calls-loop
         (bool success, bytes memory data) =
             address(pool).staticcall(abi.encodeWithSelector(IUniswapV3PoolState.slot0.selector));
         if (!success || data.length < 224) return (false, 0, 0);
@@ -698,6 +702,8 @@ library JBSwapPoolLib {
         view
         returns (bool ok, uint32 observationTimestamp, bool initialized)
     {
+        // Pool discovery intentionally probes candidate pools in a bounded fee-tier list.
+        // slither-disable-next-line calls-loop
         (bool success, bytes memory data) =
             address(pool).staticcall(abi.encodeWithSelector(IUniswapV3PoolState.observations.selector, index));
         if (!success || data.length < 128) return (false, 0, false);
@@ -720,6 +726,9 @@ library JBSwapPoolLib {
         secondsAgos[0] = _V4_TWAP_WINDOW;
         secondsAgos[1] = 0;
 
+        // Pool discovery intentionally probes candidate hooks in a bounded pool list. The seconds-per-liquidity array
+        // is not needed for the history check.
+        // slither-disable-next-line calls-loop,unused-return
         try IGeomeanOracle(address(key.hooks)).observe({key: key, secondsAgos: secondsAgos}) returns (
             int56[] memory tickCumulatives, uint160[] memory
         ) {

@@ -250,6 +250,8 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
 
         // Retain failed refunds as caller credit instead of leaving them project-addable or stranded.
         if (refundFailed) {
+            // Refund accounting is isolated per caller; reentry cannot increase the retained credit.
+            // slither-disable-next-line reentrancy-benign
             _retainTransportPaymentRefund({account: _msgSender(), amount: refundAmount});
             emit TransportPaymentRefundFailed({recipient: _msgSender(), amount: refundAmount});
         }
