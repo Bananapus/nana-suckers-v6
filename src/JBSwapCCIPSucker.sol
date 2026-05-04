@@ -503,7 +503,7 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
 
         // Scan from most recent nonce backwards (recent claims found quickly).
         for (uint64 n = maxNonce; n >= 1; n--) {
-            if (_nonceContainsLeaf(token, n, leafIndex)) return n;
+            if (_nonceContainsLeaf({token: token, nonce: n, leafIndex: leafIndex})) return n;
         }
         // Leaf index not found in any received batch.
         revert JBSwapCCIPSucker_BatchNotReceived(0);

@@ -677,12 +677,18 @@ library JBSwapPoolLib {
     }
 
     /// @notice Reads the observation cursor and cardinality from a V3 pool's slot0.
+    /// @dev Uses `staticcall` instead of the typed interface so malformed or hooklike candidate pools are rejected
+    /// as unusable candidates without reverting the whole bounded pool-discovery scan.
+    /// @param pool The V3 pool candidate to inspect.
+    /// @return ok True if `slot0()` returned enough data to decode.
+    /// @return observationIndex The pool's current observation cursor.
+    /// @return observationCardinality The number of initialized/available observation slots.
     function _v3ObservationStateOf(IUniswapV3Pool pool)
         internal
         view
         returns (bool ok, uint16 observationIndex, uint16 observationCardinality)
     {
-        // Pool discovery intentionally probes candidate pools in a bounded fee-tier list.
+        // Pool discovery intentionally probes candidate pools in a bounded fee-tier list; failed probes mean "skip".
         // slither-disable-next-line calls-loop
         (bool success, bytes memory data) =
             address(pool).staticcall(abi.encodeWithSelector(IUniswapV3PoolState.slot0.selector));
@@ -694,6 +700,12 @@ library JBSwapPoolLib {
     }
 
     /// @notice Reads one V3 observation.
+    /// @dev Uses `staticcall` so a bad candidate pool cannot interrupt pool discovery.
+    /// @param pool The V3 pool candidate to inspect.
+    /// @param index The observation ring index to read.
+    /// @return ok True if the observation returned enough data to decode.
+    /// @return observationTimestamp The timestamp stored at `index`.
+    /// @return initialized True if the observation slot has been initialized.
     function _v3ObservationOf(
         IUniswapV3Pool pool,
         uint256 index
@@ -702,7 +714,7 @@ library JBSwapPoolLib {
         view
         returns (bool ok, uint32 observationTimestamp, bool initialized)
     {
-        // Pool discovery intentionally probes candidate pools in a bounded fee-tier list.
+        // Pool discovery intentionally probes candidate pools in a bounded fee-tier list; failed probes mean "skip".
         // slither-disable-next-line calls-loop
         (bool success, bytes memory data) =
             address(pool).staticcall(abi.encodeWithSelector(IUniswapV3PoolState.observations.selector, index));

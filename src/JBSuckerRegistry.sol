@@ -390,8 +390,11 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
         return ERC2771Context._msgSender();
     }
 
-    /// @notice Records a peer-chain aggregate value, preferring active suckers over deprecated suckers for the same
-    /// chain. @param chainIds The peer-chain ids recorded so far.
+    /// @notice Records a project-scoped peer-chain aggregate value.
+    /// @dev Callers pass scratch arrays sized from `_suckersOf[projectId].keys()`, so entries are already scoped to
+    /// the project being aggregated. For each peer chain, active suckers replace deprecated suckers; deprecated
+    /// values are only used as a migration fallback when no active sucker has reported for that chain.
+    /// @param chainIds The peer-chain ids recorded so far.
     /// @param values The aggregate values recorded so far.
     /// @param hasActiveValue Whether the recorded value for each index came from an active sucker.
     /// @param chainCount The number of populated chain entries.
@@ -414,10 +417,13 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
     {
         for (uint256 j; j < chainCount;) {
             if (chainIds[j] == chainId) {
+                // An active sucker is the live source for this chain. If several active suckers briefly exist during
+                // migration, keep the max value so a lower stale snapshot cannot undercount the project.
                 if (isActive) {
                     if (!hasActiveValue[j] || value > values[j]) values[j] = value;
                     hasActiveValue[j] = true;
                 } else if (!hasActiveValue[j] && value > values[j]) {
+                    // Deprecated suckers only fill the gap until an active value for this chain has been observed.
                     values[j] = value;
                 }
                 return chainCount;
