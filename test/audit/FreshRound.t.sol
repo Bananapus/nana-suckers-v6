@@ -208,7 +208,7 @@ contract CodexNemesisSwapHarness is JBSwapCCIPSucker {
         IJBPermissions permissions,
         IJBSuckerRegistry registry
     )
-        JBSwapCCIPSucker(deployer, directory, tokens, permissions, 1, registry, address(0))
+        JBSwapCCIPSucker(deployer, directory, permissions, address(1), tokens, 1, registry, address(0))
     {}
 
     function exposedAddToBalance(address token, uint256 amount, uint256 projectId, uint256 leafIndex) external {
@@ -333,10 +333,24 @@ contract CodexNemesisFreshRoundTest is Test {
         deployerB.setChainSpecificConstants(4217, REMOTE_SELECTOR, ICCIPRouter(ROUTER));
 
         JBCCIPSucker singletonA = new JBCCIPSucker(
-            deployerA, IJBDirectory(DIRECTORY), IJBTokens(TOKENS), IJBPermissions(PERMISSIONS), 1, registryA, address(0)
+            deployerA,
+            IJBDirectory(DIRECTORY),
+            IJBPermissions(PERMISSIONS),
+            address(1),
+            IJBTokens(TOKENS),
+            1,
+            registryA,
+            address(0)
         );
         JBCCIPSucker singletonB = new JBCCIPSucker(
-            deployerB, IJBDirectory(DIRECTORY), IJBTokens(TOKENS), IJBPermissions(PERMISSIONS), 1, registryB, address(0)
+            deployerB,
+            IJBDirectory(DIRECTORY),
+            IJBPermissions(PERMISSIONS),
+            address(1),
+            IJBTokens(TOKENS),
+            1,
+            registryB,
+            address(0)
         );
 
         deployerA.configureSingleton(singletonA);

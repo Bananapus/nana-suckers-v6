@@ -50,7 +50,7 @@ contract DeepAttackSucker is JBSucker {
         IJBSuckerRegistry registry,
         address forwarder
     )
-        JBSucker(directory, permissions, tokens, 1, registry, forwarder)
+        JBSucker(directory, permissions, address(1), tokens, 1, registry, forwarder)
     {}
 
     // forge-lint: disable-next-line(mixed-case-function)

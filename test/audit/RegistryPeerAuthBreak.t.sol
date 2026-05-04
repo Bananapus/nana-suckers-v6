@@ -57,6 +57,7 @@ contract CodexNemesisRegistryPeerAuthBreakTest is Test, TestBaseWorkflow, IERC72
             deployer: deployer,
             directory: jbDirectory(),
             permissions: jbPermissions(),
+            prices: address(jbPrices()),
             tokens: jbTokens(),
             feeProjectId: 1,
             registry: registryA,

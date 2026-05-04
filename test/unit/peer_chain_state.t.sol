@@ -50,7 +50,7 @@ contract PeerChainStateSucker is JBSucker {
         IJBTokens tokens,
         address forwarder
     )
-        JBSucker(directory, permissions, tokens, 1, IJBSuckerRegistry(address(1)), forwarder)
+        JBSucker(directory, permissions, address(1400), tokens, 1, IJBSuckerRegistry(address(1)), forwarder)
     {}
 
     // forge-lint: disable-next-line(mixed-case-function)
@@ -108,10 +108,12 @@ contract PeerChainStateSucker is JBSucker {
 }
 
 contract PeerChainAdjustedAccountsHookMock is IJBPeerChainAdjustedAccounts {
+    uint256 internal immutable _balance;
     uint256 internal immutable _supply;
     uint256 internal immutable _surplus;
 
     constructor(uint256 supply, uint256 surplus) {
+        _balance = 0;
         _supply = supply;
         _surplus = surplus;
     }
@@ -123,9 +125,9 @@ contract PeerChainAdjustedAccountsHookMock is IJBPeerChainAdjustedAccounts {
     )
         external
         view
-        returns (uint256 supply, uint256 surplus)
+        returns (uint256 supply, uint256 surplus, uint256 balance)
     {
-        return (_supply, _surplus);
+        return (_supply, _surplus, _balance);
     }
 }
 

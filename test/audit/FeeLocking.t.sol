@@ -88,7 +88,7 @@ contract ZeroCostBridgeSuckerHarness is JBSucker {
         IJBSuckerRegistry registry,
         address trustedForwarder
     )
-        JBSucker(directory, permissions, tokens, feeProjectId, registry, trustedForwarder)
+        JBSucker(directory, permissions, address(1), tokens, feeProjectId, registry, trustedForwarder)
     {}
 
     function peerChainId() external view override returns (uint256) {
@@ -154,7 +154,7 @@ contract CCIPSuckerHarness is JBCCIPSucker {
         IJBSuckerRegistry registry,
         address trustedForwarder
     )
-        JBCCIPSucker(deployer, directory, tokens, permissions, feeProjectId, registry, trustedForwarder)
+        JBCCIPSucker(deployer, directory, permissions, address(1), tokens, feeProjectId, registry, trustedForwarder)
     {}
 
     function test_setRemoteToken(address localToken, JBRemoteToken memory remoteToken) external {

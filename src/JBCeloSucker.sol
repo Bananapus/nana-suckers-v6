@@ -37,17 +37,19 @@ contract JBCeloSucker is JBOptimismSucker {
     /// @param deployer A contract that deploys the clones for this contracts.
     /// @param directory A contract storing directories of terminals and controllers for each project.
     /// @param permissions A contract storing permissions.
+    /// @param prices The price oracle used to convert peer-chain balances and surplus.
     /// @param tokens A contract that manages token minting and burning.
     constructor(
         JBCeloSuckerDeployer deployer,
         IJBDirectory directory,
         IJBPermissions permissions,
+        address prices,
         IJBTokens tokens,
         uint256 feeProjectId,
         IJBSuckerRegistry registry,
         address trustedForwarder
     )
-        JBOptimismSucker(deployer, directory, permissions, tokens, feeProjectId, registry, trustedForwarder)
+        JBOptimismSucker(deployer, directory, permissions, prices, tokens, feeProjectId, registry, trustedForwarder)
     {
         // Fetch the wrapped native token by doing a callback to the deployer contract.
         WRAPPED_NATIVE = JBCeloSuckerDeployer(deployer).wrappedNative();

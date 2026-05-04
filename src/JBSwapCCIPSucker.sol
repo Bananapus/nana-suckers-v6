@@ -199,21 +199,23 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
 
     /// @param deployer The deployer that stores chain-specific configuration.
     /// @param directory The directory of terminals and controllers for projects.
-    /// @param tokens The contract that manages token minting and burning.
     /// @param permissions The permissions contract.
+    /// @param prices The price oracle used to convert peer-chain balances and surplus.
+    /// @param tokens The contract that manages token minting and burning.
     /// @param feeProjectId The project ID that receives bridge fees.
     /// @param registry The sucker registry.
     /// @param trustedForwarder The trusted forwarder for ERC-2771 meta-transactions.
     constructor(
         JBSwapCCIPSuckerDeployer deployer,
         IJBDirectory directory,
-        IJBTokens tokens,
         IJBPermissions permissions,
+        address prices,
+        IJBTokens tokens,
         uint256 feeProjectId,
         IJBSuckerRegistry registry,
         address trustedForwarder
     )
-        JBCCIPSucker(deployer, directory, tokens, permissions, feeProjectId, registry, trustedForwarder)
+        JBCCIPSucker(deployer, directory, permissions, prices, tokens, feeProjectId, registry, trustedForwarder)
     {
         IJBSwapCCIPSuckerDeployer swapDeployer = IJBSwapCCIPSuckerDeployer(address(deployer));
         BRIDGE_TOKEN = swapDeployer.bridgeToken();
@@ -492,33 +494,6 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
         super._addToBalance({token: token, amount: amount, cachedProjectId: cachedProjectId});
     }
 
-    /// @notice Find the nonce whose batch contains the given leaf index.
-    /// @dev Scans from the newest nonce backwards so recent batches resolve first without storing extra cache state.
-    /// @param token The local token address.
-    /// @param leafIndex The leaf index from the claim.
-    /// @return The nonce of the batch containing this leaf, or 0 if no conversion rates exist.
-    function _findNonceForLeafIndex(address token, uint256 leafIndex) internal view returns (uint64) {
-        uint64 maxNonce = _highestReceivedNonce[token];
-        if (maxNonce == 0) return 0;
-
-        // Scan from most recent nonce backwards (recent claims found quickly).
-        for (uint64 n = maxNonce; n >= 1; n--) {
-            if (_nonceContainsLeaf({token: token, nonce: n, leafIndex: leafIndex})) return n;
-        }
-        // Leaf index not found in any received batch.
-        revert JBSwapCCIPSucker_BatchNotReceived(0);
-    }
-
-    /// @notice Check whether the given nonce's batch range contains the leaf index.
-    /// @param token The local token address.
-    /// @param nonce The nonce to check.
-    /// @param leafIndex The leaf index to look for.
-    /// @return True if the nonce's [start, end) range contains `leafIndex`.
-    function _nonceContainsLeaf(address token, uint64 nonce, uint256 leafIndex) internal view returns (bool) {
-        uint256 end = _batchEndOf[token][nonce];
-        return end != 0 && leafIndex >= _batchStartOf[token][nonce] && leafIndex < end;
-    }
-
     /// @notice Override to swap local tokens into bridge tokens before CCIP bridging.
     /// @dev Does NOT modify `sucker_message.amount` — keeps the original leaf-denomination total so the
     /// receiving chain can use it (along with the actual delivered amount) to compute the proportional
@@ -624,5 +599,36 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
             amount: amount,
             minAmountOut: 0
         });
+    }
+
+    //*********************************************************************//
+    // ----------------------- internal views ---------------------------- //
+    //*********************************************************************//
+
+    /// @notice Find the nonce whose batch contains the given leaf index.
+    /// @dev Scans from the newest nonce backwards so recent batches resolve first without storing extra cache state.
+    /// @param token The local token address.
+    /// @param leafIndex The leaf index from the claim.
+    /// @return The nonce of the batch containing this leaf, or 0 if no conversion rates exist.
+    function _findNonceForLeafIndex(address token, uint256 leafIndex) internal view returns (uint64) {
+        uint64 maxNonce = _highestReceivedNonce[token];
+        if (maxNonce == 0) return 0;
+
+        // Scan from most recent nonce backwards so the normal just-bridged claim path exits quickly.
+        for (uint64 n = maxNonce; n >= 1; n--) {
+            if (_nonceContainsLeaf({token: token, nonce: n, leafIndex: leafIndex})) return n;
+        }
+
+        revert JBSwapCCIPSucker_BatchNotReceived(0);
+    }
+
+    /// @notice Check whether the given nonce's batch range contains the leaf index.
+    /// @param token The local token address.
+    /// @param nonce The nonce to check.
+    /// @param leafIndex The leaf index to look for.
+    /// @return True if the nonce's [start, end) range contains `leafIndex`.
+    function _nonceContainsLeaf(address token, uint64 nonce, uint256 leafIndex) internal view returns (bool) {
+        uint256 end = _batchEndOf[token][nonce];
+        return end != 0 && leafIndex >= _batchStartOf[token][nonce] && leafIndex < end;
     }
 }

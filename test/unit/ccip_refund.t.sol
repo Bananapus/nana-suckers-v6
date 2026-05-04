@@ -32,7 +32,9 @@ contract CCIPSuckerHarness is JBCCIPSucker {
         // forge-lint: disable-next-line(mixed-case-variable)
         address trusted_forwarder
     )
-        JBCCIPSucker(deployer, directory, tokens, permissions, 1, IJBSuckerRegistry(address(1)), trusted_forwarder)
+        JBCCIPSucker(
+            deployer, directory, permissions, address(1), tokens, 1, IJBSuckerRegistry(address(1)), trusted_forwarder
+        )
     {}
 
     /// @notice Directly insert a leaf into the outbox tree for testing.

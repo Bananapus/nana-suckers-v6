@@ -22,7 +22,7 @@ contract CodexCCIPLegacyFormatHarness is JBCCIPSucker {
         IJBTokens tokens,
         IJBPermissions permissions
     )
-        JBCCIPSucker(deployer, directory, tokens, permissions, 1, IJBSuckerRegistry(address(1)), address(0))
+        JBCCIPSucker(deployer, directory, permissions, address(1), tokens, 1, IJBSuckerRegistry(address(1)), address(0))
     {}
 }
 

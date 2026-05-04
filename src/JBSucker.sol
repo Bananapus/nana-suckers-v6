@@ -7,6 +7,7 @@ import {IJBController} from "@bananapus/core-v6/src/interfaces/IJBController.sol
 import {IJBDirectory} from "@bananapus/core-v6/src/interfaces/IJBDirectory.sol";
 import {IJBPermissioned} from "@bananapus/core-v6/src/interfaces/IJBPermissioned.sol";
 import {IJBPermissions} from "@bananapus/core-v6/src/interfaces/IJBPermissions.sol";
+import {IJBPrices} from "@bananapus/core-v6/src/interfaces/IJBPrices.sol";
 import {IJBProjects} from "@bananapus/core-v6/src/interfaces/IJBProjects.sol";
 import {IJBTerminal} from "@bananapus/core-v6/src/interfaces/IJBTerminal.sol";
 import {IJBTokens} from "@bananapus/core-v6/src/interfaces/IJBTokens.sol";
@@ -116,11 +117,14 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     /// @notice The directory of terminals and controllers for projects.
     IJBDirectory public immutable override DIRECTORY;
 
-    /// @notice The project registry (ERC-721 ownership).
-    IJBProjects public immutable override PROJECTS;
-
     /// @notice The project ID that receives the `toRemoteFee` payment. Typically the protocol project (ID 1).
     uint256 public immutable FEE_PROJECT_ID;
+
+    /// @notice The price oracle used to convert peer-chain balances and surplus.
+    IJBPrices public immutable PRICES;
+
+    /// @notice The project registry (ERC-721 ownership).
+    IJBProjects public immutable override PROJECTS;
 
     /// @notice The sucker registry that manages the global `toRemoteFee`.
     IJBSuckerRegistry public immutable REGISTRY;
@@ -211,6 +215,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
 
     /// @param directory A contract storing directories of terminals and controllers for each project.
     /// @param permissions A contract storing permissions.
+    /// @param prices The price oracle used to convert peer-chain balances and surplus.
     /// @param tokens A contract that manages token minting and burning.
     /// @param feeProjectId The project ID that receives the `toRemoteFee` payment (typically 1).
     /// @param registry The sucker registry that manages the global `toRemoteFee`.
@@ -218,6 +223,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     constructor(
         IJBDirectory directory,
         IJBPermissions permissions,
+        address prices,
         IJBTokens tokens,
         uint256 feeProjectId,
         IJBSuckerRegistry registry,
@@ -227,10 +233,11 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         JBPermissioned(permissions)
     {
         DIRECTORY = directory;
-        PROJECTS = directory.PROJECTS();
-        TOKENS = tokens;
         FEE_PROJECT_ID = feeProjectId;
+        PRICES = IJBPrices(prices);
+        PROJECTS = directory.PROJECTS();
         REGISTRY = registry;
+        TOKENS = tokens;
 
         // Make it so the singleton can't be initialized.
         _disableInitializers();
@@ -1483,7 +1490,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         returns (uint256 converted)
     {
         converted = JBSuckerLib.convertPeerValue({
-            directory: DIRECTORY, projectId: projectId(), source: source, decimals: decimals, currency: currency
+            prices: PRICES, projectId: projectId(), source: source, decimals: decimals, currency: currency
         });
     }
 
@@ -1599,6 +1606,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
 
         JBMessageRoot memory message = JBSuckerLib.buildSnapshotMessage({
             directory: DIRECTORY,
+            prices: PRICES,
             projectId: projectId(),
             remoteToken: remoteToken.addr,
             amount: amount,

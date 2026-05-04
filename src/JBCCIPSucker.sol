@@ -74,21 +74,23 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
 
     /// @param deployer A contract that deploys the clones for this contract.
     /// @param directory A contract storing directories of terminals and controllers for each project.
-    /// @param tokens A contract that manages token minting and burning.
     /// @param permissions A contract storing permissions.
+    /// @param prices The price oracle used to convert peer-chain balances and surplus.
+    /// @param tokens A contract that manages token minting and burning.
     /// @param feeProjectId The ID of the project that receives fees.
     /// @param registry The sucker registry that tracks deployed suckers.
     /// @param trustedForwarder The trusted forwarder for ERC-2771 meta-transactions.
     constructor(
         JBCCIPSuckerDeployer deployer,
         IJBDirectory directory,
-        IJBTokens tokens,
         IJBPermissions permissions,
+        address prices,
+        IJBTokens tokens,
         uint256 feeProjectId,
         IJBSuckerRegistry registry,
         address trustedForwarder
     )
-        JBSucker(directory, permissions, tokens, feeProjectId, registry, trustedForwarder)
+        JBSucker(directory, permissions, prices, tokens, feeProjectId, registry, trustedForwarder)
     {
         // Read the remote chain ID from the deployer.
         REMOTE_CHAIN_ID = IJBCCIPSuckerDeployer(deployer).ccipRemoteChainId();

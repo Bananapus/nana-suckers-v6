@@ -40,10 +40,11 @@ contract SnapshotGapHarness is JBSucker {
     constructor(
         IJBDirectory directory,
         IJBPermissions permissions,
+        address prices,
         IJBTokens tokens,
         address forwarder
     )
-        JBSucker(directory, permissions, tokens, 1, IJBSuckerRegistry(address(1)), forwarder)
+        JBSucker(directory, permissions, prices, tokens, 1, IJBSuckerRegistry(address(1)), forwarder)
     {}
 
     function _sendRootOverAMB(
@@ -192,8 +193,9 @@ contract RegistryFirstTerminalSnapshotGapTest is Test {
     }
 
     function _createSucker() internal returns (SnapshotGapHarness) {
-        SnapshotGapHarness singleton =
-            new SnapshotGapHarness(IJBDirectory(DIRECTORY), IJBPermissions(PERMISSIONS), IJBTokens(TOKENS), FORWARDER);
+        SnapshotGapHarness singleton = new SnapshotGapHarness(
+            IJBDirectory(DIRECTORY), IJBPermissions(PERMISSIONS), PRICES, IJBTokens(TOKENS), FORWARDER
+        );
 
         SnapshotGapHarness clone =
             SnapshotGapHarness(payable(address(LibClone.cloneDeterministic(address(singleton), bytes32("gap")))));

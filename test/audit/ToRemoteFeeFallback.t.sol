@@ -34,7 +34,7 @@ contract OptimismFeeHarness is JBOptimismSucker {
         IJBTokens tokens,
         IJBSuckerRegistry registry
     )
-        JBOptimismSucker(deployer, directory, permissions, tokens, 1, registry, address(0))
+        JBOptimismSucker(deployer, directory, permissions, address(1), tokens, 1, registry, address(0))
     {}
 
     function seedOutbox(address token, bytes32 remoteToken) external {

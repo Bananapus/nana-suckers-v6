@@ -26,7 +26,7 @@ contract CodexNemesisDeprecatedLiveSucker is JBSucker {
         IJBPermissions permissions,
         IJBTokens tokens
     )
-        JBSucker(directory, permissions, tokens, 1, IJBSuckerRegistry(address(1)), address(0))
+        JBSucker(directory, permissions, address(1), tokens, 1, IJBSuckerRegistry(address(1)), address(0))
     {}
 
     function peerChainId() external pure override returns (uint256) {

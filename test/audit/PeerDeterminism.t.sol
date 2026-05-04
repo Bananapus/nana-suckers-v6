@@ -52,6 +52,7 @@ contract CodexPeerDeterminismTest is Test, TestBaseWorkflow, IERC721Receiver {
             deployer: deployer,
             directory: jbDirectory(),
             permissions: jbPermissions(),
+            prices: address(jbPrices()),
             tokens: jbTokens(),
             feeProjectId: 1,
             registry: registryA,

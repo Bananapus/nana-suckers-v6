@@ -77,7 +77,7 @@ contract CCIPTestSucker is JBCCIPSucker {
         IJBTokens tokens,
         IJBPermissions permissions
     )
-        JBCCIPSucker(deployer, directory, tokens, permissions, 1, IJBSuckerRegistry(address(1)), address(0))
+        JBCCIPSucker(deployer, directory, permissions, address(1), tokens, 1, IJBSuckerRegistry(address(1)), address(0))
     {}
 
     // forge-lint: disable-next-line(mixed-case-function)
@@ -135,7 +135,7 @@ contract BaseTestSucker is JBSucker {
         IJBPermissions permissions,
         IJBTokens tokens
     )
-        JBSucker(directory, permissions, tokens, 1, IJBSuckerRegistry(address(1)), address(0))
+        JBSucker(directory, permissions, address(1), tokens, 1, IJBSuckerRegistry(address(1)), address(0))
     {}
 
     // forge-lint: disable-next-line(mixed-case-function)

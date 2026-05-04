@@ -29,7 +29,9 @@ contract ZeroOutputRetryHarness is JBSwapCCIPSucker {
         IJBTokens tokens,
         IJBPermissions permissions
     )
-        JBSwapCCIPSucker(deployer, directory, tokens, permissions, 1, IJBSuckerRegistry(address(1)), address(0))
+        JBSwapCCIPSucker(
+            deployer, directory, permissions, address(1), tokens, 1, IJBSuckerRegistry(address(1)), address(0)
+        )
     {}
 
     function testSetInbox(address token, bytes32 root, uint64 nonce) external {

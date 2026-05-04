@@ -35,7 +35,7 @@ contract CodexFeeIrrecoverableHarness is JBSucker {
         IJBTokens tokens,
         IJBSuckerRegistry registry
     )
-        JBSucker(directory, permissions, tokens, 1, registry, address(0))
+        JBSucker(directory, permissions, address(1), tokens, 1, registry, address(0))
     {}
 
     function peerChainId() external view override returns (uint256) {

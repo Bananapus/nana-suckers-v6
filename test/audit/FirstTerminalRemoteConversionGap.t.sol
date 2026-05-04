@@ -14,7 +14,7 @@ import {JBSuckerLib} from "../../src/libraries/JBSuckerLib.sol";
 
 contract ConvertPeerValueHarness {
     function convert(
-        IJBDirectory directory,
+        IJBPrices prices,
         uint256 projectId,
         JBDenominatedAmount memory source,
         uint256 decimals,
@@ -24,7 +24,7 @@ contract ConvertPeerValueHarness {
         view
         returns (uint256)
     {
-        return JBSuckerLib.convertPeerValue(directory, projectId, source, decimals, currency);
+        return JBSuckerLib.convertPeerValue(prices, projectId, source, decimals, currency);
     }
 }
 
@@ -61,7 +61,7 @@ contract FirstTerminalRemoteConversionGapTest is Test {
             JBDenominatedAmount({value: 10 ether, currency: uint32(ETH_CURRENCY), decimals: 18});
 
         uint256 converted =
-            harness.convert(IJBDirectory(DIRECTORY), PROJECT_ID, remoteEthSnapshot, 18, uint256(NATIVE_CURRENCY));
+            harness.convert(IJBPrices(PRICES), PROJECT_ID, remoteEthSnapshot, 18, uint256(NATIVE_CURRENCY));
         assertEq(converted, 10 ether, "controller price oracle should convert the remote value");
     }
 }
