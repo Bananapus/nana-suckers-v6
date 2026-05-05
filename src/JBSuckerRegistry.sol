@@ -479,8 +479,8 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
 
     /// @notice Deploy one or more cross-chain suckers for a project in a single transaction. Each sucker is created via
     /// its deployer, registered in this registry, and immediately configured with its token mappings. Multiple suckers
-    /// targeting the same peer chain are allowed for bridge resilience. The caller must have `DEPLOY_SUCKERS` permission,
-    /// and this registry must hold `MAP_SUCKER_TOKEN` permission for the project.
+    /// targeting the same peer chain are allowed for bridge resilience. The caller must have `DEPLOY_SUCKERS`
+    /// permission, and this registry must hold `MAP_SUCKER_TOKEN` permission for the project.
     /// @param projectId The ID of the project to deploy suckers for.
     /// @param salt The salt used to deploy the contract. For the suckers to be peers, this must be the same value on
     /// each chain where suckers are deployed.
