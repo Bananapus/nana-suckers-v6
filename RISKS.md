@@ -136,15 +136,15 @@ The fee is paid to `FEE_PROJECT_ID` (the protocol project), not to the sucker's 
 
 `JBSuckerRegistry.remoteBalanceOf`, `remoteSurplusOf`, and `remoteTotalSupplyOf` intentionally use `try/catch` around each sucker and silently ignore peers that revert. Both active and deprecated suckers can be included, with per-chain deduplication: when multiple suckers target the same peer chain (e.g., during a migration window), active sucker values take precedence, and deprecated sucker values are used only if no active sucker answers for that peer chain. This is accepted because a single bad peer should not brick every cross-chain dashboard or estimator. The trade-off is that these read surfaces are best-effort only: consumers must treat them as lower bounds, not exact reconciled totals, unless they independently verify that every active sucker responded successfully.
 
-### 10.8 Zero-output swap batches route to pendingSwapOf
+### 10.6 Zero-output swap batches route to pendingSwapOf
 
 When `JBSwapCCIPSucker.ccipReceive` receives bridge tokens and the swap succeeds but returns zero local tokens (e.g., due to extreme price impact or dust amounts), the batch is routed to `pendingSwapOf` for later retry via `retrySwap`. Without this, claims would proceed with zero terminal backing, minting unbacked project tokens. The trade-off is that these batches require a manual `retrySwap` call once pool conditions improve. Anyone can call `retrySwap` — it is permissionless.
 
-### 10.6 Hookless V4 spot pricing is sandwich-vulnerable by design
+### 10.7 Hookless V4 spot pricing is sandwich-vulnerable by design
 
 When no TWAP-capable route is available for a cross-denomination swap, a hookless V4 pool can be used as a last-resort spot-priced fallback. `_getV4Quote` then uses the instantaneous spot tick from `POOL_MANAGER.getSlot0()` instead of a TWAP oracle. This tick is manipulable via sandwich attacks, allowing an attacker to skew the `minAmountOut` and extract value from the swap. The sigmoid slippage model limits the damage but operates on a corrupted baseline. This is an accepted liveness tradeoff for the no-TWAP-route case: reverting when no TWAP is available would cause the CCIP message to fail, leaving bridged tokens stuck until manual retry. Hooked V4 pools must serve the configured TWAP window; if the hook's `observe()` reverts or lacks history, that pool is not eligible to beat a V3 TWAP route or degrade silently to spot.
 
-### 10.7 `mapTokens` refunds ETH on enable-only batches
+### 10.8 `mapTokens` refunds ETH on enable-only batches
 
 `mapTokens()` only uses `msg.value` when one or more mappings are being disabled and need transport payment for the final root flush. If every mapping in the batch is enable-only (`numberToDisable == 0`), the full `msg.value` is refunded to `_msgSender()`. If the refund transfer fails (e.g., the caller is a non-payable contract), the call reverts with `JBSucker_RefundFailed`. When disables are present, any dust remainder from integer division (`msg.value % numberToDisable`) is also refunded on a best-effort basis.
 

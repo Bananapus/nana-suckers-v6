@@ -6,6 +6,17 @@
     "type": "git",
     "url": "git+https://github.com/Bananapus/nana-suckers-v6"
   },
+  "files": [
+    "CHANGELOG.md",
+    "foundry.lock",
+    "foundry.toml",
+    "references/",
+    "remappings.txt",
+    "script/Deploy.s.sol",
+    "script/helpers/",
+    "sphinx.lock",
+    "src/"
+  ],
   "engines": {
     "node": ">=20.0.0"
   },
@@ -18,19 +29,19 @@
     "analyze": "slither . --config-file slither-ci.config.json"
   },
   "dependencies": {
-    "@arbitrum/nitro-contracts": "^1.2.1",
-    "@bananapus/core-v6": "^0.0.36",
-    "@bananapus/permission-ids-v6": "^0.0.19",
-    "@chainlink/contracts-ccip": "^1.6.0",
-    "@chainlink/local": "github:smartcontractkit/chainlink-local#v0.2.7",
-    "@openzeppelin/contracts": "^5.6.1",
-    "@prb/math": "^4.1.0",
-    "@uniswap/v3-core": "github:Uniswap/v3-core#0.8",
-    "@uniswap/v3-periphery": "github:Uniswap/v3-periphery#0.8",
-    "@uniswap/v4-core": "^1.0.2",
-    "solady": "^0.1.26"
+    "@arbitrum/nitro-contracts": "3.2.0",
+    "@bananapus/core-v6": "0.0.39",
+    "@bananapus/permission-ids-v6": "0.0.22",
+    "@chainlink/contracts-ccip": "1.6.4",
+    "@chainlink/local": "0.2.7",
+    "@openzeppelin/contracts": "5.6.1",
+    "@prb/math": "4.1.1",
+    "@uniswap/v3-core": "github:Uniswap/v3-core#6562c52e8f75f0c10f9deaf44861847585fc8129",
+    "@uniswap/v3-periphery": "github:Uniswap/v3-periphery#b325bb0905d922ae61fcc7df85ee802e8df5e96c",
+    "@uniswap/v4-core": "1.0.2",
+    "solady": "0.1.26"
   },
   "devDependencies": {
-    "@sphinx-labs/plugins": "^0.33.2"
+    "@sphinx-labs/plugins": "0.33.3"
   }
 }

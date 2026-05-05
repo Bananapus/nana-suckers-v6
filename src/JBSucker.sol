@@ -698,7 +698,9 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     function peerChainBalanceOf(uint256 decimals, uint256 currency) external view returns (JBDenominatedAmount memory) {
         return JBDenominatedAmount({
             value: _convertPeerValue({source: _peerChainBalance, decimals: decimals, currency: currency}),
+            // forge-lint: disable-next-line(unsafe-typecast)
             currency: uint32(currency),
+            // forge-lint: disable-next-line(unsafe-typecast)
             decimals: uint8(decimals)
         });
     }
@@ -711,7 +713,9 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     function peerChainSurplusOf(uint256 decimals, uint256 currency) external view returns (JBDenominatedAmount memory) {
         return JBDenominatedAmount({
             value: _convertPeerValue({source: _peerChainSurplus, decimals: decimals, currency: currency}),
+            // forge-lint: disable-next-line(unsafe-typecast)
             currency: uint32(currency),
+            // forge-lint: disable-next-line(unsafe-typecast)
             decimals: uint8(decimals)
         });
     }
@@ -774,12 +778,15 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         }
 
         // The sucker will soon be considered deprecated, this functions only as a warning to users.
+        // Deprecation state is intentionally time-based.
+        // forge-lint: disable-next-line(block-timestamp)
         if (block.timestamp < _deprecatedAfter - _maxMessagingDelay()) {
             return JBSuckerState.DEPRECATION_PENDING;
         }
 
         // The sucker will no longer send new roots to the pair, but it will accept new incoming roots.
         // Additionally it will let users exit here now that we can no longer send roots/tokens.
+        // forge-lint: disable-next-line(block-timestamp)
         if (block.timestamp < _deprecatedAfter) {
             return JBSuckerState.SENDING_DISABLED;
         }
@@ -1197,6 +1204,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
 
             // Update the numberOfClaimsSent to the current count of the tree.
             // This is used as in the fallback to allow users to withdraw locally if the bridge is reverting.
+            // forge-lint: disable-next-line(unsafe-typecast)
             outbox.numberOfClaimsSent = uint192(count);
             index = count - 1;
         }
@@ -1257,7 +1265,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         internal
     {
         // Ensure the index is within tree bounds (max 2^TREE_DEPTH - 1).
-        if (index >= (1 << _TREE_DEPTH)) revert JBSucker_IndexOutOfRange(index);
+        if (index >= (uint256(1) << _TREE_DEPTH)) revert JBSucker_IndexOutOfRange(index);
 
         // Make sure the leaf has not already been executed.
         if (_executedFor[terminalToken].get(index)) {
@@ -1353,7 +1361,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         internal
     {
         // Ensure the index is within tree bounds (max 2^TREE_DEPTH - 1).
-        if (index >= (1 << _TREE_DEPTH)) revert JBSucker_IndexOutOfRange(index);
+        if (index >= (uint256(1) << _TREE_DEPTH)) revert JBSucker_IndexOutOfRange(index);
 
         // Make sure that the emergencyHatch is enabled for the token.
         JBSuckerState deprecationState = state();
@@ -1431,7 +1439,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         // Copy only the non-zero branch slots from storage into memory for the root computation.
         bytes32[_TREE_DEPTH] memory branch;
         for (uint256 i; i < _TREE_DEPTH;) {
-            if (count & (1 << i) != 0) {
+            if (count & (uint256(1) << i) != 0) {
                 branch[i] = tree.branch[i];
             }
             unchecked {

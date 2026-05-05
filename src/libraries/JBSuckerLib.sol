@@ -36,7 +36,7 @@ library JBSuckerLib {
     uint256 internal constant _CURRENT_RULESET_OF_RETURN_BYTES = (9 + 19) * 32;
 
     /// @notice The ETH currency ID used for cross-chain peer snapshots.
-    uint256 internal constant _ETH_CURRENCY = JBCurrencyIds.ETH;
+    uint32 internal constant _ETH_CURRENCY = JBCurrencyIds.ETH;
 
     /// @notice The ETH decimal precision used for cross-chain peer snapshots.
     uint8 internal constant _ETH_DECIMALS = 18;
@@ -92,7 +92,7 @@ library JBSuckerLib {
         for (uint256 i; i < numTerminals;) {
             // slither-disable-next-line calls-loop
             try terminals[i].currentSurplusOf({
-                projectId: projectId, tokens: new address[](0), decimals: _ETH_DECIMALS, currency: uint32(_ETH_CURRENCY)
+                projectId: projectId, tokens: new address[](0), decimals: _ETH_DECIMALS, currency: _ETH_CURRENCY
             }) returns (
                 uint256 surplus
             ) {
@@ -126,7 +126,7 @@ library JBSuckerLib {
                     ) {
                         if (bal != 0) {
                             // If the token is already ETH-denominated, adjust decimals directly.
-                            if (tokenCurrency == uint32(_ETH_CURRENCY)) {
+                            if (tokenCurrency == _ETH_CURRENCY) {
                                 ethBalance += JBFixedPointNumber.adjustDecimals({
                                     value: bal, decimals: dec, targetDecimals: _ETH_DECIMALS
                                 });
@@ -136,7 +136,7 @@ library JBSuckerLib {
                                 try prices.pricePerUnitOf({
                                     projectId: projectId,
                                     pricingCurrency: tokenCurrency,
-                                    unitCurrency: uint32(_ETH_CURRENCY),
+                                    unitCurrency: _ETH_CURRENCY,
                                     decimals: _ETH_DECIMALS
                                 }) returns (
                                     uint256 price
@@ -180,6 +180,7 @@ library JBSuckerLib {
         if (source.value == 0) return 0;
 
         // If the source currency matches the target, just adjust decimals.
+        // forge-lint: disable-next-line(unsafe-typecast)
         if (source.currency == uint32(currency)) {
             converted = JBFixedPointNumber.adjustDecimals({
                 value: source.value, decimals: source.decimals, targetDecimals: decimals
@@ -190,7 +191,9 @@ library JBSuckerLib {
             try prices.pricePerUnitOf({
                 projectId: projectId,
                 pricingCurrency: source.currency,
+                // forge-lint: disable-next-line(unsafe-typecast)
                 unitCurrency: uint32(currency),
+                // forge-lint: disable-next-line(unsafe-typecast)
                 decimals: uint8(decimals)
             }) returns (
                 uint256 price

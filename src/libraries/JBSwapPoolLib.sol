@@ -7,6 +7,7 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 import {IUniswapV3Factory} from "@uniswap/v3-core/contracts/interfaces/IUniswapV3Factory.sol";
 import {IUniswapV3Pool} from "@uniswap/v3-core/contracts/interfaces/IUniswapV3Pool.sol";
 import {IUniswapV3PoolState} from "@uniswap/v3-core/contracts/interfaces/pool/IUniswapV3PoolState.sol";
+import {TickMath as V3TickMath} from "@uniswap/v3-core/contracts/libraries/TickMath.sol";
 import {OracleLibrary} from "@uniswap/v3-periphery/contracts/libraries/OracleLibrary.sol";
 import {BalanceDelta, BalanceDeltaLibrary} from "@uniswap/v4-core/src/types/BalanceDelta.sol";
 import {Currency} from "@uniswap/v4-core/src/types/Currency.sol";
@@ -16,7 +17,6 @@ import {PoolId, PoolIdLibrary} from "@uniswap/v4-core/src/types/PoolId.sol";
 import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
 import {StateLibrary} from "@uniswap/v4-core/src/libraries/StateLibrary.sol";
 import {SwapParams} from "@uniswap/v4-core/src/types/PoolOperation.sol";
-import {TickMath} from "@uniswap/v4-core/src/libraries/TickMath.sol";
 
 // Local: libraries (alphabetized).
 import {JBConstants} from "@bananapus/core-v6/src/libraries/JBConstants.sol";
@@ -58,7 +58,7 @@ library JBSwapPoolLib {
     //*********************************************************************//
 
     /// @dev The default TWAP observation window in seconds (10 minutes).
-    uint256 private constant _DEFAULT_TWAP_WINDOW = 600;
+    uint32 private constant _DEFAULT_TWAP_WINDOW = 600;
 
     /// @dev The minimum acceptable TWAP observation window in seconds (2 minutes).
     uint256 private constant _MIN_TWAP_WINDOW = 120;
@@ -172,6 +172,8 @@ library JBSwapPoolLib {
         // V4 outputs native ETH for WETH-paired pools. If the caller requested WETH (not NATIVE_TOKEN),
         // wrap the received ETH so the caller gets the token they expect.
         if (isV4 && tokenOut != JBConstants.NATIVE_TOKEN && normalizedOut == config.weth) {
+            // Wrap through the configured WETH contract; this is not a user-selected ETH recipient.
+            // slither-disable-next-line arbitrary-send-eth
             IWrappedNativeToken(config.weth).deposit{value: amountOut}();
         }
     }
@@ -212,10 +214,16 @@ library JBSwapPoolLib {
 
             // Extract input and output amounts based on swap direction.
             if (zeroForOne) {
+                // The PoolManager returns the exact-input delta as negative and output delta as positive.
+                // forge-lint: disable-next-line(unsafe-typecast)
                 amountIn = uint256(uint128(-delta0));
+                // forge-lint: disable-next-line(unsafe-typecast)
                 amountOut = uint256(uint128(delta1));
             } else {
+                // The PoolManager returns the exact-input delta as negative and output delta as positive.
+                // forge-lint: disable-next-line(unsafe-typecast)
                 amountIn = uint256(uint128(-delta1));
+                // forge-lint: disable-next-line(unsafe-typecast)
                 amountOut = uint256(uint128(delta0));
             }
 
@@ -274,6 +282,8 @@ library JBSwapPoolLib {
         if (msg.sender != expectedPool) revert JBSwapPoolLib_CallerNotPool(msg.sender);
 
         // The positive delta is what we owe to the pool.
+        // The V3 pool callback guarantees exactly one positive delta for exact-input swaps.
+        // forge-lint: disable-next-line(unsafe-typecast)
         uint256 amountToSend = amount0Delta < 0 ? uint256(amount1Delta) : uint256(amount0Delta);
 
         // If input is native ETH, wrap to WETH for V3.
@@ -569,7 +579,7 @@ library JBSwapPoolLib {
 
         // Consult the V3 oracle for the arithmetic mean tick and harmonic mean liquidity.
         (int24 arithmeticMeanTick, uint128 liquidity) =
-            OracleLibrary.consult({pool: address(pool), secondsAgo: uint32(_DEFAULT_TWAP_WINDOW)});
+            OracleLibrary.consult({pool: address(pool), secondsAgo: _DEFAULT_TWAP_WINDOW});
 
         // Revert if the pool has no in-range liquidity.
         if (liquidity == 0) revert JBSwapPoolLib_NoLiquidity();
@@ -626,6 +636,8 @@ library JBSwapPoolLib {
                 if (tickCumulatives.length < 2) revert JBSwapPoolLib_InsufficientTwapHistory();
 
                 // Compute the arithmetic mean tick from the cumulative tick difference.
+                // The geomean oracle returns the same int24 tick domain used by Uniswap pools.
+                // forge-lint: disable-next-line(unsafe-typecast)
                 tick = int24((tickCumulatives[1] - tickCumulatives[0]) / int56(int32(_V4_TWAP_WINDOW)));
             } else {
                 // Hookless V4 spot pools are only selected when no TWAP-capable route exists.
@@ -726,7 +738,10 @@ library JBSwapPoolLib {
 
     /// @notice Returns true when a timestamp is at least `window` seconds old.
     function _observationIsOldEnough(uint32 observationTimestamp, uint256 window) internal view returns (bool) {
+        // TWAP freshness is intentionally time-based.
+        // forge-lint: disable-next-line(block-timestamp)
         if (observationTimestamp >= block.timestamp) return false;
+        // forge-lint: disable-next-line(block-timestamp)
         return block.timestamp - observationTimestamp >= window;
     }
 
@@ -771,14 +786,7 @@ library JBSwapPoolLib {
         returns (uint256 minAmountOut)
     {
         // Compute the dynamic slippage tolerance based on price impact.
-        uint256 slippageTolerance = _getSlippageTolerance({
-            amountIn: amount,
-            liquidity: liquidity,
-            tokenOut: tokenOut,
-            tokenIn: tokenIn,
-            arithmeticMeanTick: tick,
-            poolFeeBps: poolFeeBps
-        });
+        uint256 slippageTolerance = _getSlippageTolerance(amount, liquidity, tokenOut, tokenIn, tick, poolFeeBps);
 
         // If the slippage tolerance is 100% or more, accept any output.
         if (slippageTolerance >= _SLIPPAGE_DENOMINATOR) return 0;
@@ -788,7 +796,12 @@ library JBSwapPoolLib {
 
         // Get the expected output at the TWAP tick.
         minAmountOut = OracleLibrary.getQuoteAtTick({
-            tick: tick, baseAmount: uint128(amount), baseToken: tokenIn, quoteToken: tokenOut
+            tick: tick,
+            // The overflow check above bounds `amount` for `getQuoteAtTick`.
+            // forge-lint: disable-next-line(unsafe-typecast)
+            baseAmount: uint128(amount),
+            baseToken: tokenIn,
+            quoteToken: tokenOut
         });
 
         // Reduce by the slippage tolerance to get the minimum acceptable output.
@@ -816,21 +829,20 @@ library JBSwapPoolLib {
         returns (uint256)
     {
         // Sort the tokens to determine swap direction.
-        (address token0,) = tokenOut < tokenIn ? (tokenOut, tokenIn) : (tokenIn, tokenOut);
+        address token0 = tokenOut < tokenIn ? tokenOut : tokenIn;
         bool zeroForOne = tokenIn == token0;
 
         // Get the sqrt price at the mean tick for impact calculation.
-        uint160 sqrtP = TickMath.getSqrtPriceAtTick(arithmeticMeanTick);
+        uint160 sqrtP = V3TickMath.getSqrtRatioAtTick(arithmeticMeanTick);
 
         // If sqrtP is zero, return maximum slippage (accept any output).
         if (sqrtP == 0) return _SLIPPAGE_DENOMINATOR;
 
         // Calculate the price impact of the swap.
-        uint256 impact =
-            JBSwapLib.calculateImpact({amountIn: amountIn, liquidity: liquidity, sqrtP: sqrtP, zeroForOne: zeroForOne});
+        uint256 impact = JBSwapLib.calculateImpact(amountIn, liquidity, sqrtP, zeroForOne);
 
         // Map the impact to a sigmoid slippage tolerance.
-        return JBSwapLib.getSlippageTolerance({impact: impact, poolFeeBps: poolFeeBps});
+        return JBSwapLib.getSlippageTolerance(impact, poolFeeBps);
     }
 
     //*********************************************************************//
@@ -928,6 +940,8 @@ library JBSwapPoolLib {
         (int256 amount0, int256 amount1) = pool.swap({
             recipient: address(this),
             zeroForOne: zeroForOne,
+            // Exact-input swap amounts are provided as positive ints to Uniswap V3.
+            // forge-lint: disable-next-line(unsafe-typecast)
             amountSpecified: int256(amount),
             sqrtPriceLimitX96: JBSwapLib.sqrtPriceLimitFromAmounts({
                 amountIn: amount, minimumAmountOut: minAmountOut, zeroForOne: zeroForOne
@@ -976,6 +990,8 @@ library JBSwapPoolLib {
             });
 
             // V4 uses negative amounts for exact-input swaps.
+            // Exact-input swap amounts are negated for Uniswap V4.
+            // forge-lint: disable-next-line(unsafe-typecast)
             int256 exactInputAmount = -int256(amount);
 
             unlockData = abi.encode(key, zeroForOne, exactInputAmount, sqrtPriceLimitX96, minAmountOut, config.weth);
