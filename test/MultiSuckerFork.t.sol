@@ -7,6 +7,7 @@ import {LibClone} from "solady/src/utils/LibClone.sol";
 
 import {IJBDirectory} from "@bananapus/core-v6/src/interfaces/IJBDirectory.sol";
 import {IJBPermissions} from "@bananapus/core-v6/src/interfaces/IJBPermissions.sol";
+import {IJBPrices} from "@bananapus/core-v6/src/interfaces/IJBPrices.sol";
 import {IJBTokens} from "@bananapus/core-v6/src/interfaces/IJBTokens.sol";
 import {JBConstants} from "@bananapus/core-v6/src/libraries/JBConstants.sol";
 import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
@@ -34,7 +35,7 @@ contract MultiSuckerMock is JBSucker {
         IJBTokens tokens,
         IJBSuckerRegistry registry
     )
-        JBSucker(directory, permissions, address(1), tokens, 1, registry, address(0))
+        JBSucker(directory, permissions, IJBPrices(address(1)), tokens, 1, registry, address(0))
     {}
 
     function setPeerChainId(uint256 chainId) external {

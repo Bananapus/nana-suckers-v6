@@ -5,6 +5,7 @@ import "forge-std/Test.sol";
 
 import {IJBDirectory} from "@bananapus/core-v6/src/interfaces/IJBDirectory.sol";
 import {IJBPermissions} from "@bananapus/core-v6/src/interfaces/IJBPermissions.sol";
+import {IJBPrices} from "@bananapus/core-v6/src/interfaces/IJBPrices.sol";
 import {IJBTokens} from "@bananapus/core-v6/src/interfaces/IJBTokens.sol";
 
 import {JBOptimismSucker} from "../../src/JBOptimismSucker.sol";
@@ -58,7 +59,7 @@ contract PeerTopologyAuthBreakTest is Test {
             deployer: deployerA,
             directory: IJBDirectory(DIRECTORY_A),
             permissions: IJBPermissions(PERMISSIONS),
-            prices: address(1),
+            prices: IJBPrices(address(1)),
             tokens: IJBTokens(TOKENS),
             feeProjectId: 1,
             registry: IJBSuckerRegistry(REGISTRY),
@@ -68,7 +69,7 @@ contract PeerTopologyAuthBreakTest is Test {
             deployer: deployerB,
             directory: IJBDirectory(DIRECTORY_B),
             permissions: IJBPermissions(PERMISSIONS),
-            prices: address(1),
+            prices: IJBPrices(address(1)),
             tokens: IJBTokens(TOKENS),
             feeProjectId: 1,
             registry: IJBSuckerRegistry(REGISTRY),

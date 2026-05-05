@@ -40,7 +40,7 @@ contract SnapshotGapHarness is JBSucker {
     constructor(
         IJBDirectory directory,
         IJBPermissions permissions,
-        address prices,
+        IJBPrices prices,
         IJBTokens tokens,
         address forwarder
     )
@@ -194,7 +194,7 @@ contract RegistryFirstTerminalSnapshotGapTest is Test {
 
     function _createSucker() internal returns (SnapshotGapHarness) {
         SnapshotGapHarness singleton = new SnapshotGapHarness(
-            IJBDirectory(DIRECTORY), IJBPermissions(PERMISSIONS), PRICES, IJBTokens(TOKENS), FORWARDER
+            IJBDirectory(DIRECTORY), IJBPermissions(PERMISSIONS), IJBPrices(PRICES), IJBTokens(TOKENS), FORWARDER
         );
 
         SnapshotGapHarness clone =

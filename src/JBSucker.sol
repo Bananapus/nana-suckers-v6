@@ -225,7 +225,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     constructor(
         IJBDirectory directory,
         IJBPermissions permissions,
-        address prices,
+        IJBPrices prices,
         IJBTokens tokens,
         uint256 feeProjectId,
         IJBSuckerRegistry registry,
@@ -236,7 +236,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     {
         DIRECTORY = directory;
         FEE_PROJECT_ID = feeProjectId;
-        PRICES = IJBPrices(prices);
+        PRICES = prices;
         PROJECTS = directory.PROJECTS();
         REGISTRY = registry;
         TOKENS = tokens;
