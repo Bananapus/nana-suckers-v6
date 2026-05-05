@@ -88,7 +88,7 @@ contract ZeroCostBridgeSuckerHarness is JBSucker {
         IJBSuckerRegistry registry,
         address trustedForwarder
     )
-        JBSucker(directory, permissions, tokens, feeProjectId, registry, trustedForwarder)
+        JBSucker(directory, permissions, address(1), tokens, feeProjectId, registry, trustedForwarder)
     {}
 
     function peerChainId() external view override returns (uint256) {
@@ -154,7 +154,7 @@ contract CCIPSuckerHarness is JBCCIPSucker {
         IJBSuckerRegistry registry,
         address trustedForwarder
     )
-        JBCCIPSucker(deployer, directory, tokens, permissions, feeProjectId, registry, trustedForwarder)
+        JBCCIPSucker(deployer, directory, permissions, address(1), tokens, feeProjectId, registry, trustedForwarder)
     {}
 
     function test_setRemoteToken(address localToken, JBRemoteToken memory remoteToken) external {
@@ -187,6 +187,10 @@ contract CCIPSuckerHarness is JBCCIPSucker {
 contract NonPayableCaller {
     function callToRemote(address sucker, address token) external payable {
         JBSucker(payable(sucker)).toRemote{value: msg.value}(token);
+    }
+
+    function claimRetainedTransportPaymentRefund(address sucker, address payable beneficiary) external {
+        JBSucker(payable(sucker)).claimRetainedTransportPaymentRefund(beneficiary);
     }
 }
 
@@ -230,7 +234,7 @@ contract CodexFeeLockingTest is Test {
         vm.mockCall(DIRECTORY, abi.encodeCall(IJBDirectory.terminalsOf, (PROJECT_ID)), abi.encode(new IJBTerminal[](0)));
     }
 
-    function test_failedToRemoteFeePayment_staysLockedAfterLaterNativeClaim() public {
+    function test_failedToRemoteFeePayment_isRefundableAndExcludedFromNativeClaims() public {
         ZeroCostBridgeSuckerHarness singleton = new ZeroCostBridgeSuckerHarness(
             IJBDirectory(DIRECTORY),
             IJBPermissions(PERMISSIONS),
@@ -262,14 +266,24 @@ contract CodexFeeLockingTest is Test {
 
         sucker.toRemote{value: TO_REMOTE_FEE}(ERC20_TOKEN);
         assertEq(address(sucker).balance, TO_REMOTE_FEE, "failed fee payment should stay in the sucker");
+        assertEq(sucker.retainedToRemoteFeeOf(address(this)), TO_REMOTE_FEE, "failed fee should be caller credit");
+        assertEq(
+            sucker.amountToAddToBalanceOf(JBConstants.NATIVE_TOKEN), 0, "failed fee should not be native add-to-balance"
+        );
 
         vm.deal(address(sucker), address(sucker).balance + NATIVE_CLAIM_AMOUNT);
         sucker.test_handleClaim(JBConstants.NATIVE_TOKEN, NATIVE_CLAIM_AMOUNT, 1, address(this));
 
-        assertEq(address(sucker).balance, TO_REMOTE_FEE, "later native claims do not absorb the failed protocol fee");
+        assertEq(address(sucker).balance, TO_REMOTE_FEE, "later native claims leave fee credit alone");
+
+        address payable refundRecipient = payable(makeAddr("refundRecipient"));
+        sucker.claimRetainedToRemoteFee(refundRecipient);
+
+        assertEq(address(sucker).balance, 0, "retained fee should be refundable");
+        assertEq(refundRecipient.balance, TO_REMOTE_FEE, "refund recipient should receive retained fee");
     }
 
-    function test_failedCcipRefund_staysLockedAfterLaterNativeClaim() public {
+    function test_failedCcipRefund_isRefundableAndExcludedFromNativeClaims() public {
         address mockDeployer = address(0x3001);
         vm.mockCall(mockDeployer, abi.encodeCall(IJBCCIPSuckerDeployer.ccipRemoteChainId, ()), abi.encode(uint256(137)));
         vm.mockCall(
@@ -319,10 +333,28 @@ contract CodexFeeLockingTest is Test {
         uint256 stuckRefund = TRANSPORT_PAYMENT - CCIP_FEE;
         assertEq(address(sucker).balance, stuckRefund, "failed refund should stay in the sucker");
         assertEq(RouterStub(ROUTER_ADDR).totalFeeReceived(), CCIP_FEE, "router should receive the bridge fee");
+        assertEq(
+            sucker.retainedTransportPaymentRefundOf(address(caller)),
+            stuckRefund,
+            "failed refund should be caller credit"
+        );
+        assertEq(
+            sucker.amountToAddToBalanceOf(JBConstants.NATIVE_TOKEN),
+            0,
+            "failed refund should not be native add-to-balance"
+        );
 
         vm.deal(address(sucker), address(sucker).balance + NATIVE_CLAIM_AMOUNT);
         sucker.test_handleClaim(JBConstants.NATIVE_TOKEN, NATIVE_CLAIM_AMOUNT, 1, address(this));
 
         assertEq(address(sucker).balance, stuckRefund, "later native claims do not absorb the failed refund");
+
+        address payable refundRecipient = payable(makeAddr("ccipRefundRecipient"));
+        caller.claimRetainedTransportPaymentRefund(address(sucker), refundRecipient);
+
+        assertEq(address(sucker).balance, 0, "retained CCIP refund should be reclaimable");
+        assertEq(refundRecipient.balance, stuckRefund, "refund recipient should receive retained CCIP refund");
+        assertEq(sucker.retainedTransportPaymentRefundOf(address(caller)), 0, "caller refund credit should be cleared");
+        assertEq(sucker.retainedTransportPaymentRefundBalance(), 0, "global refund total should be cleared");
     }
 }

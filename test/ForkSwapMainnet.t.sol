@@ -124,6 +124,7 @@ abstract contract SwapCCIPSuckerForkTestBase is SuckerForkHelpers {
             directory: jbDirectory(),
             tokens: jbTokens(),
             permissions: jbPermissions(),
+            prices: address(jbPrices()),
             feeProjectId: 1,
             registry: IJBSuckerRegistry(address(0)),
             trustedForwarder: address(0)
@@ -131,7 +132,7 @@ abstract contract SwapCCIPSuckerForkTestBase is SuckerForkHelpers {
         vm.stopPrank();
 
         suckerDeployer.configureSingleton(singleton);
-        suckerL1 = suckerDeployer.createForSender(1, "salty");
+        suckerL1 = suckerDeployer.createForSender(1, "salty", bytes32(0));
         vm.label(address(suckerL1), "swapSuckerL1");
 
         uint8[] memory ids = new uint8[](1);

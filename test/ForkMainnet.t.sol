@@ -90,6 +90,7 @@ abstract contract CCIPSuckerMainnetForkTestBase is SuckerForkHelpers {
             deployer: suckerDeployerL1,
             directory: jbDirectory(),
             permissions: jbPermissions(),
+            prices: address(jbPrices()),
             tokens: jbTokens(),
             feeProjectId: 1,
             registry: IJBSuckerRegistry(address(0)),
@@ -98,7 +99,7 @@ abstract contract CCIPSuckerMainnetForkTestBase is SuckerForkHelpers {
         vm.stopPrank();
 
         suckerDeployerL1.configureSingleton(singletonL1);
-        suckerL1 = suckerDeployerL1.createForSender(1, "salty");
+        suckerL1 = suckerDeployerL1.createForSender(1, "salty", bytes32(0));
         vm.label(address(suckerL1), "suckerL1");
 
         // Grant sucker mint permission on L1.
@@ -134,6 +135,7 @@ abstract contract CCIPSuckerMainnetForkTestBase is SuckerForkHelpers {
             deployer: suckerDeployerL2,
             directory: jbDirectory(),
             permissions: jbPermissions(),
+            prices: address(jbPrices()),
             tokens: jbTokens(),
             feeProjectId: 1,
             registry: IJBSuckerRegistry(address(0)),
@@ -142,7 +144,7 @@ abstract contract CCIPSuckerMainnetForkTestBase is SuckerForkHelpers {
         vm.stopPrank();
 
         suckerDeployerL2.configureSingleton(singletonL2);
-        IJBSucker suckerL2 = suckerDeployerL2.createForSender(1, "salty");
+        IJBSucker suckerL2 = suckerDeployerL2.createForSender(1, "salty", bytes32(0));
 
         // Grant L2 sucker mint permission and launch L2 project.
         JBPermissionsData memory permsL2 =

@@ -191,9 +191,9 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
     }
 
     /// @notice The cumulative balance across all remote peer chains for a project, denominated in a given currency.
-    /// @dev Includes both active and deprecated suckers to prevent undercounting during migration windows.
-    /// Uses per-chain deduplication (max per chain, not sum) to prevent double-counting when both a deprecated and
-    /// active sucker exist for the same chain. Silently skips suckers that revert.
+    /// @dev Includes deprecated suckers only when no active sucker answers for the same peer chain, to prevent
+    /// undercounting during migration windows without letting stale deprecated snapshots dominate live routes.
+    /// Silently skips suckers that revert.
     /// @param projectId The ID of the project.
     /// @param decimals The decimal precision for the returned value.
     /// @param currency The currency to normalize to.
@@ -215,6 +215,7 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
         // so a linear scan is cheaper than a mapping.
         uint256[] memory chainIds = new uint256[](len);
         uint256[] memory maxBalances = new uint256[](len);
+        bool[] memory hasActiveValue = new bool[](len);
         uint256 chainCount;
 
         for (uint256 i; i < len;) {
@@ -228,26 +229,15 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
                 ) {
                     // slither-disable-next-line calls-loop
                     uint256 chainId = IJBSucker(allSuckers[i]).peerChainId();
-                    // Per-chain max: if multiple suckers target the same chain (deprecated + active
-                    // during migration), take the highest value to avoid double-counting.
-                    bool found;
-                    for (uint256 j; j < chainCount;) {
-                        if (chainIds[j] == chainId) {
-                            if (amt.value > maxBalances[j]) maxBalances[j] = amt.value;
-                            found = true;
-                            break;
-                        }
-                        unchecked {
-                            ++j;
-                        }
-                    }
-                    if (!found) {
-                        chainIds[chainCount] = chainId;
-                        maxBalances[chainCount] = amt.value;
-                        unchecked {
-                            ++chainCount;
-                        }
-                    }
+                    chainCount = _recordPeerValue({
+                        chainIds: chainIds,
+                        values: maxBalances,
+                        hasActiveValue: hasActiveValue,
+                        chainCount: chainCount,
+                        chainId: chainId,
+                        value: amt.value,
+                        isActive: val == _SUCKER_EXISTS
+                    });
                 } catch {}
             }
             unchecked {
@@ -265,9 +255,9 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
     }
 
     /// @notice The cumulative surplus across all remote peer chains for a project, denominated in a given currency.
-    /// @dev Includes both active and deprecated suckers to prevent undercounting during migration windows.
-    /// Uses per-chain deduplication (max per chain, not sum) to prevent double-counting when both a deprecated and
-    /// active sucker exist for the same chain. Silently skips suckers that revert.
+    /// @dev Includes deprecated suckers only when no active sucker answers for the same peer chain, to prevent
+    /// undercounting during migration windows without letting stale deprecated snapshots dominate live routes.
+    /// Silently skips suckers that revert.
     /// @param projectId The ID of the project.
     /// @param decimals The decimal precision for the returned value.
     /// @param currency The currency to normalize to.
@@ -289,6 +279,7 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
         // so a linear scan is cheaper than a mapping.
         uint256[] memory chainIds = new uint256[](len);
         uint256[] memory maxSurplus = new uint256[](len);
+        bool[] memory hasActiveValue = new bool[](len);
         uint256 chainCount;
 
         for (uint256 i; i < len;) {
@@ -302,26 +293,15 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
                 ) {
                     // slither-disable-next-line calls-loop
                     uint256 chainId = IJBSucker(allSuckers[i]).peerChainId();
-                    // Per-chain max: if multiple suckers target the same chain (deprecated + active
-                    // during migration), take the highest value to avoid double-counting.
-                    bool found;
-                    for (uint256 j; j < chainCount;) {
-                        if (chainIds[j] == chainId) {
-                            if (amt.value > maxSurplus[j]) maxSurplus[j] = amt.value;
-                            found = true;
-                            break;
-                        }
-                        unchecked {
-                            ++j;
-                        }
-                    }
-                    if (!found) {
-                        chainIds[chainCount] = chainId;
-                        maxSurplus[chainCount] = amt.value;
-                        unchecked {
-                            ++chainCount;
-                        }
-                    }
+                    chainCount = _recordPeerValue({
+                        chainIds: chainIds,
+                        values: maxSurplus,
+                        hasActiveValue: hasActiveValue,
+                        chainCount: chainCount,
+                        chainId: chainId,
+                        value: amt.value,
+                        isActive: val == _SUCKER_EXISTS
+                    });
                 } catch {}
             }
             unchecked {
@@ -339,9 +319,9 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
     }
 
     /// @notice The cumulative total supply across all remote peer chains for a project.
-    /// @dev Includes both active and deprecated suckers to prevent undercounting during migration windows.
-    /// Uses per-chain deduplication (max per chain, not sum) to prevent double-counting when both a deprecated and
-    /// active sucker exist for the same chain. Silently skips suckers that revert.
+    /// @dev Includes deprecated suckers only when no active sucker answers for the same peer chain, to prevent
+    /// undercounting during migration windows without letting stale deprecated snapshots dominate live routes.
+    /// Silently skips suckers that revert.
     /// @param projectId The ID of the project.
     /// @return totalSupply The combined peer chain total supply.
     function remoteTotalSupplyOf(uint256 projectId) external view override returns (uint256 totalSupply) {
@@ -352,6 +332,7 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
         // so a linear scan is cheaper than a mapping.
         uint256[] memory chainIds = new uint256[](len);
         uint256[] memory maxSupply = new uint256[](len);
+        bool[] memory hasActiveValue = new bool[](len);
         uint256 chainCount;
 
         for (uint256 i; i < len;) {
@@ -363,26 +344,15 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
                 try IJBSucker(allSuckers[i]).peerChainTotalSupply() returns (uint256 supply) {
                     // slither-disable-next-line calls-loop
                     uint256 chainId = IJBSucker(allSuckers[i]).peerChainId();
-                    // Per-chain max: if multiple suckers target the same chain (deprecated + active
-                    // during migration), take the highest value to avoid double-counting.
-                    bool found;
-                    for (uint256 j; j < chainCount;) {
-                        if (chainIds[j] == chainId) {
-                            if (supply > maxSupply[j]) maxSupply[j] = supply;
-                            found = true;
-                            break;
-                        }
-                        unchecked {
-                            ++j;
-                        }
-                    }
-                    if (!found) {
-                        chainIds[chainCount] = chainId;
-                        maxSupply[chainCount] = supply;
-                        unchecked {
-                            ++chainCount;
-                        }
-                    }
+                    chainCount = _recordPeerValue({
+                        chainIds: chainIds,
+                        values: maxSupply,
+                        hasActiveValue: hasActiveValue,
+                        chainCount: chainCount,
+                        chainId: chainId,
+                        value: supply,
+                        isActive: val == _SUCKER_EXISTS
+                    });
                 } catch {}
             }
             unchecked {
@@ -420,11 +390,64 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
         return ERC2771Context._msgSender();
     }
 
+    /// @notice Records a project-scoped peer-chain aggregate value.
+    /// @dev Callers pass scratch arrays sized from `_suckersOf[projectId].keys()`, so entries are already scoped to
+    /// the project being aggregated. For each peer chain, active suckers replace deprecated suckers; deprecated
+    /// values are only used as a migration fallback when no active sucker has reported for that chain.
+    /// @param chainIds The peer-chain ids recorded so far.
+    /// @param values The aggregate values recorded so far.
+    /// @param hasActiveValue Whether the recorded value for each index came from an active sucker.
+    /// @param chainCount The number of populated chain entries.
+    /// @param chainId The peer-chain id being recorded.
+    /// @param value The value being recorded.
+    /// @param isActive Whether the value came from an active sucker.
+    /// @return The updated number of populated chain entries.
+    function _recordPeerValue(
+        uint256[] memory chainIds,
+        uint256[] memory values,
+        bool[] memory hasActiveValue,
+        uint256 chainCount,
+        uint256 chainId,
+        uint256 value,
+        bool isActive
+    )
+        internal
+        pure
+        returns (uint256)
+    {
+        for (uint256 j; j < chainCount;) {
+            if (chainIds[j] == chainId) {
+                // An active sucker is the live source for this chain. If several active suckers briefly exist during
+                // migration, keep the max value so a lower stale snapshot cannot undercount the project.
+                if (isActive) {
+                    if (!hasActiveValue[j] || value > values[j]) values[j] = value;
+                    hasActiveValue[j] = true;
+                } else if (!hasActiveValue[j] && value > values[j]) {
+                    // Deprecated suckers only fill the gap until an active value for this chain has been observed.
+                    values[j] = value;
+                }
+                return chainCount;
+            }
+            unchecked {
+                ++j;
+            }
+        }
+
+        chainIds[chainCount] = chainId;
+        values[chainCount] = value;
+        hasActiveValue[chainCount] = isActive;
+        unchecked {
+            return chainCount + 1;
+        }
+    }
+
     /// @notice Reverts if any active sucker for the given project already targets the same peer chain as the new
     /// sucker.
     /// @param projectId The ID of the project to check.
     /// @param newSucker The newly created sucker to validate.
     function _revertIfDuplicatePeerChain(uint256 projectId, IJBSucker newSucker) internal view {
+        // The new sucker is registry-deployed and trusted for this validation.
+        // slither-disable-next-line calls-loop
         uint256 newPeerChainId = newSucker.peerChainId();
         address[] memory existing = _suckersOf[projectId].keys();
         for (uint256 i; i < existing.length;) {
@@ -521,7 +544,8 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
 
             // Create the sucker.
             // slither-disable-next-line reentrancy-event,calls-loop
-            IJBSucker sucker = configuration.deployer.createForSender({localProjectId: projectId, salt: salt});
+            IJBSucker sucker = configuration.deployer
+            .createForSender({localProjectId: projectId, salt: salt, peer: configuration.peer});
             suckers[i] = address(sucker);
 
             // Make sure no active sucker already targets the same peer chain.

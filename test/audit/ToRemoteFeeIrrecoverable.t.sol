@@ -35,7 +35,7 @@ contract CodexFeeIrrecoverableHarness is JBSucker {
         IJBTokens tokens,
         IJBSuckerRegistry registry
     )
-        JBSucker(directory, permissions, tokens, 1, registry, address(0))
+        JBSucker(directory, permissions, address(1), tokens, 1, registry, address(0))
     {}
 
     function peerChainId() external view override returns (uint256) {
@@ -169,7 +169,7 @@ contract CodexToRemoteFeeIrrecoverableTest is Test {
         vm.mockCall(DIRECTORY, abi.encodeCall(IJBDirectory.terminalsOf, (PROJECT_ID)), abi.encode(new IJBTerminal[](0)));
     }
 
-    function test_feeEthRemainsStuckAfterLaterNativeClaim() external {
+    function test_failedFeeIsRefundableAndExcludedFromNativeAddToBalance() external {
         sucker.test_setRemoteToken(
             JBConstants.NATIVE_TOKEN,
             JBRemoteToken({
@@ -195,6 +195,13 @@ contract CodexToRemoteFeeIrrecoverableTest is Test {
 
         sucker.toRemote{value: FEE}(JBConstants.NATIVE_TOKEN);
         assertEq(address(sucker).balance, FEE, "fee should remain in the sucker after failed fee payment");
+        assertEq(sucker.retainedToRemoteFeeOf(address(this)), FEE, "failed fee is credited to original caller");
+        assertEq(sucker.retainedToRemoteFeeBalance(), FEE, "retained fees are tracked globally");
+        assertEq(
+            sucker.amountToAddToBalanceOf(JBConstants.NATIVE_TOKEN),
+            0,
+            "retained fee ETH should not be reported as addable"
+        );
 
         vm.deal(address(sucker), FEE + 1);
         sucker.test_setInboxRoot(JBConstants.NATIVE_TOKEN, 1, bytes32(uint256(1)));
@@ -246,8 +253,16 @@ contract CodexToRemoteFeeIrrecoverableTest is Test {
             })
         );
 
-        assertEq(address(sucker).balance, FEE, "later native claims do not sweep the retained fee ETH");
+        assertEq(address(sucker).balance, FEE, "later native claims leave retained fee credit alone");
         assertEq(address(terminal).balance, 1, "claim should forward only the leaf amount");
-        assertEq(sucker.amountToAddToBalanceOf(JBConstants.NATIVE_TOKEN), FEE, "fee ETH stays addable but unreachable");
+        assertEq(sucker.amountToAddToBalanceOf(JBConstants.NATIVE_TOKEN), 0, "retained fee should stay excluded");
+
+        address payable refundRecipient = payable(makeAddr("refundRecipient"));
+        sucker.claimRetainedToRemoteFee(refundRecipient);
+
+        assertEq(address(sucker).balance, 0, "retained fee should be reclaimable");
+        assertEq(refundRecipient.balance, FEE, "refund recipient should receive retained fee");
+        assertEq(sucker.retainedToRemoteFeeOf(address(this)), 0, "caller credit should be cleared");
+        assertEq(sucker.retainedToRemoteFeeBalance(), 0, "global retained fee total should be cleared");
     }
 }

@@ -6,6 +6,8 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {IUniswapV3Factory} from "@uniswap/v3-core/contracts/interfaces/IUniswapV3Factory.sol";
 import {IUniswapV3Pool} from "@uniswap/v3-core/contracts/interfaces/IUniswapV3Pool.sol";
+import {IUniswapV3PoolState} from "@uniswap/v3-core/contracts/interfaces/pool/IUniswapV3PoolState.sol";
+import {TickMath as V3TickMath} from "@uniswap/v3-core/contracts/libraries/TickMath.sol";
 import {OracleLibrary} from "@uniswap/v3-periphery/contracts/libraries/OracleLibrary.sol";
 import {BalanceDelta, BalanceDeltaLibrary} from "@uniswap/v4-core/src/types/BalanceDelta.sol";
 import {Currency} from "@uniswap/v4-core/src/types/Currency.sol";
@@ -15,7 +17,6 @@ import {PoolId, PoolIdLibrary} from "@uniswap/v4-core/src/types/PoolId.sol";
 import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
 import {StateLibrary} from "@uniswap/v4-core/src/libraries/StateLibrary.sol";
 import {SwapParams} from "@uniswap/v4-core/src/types/PoolOperation.sol";
-import {TickMath} from "@uniswap/v4-core/src/libraries/TickMath.sol";
 
 // Local: libraries (alphabetized).
 import {JBConstants} from "@bananapus/core-v6/src/libraries/JBConstants.sol";
@@ -45,19 +46,19 @@ library JBSwapPoolLib {
     // --------------------------- custom errors ------------------------- //
     //*********************************************************************//
 
-    error JBSwapPoolLib_NoPool();
-    error JBSwapPoolLib_NoLiquidity();
-    error JBSwapPoolLib_InsufficientTwapHistory();
     error JBSwapPoolLib_AmountOverflow(uint256 amount);
-    error JBSwapPoolLib_SlippageExceeded(uint256 amountOut, uint256 minAmountOut);
     error JBSwapPoolLib_CallerNotPool(address caller);
+    error JBSwapPoolLib_InsufficientTwapHistory();
+    error JBSwapPoolLib_NoLiquidity();
+    error JBSwapPoolLib_NoPool();
+    error JBSwapPoolLib_SlippageExceeded(uint256 amountOut, uint256 minAmountOut);
 
     //*********************************************************************//
     // ------------------------ private constants ------------------------ //
     //*********************************************************************//
 
     /// @dev The default TWAP observation window in seconds (10 minutes).
-    uint256 private constant _DEFAULT_TWAP_WINDOW = 600;
+    uint32 private constant _DEFAULT_TWAP_WINDOW = 600;
 
     /// @dev The minimum acceptable TWAP observation window in seconds (2 minutes).
     uint256 private constant _MIN_TWAP_WINDOW = 120;
@@ -171,6 +172,8 @@ library JBSwapPoolLib {
         // V4 outputs native ETH for WETH-paired pools. If the caller requested WETH (not NATIVE_TOKEN),
         // wrap the received ETH so the caller gets the token they expect.
         if (isV4 && tokenOut != JBConstants.NATIVE_TOKEN && normalizedOut == config.weth) {
+            // Wrap through the configured WETH contract; this is not a user-selected ETH recipient.
+            // slither-disable-next-line arbitrary-send-eth
             IWrappedNativeToken(config.weth).deposit{value: amountOut}();
         }
     }
@@ -211,15 +214,23 @@ library JBSwapPoolLib {
 
             // Extract input and output amounts based on swap direction.
             if (zeroForOne) {
+                // The PoolManager returns the exact-input delta as negative and output delta as positive.
+                // forge-lint: disable-next-line(unsafe-typecast)
                 amountIn = uint256(uint128(-delta0));
+                // forge-lint: disable-next-line(unsafe-typecast)
                 amountOut = uint256(uint128(delta1));
             } else {
+                // The PoolManager returns the exact-input delta as negative and output delta as positive.
+                // forge-lint: disable-next-line(unsafe-typecast)
                 amountIn = uint256(uint128(-delta1));
+                // forge-lint: disable-next-line(unsafe-typecast)
                 amountOut = uint256(uint128(delta0));
             }
 
             // Enforce the minimum output from the TWAP quote.
-            if (amountOut < minAmountOut) revert JBSwapPoolLib_SlippageExceeded(amountOut, minAmountOut);
+            if (amountOut < minAmountOut) {
+                revert JBSwapPoolLib_SlippageExceeded({amountOut: amountOut, minAmountOut: minAmountOut});
+            }
         }
 
         // Settle input (pay what we owe to the PoolManager).
@@ -271,6 +282,8 @@ library JBSwapPoolLib {
         if (msg.sender != expectedPool) revert JBSwapPoolLib_CallerNotPool(msg.sender);
 
         // The positive delta is what we owe to the pool.
+        // The V3 pool callback guarantees exactly one positive delta for exact-input swaps.
+        // forge-lint: disable-next-line(unsafe-typecast)
         uint256 amountToSend = amount0Delta < 0 ? uint256(amount1Delta) : uint256(amount0Delta);
 
         // If input is native ETH, wrap to WETH for V3.
@@ -329,22 +342,23 @@ library JBSwapPoolLib {
         view
         returns (bool isV4, IUniswapV3Pool v3Pool, PoolKey memory v4Key)
     {
-        // Track the best liquidity found across both protocols.
+        // Track the best TWAP-ready liquidity found across both protocols.
         uint128 bestLiquidity;
 
-        // Search V3 pools across all fee tiers.
+        // Search V3 pools across all fee tiers. Only pools with the full TWAP window are eligible.
         (v3Pool, bestLiquidity) = _discoverV3Pool({
             v3Factory: config.v3Factory, normalizedTokenIn: normalizedTokenIn, normalizedTokenOut: normalizedTokenOut
         });
 
         // If a V4 pool manager is configured, also search V4 pools.
         if (address(config.poolManager) != address(0)) {
-            (PoolKey memory v4Candidate, uint128 v4Liquidity) = _discoverV4Pool({
+            (PoolKey memory v4Candidate, uint128 v4Liquidity, bool v4UsesTwap) = _discoverV4Pool({
                 config: config, normalizedTokenIn: normalizedTokenIn, normalizedTokenOut: normalizedTokenOut
             });
 
-            // Select the V4 pool if it has strictly more liquidity than the best V3 pool.
-            if (v4Liquidity > bestLiquidity) {
+            // Select V4 if no TWAP-ready V3 exists, or if a TWAP-ready V4 beats the V3 route.
+            // Hookless V4 spot pools remain a last-resort fallback and cannot outrank V3 TWAP.
+            if (v4Liquidity != 0 && (bestLiquidity == 0 || (v4UsesTwap && v4Liquidity > bestLiquidity))) {
                 isV4 = true;
                 v3Pool = IUniswapV3Pool(address(0));
                 v4Key = v4Candidate;
@@ -377,6 +391,15 @@ library JBSwapPoolLib {
                 v3Factory.getPool({tokenA: normalizedTokenIn, tokenB: normalizedTokenOut, fee: _feeTier(i)});
 
             if (poolAddr != address(0)) {
+                // Skip young V3 pools instead of falling back to spot. No-quote programmatic swaps rely on the TWAP
+                // floor, so a pool must already cover the full observation window before it can route funds.
+                if (!_v3PoolHasFullTwapHistory(IUniswapV3Pool(poolAddr))) {
+                    unchecked {
+                        ++i;
+                    }
+                    continue;
+                }
+
                 // Query the pool's current in-range liquidity.
                 // slither-disable-next-line calls-loop
                 uint128 poolLiquidity = IUniswapV3Pool(poolAddr).liquidity();
@@ -394,12 +417,14 @@ library JBSwapPoolLib {
         }
     }
 
-    /// @notice Search V4 pools across 4 fee tiers and 2 hook configs for the highest liquidity.
+    /// @notice Search V4 pools across 4 fee tiers and 2 hook configs for the best eligible liquidity.
+    /// @dev TWAP-capable hooked pools are preferred over hookless spot pools. Broken hooked pools are skipped.
     /// @param config The swap configuration (pool manager, hook, WETH addresses).
     /// @param normalizedTokenIn The normalized input token address.
     /// @param normalizedTokenOut The normalized output token address.
-    /// @return bestKey The pool key of the V4 pool with the highest liquidity.
+    /// @return bestKey The selected V4 pool key.
     /// @return bestLiquidity The liquidity of the best V4 pool found.
+    /// @return bestUsesTwap Whether the selected V4 pool has a working TWAP hook.
     function _discoverV4Pool(
         SwapConfig memory config,
         address normalizedTokenIn,
@@ -407,13 +432,18 @@ library JBSwapPoolLib {
     )
         internal
         view
-        returns (PoolKey memory bestKey, uint128 bestLiquidity)
+        returns (PoolKey memory bestKey, uint128 bestLiquidity, bool bestUsesTwap)
     {
-        // Convert to V4 convention: WETH -> address(0) for native ETH.
+        // Keep the best hookless pool separate. Hookless V4 pools only provide spot pricing, so they are a fallback
+        // candidate and should not beat a hooked pool that can serve the TWAP window.
+        PoolKey memory bestSpotKey;
+        uint128 bestSpotLiquidity;
+
+        // Convert to V4 convention before sorting: WETH represents native ETH in the calling code, while V4 pool
+        // keys use address(0) for native ETH.
         address sorted0;
         address sorted1;
         {
-            // V4 uses address(0) for native ETH, so convert WETH addresses.
             address v4In = normalizedTokenIn == config.weth ? address(0) : normalizedTokenIn;
             address v4Out = normalizedTokenOut == config.weth ? address(0) : normalizedTokenOut;
 
@@ -445,10 +475,23 @@ library JBSwapPoolLib {
                     tierIndex: i
                 });
 
-                // Track the pool with the highest liquidity.
-                if (liq > bestLiquidity) {
-                    bestLiquidity = liq;
-                    bestKey = key;
+                if (liq != 0) {
+                    if (hookAddr == address(0)) {
+                        // Hookless pools can only be quoted at spot. Save the deepest one, but leave `bestKey`
+                        // reserved for TWAP-capable hooked pools.
+                        if (liq > bestSpotLiquidity) {
+                            bestSpotLiquidity = liq;
+                            bestSpotKey = key;
+                        }
+                    } else if (_v4PoolHasTwap(key)) {
+                        // Hooked pools are only eligible if their hook can serve the configured TWAP window. Among
+                        // those, route through the deepest pool.
+                        if (liq > bestLiquidity) {
+                            bestLiquidity = liq;
+                            bestKey = key;
+                            bestUsesTwap = true;
+                        }
+                    }
                 }
 
                 unchecked {
@@ -459,6 +502,13 @@ library JBSwapPoolLib {
             unchecked {
                 ++i;
             }
+        }
+
+        if (bestLiquidity == 0) {
+            // No hooked pool could serve TWAP, so return the deepest hookless spot pool as the V4 fallback. The
+            // caller still compares this against V3 TWAP liquidity before choosing a route.
+            bestKey = bestSpotKey;
+            bestLiquidity = bestSpotLiquidity;
         }
     }
 
@@ -532,16 +582,12 @@ library JBSwapPoolLib {
         // Revert if the pool has no TWAP history at all.
         if (oldestObservation == 0) revert JBSwapPoolLib_InsufficientTwapHistory();
 
-        // Use the default window, clamped to the oldest available observation.
-        uint256 twapWindow = _DEFAULT_TWAP_WINDOW;
-        if (oldestObservation < twapWindow) twapWindow = oldestObservation;
-
-        // Revert if the available history is too short for a reliable TWAP.
-        if (twapWindow < _MIN_TWAP_WINDOW) revert JBSwapPoolLib_InsufficientTwapHistory();
+        // Revert if the available history cannot serve the full default TWAP window.
+        if (oldestObservation < _DEFAULT_TWAP_WINDOW) revert JBSwapPoolLib_InsufficientTwapHistory();
 
         // Consult the V3 oracle for the arithmetic mean tick and harmonic mean liquidity.
         (int24 arithmeticMeanTick, uint128 liquidity) =
-            OracleLibrary.consult({pool: address(pool), secondsAgo: uint32(twapWindow)});
+            OracleLibrary.consult({pool: address(pool), secondsAgo: _DEFAULT_TWAP_WINDOW});
 
         // Revert if the pool has no in-range liquidity.
         if (liquidity == 0) revert JBSwapPoolLib_NoLiquidity();
@@ -557,7 +603,7 @@ library JBSwapPoolLib {
         });
     }
 
-    /// @notice Get a V4 quote with dynamic slippage. Prefers hook TWAP, falls back to spot tick.
+    /// @notice Get a V4 quote with dynamic slippage. Hooked pools must serve TWAP; hookless pools use spot fallback.
     /// @param config The swap configuration (pool manager, WETH addresses).
     /// @param key The V4 pool key to quote against.
     /// @param normalizedTokenIn The normalized input token address.
@@ -583,28 +629,26 @@ library JBSwapPoolLib {
         {
             // Derive the pool ID from the key.
             PoolId id = key.toId();
-            bool usedTwap;
-
-            // If the pool has a hook, try to get a TWAP from the geomean oracle.
+            // If the pool has a hook, require a TWAP from the geomean oracle.
             if (address(key.hooks) != address(0)) {
                 // Build the observation window: [_V4_TWAP_WINDOW seconds ago, now].
                 uint32[] memory secondsAgos = new uint32[](2);
                 secondsAgos[0] = _V4_TWAP_WINDOW;
                 secondsAgos[1] = 0;
 
-                // Attempt to read the TWAP from the hook's geomean oracle.
+                // Read the TWAP from the hook's geomean oracle. The seconds-per-liquidity array is not used for
+                // price checks.
                 // slither-disable-next-line unused-return
-                try IGeomeanOracle(address(key.hooks)).observe({key: key, secondsAgos: secondsAgos}) returns (
-                    int56[] memory tickCumulatives, uint160[] memory
-                ) {
-                    // Compute the arithmetic mean tick from the cumulative tick difference.
-                    tick = int24((tickCumulatives[1] - tickCumulatives[0]) / int56(int32(_V4_TWAP_WINDOW)));
-                    usedTwap = true;
-                } catch {}
-            }
+                (int56[] memory tickCumulatives,) =
+                    IGeomeanOracle(address(key.hooks)).observe({key: key, secondsAgos: secondsAgos});
+                if (tickCumulatives.length < 2) revert JBSwapPoolLib_InsufficientTwapHistory();
 
-            // Fall back to the current spot tick if the TWAP oracle was unavailable.
-            if (!usedTwap) {
+                // Compute the arithmetic mean tick from the cumulative tick difference.
+                // The geomean oracle returns the same int24 tick domain used by Uniswap pools.
+                // forge-lint: disable-next-line(unsafe-typecast)
+                tick = int24((tickCumulatives[1] - tickCumulatives[0]) / int56(int32(_V4_TWAP_WINDOW)));
+            } else {
+                // Hookless V4 spot pools are only selected when no TWAP-capable route exists.
                 // slither-disable-next-line unused-return
                 (, tick,,) = config.poolManager.getSlot0(id);
             }
@@ -625,6 +669,116 @@ library JBSwapPoolLib {
             tick: tick,
             poolFeeBps: feeBps
         });
+    }
+
+    /// @notice Checks whether a V3 pool can serve the full default TWAP window.
+    /// @dev Reads the observation ring directly so discovery can skip young pools without reverting. The oldest
+    /// initialized observation must be at least `_DEFAULT_TWAP_WINDOW` seconds old.
+    /// @param pool The V3 pool to inspect.
+    /// @return True if the pool has enough initialized history for a default-window TWAP.
+    function _v3PoolHasFullTwapHistory(IUniswapV3Pool pool) internal view returns (bool) {
+        // slot0 gives the current observation cursor and total initialized/available observation slots.
+        (bool slot0Ok, uint16 observationIndex, uint16 observationCardinality) = _v3ObservationStateOf(pool);
+        if (!slot0Ok || observationCardinality == 0) return false;
+
+        // In a full ring, the next slot after the cursor is the oldest observation.
+        uint256 oldestIndex = (uint256(observationIndex) + 1) % uint256(observationCardinality);
+        (bool observationOk, uint32 observationTimestamp, bool initialized) =
+            _v3ObservationOf({pool: pool, index: oldestIndex});
+        if (!observationOk) return false;
+
+        // If the ring has not wrapped yet, slot 0 is the oldest initialized observation.
+        if (!initialized) {
+            (observationOk, observationTimestamp, initialized) = _v3ObservationOf({pool: pool, index: 0});
+            if (!observationOk || !initialized) return false;
+        }
+
+        return _observationIsOldEnough({observationTimestamp: observationTimestamp, window: _DEFAULT_TWAP_WINDOW});
+    }
+
+    /// @notice Reads the observation cursor and cardinality from a V3 pool's slot0.
+    /// @dev Uses `staticcall` instead of the typed interface so malformed or hooklike candidate pools are rejected
+    /// as unusable candidates without reverting the whole bounded pool-discovery scan.
+    /// @param pool The V3 pool candidate to inspect.
+    /// @return ok True if `slot0()` returned enough data to decode.
+    /// @return observationIndex The pool's current observation cursor.
+    /// @return observationCardinality The number of initialized/available observation slots.
+    function _v3ObservationStateOf(IUniswapV3Pool pool)
+        internal
+        view
+        returns (bool ok, uint16 observationIndex, uint16 observationCardinality)
+    {
+        // Pool discovery intentionally probes candidate pools in a bounded fee-tier list; failed probes mean "skip".
+        // slither-disable-next-line calls-loop
+        (bool success, bytes memory data) =
+            address(pool).staticcall(abi.encodeWithSelector(IUniswapV3PoolState.slot0.selector));
+        if (!success || data.length < 224) return (false, 0, 0);
+
+        (,, observationIndex, observationCardinality,,,) =
+            abi.decode(data, (uint160, int24, uint16, uint16, uint16, uint8, bool));
+        ok = true;
+    }
+
+    /// @notice Reads one V3 observation.
+    /// @dev Uses `staticcall` so a bad candidate pool cannot interrupt pool discovery.
+    /// @param pool The V3 pool candidate to inspect.
+    /// @param index The observation ring index to read.
+    /// @return ok True if the observation returned enough data to decode.
+    /// @return observationTimestamp The timestamp stored at `index`.
+    /// @return initialized True if the observation slot has been initialized.
+    function _v3ObservationOf(
+        IUniswapV3Pool pool,
+        uint256 index
+    )
+        internal
+        view
+        returns (bool ok, uint32 observationTimestamp, bool initialized)
+    {
+        // Pool discovery intentionally probes candidate pools in a bounded fee-tier list; failed probes mean "skip".
+        // slither-disable-next-line calls-loop
+        (bool success, bytes memory data) =
+            address(pool).staticcall(abi.encodeWithSelector(IUniswapV3PoolState.observations.selector, index));
+        if (!success || data.length < 128) return (false, 0, false);
+
+        (observationTimestamp,,, initialized) = abi.decode(data, (uint32, int56, uint160, bool));
+        ok = true;
+    }
+
+    /// @notice Check whether an oracle observation is old enough to cover a TWAP window ending at the current block.
+    /// @dev Current or future timestamps are rejected before subtracting so the age check cannot underflow.
+    /// @param observationTimestamp The timestamp recorded in the pool's oracle observation.
+    /// @param window The required observation age, in seconds.
+    /// @return True if the observation is before the current block and at least `window` seconds old.
+    function _observationIsOldEnough(uint32 observationTimestamp, uint256 window) internal view returns (bool) {
+        // TWAP freshness is intentionally time-based.
+        // forge-lint: disable-next-line(block-timestamp)
+        if (observationTimestamp >= block.timestamp) return false;
+        // forge-lint: disable-next-line(block-timestamp)
+        return block.timestamp - observationTimestamp >= window;
+    }
+
+    /// @notice Check whether a V4 hooked pool can return cumulative ticks for the required TWAP window.
+    /// @dev Hookless pools return false. Reverting hooks and hooks that return fewer than two cumulative tick values
+    /// are treated as unusable for TWAP routing.
+    /// @param key The V4 pool key whose hook should be probed.
+    /// @return True if the hook can serve both the historical and current cumulative tick observations.
+    function _v4PoolHasTwap(PoolKey memory key) internal view returns (bool) {
+        if (address(key.hooks) == address(0)) return false;
+
+        uint32[] memory secondsAgos = new uint32[](2);
+        secondsAgos[0] = _V4_TWAP_WINDOW;
+        secondsAgos[1] = 0;
+
+        // Pool discovery intentionally probes candidate hooks in a bounded pool list. The seconds-per-liquidity array
+        // is not needed for the history check.
+        // slither-disable-next-line calls-loop,unused-return
+        try IGeomeanOracle(address(key.hooks)).observe({key: key, secondsAgos: secondsAgos}) returns (
+            int56[] memory tickCumulatives, uint160[] memory
+        ) {
+            return tickCumulatives.length >= 2;
+        } catch {
+            return false;
+        }
     }
 
     /// @notice Compute the minimum acceptable output using sigmoid slippage at the given tick.
@@ -648,14 +802,7 @@ library JBSwapPoolLib {
         returns (uint256 minAmountOut)
     {
         // Compute the dynamic slippage tolerance based on price impact.
-        uint256 slippageTolerance = _getSlippageTolerance({
-            amountIn: amount,
-            liquidity: liquidity,
-            tokenOut: tokenOut,
-            tokenIn: tokenIn,
-            arithmeticMeanTick: tick,
-            poolFeeBps: poolFeeBps
-        });
+        uint256 slippageTolerance = _getSlippageTolerance(amount, liquidity, tokenOut, tokenIn, tick, poolFeeBps);
 
         // If the slippage tolerance is 100% or more, accept any output.
         if (slippageTolerance >= _SLIPPAGE_DENOMINATOR) return 0;
@@ -665,7 +812,12 @@ library JBSwapPoolLib {
 
         // Get the expected output at the TWAP tick.
         minAmountOut = OracleLibrary.getQuoteAtTick({
-            tick: tick, baseAmount: uint128(amount), baseToken: tokenIn, quoteToken: tokenOut
+            tick: tick,
+            // The overflow check above bounds `amount` for `getQuoteAtTick`.
+            // forge-lint: disable-next-line(unsafe-typecast)
+            baseAmount: uint128(amount),
+            baseToken: tokenIn,
+            quoteToken: tokenOut
         });
 
         // Reduce by the slippage tolerance to get the minimum acceptable output.
@@ -693,11 +845,11 @@ library JBSwapPoolLib {
         returns (uint256)
     {
         // Sort the tokens to determine swap direction.
-        (address token0,) = tokenOut < tokenIn ? (tokenOut, tokenIn) : (tokenIn, tokenOut);
+        address token0 = tokenOut < tokenIn ? tokenOut : tokenIn;
         bool zeroForOne = tokenIn == token0;
 
         // Get the sqrt price at the mean tick for impact calculation.
-        uint160 sqrtP = TickMath.getSqrtPriceAtTick(arithmeticMeanTick);
+        uint160 sqrtP = V3TickMath.getSqrtRatioAtTick(arithmeticMeanTick);
 
         // If sqrtP is zero, return maximum slippage (accept any output).
         if (sqrtP == 0) return _SLIPPAGE_DENOMINATOR;
@@ -805,6 +957,8 @@ library JBSwapPoolLib {
         (int256 amount0, int256 amount1) = pool.swap({
             recipient: address(this),
             zeroForOne: zeroForOne,
+            // Exact-input swap amounts are provided as positive ints to Uniswap V3.
+            // forge-lint: disable-next-line(unsafe-typecast)
             amountSpecified: int256(amount),
             sqrtPriceLimitX96: JBSwapLib.sqrtPriceLimitFromAmounts({
                 amountIn: amount, minimumAmountOut: minAmountOut, zeroForOne: zeroForOne
@@ -816,7 +970,9 @@ library JBSwapPoolLib {
         amountOut = uint256(-(zeroForOne ? amount1 : amount0));
 
         // Enforce the minimum output from the TWAP quote.
-        if (amountOut < minAmountOut) revert JBSwapPoolLib_SlippageExceeded(amountOut, minAmountOut);
+        if (amountOut < minAmountOut) {
+            revert JBSwapPoolLib_SlippageExceeded({amountOut: amountOut, minAmountOut: minAmountOut});
+        }
     }
 
     /// @notice Execute a swap through a V4 pool via `PoolManager.unlock()`.
@@ -851,6 +1007,8 @@ library JBSwapPoolLib {
             });
 
             // V4 uses negative amounts for exact-input swaps.
+            // Exact-input swap amounts are negated for Uniswap V4.
+            // forge-lint: disable-next-line(unsafe-typecast)
             int256 exactInputAmount = -int256(amount);
 
             unlockData = abi.encode(key, zeroForOne, exactInputAmount, sqrtPriceLimitX96, minAmountOut, config.weth);

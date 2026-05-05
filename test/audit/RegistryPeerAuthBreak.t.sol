@@ -28,6 +28,7 @@ import {JBMessageRoot} from "../../src/structs/JBMessageRoot.sol";
 import {JBInboxTreeRoot} from "../../src/structs/JBInboxTreeRoot.sol";
 import {IOPMessenger} from "../../src/interfaces/IOPMessenger.sol";
 import {IOPStandardBridge} from "../../src/interfaces/IOPStandardBridge.sol";
+import {LibClone} from "solady/src/utils/LibClone.sol";
 
 contract CodexNemesisRegistryPeerAuthBreakTest is Test, TestBaseWorkflow, IERC721Receiver {
     address internal constant MESSENGER = address(0x1001);
@@ -56,6 +57,7 @@ contract CodexNemesisRegistryPeerAuthBreakTest is Test, TestBaseWorkflow, IERC72
             deployer: deployer,
             directory: jbDirectory(),
             permissions: jbPermissions(),
+            prices: address(jbPrices()),
             tokens: jbTokens(),
             feeProjectId: 1,
             registry: registryA,
@@ -104,7 +106,57 @@ contract CodexNemesisRegistryPeerAuthBreakTest is Test, TestBaseWorkflow, IERC72
             );
     }
 
+    function test_registryExplicitPeersAcceptDifferentDeploymentTopology() external {
+        bytes32 salt = keccak256("explicit-peer-salt");
+        address expectedA = _predictRegistrySucker({registry: registryA, salt: salt});
+        address expectedB = _predictRegistrySucker({registry: registryB, salt: salt});
+
+        IJBSucker suckerA =
+            _deployViaRegistry({registry: registryA, salt: salt, peer: bytes32(uint256(uint160(expectedB)))});
+        IJBSucker suckerB =
+            _deployViaRegistry({registry: registryB, salt: salt, peer: bytes32(uint256(uint160(expectedA)))});
+
+        assertEq(address(suckerA), expectedA);
+        assertEq(address(suckerB), expectedB);
+        assertEq(suckerA.peer(), bytes32(uint256(uint160(address(suckerB)))));
+        assertEq(suckerB.peer(), bytes32(uint256(uint160(address(suckerA)))));
+
+        vm.mockCall(
+            MESSENGER, abi.encodeWithSelector(IOPMessenger.xDomainMessageSender.selector), abi.encode(address(suckerA))
+        );
+
+        vm.prank(MESSENGER);
+        JBOptimismSucker(payable(address(suckerB)))
+            .fromRemote(
+                JBMessageRoot({
+                version: 1,
+                token: bytes32(uint256(uint160(JBConstants.NATIVE_TOKEN))),
+                amount: 0,
+                remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(1))}),
+                sourceTotalSupply: 0,
+                sourceCurrency: uint32(uint160(JBConstants.NATIVE_TOKEN)),
+                sourceDecimals: 18,
+                sourceSurplus: 0,
+                sourceBalance: 0,
+                sourceTimestamp: 1
+            })
+            );
+
+        assertEq(suckerB.inboxOf(JBConstants.NATIVE_TOKEN).nonce, 1);
+    }
+
     function _deployViaRegistry(JBSuckerRegistry registry, bytes32 salt) internal returns (IJBSucker sucker) {
+        return _deployViaRegistry({registry: registry, salt: salt, peer: bytes32(0)});
+    }
+
+    function _deployViaRegistry(
+        JBSuckerRegistry registry,
+        bytes32 salt,
+        bytes32 peer
+    )
+        internal
+        returns (IJBSucker sucker)
+    {
         JBTokenMapping[] memory mappings = new JBTokenMapping[](1);
         mappings[0] = JBTokenMapping({
             localToken: JBConstants.NATIVE_TOKEN,
@@ -113,9 +165,18 @@ contract CodexNemesisRegistryPeerAuthBreakTest is Test, TestBaseWorkflow, IERC72
         });
 
         JBSuckerDeployerConfig[] memory configs = new JBSuckerDeployerConfig[](1);
-        configs[0] = JBSuckerDeployerConfig({deployer: IJBSuckerDeployer(address(deployer)), mappings: mappings});
+        configs[0] =
+            JBSuckerDeployerConfig({deployer: IJBSuckerDeployer(address(deployer)), peer: peer, mappings: mappings});
 
         sucker = IJBSucker(registry.deploySuckersFor(projectId, salt, configs)[0]);
+    }
+
+    function _predictRegistrySucker(JBSuckerRegistry registry, bytes32 salt) internal view returns (address) {
+        bytes32 registrySalt = keccak256(abi.encode(address(this), salt));
+        bytes32 deployerSalt = keccak256(abi.encodePacked(address(registry), registrySalt));
+        return LibClone.predictDeterministicAddress({
+            implementation: address(deployer.singleton()), salt: deployerSalt, deployer: address(deployer)
+        });
     }
 
     function _grantRegistryPermissions(address operator) internal {

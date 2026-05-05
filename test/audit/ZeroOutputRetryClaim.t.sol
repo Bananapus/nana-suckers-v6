@@ -29,7 +29,9 @@ contract ZeroOutputRetryHarness is JBSwapCCIPSucker {
         IJBTokens tokens,
         IJBPermissions permissions
     )
-        JBSwapCCIPSucker(deployer, directory, tokens, permissions, 1, IJBSuckerRegistry(address(1)), address(0))
+        JBSwapCCIPSucker(
+            deployer, directory, permissions, address(1), tokens, 1, IJBSuckerRegistry(address(1)), address(0)
+        )
     {}
 
     function testSetInbox(address token, bytes32 root, uint64 nonce) external {
@@ -125,7 +127,8 @@ contract ZeroOutputRetryClaimTest is Test {
         });
         deployer.configureSingleton(singleton);
 
-        sucker = ZeroOutputRetryHarness(payable(address(deployer.createForSender(1, bytes32("ZERO_OUTPUT")))));
+        sucker =
+            ZeroOutputRetryHarness(payable(address(deployer.createForSender(1, bytes32("ZERO_OUTPUT"), bytes32(0)))));
 
         vm.mockCall(LOCAL_TOKEN, abi.encodeWithSignature("balanceOf(address)", address(sucker)), abi.encode(uint256(0)));
     }

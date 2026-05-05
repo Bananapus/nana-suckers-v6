@@ -53,17 +53,19 @@ contract JBArbitrumSucker is JBSucker, IJBArbitrumSucker {
 
     /// @param directory A contract storing directories of terminals and controllers for each project.
     /// @param permissions A contract storing permissions.
+    /// @param prices The price oracle used to convert peer-chain balances and surplus.
     /// @param tokens A contract that manages token minting and burning.
     constructor(
         JBArbitrumSuckerDeployer deployer,
         IJBDirectory directory,
         IJBPermissions permissions,
+        address prices,
         IJBTokens tokens,
         uint256 feeProjectId,
         IJBSuckerRegistry registry,
         address trustedForwarder
     )
-        JBSucker(directory, permissions, tokens, feeProjectId, registry, trustedForwarder)
+        JBSucker(directory, permissions, prices, tokens, feeProjectId, registry, trustedForwarder)
     {
         GATEWAYROUTER = JBArbitrumSuckerDeployer(deployer).arbGatewayRouter();
         ARBINBOX = JBArbitrumSuckerDeployer(deployer).arbInbox();

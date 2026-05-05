@@ -81,7 +81,7 @@ contract RegistryStaleDeprecatedMaxSurplusTest is Test {
     uint256 internal constant PROJECT_ID = 1;
     uint256 internal constant PEER_CHAIN_ID = 10;
 
-    function test_staleDeprecatedSameChainSurplusDominatesFreshActiveSnapshot() external {
+    function test_freshActiveSnapshotDominatesStaleDeprecatedSameChainSurplus() external {
         RegistryHarness registry = new RegistryHarness();
 
         // Old deprecated sucker: stale surplus snapshot from before the migration.
@@ -98,8 +98,8 @@ contract RegistryStaleDeprecatedMaxSurplusTest is Test {
         uint256 reportedRemoteSurplus = registry.remoteSurplusOf(PROJECT_ID, 18, uint256(uint160(address(0xEEE))));
         uint256 reportedRemoteSupply = registry.remoteTotalSupplyOf(PROJECT_ID);
 
-        // The registry keeps the MAX same-chain value, so the stale deprecated snapshot wins.
-        assertEq(reportedRemoteSurplus, 1000 ether, "stale deprecated surplus should dominate");
+        // The registry prefers the live active sucker over stale deprecated same-chain snapshots.
+        assertEq(reportedRemoteSurplus, 100 ether, "fresh active surplus should dominate");
         assertEq(reportedRemoteSupply, 100 ether, "supply stays on the fresh/current value");
 
         uint256 localSurplus = 100 ether;
@@ -121,7 +121,6 @@ contract RegistryStaleDeprecatedMaxSurplusTest is Test {
         });
 
         assertEq(payoutUsingFreshSameChainValue, 100 ether, "fresh omnichain accounting");
-        assertEq(payoutUsingRegistryValue, 550 ether, "registry overstates surplus during migration");
-        assertEq(payoutUsingRegistryValue - payoutUsingFreshSameChainValue, 450 ether, "overpayment amount");
+        assertEq(payoutUsingRegistryValue, payoutUsingFreshSameChainValue, "registry uses fresh omnichain accounting");
     }
 }

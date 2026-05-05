@@ -67,7 +67,7 @@ contract RegistryStaleMaxAggregationTest is Test {
         registry = new RegistryHarness(DIRECTORY, PERMISSIONS);
     }
 
-    function test_sameChainMaxAggregationPrefersStaleDeprecatedValues() public {
+    function test_sameChainAggregationPrefersActiveValuesOverStaleDeprecatedValues() public {
         MockAggregateSucker deprecatedSucker = new MockAggregateSucker(CHAIN_ID, 1000e18, 500e18);
         MockAggregateSucker activeSucker = new MockAggregateSucker(CHAIN_ID, 100e18, 50e18);
 
@@ -76,13 +76,13 @@ contract RegistryStaleMaxAggregationTest is Test {
 
         assertEq(
             registry.remoteTotalSupplyOf(PROJECT_ID),
-            1000e18,
-            "deprecated stale supply wins even though active sucker is the live route"
+            100e18,
+            "active supply should win even when a deprecated sucker reports more"
         );
         assertEq(
             registry.remoteSurplusOf(PROJECT_ID, 18, uint256(uint160(address(0xEEE)))),
-            500e18,
-            "deprecated stale surplus wins even though active sucker is the live route"
+            50e18,
+            "active surplus should win even when a deprecated sucker reports more"
         );
     }
 }

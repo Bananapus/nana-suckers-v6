@@ -16,6 +16,7 @@ import {IOPMessenger} from "../../src/interfaces/IOPMessenger.sol";
 import {IOPStandardBridge} from "../../src/interfaces/IOPStandardBridge.sol";
 import {JBInboxTreeRoot} from "../../src/structs/JBInboxTreeRoot.sol";
 import {JBMessageRoot} from "../../src/structs/JBMessageRoot.sol";
+import {LibClone} from "solady/src/utils/LibClone.sol";
 
 contract PeerTopologyAuthBreakTest is Test {
     address internal constant DIRECTORY_A = address(0x1001);
@@ -57,6 +58,7 @@ contract PeerTopologyAuthBreakTest is Test {
             deployer: deployerA,
             directory: IJBDirectory(DIRECTORY_A),
             permissions: IJBPermissions(PERMISSIONS),
+            prices: address(1),
             tokens: IJBTokens(TOKENS),
             feeProjectId: 1,
             registry: IJBSuckerRegistry(REGISTRY),
@@ -66,6 +68,7 @@ contract PeerTopologyAuthBreakTest is Test {
             deployer: deployerB,
             directory: IJBDirectory(DIRECTORY_B),
             permissions: IJBPermissions(PERMISSIONS),
+            prices: address(1),
             tokens: IJBTokens(TOKENS),
             feeProjectId: 1,
             registry: IJBSuckerRegistry(REGISTRY),
@@ -80,8 +83,8 @@ contract PeerTopologyAuthBreakTest is Test {
         bytes32 salt = keccak256("NEMESIS_PEER_BREAK");
 
         vm.startPrank(USER);
-        IJBSucker suckerA = deployerA.createForSender({localProjectId: 1, salt: salt});
-        IJBSucker suckerB = deployerB.createForSender({localProjectId: 1, salt: salt});
+        IJBSucker suckerA = deployerA.createForSender({localProjectId: 1, salt: salt, peer: bytes32(0)});
+        IJBSucker suckerB = deployerB.createForSender({localProjectId: 1, salt: salt, peer: bytes32(0)});
         vm.stopPrank();
 
         assertTrue(
@@ -108,5 +111,58 @@ contract PeerTopologyAuthBreakTest is Test {
         vm.expectRevert();
         vm.prank(MESSENGER);
         JBOptimismSucker(payable(address(suckerA))).fromRemote(root);
+    }
+
+    function test_explicitPeerSupportsDifferentDeploymentTopology() public {
+        bytes32 salt = keccak256("NEMESIS_EXPLICIT_PEER");
+        address expectedA = _predictSucker({deployer: deployerA, sender: USER, salt: salt});
+        address expectedB = _predictSucker({deployer: deployerB, sender: USER, salt: salt});
+
+        vm.startPrank(USER);
+        IJBSucker suckerA =
+            deployerA.createForSender({localProjectId: 1, salt: salt, peer: bytes32(uint256(uint160(expectedB)))});
+        IJBSucker suckerB =
+            deployerB.createForSender({localProjectId: 1, salt: salt, peer: bytes32(uint256(uint160(expectedA)))});
+        vm.stopPrank();
+
+        assertEq(address(suckerA), expectedA);
+        assertEq(address(suckerB), expectedB);
+        assertEq(suckerA.peer(), bytes32(uint256(uint160(address(suckerB)))));
+        assertEq(suckerB.peer(), bytes32(uint256(uint160(address(suckerA)))));
+
+        vm.mockCall(MESSENGER, abi.encodeWithSignature("xDomainMessageSender()"), abi.encode(address(suckerB)));
+
+        JBMessageRoot memory root = JBMessageRoot({
+            version: JBSucker(payable(address(suckerA))).MESSAGE_VERSION(),
+            token: bytes32(uint256(uint160(address(0xBEEF)))),
+            amount: 0,
+            remoteRoot: JBInboxTreeRoot({nonce: 1, root: keccak256("root")}),
+            sourceTotalSupply: 0,
+            sourceCurrency: 1,
+            sourceDecimals: 18,
+            sourceSurplus: 0,
+            sourceBalance: 0,
+            sourceTimestamp: 1
+        });
+
+        vm.prank(MESSENGER);
+        JBOptimismSucker(payable(address(suckerA))).fromRemote(root);
+
+        assertEq(suckerA.inboxOf(address(0xBEEF)).nonce, 1);
+    }
+
+    function _predictSucker(
+        JBOptimismSuckerDeployer deployer,
+        address sender,
+        bytes32 salt
+    )
+        internal
+        view
+        returns (address)
+    {
+        bytes32 deployerSalt = keccak256(abi.encodePacked(sender, salt));
+        return LibClone.predictDeterministicAddress({
+            implementation: address(deployer.singleton()), salt: deployerSalt, deployer: address(deployer)
+        });
     }
 }

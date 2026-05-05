@@ -76,9 +76,9 @@ abstract contract OPStackNativeBridgeForkTestBase is SuckerForkHelpers {
     function setUp() public override {
         _initMetadata();
 
-        // ── L1 (Ethereum, roll back a few blocks to avoid RPC race where latest block isn't fully executed)
+        // ── L1 (Ethereum)
         l1Fork = vm.createSelectFork("ethereum");
-        vm.rollFork(block.number - 5);
+        vm.rollFork(block.number - 1);
         super.setUp();
         vm.stopPrank();
 
@@ -94,7 +94,7 @@ abstract contract OPStackNativeBridgeForkTestBase is SuckerForkHelpers {
         vm.stopPrank();
 
         suckerDeployerL1.configureSingleton(singletonL1);
-        suckerL1 = suckerDeployerL1.createForSender(1, "l1-salt");
+        suckerL1 = suckerDeployerL1.createForSender(1, "l1-salt", bytes32(0));
         vm.label(address(suckerL1), "suckerL1");
 
         // Grant sucker mint permission on L1.
@@ -109,9 +109,9 @@ abstract contract OPStackNativeBridgeForkTestBase is SuckerForkHelpers {
         projectToken = jbController().deployERC20For(1, "SuckerToken", "SOOK", bytes32(0));
         vm.stopPrank();
 
-        // ── L2 (roll back a few blocks to avoid RPC race where latest block isn't fully executed)
+        // ── L2
         l2Fork = vm.createSelectFork(_l2RpcUrl());
-        vm.rollFork(block.number - 5);
+        vm.rollFork(block.number - 1);
         super.setUp();
         vm.stopPrank();
 
@@ -126,7 +126,7 @@ abstract contract OPStackNativeBridgeForkTestBase is SuckerForkHelpers {
         vm.stopPrank();
 
         suckerDeployerL2.configureSingleton(singletonL2);
-        suckerL2 = suckerDeployerL2.createForSender(1, "l2-salt");
+        suckerL2 = suckerDeployerL2.createForSender(1, "l2-salt", bytes32(0));
         vm.label(address(suckerL2), "suckerL2");
 
         // Grant L2 sucker mint permission and launch L2 project.
@@ -300,6 +300,7 @@ contract ForkOptimismTest is OPStackNativeBridgeForkTestBase {
             deployer: deployer,
             directory: directory,
             permissions: permissions,
+            prices: address(jbPrices()),
             tokens: tokens,
             feeProjectId: 1,
             registry: IJBSuckerRegistry(address(0)),
@@ -349,6 +350,7 @@ contract ForkBaseTest is OPStackNativeBridgeForkTestBase {
             deployer: deployer,
             directory: directory,
             permissions: permissions,
+            prices: address(jbPrices()),
             tokens: tokens,
             feeProjectId: 1,
             registry: IJBSuckerRegistry(address(0)),

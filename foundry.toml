@@ -14,8 +14,7 @@ depth = 100
 fail_on_revert = false
 
 [lint]
-exclude_lints = ["pascal-case-struct", "mixed-case-variable"]
-lint_on_build = false
+exclude_lints = ["mixed-case-variable", "pascal-case-struct"]
 
 [fmt]
 number_underscore = "thousands"

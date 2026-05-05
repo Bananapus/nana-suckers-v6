@@ -32,7 +32,9 @@ contract CCIPSuckerHarness is JBCCIPSucker {
         // forge-lint: disable-next-line(mixed-case-variable)
         address trusted_forwarder
     )
-        JBCCIPSucker(deployer, directory, tokens, permissions, 1, IJBSuckerRegistry(address(1)), trusted_forwarder)
+        JBCCIPSucker(
+            deployer, directory, permissions, address(1), tokens, 1, IJBSuckerRegistry(address(1)), trusted_forwarder
+        )
     {}
 
     /// @notice Directly insert a leaf into the outbox tree for testing.
@@ -62,6 +64,10 @@ contract CCIPSuckerHarness is JBCCIPSucker {
 contract NonPayableCaller {
     function callToRemote(address sucker, address token) external payable {
         JBCCIPSucker(payable(sucker)).toRemote{value: msg.value}(token);
+    }
+
+    function claimRetainedTransportPaymentRefund(address sucker, address payable beneficiary) external {
+        JBCCIPSucker(payable(sucker)).claimRetainedTransportPaymentRefund(beneficiary);
     }
 }
 
@@ -171,7 +177,7 @@ contract CCIPRefundTest is Test {
     // Non-payable caller — refund failure emits event, does NOT revert
     // =========================================================================
 
-    /// @notice When refund fails (non-payable caller), toRemote should succeed and emit TransportPaymentRefundFailed.
+    /// @notice When refund fails, toRemote should succeed, emit, and retain the refund for later claim.
     function test_toRemote_nonPayableCaller_emitsEventOnRefundFailure() public {
         address erc20 = makeAddr("bridgedERC20");
         uint256 bridgeFee = 0.05 ether;
@@ -195,8 +201,19 @@ contract CCIPRefundTest is Test {
         caller.callToRemote{value: transportPayment}(address(sucker), erc20);
 
         // The bridge operation completed successfully despite the refund failure.
-        // The excess funds remain in the sucker contract.
         assertEq(sucker.test_getOutboxBalance(erc20), 0, "Outbox balance should be cleared");
+        assertEq(
+            sucker.retainedTransportPaymentRefundOf(address(caller)),
+            expectedRefund,
+            "failed refund should be retained for caller"
+        );
+        assertEq(sucker.retainedTransportPaymentRefundBalance(), expectedRefund, "global retained refund mismatch");
+
+        address payable beneficiary = payable(makeAddr("refundBeneficiary"));
+        caller.claimRetainedTransportPaymentRefund(address(sucker), beneficiary);
+
+        assertEq(beneficiary.balance, expectedRefund, "beneficiary should receive retained refund");
+        assertEq(sucker.retainedTransportPaymentRefundBalance(), 0, "retained refund should clear");
     }
 
     /// @notice When refund succeeds (payable caller), no event is emitted.

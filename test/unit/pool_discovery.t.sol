@@ -14,6 +14,7 @@ import {PoolId, PoolIdLibrary} from "@uniswap/v4-core/src/types/PoolId.sol";
 import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
 import {StateLibrary} from "@uniswap/v4-core/src/libraries/StateLibrary.sol";
 
+import {IGeomeanOracle} from "../../src/interfaces/IGeomeanOracle.sol";
 import {JBSwapPoolLib} from "../../src/libraries/JBSwapPoolLib.sol";
 
 /// @notice Mock V4 PoolManager that stores slot data for pool state queries via extsload.
@@ -106,6 +107,8 @@ contract JBSwapPoolLib_PoolDiscoveryTest is Test {
     address v3Pool100;
 
     function setUp() public {
+        vm.warp(1000);
+
         v3Factory = makeAddr("v3Factory");
         poolManager = new MockPoolManager();
         harness = new PoolDiscoveryHarness();
@@ -140,6 +143,16 @@ contract JBSwapPoolLib_PoolDiscoveryTest is Test {
         );
         // Mock the pool's liquidity.
         vm.mockCall(pool, abi.encodeWithSelector(IUniswapV3PoolState.liquidity.selector), abi.encode(liquidity));
+        vm.mockCall(
+            pool,
+            abi.encodeWithSelector(IUniswapV3PoolState.slot0.selector),
+            abi.encode(uint160(1 << 96), int24(0), uint16(0), uint16(2), uint16(2), uint8(0), true)
+        );
+        vm.mockCall(
+            pool,
+            abi.encodeWithSelector(IUniswapV3PoolState.observations.selector, uint256(1)),
+            abi.encode(uint32(block.timestamp - 600), int56(0), uint160(0), true)
+        );
     }
 
     /// @dev Configure a V4 pool (hookless) with given liquidity.
@@ -172,6 +185,16 @@ contract JBSwapPoolLib_PoolDiscoveryTest is Test {
         });
 
         poolManager.setPool(key, 1 << 96, liquidity);
+
+        int56[] memory tickCumulatives = new int56[](2);
+        uint160[] memory secondsPerLiquidityCumulativeX128s = new uint160[](2);
+        uint32[] memory secondsAgos = new uint32[](2);
+        secondsAgos[0] = 120;
+        vm.mockCall(
+            hook,
+            abi.encodeWithSelector(IGeomeanOracle.observe.selector, key, secondsAgos),
+            abi.encode(tickCumulatives, secondsPerLiquidityCumulativeX128s)
+        );
     }
 
     /// @dev Build a SwapConfig pointing at our mocks.
@@ -185,13 +208,11 @@ contract JBSwapPoolLib_PoolDiscoveryTest is Test {
     }
 
     // =========================================================================
-    // Test 1: V3 dust liquidity, V4 deep liquidity => V4 selected
-    // (This was the broken case before the M-1 fix)
+    // Test 1: V3 TWAP liquidity, hookless V4 spot liquidity => V3 selected
     // =========================================================================
 
-    /// @notice When V3 has dust liquidity (1 wei) and hookless V4 has deep liquidity,
-    /// V4 should be selected. Before the fix, V3 would win because hookless V4 was blocked.
-    function test_poolDiscovery_v4HooklessBeatsV3Dust() public {
+    /// @notice Hookless V4 spot pools do not outrank TWAP-ready V3 pools on liquidity alone.
+    function test_poolDiscovery_v3TwapBeatsHooklessV4Spot() public {
         // V3 has dust liquidity at 0.3% fee tier.
         _setupV3Pool(v3Pool3000, 3000, 1);
 
@@ -200,8 +221,8 @@ contract JBSwapPoolLib_PoolDiscoveryTest is Test {
 
         (bool isV4, IUniswapV3Pool v3Pool,) = harness.discoverPool(_config(), TOKEN_A, TOKEN_B);
 
-        assertTrue(isV4, "V4 hookless pool with deep liquidity should be selected over V3 dust");
-        assertEq(address(v3Pool), address(0), "V3 pool should be cleared when V4 wins");
+        assertFalse(isV4, "V3 TWAP should beat hookless V4 spot");
+        assertEq(address(v3Pool), v3Pool3000, "V3 pool should be retained");
     }
 
     // =========================================================================
@@ -260,13 +281,11 @@ contract JBSwapPoolLib_PoolDiscoveryTest is Test {
     }
 
     // =========================================================================
-    // Test 5: Hookless V4 with more liquidity than V3 (the broken case)
+    // Test 5: Hookless V4 with more liquidity than V3 TWAP
     // =========================================================================
 
-    /// @notice Edge case: hookless V4 pool with strictly more liquidity than V3 should
-    /// be selected. This was the exact scenario broken before the M-1 fix — the old
-    /// code required V4 to have a hook OR V3 to have zero liquidity.
-    function test_poolDiscovery_hooklessV4MoreLiquidityThanV3() public {
+    /// @notice A hookless V4 spot pool cannot beat a TWAP-ready V3 pool on liquidity alone.
+    function test_poolDiscovery_hooklessV4SpotDoesNotBeatV3TwapOnLiquidity() public {
         // V3 has moderate liquidity.
         _setupV3Pool(v3Pool500, 500, 100_000e18);
 
@@ -275,8 +294,8 @@ contract JBSwapPoolLib_PoolDiscoveryTest is Test {
 
         (bool isV4, IUniswapV3Pool v3Pool,) = harness.discoverPool(_config(), TOKEN_A, TOKEN_B);
 
-        assertTrue(isV4, "Hookless V4 with more liquidity must beat V3 (M-1 fix)");
-        assertEq(address(v3Pool), address(0), "V3 pool should be zeroed when V4 wins");
+        assertFalse(isV4, "Hookless V4 spot should not beat V3 TWAP");
+        assertEq(address(v3Pool), v3Pool500, "V3 pool should be retained");
     }
 
     // =========================================================================
@@ -323,7 +342,7 @@ contract JBSwapPoolLib_PoolDiscoveryTest is Test {
     // =========================================================================
 
     /// @notice When neither V3 nor V4 has any pools, discoverPool returns zeros.
-    function test_poolDiscovery_noPools_returnsZeros() public {
+    function test_poolDiscovery_noPools_returnsZeros() public view {
         // No pools configured (default setUp has all V3 returning address(0)).
         (bool isV4, IUniswapV3Pool v3Pool,) = harness.discoverPool(_config(), TOKEN_A, TOKEN_B);
 
@@ -335,32 +354,34 @@ contract JBSwapPoolLib_PoolDiscoveryTest is Test {
     // Multi-tier: V4 wins on a different tier than V3's best
     // =========================================================================
 
-    /// @notice V3 best pool is on 0.3% tier, but hookless V4 on 0.05% tier has more liquidity.
-    function test_poolDiscovery_v4WinsOnDifferentTier() public {
+    /// @notice V3 best pool is on 0.3% tier, and hookless V4 on 0.05% tier has more liquidity.
+    function test_poolDiscovery_hooklessV4SpotDoesNotBeatV3TwapOnDifferentTier() public {
         // V3 at 0.3% has moderate liquidity.
         _setupV3Pool(v3Pool3000, 3000, 100_000e18);
 
         // Hookless V4 at 0.05% tier (fee=500, tickSpacing=10) has more.
         _setupV4HooklessPool(500, 10, 200_000e18);
 
-        (bool isV4,,) = harness.discoverPool(_config(), TOKEN_A, TOKEN_B);
+        (bool isV4, IUniswapV3Pool v3Pool,) = harness.discoverPool(_config(), TOKEN_A, TOKEN_B);
 
-        assertTrue(isV4, "V4 should win even on a different fee tier");
+        assertFalse(isV4, "Hookless V4 spot should not beat V3 TWAP on a different fee tier");
+        assertEq(address(v3Pool), v3Pool3000, "V3 pool should be retained");
     }
 
     // =========================================================================
     // V4 barely beats V3 (boundary: V4 has 1 more liquidity)
     // =========================================================================
 
-    /// @notice V4 with exactly 1 more unit of liquidity than V3 should win.
-    function test_poolDiscovery_v4BeatsV3ByOne() public {
+    /// @notice V4 with exactly 1 more unit of liquidity than V3 should not win if it is hookless spot.
+    function test_poolDiscovery_hooklessV4SpotDoesNotBeatV3TwapByOne() public {
         uint128 v3Liq = 1_000_000;
 
         _setupV3Pool(v3Pool3000, 3000, v3Liq);
         _setupV4HooklessPool(3000, 60, v3Liq + 1);
 
-        (bool isV4,,) = harness.discoverPool(_config(), TOKEN_A, TOKEN_B);
+        (bool isV4, IUniswapV3Pool v3Pool,) = harness.discoverPool(_config(), TOKEN_A, TOKEN_B);
 
-        assertTrue(isV4, "V4 should win with strictly more liquidity (by 1 wei)");
+        assertFalse(isV4, "Hookless V4 spot should not beat V3 TWAP by one wei");
+        assertEq(address(v3Pool), v3Pool3000, "V3 pool should be retained");
     }
 }

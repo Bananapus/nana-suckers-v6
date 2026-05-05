@@ -29,7 +29,7 @@ contract DeprecatedViewMockSucker is JBSucker {
         IJBPermissions permissions,
         IJBTokens tokens
     )
-        JBSucker(directory, permissions, tokens, 1, IJBSuckerRegistry(address(1)), address(0))
+        JBSucker(directory, permissions, address(1), tokens, 1, IJBSuckerRegistry(address(1)), address(0))
     {}
 
     function test_setPeerChain(uint256 chainId) external {
@@ -93,7 +93,7 @@ contract DeprecatedViewMockDeployer is IJBSuckerDeployer {
         return false;
     }
 
-    function createForSender(uint256, bytes32) external returns (IJBSucker) {
+    function createForSender(uint256, bytes32, bytes32) external returns (IJBSucker) {
         IJBSucker sucker = _suckers[_index];
         _index++;
         return sucker;
@@ -147,8 +147,8 @@ contract DeprecatedSuckerAggregateViewsTest is Test {
         registry.allowSuckerDeployer(address(deployer));
 
         JBSuckerDeployerConfig[] memory configs = new JBSuckerDeployerConfig[](2);
-        configs[0] = JBSuckerDeployerConfig({deployer: deployer, mappings: new JBTokenMapping[](0)});
-        configs[1] = JBSuckerDeployerConfig({deployer: deployer, mappings: new JBTokenMapping[](0)});
+        configs[0] = JBSuckerDeployerConfig({deployer: deployer, peer: bytes32(0), mappings: new JBTokenMapping[](0)});
+        configs[1] = JBSuckerDeployerConfig({deployer: deployer, peer: bytes32(0), mappings: new JBTokenMapping[](0)});
         registry.deploySuckersFor({projectId: PROJECT_ID, salt: bytes32("dedup"), configurations: configs});
     }
 
@@ -171,8 +171,7 @@ contract DeprecatedSuckerAggregateViewsTest is Test {
         assertEq(supplyAfter, 800e18, "deprecated sucker supply must still be included in aggregate views");
     }
 
-    /// @notice When both a deprecated and an active sucker target the same chain, the registry
-    /// must take the max (not the sum) to prevent double-counting.
+    /// @notice When both a deprecated and an active sucker target the same chain, the active sucker wins.
     function test_sameChainDeprecatedAndActiveDoesNotDoubleCount() external {
         // Make both suckers target the same chain.
         suckerA.test_setPeerChain(10);
@@ -185,9 +184,9 @@ contract DeprecatedSuckerAggregateViewsTest is Test {
         suckerA.test_setDeprecatedAfter(block.timestamp - 1);
         registry.removeDeprecatedSucker({projectId: PROJECT_ID, sucker: address(suckerA)});
 
-        // The registry should take max(1000, 800) = 1000, NOT sum(1000 + 800) = 1800.
+        // The active sucker's value wins over deprecated state for the same peer chain.
         uint256 totalSupply = registry.remoteTotalSupplyOf(PROJECT_ID);
-        assertEq(totalSupply, 1000e18, "same-chain suckers should use max, not sum (dedup)");
+        assertEq(totalSupply, 800e18, "active same-chain sucker should win over deprecated state");
     }
 
     /// @notice When deprecated and active suckers target different chains, both contribute

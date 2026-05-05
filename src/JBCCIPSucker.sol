@@ -42,10 +42,10 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
     //*********************************************************************//
 
     /// @notice Emitted when a transport payment refund fails after a successful CCIP send.
-    /// @dev The refunded ETH is permanently stuck in this contract — there is no recovery function.
-    /// This is an accepted tradeoff to avoid reverting after CCIP has committed the bridge message.
+    /// @dev The refunded ETH is retained as account-scoped credit so the CCIP send does not revert after
+    /// committing the bridge message.
     /// @param recipient The address that was supposed to receive the refund.
-    /// @param amount The amount of the failed refund (permanently stuck in this contract).
+    /// @param amount The amount of the failed refund.
     event TransportPaymentRefundFailed(address indexed recipient, uint256 amount);
 
     //*********************************************************************//
@@ -74,21 +74,23 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
 
     /// @param deployer A contract that deploys the clones for this contract.
     /// @param directory A contract storing directories of terminals and controllers for each project.
-    /// @param tokens A contract that manages token minting and burning.
     /// @param permissions A contract storing permissions.
+    /// @param prices The price oracle used to convert peer-chain balances and surplus.
+    /// @param tokens A contract that manages token minting and burning.
     /// @param feeProjectId The ID of the project that receives fees.
     /// @param registry The sucker registry that tracks deployed suckers.
     /// @param trustedForwarder The trusted forwarder for ERC-2771 meta-transactions.
     constructor(
         JBCCIPSuckerDeployer deployer,
         IJBDirectory directory,
-        IJBTokens tokens,
         IJBPermissions permissions,
+        address prices,
+        IJBTokens tokens,
         uint256 feeProjectId,
         IJBSuckerRegistry registry,
         address trustedForwarder
     )
-        JBSucker(directory, permissions, tokens, feeProjectId, registry, trustedForwarder)
+        JBSucker(directory, permissions, prices, tokens, feeProjectId, registry, trustedForwarder)
     {
         // Read the remote chain ID from the deployer.
         REMOTE_CHAIN_ID = IJBCCIPSuckerDeployer(deployer).ccipRemoteChainId();
@@ -248,8 +250,13 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
             refundRecipient: _msgSender()
         });
 
-        // Emit an event if the excess transport payment refund failed.
-        if (refundFailed) emit TransportPaymentRefundFailed(_msgSender(), refundAmount);
+        // Retain failed refunds as caller credit instead of leaving them project-addable or stranded.
+        if (refundFailed) {
+            // Refund accounting is isolated per caller; reentry cannot increase the retained credit.
+            // slither-disable-next-line reentrancy-benign
+            _retainTransportPaymentRefund({account: _msgSender(), amount: refundAmount});
+            emit TransportPaymentRefundFailed({recipient: _msgSender(), amount: refundAmount});
+        }
     }
 
     //*********************************************************************//
@@ -282,7 +289,7 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
         // funds. CCIP wraps native tokens to WETH before bridging (see `_sendRootOverAMB`), so ALL tokens —
         // including native — need sufficient gas for an ERC-20 transfer on the remote chain.
         if (map.minGas < MESSENGER_ERC20_MIN_GAS_LIMIT) {
-            revert JBSucker_BelowMinGas(map.minGas, MESSENGER_ERC20_MIN_GAS_LIMIT);
+            revert JBSucker_BelowMinGas({minGas: map.minGas, minGasLimit: MESSENGER_ERC20_MIN_GAS_LIMIT});
         }
     }
 }

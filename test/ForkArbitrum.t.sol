@@ -66,7 +66,8 @@ contract ForkArbitrumDeployerTest is TestBaseWorkflow, IERC721Receiver {
 
         // ── L1 (Ethereum mainnet)
         l1Fork = vm.createSelectFork("ethereum");
-        vm.rollFork(block.number - 5);
+        // Some RPCs report a new head before its account state is queryable. Stay one executed block behind.
+        vm.rollFork(block.number - 1);
         super.setUp();
         vm.stopPrank();
 
@@ -86,6 +87,7 @@ contract ForkArbitrumDeployerTest is TestBaseWorkflow, IERC721Receiver {
             deployer: deployerL1,
             directory: jbDirectory(),
             permissions: jbPermissions(),
+            prices: address(jbPrices()),
             tokens: jbTokens(),
             feeProjectId: 1,
             registry: IJBSuckerRegistry(address(0)),
@@ -94,11 +96,10 @@ contract ForkArbitrumDeployerTest is TestBaseWorkflow, IERC721Receiver {
 
         deployerL1.configureSingleton(singletonL1);
         _launchProject();
-        suckerL1 = deployerL1.createForSender(1, "arb-l1");
+        suckerL1 = deployerL1.createForSender(1, "arb-l1", bytes32(0));
 
         // ── L2 (Arbitrum mainnet)
         l2Fork = vm.createSelectFork("arbitrum");
-        vm.rollFork(block.number - 5);
         super.setUp();
         vm.stopPrank();
 
@@ -119,6 +120,7 @@ contract ForkArbitrumDeployerTest is TestBaseWorkflow, IERC721Receiver {
             deployer: deployerL2,
             directory: jbDirectory(),
             permissions: jbPermissions(),
+            prices: address(jbPrices()),
             tokens: jbTokens(),
             feeProjectId: 1,
             registry: IJBSuckerRegistry(address(0)),
@@ -127,7 +129,7 @@ contract ForkArbitrumDeployerTest is TestBaseWorkflow, IERC721Receiver {
 
         deployerL2.configureSingleton(singletonL2);
         _launchProject();
-        suckerL2 = deployerL2.createForSender(1, "arb-l2");
+        suckerL2 = deployerL2.createForSender(1, "arb-l2", bytes32(0));
 
         // Mock the registry's toRemoteFee() on both forks (registry is address(0) in tests).
         vm.selectFork(l1Fork);
@@ -255,7 +257,8 @@ contract ForkArbitrumNativeTransferTest is TestBaseWorkflow {
 
         // ── L1 (Ethereum mainnet)
         l1Fork = vm.createSelectFork("ethereum");
-        vm.rollFork(block.number - 5);
+        // Some RPCs report a new head before its account state is queryable. Stay one executed block behind.
+        vm.rollFork(block.number - 1);
         super.setUp();
         vm.stopPrank();
 
@@ -278,6 +281,7 @@ contract ForkArbitrumNativeTransferTest is TestBaseWorkflow {
             deployer: deployerL1,
             directory: jbDirectory(),
             permissions: jbPermissions(),
+            prices: address(jbPrices()),
             tokens: jbTokens(),
             feeProjectId: 1,
             registry: IJBSuckerRegistry(address(0)),
@@ -286,7 +290,7 @@ contract ForkArbitrumNativeTransferTest is TestBaseWorkflow {
         vm.stopPrank();
 
         deployerL1.configureSingleton(singletonL1);
-        suckerL1 = deployerL1.createForSender(1, "arb-native");
+        suckerL1 = deployerL1.createForSender(1, "arb-native", bytes32(0));
         vm.label(address(suckerL1), "suckerL1");
 
         // Grant sucker mint permission.

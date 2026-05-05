@@ -419,17 +419,17 @@ jobs:
           submodules: recursive
       - uses: actions/setup-node@v4
         with:
-          node-version: 22.4.x
+          node-version: 25.9.0
       - name: Install npm dependencies
         run: npm install --omit=dev
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
       - name: Run tests
-        run: forge test --fail-fast --summary --detailed --skip "*/script/**"
+        run: forge test --deny notes --fail-fast --summary --detailed --skip "*/script/**"
         env:
           RPC_ETHEREUM_MAINNET: ${{ secrets.RPC_ETHEREUM_MAINNET }}
       - name: Check contract sizes
-        run: forge build --sizes --skip "*/test/**" --skip "*/script/**" --skip SphinxUtils
+        run: forge build --deny notes --sizes --skip "*/test/**" --skip "*/script/**" --skip SphinxUtils
 ```
 
 **lint.yml:**
@@ -470,16 +470,19 @@ jobs:
           submodules: recursive
       - uses: actions/setup-node@v4
         with:
-          node-version: latest
+          node-version: 25.9.0
       - name: Install npm dependencies
         run: npm install --omit=dev
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
+      - name: Build contracts
+        run: forge build --deny notes --build-info --skip "*/test/**" --skip "*/script/**"
       - name: Run slither
-        uses: crytic/slither-action@v0.3.1
+        uses: crytic/slither-action@v0.4.1
         with:
             slither-config: slither-ci.config.json
             fail-on: medium
+            ignore-compile: true
 ```
 
 **slither-ci.config.json:**
@@ -515,7 +518,7 @@ jobs:
   },
   "dependencies": { ... },
   "devDependencies": {
-    "@sphinx-labs/plugins": "^0.33.2"
+    "@sphinx-labs/plugins": "0.33.3"
   }
 }
 ```
@@ -603,8 +606,8 @@ CI checks formatting via `forge fmt --check`.
 - `forge-std` as a git submodule in `lib/`
 - Sphinx plugins as a devDependency
 - Cross-repo references use `file:../sibling-repo` in local development
-- Published versions use semver ranges (`^0.0.x`) for npm
+- Published versions use exact semver pins for npm
 
 ### Contract Size Checks
 
-CI runs `forge build --sizes` to catch contracts approaching the 24KB limit. When the repo's default `optimizer_runs` differs from what you want for size checking, use `FOUNDRY_PROFILE=ci_sizes forge build --sizes` with a `[profile.ci_sizes]` section in `foundry.toml`.
+CI runs `forge build --deny notes --sizes` to catch contracts approaching the 24KB limit. When the repo's default `optimizer_runs` differs from what you want for size checking, use `FOUNDRY_PROFILE=ci_sizes forge build --deny notes --sizes` with a `[profile.ci_sizes]` section in `foundry.toml`.

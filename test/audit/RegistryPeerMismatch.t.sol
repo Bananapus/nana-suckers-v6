@@ -92,7 +92,14 @@ contract RegistryPeerMismatchTest is Test {
         deployer.setChainSpecificConstants(IOPMessenger(MESSENGER), IOPStandardBridge(BRIDGE));
 
         JBOptimismSucker singleton = new JBOptimismSucker(
-            deployer, IJBDirectory(DIRECTORY), IJBPermissions(PERMISSIONS), IJBTokens(TOKENS), 1, registry, address(0)
+            deployer,
+            IJBDirectory(DIRECTORY),
+            IJBPermissions(PERMISSIONS),
+            address(1),
+            IJBTokens(TOKENS),
+            1,
+            registry,
+            address(0)
         );
         vm.prank(OWNER);
         deployer.configureSingleton(singleton);
@@ -107,6 +114,6 @@ contract RegistryPeerMismatchTest is Test {
         returns (JBSuckerDeployerConfig[] memory configs)
     {
         configs = new JBSuckerDeployerConfig[](1);
-        configs[0] = JBSuckerDeployerConfig({deployer: deployer, mappings: new JBTokenMapping[](0)});
+        configs[0] = JBSuckerDeployerConfig({deployer: deployer, peer: bytes32(0), mappings: new JBTokenMapping[](0)});
     }
 }

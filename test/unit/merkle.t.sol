@@ -32,6 +32,7 @@ contract MerkleUnitTest is JBSucker, Test {
         JBSucker(
             IJBDirectory(address(new MockDirectory())),
             IJBPermissions(address(800)),
+            address(1),
             IJBTokens(address(700)),
             1,
             IJBSuckerRegistry(address(this)),
@@ -217,6 +218,7 @@ contract DeployerUnitTest is Test {
             _deployer,
             dir,
             IJBPermissions(address(0)),
+            address(1),
             IJBTokens(address(0)),
             1,
             IJBSuckerRegistry(address(this)),
@@ -227,6 +229,6 @@ contract DeployerUnitTest is Test {
         _deployer.configureSingleton(_sucker);
 
         // Create a sucker for a project.
-        _deployer.createForSender(1, bytes32(0));
+        _deployer.createForSender(1, bytes32(0), bytes32(0));
     }
 }

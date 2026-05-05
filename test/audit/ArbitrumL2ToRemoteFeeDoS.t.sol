@@ -33,7 +33,7 @@ contract ArbitrumL2FeeHarness is JBArbitrumSucker {
         IJBTokens tokens,
         IJBSuckerRegistry registry
     )
-        JBArbitrumSucker(deployer, directory, permissions, tokens, 1, registry, address(0))
+        JBArbitrumSucker(deployer, directory, permissions, address(1), tokens, 1, registry, address(0))
     {}
 
     function seedOutbox(address token, bytes32 remoteToken) external {

@@ -42,7 +42,7 @@ contract ZeroCostBridgeSucker is JBSucker {
         IJBSuckerRegistry registry,
         address forwarder
     )
-        JBSucker(directory, permissions, tokens, feeProjectId, registry, forwarder)
+        JBSucker(directory, permissions, address(1), tokens, feeProjectId, registry, forwarder)
     {}
 
     // forge-lint: disable-next-line(mixed-case-function)

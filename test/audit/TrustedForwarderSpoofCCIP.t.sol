@@ -62,6 +62,7 @@ contract TrustedForwarderSpoofCCIPTest is Test {
             deployer: deployer,
             directory: IJBDirectory(DIRECTORY),
             permissions: IJBPermissions(PERMISSIONS),
+            prices: address(1),
             tokens: IJBTokens(TOKENS),
             feeProjectId: 1,
             registry: IJBSuckerRegistry(REGISTRY),

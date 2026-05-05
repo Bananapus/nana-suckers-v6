@@ -87,7 +87,7 @@ contract ForkCeloTest is TestBaseWorkflow {
         // ── L1 (Ethereum)
         // ────────────────────────────────────────────────────────────
         l1Fork = vm.createSelectFork("ethereum");
-        vm.rollFork(block.number - 5);
+        vm.rollFork(block.number - 1);
 
         // Deploy full JB infrastructure on L1.
         super.setUp();
@@ -106,6 +106,7 @@ contract ForkCeloTest is TestBaseWorkflow {
             deployer: suckerDeployerL1,
             directory: jbDirectory(),
             permissions: jbPermissions(),
+            prices: address(jbPrices()),
             tokens: jbTokens(),
             feeProjectId: 1,
             registry: IJBSuckerRegistry(address(0)),
@@ -114,7 +115,7 @@ contract ForkCeloTest is TestBaseWorkflow {
         vm.stopPrank();
 
         suckerDeployerL1.configureSingleton(singletonL1);
-        suckerL1 = suckerDeployerL1.createForSender(1, "salty");
+        suckerL1 = suckerDeployerL1.createForSender(1, "salty", bytes32(0));
         vm.label(address(suckerL1), "suckerL1");
 
         // Grant sucker mint permission on L1.
@@ -132,7 +133,7 @@ contract ForkCeloTest is TestBaseWorkflow {
         // ── L2 (Celo)
         // ────────────────────────────────────────────────────────────
         l2Fork = vm.createSelectFork("celo");
-        vm.rollFork(block.number - 5);
+        vm.rollFork(block.number - 1);
 
         // Deploy full JB infrastructure on Celo.
         super.setUp();
@@ -150,6 +151,7 @@ contract ForkCeloTest is TestBaseWorkflow {
             deployer: suckerDeployerL2,
             directory: jbDirectory(),
             permissions: jbPermissions(),
+            prices: address(jbPrices()),
             tokens: jbTokens(),
             feeProjectId: 1,
             registry: IJBSuckerRegistry(address(0)),
@@ -158,7 +160,7 @@ contract ForkCeloTest is TestBaseWorkflow {
         vm.stopPrank();
 
         suckerDeployerL2.configureSingleton(singletonL2);
-        suckerL2 = suckerDeployerL2.createForSender(1, "salty");
+        suckerL2 = suckerDeployerL2.createForSender(1, "salty", bytes32(0));
         vm.label(address(suckerL2), "suckerL2");
 
         // Grant L2 sucker mint permission and launch L2 project.

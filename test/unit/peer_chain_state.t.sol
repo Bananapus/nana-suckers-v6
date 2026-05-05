@@ -9,10 +9,14 @@ import {IJBDirectory} from "@bananapus/core-v6/src/interfaces/IJBDirectory.sol";
 import {IJBMultiTerminal} from "@bananapus/core-v6/src/interfaces/IJBMultiTerminal.sol";
 import {IJBPermissions} from "@bananapus/core-v6/src/interfaces/IJBPermissions.sol";
 import {IJBPrices} from "@bananapus/core-v6/src/interfaces/IJBPrices.sol";
+import {IJBRulesetApprovalHook} from "@bananapus/core-v6/src/interfaces/IJBRulesetApprovalHook.sol";
 import {IJBTerminal} from "@bananapus/core-v6/src/interfaces/IJBTerminal.sol";
 import {IJBTerminalStore} from "@bananapus/core-v6/src/interfaces/IJBTerminalStore.sol";
 import {IJBTokens} from "@bananapus/core-v6/src/interfaces/IJBTokens.sol";
+import {JBRulesetMetadataResolver} from "@bananapus/core-v6/src/libraries/JBRulesetMetadataResolver.sol";
 import {JBAccountingContext} from "@bananapus/core-v6/src/structs/JBAccountingContext.sol";
+import {JBRuleset} from "@bananapus/core-v6/src/structs/JBRuleset.sol";
+import {JBRulesetMetadata} from "@bananapus/core-v6/src/structs/JBRulesetMetadata.sol";
 import {IERC165} from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
 import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import {LibClone} from "solady/src/utils/LibClone.sol";
@@ -20,6 +24,7 @@ import {LibClone} from "solady/src/utils/LibClone.sol";
 // forge-lint: disable-next-line(unaliased-plain-import)
 import "../../src/JBSucker.sol";
 
+import {IJBPeerChainAdjustedAccounts} from "../../src/interfaces/IJBPeerChainAdjustedAccounts.sol";
 import {IJBSuckerRegistry} from "../../src/interfaces/IJBSuckerRegistry.sol";
 import {JBDenominatedAmount} from "../../src/structs/JBDenominatedAmount.sol";
 import {JBInboxTreeRoot} from "../../src/structs/JBInboxTreeRoot.sol";
@@ -45,7 +50,7 @@ contract PeerChainStateSucker is JBSucker {
         IJBTokens tokens,
         address forwarder
     )
-        JBSucker(directory, permissions, tokens, 1, IJBSuckerRegistry(address(1)), forwarder)
+        JBSucker(directory, permissions, address(1400), tokens, 1, IJBSuckerRegistry(address(1)), forwarder)
     {}
 
     // forge-lint: disable-next-line(mixed-case-function)
@@ -102,6 +107,30 @@ contract PeerChainStateSucker is JBSucker {
     }
 }
 
+contract PeerChainAdjustedAccountsHookMock is IJBPeerChainAdjustedAccounts {
+    uint256 internal immutable _balance;
+    uint256 internal immutable _supply;
+    uint256 internal immutable _surplus;
+
+    constructor(uint256 supply, uint256 surplus) {
+        _balance = 0;
+        _supply = supply;
+        _surplus = surplus;
+    }
+
+    function peerChainAdjustedAccountsOf(
+        uint256,
+        uint256,
+        uint256
+    )
+        external
+        view
+        returns (uint256 supply, uint256 surplus, uint256 balance)
+    {
+        return (_supply, _surplus, _balance);
+    }
+}
+
 /// @title PeerChainStateTest
 /// @notice Tests for peer chain state tracking: fromRemote storage, peerChainBalanceOf/SurplusOf views,
 /// and buildETHAggregate message propagation via toRemote/sendRoot.
@@ -152,6 +181,7 @@ contract PeerChainStateTest is Test {
             abi.encodeCall(IJBController.totalTokenSupplyWithReservedTokensOf, (PROJECT_ID)),
             abi.encode(uint256(0))
         );
+        vm.mockCall(CONTROLLER, abi.encodeCall(IJBController.PRICES, ()), abi.encode(PRICES));
         vm.mockCall(
             DIRECTORY, abi.encodeCall(IJBDirectory.primaryTerminalOf, (PROJECT_ID, TOKEN)), abi.encode(TERMINAL)
         );
@@ -405,6 +435,95 @@ contract PeerChainStateTest is Test {
         assertEq(m.sourceDecimals, ETH_DECIMALS, "sourceDecimals should be 18");
         assertEq(m.sourceSurplus, 30 ether, "sourceSurplus should match mock");
         assertEq(m.sourceBalance, 50 ether, "sourceBalance should match mock");
+    }
+
+    /// @notice toRemote includes optional data-hook accounting in the peer-chain supply and surplus snapshot.
+    function test_toRemoteAddsDataHookPeerChainAdjustedAccounts() public {
+        sucker.test_setRemoteToken(
+            TOKEN,
+            JBRemoteToken({
+                enabled: true,
+                emergencyHatch: false,
+                minGas: 200_000,
+                addr: bytes32(uint256(uint160(makeAddr("remoteToken"))))
+            })
+        );
+
+        vm.deal(address(sucker), 1 ether);
+        sucker.test_insertIntoTree(1 ether, TOKEN, 1 ether, bytes32(uint256(uint160(address(0xBEEF)))));
+
+        vm.mockCall(
+            CONTROLLER,
+            abi.encodeCall(IJBController.totalTokenSupplyWithReservedTokensOf, (PROJECT_ID)),
+            abi.encode(uint256(1000 ether))
+        );
+        _mockSingleETHTerminal({ethBalance: 50 ether, ethSurplus: 30 ether});
+
+        PeerChainAdjustedAccountsHookMock accountingHook =
+            new PeerChainAdjustedAccountsHookMock({supply: 12 ether, surplus: 3 ether});
+        vm.etch(CONTROLLER, hex"00");
+        JBRulesetMetadata memory metadata;
+        metadata.dataHook = address(accountingHook);
+        JBRuleset memory ruleset = JBRuleset({
+            cycleNumber: 0,
+            id: 1,
+            basedOnId: 0,
+            start: 0,
+            duration: 0,
+            weight: 0,
+            weightCutPercent: 0,
+            approvalHook: IJBRulesetApprovalHook(address(0)),
+            metadata: JBRulesetMetadataResolver.packRulesetMetadata(metadata)
+        });
+        vm.mockCall(
+            CONTROLLER, abi.encodeCall(IJBController.currentRulesetOf, (PROJECT_ID)), abi.encode(ruleset, metadata)
+        );
+
+        sucker.test_resetSendRootOverAMBCalled();
+        sucker.toRemote(TOKEN);
+
+        JBMessageRoot memory m = sucker.test_getLastSentMessage();
+        assertEq(m.sourceTotalSupply, 1012 ether, "sourceTotalSupply should include data-hook supply");
+        assertEq(m.sourceSurplus, 33 ether, "sourceSurplus should include data-hook surplus");
+        assertEq(m.sourceBalance, 50 ether, "sourceBalance should not include loan debt");
+    }
+
+    /// @notice toRemote assigns a monotonic source freshness key even when multiple roots are sent in one block.
+    function test_toRemoteUsesMonotonicSnapshotFreshnessWithinSameBlock() public {
+        sucker.test_setRemoteToken(
+            TOKEN,
+            JBRemoteToken({
+                enabled: true,
+                emergencyHatch: false,
+                minGas: 200_000,
+                addr: bytes32(uint256(uint160(makeAddr("remoteToken"))))
+            })
+        );
+
+        vm.deal(address(sucker), 2 ether);
+        sucker.test_insertIntoTree(1 ether, TOKEN, 1 ether, bytes32(uint256(uint160(address(0xBEEF)))));
+
+        vm.mockCall(
+            CONTROLLER,
+            abi.encodeCall(IJBController.totalTokenSupplyWithReservedTokensOf, (PROJECT_ID)),
+            abi.encode(uint256(1000 ether))
+        );
+        _mockSingleETHTerminal({ethBalance: 50 ether, ethSurplus: 30 ether});
+
+        sucker.test_resetSendRootOverAMBCalled();
+        sucker.toRemote(TOKEN);
+        JBMessageRoot memory first = sucker.test_getLastSentMessage();
+
+        sucker.test_insertIntoTree(2 ether, TOKEN, 1 ether, bytes32(uint256(uint160(address(0xCAFE)))));
+        sucker.toRemote(TOKEN);
+        JBMessageRoot memory second = sucker.test_getLastSentMessage();
+
+        assertEq(first.sourceTimestamp >> 128, block.timestamp, "first freshness key includes source timestamp");
+        assertEq(uint128(first.sourceTimestamp), 1, "first freshness key sequence");
+        assertEq(second.sourceTimestamp >> 128, block.timestamp, "second freshness key includes source timestamp");
+        assertEq(uint128(second.sourceTimestamp), 2, "second freshness key sequence");
+        assertGt(second.sourceTimestamp, first.sourceTimestamp, "same-block freshness key increases");
+        assertEq(block.timestamp, 100 days, "test stayed in one block timestamp");
     }
 
     /// @notice toRemote with no terminals produces surplus=0, balance=0 in message.

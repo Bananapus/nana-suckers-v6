@@ -25,4 +25,4 @@
 
 - [`test/SuckerAttacks.t.sol`](../test/SuckerAttacks.t.sol), [`test/SuckerDeepAttacks.t.sol`](../test/SuckerDeepAttacks.t.sol), and [`test/TestAuditGaps.sol`](../test/TestAuditGaps.sol) for security-sensitive assumptions.
 - [`test/InteropCompat.t.sol`](../test/InteropCompat.t.sol) when the problem is deployment wiring rather than runtime logic.
-- [`test/unit/invariants.t.sol`](../test/unit/invariants.t.sol), [`test/unit/peer_chain_state.t.sol`](../test/unit/peer_chain_state.t.sol), and [`test/audit/codex-PeerSnapshotDesync.t.sol`](../test/audit/codex-PeerSnapshotDesync.t.sol) when shared accounting or snapshot boundaries are in doubt.
+- [`test/unit/invariants.t.sol`](../test/unit/invariants.t.sol), [`test/unit/peer_chain_state.t.sol`](../test/unit/peer_chain_state.t.sol), and [`test/audit/PeerSnapshotDesync.t.sol`](../test/audit/PeerSnapshotDesync.t.sol) when shared accounting or snapshot boundaries are in doubt.

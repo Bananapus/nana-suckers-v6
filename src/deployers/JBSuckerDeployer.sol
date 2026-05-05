@@ -138,14 +138,16 @@ abstract contract JBSuckerDeployer is ERC2771Context, JBPermissioned, IJBSuckerD
         singleton = _singleton;
     }
 
-    /// @notice Create a new `JBSucker` for a specific project.
+    /// @notice Create a new `JBSucker` for a specific project with an explicit remote peer.
     /// @dev Uses the sender address as the salt, which means the same sender must call this function on both chains.
     /// @param localProjectId The project's ID on the local chain.
     /// @param salt The salt to use for the `create2` address.
+    /// @param peer The remote peer address. Leave zero to use the default deterministic same-address peer.
     /// @return sucker The address of the new sucker.
     function createForSender(
         uint256 localProjectId,
-        bytes32 salt
+        bytes32 salt,
+        bytes32 peer
     )
         external
         override(IJBSuckerDeployer)
@@ -166,6 +168,6 @@ abstract contract JBSuckerDeployer is ERC2771Context, JBPermissioned, IJBSuckerD
         isSucker[address(sucker)] = true;
 
         // Initialize the clone.
-        JBSucker(payable(address(sucker))).initialize(localProjectId);
+        JBSucker(payable(address(sucker))).initialize({localProjectId: localProjectId, remotePeer: peer});
     }
 }

@@ -152,6 +152,7 @@ contract DeployerTests is Test, TestBaseWorkflow, IERC721Receiver {
             deployer: OPDeployer,
             directory: jbDirectory(),
             permissions: jbPermissions(),
+            prices: address(jbPrices()),
             tokens: jbTokens(),
             feeProjectId: 1,
             registry: IJBSuckerRegistry(address(0)),
@@ -193,6 +194,7 @@ contract DeployerTests is Test, TestBaseWorkflow, IERC721Receiver {
             deployer: CCIPDeployer,
             directory: jbDirectory(),
             permissions: jbPermissions(),
+            prices: address(jbPrices()),
             tokens: jbTokens(),
             feeProjectId: 1,
             registry: IJBSuckerRegistry(address(0)),
@@ -232,6 +234,7 @@ contract DeployerTests is Test, TestBaseWorkflow, IERC721Receiver {
             deployer: ARBDeployer,
             directory: jbDirectory(),
             permissions: jbPermissions(),
+            prices: address(jbPrices()),
             tokens: jbTokens(),
             feeProjectId: 1,
             registry: IJBSuckerRegistry(address(0)),
@@ -418,7 +421,7 @@ contract DeployerTests is Test, TestBaseWorkflow, IERC721Receiver {
         internal
         returns (IJBSucker)
     {
-        return deployer.createForSender(_projectId, salt);
+        return deployer.createForSender(_projectId, salt, bytes32(0));
     }
 
     function _deployThroughRegistry(
@@ -437,7 +440,7 @@ contract DeployerTests is Test, TestBaseWorkflow, IERC721Receiver {
         });
 
         JBSuckerDeployerConfig[] memory configurations = new JBSuckerDeployerConfig[](1);
-        configurations[0] = JBSuckerDeployerConfig({deployer: deployer, mappings: mappings});
+        configurations[0] = JBSuckerDeployerConfig({deployer: deployer, peer: bytes32(0), mappings: mappings});
 
         return IJBSucker(registry.deploySuckersFor(_projectId, salt, configurations)[0]);
     }
@@ -550,7 +553,7 @@ contract DeployerTests is Test, TestBaseWorkflow, IERC721Receiver {
             remoteToken: bytes32(uint256(uint160(JBConstants.NATIVE_TOKEN)))
         });
         JBSuckerDeployerConfig[] memory configs2 = new JBSuckerDeployerConfig[](1);
-        configs2[0] = JBSuckerDeployerConfig({deployer: deployer2, mappings: mappings2});
+        configs2[0] = JBSuckerDeployerConfig({deployer: deployer2, peer: bytes32(0), mappings: mappings2});
 
         vm.expectRevert(
             abi.encodeWithSelector(
