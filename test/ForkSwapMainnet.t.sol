@@ -157,7 +157,7 @@ abstract contract SwapCCIPSuckerForkTestBase is SuckerForkHelpers {
         JBSwapCCIPSucker swapSucker = JBSwapCCIPSucker(payable(address(suckerL1)));
         assertEq(address(swapSucker.BRIDGE_TOKEN()), _bridgeToken(), "BRIDGE_TOKEN mismatch");
         assertEq(address(swapSucker.V3_FACTORY()), _v3Factory(), "V3_FACTORY mismatch");
-        assertEq(address(swapSucker.WETH()), _weth(), "WETH mismatch");
+        assertEq(address(swapSucker.WRAPPED_NATIVE_TOKEN()), _weth(), "WETH mismatch");
         assertEq(address(swapSucker.POOL_MANAGER()), address(0), "No V4 pool manager");
         assertEq(address(swapSucker.CCIP_ROUTER()), CCIPHelper.routerOfChain(_l1ChainId()), "CCIP router mismatch");
         assertEq(swapSucker.REMOTE_CHAIN_ID(), _remoteChainId(), "Remote chain ID mismatch");

@@ -56,7 +56,10 @@ contract ForkSwapHarness is JBSwapCCIPSucker {
     {
         return JBSwapPoolLib.discoverPool(
             JBSwapPoolLib.SwapConfig({
-                v3Factory: V3_FACTORY, poolManager: POOL_MANAGER, univ4Hook: UNIV4_HOOK, weth: address(WETH)
+                v3Factory: V3_FACTORY,
+                poolManager: POOL_MANAGER,
+                univ4Hook: UNIV4_HOOK,
+                weth: address(WRAPPED_NATIVE_TOKEN)
             }),
             normalizedIn,
             normalizedOut
@@ -77,7 +80,7 @@ contract ForkSwapHarness is JBSwapCCIPSucker {
 
     /// @notice Expose normalization for testing.
     function exposed_normalize(address token) external view returns (address) {
-        return token == JBConstants.NATIVE_TOKEN ? address(WETH) : token;
+        return token == JBConstants.NATIVE_TOKEN ? address(WRAPPED_NATIVE_TOKEN) : token;
     }
 
     /// @notice Read a conversion rate for a given nonce.
@@ -175,7 +178,7 @@ contract ForkSwapTest is Test {
     /// @notice Constructor wires real V3 factory and WETH from deployer.
     function test_immutables() public view {
         assertEq(address(sucker.V3_FACTORY()), V3_FACTORY, "V3_FACTORY should be real mainnet factory");
-        assertEq(address(sucker.WETH()), MAINNET_WETH, "WETH should be real mainnet WETH");
+        assertEq(address(sucker.WRAPPED_NATIVE_TOKEN()), MAINNET_WETH, "WETH should be real mainnet WETH");
         assertEq(address(sucker.BRIDGE_TOKEN()), USDC, "BRIDGE_TOKEN should be real mainnet USDC");
         assertEq(address(sucker.POOL_MANAGER()), address(0), "POOL_MANAGER should be 0 (V4 not configured)");
     }

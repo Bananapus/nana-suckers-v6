@@ -174,7 +174,7 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
             // Decode the root message from the payload.
             JBMessageRoot memory root = abi.decode(payload, (JBMessageRoot));
 
-            // Only unwrap WETH -> ETH when the root targets native token (not when claiming WETH as ERC-20).
+            // Only unwrap wrapped native token when the root targets native token (not when claiming it as ERC-20).
             if (root.token == bytes32(uint256(uint160(JBConstants.NATIVE_TOKEN)))) {
                 JBCCIPLib.unwrapReceivedTokens({
                     ccipRouter: CCIP_ROUTER, destTokenAmounts: any2EvmMessage.destTokenAmounts
@@ -224,7 +224,7 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
             // Add extra gas for the ERC-20 token transfer on the remote chain.
             gasLimit += remoteToken.minGas;
 
-            // Wrap native ETH -> WETH if needed, build the CCIP token amounts array, and approve the router.
+            // Wrap native tokens if needed, build the CCIP token amounts array, and approve the router.
             // slither-disable-next-line unused-return
             (tokenAmounts,) = JBCCIPLib.prepareTokenAmounts({ccipRouter: CCIP_ROUTER, token: token, amount: amount});
         } else {
@@ -281,15 +281,15 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
     ///
     /// Example: ETH mainnet (native = ETH) <-> Celo (native = CELO, ETH is an ERC-20).
     ///   - On mainnet: `mapToken({localToken: NATIVE_TOKEN, remoteToken: celoETH_address})`
-    ///   - Sending: `_sendRootOverAMB` wraps native ETH -> WETH, bridges WETH via CCIP.
-    ///   - Receiving: `ccipReceive` checks `root.token == NATIVE_TOKEN` to decide whether to unwrap WETH -> ETH.
+    ///   - Sending: `_sendRootOverAMB` wraps native tokens, bridges them via CCIP.
+    ///   - Receiving: `ccipReceive` checks `root.token == NATIVE_TOKEN` to decide whether to unwrap.
     ///     If `root.token` is an ERC-20 address (like celoETH), no unwrap occurs — tokens stay as ERC-20.
     ///
     /// The base class restriction (`NATIVE_TOKEN` can only map to `NATIVE_TOKEN` or `address(0)`) is intentionally
     /// removed here. The base class retains that restriction for OP/Arbitrum where both chains share ETH as native.
     function _validateTokenMapping(JBTokenMapping calldata map) internal pure virtual override {
         // Enforce a reasonable minimum gas limit for bridging. A minimum which is too low could lead to the loss of
-        // funds. CCIP wraps native tokens to WETH before bridging (see `_sendRootOverAMB`), so ALL tokens —
+        // funds. CCIP wraps native tokens before bridging (see `_sendRootOverAMB`), so ALL tokens —
         // including native — need sufficient gas for an ERC-20 transfer on the remote chain.
         if (map.minGas < MESSENGER_ERC20_MIN_GAS_LIMIT) {
             revert JBSucker_BelowMinGas({minGas: map.minGas, minGasLimit: MESSENGER_ERC20_MIN_GAS_LIMIT});

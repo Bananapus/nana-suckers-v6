@@ -255,8 +255,8 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     /// @notice Accepts incoming native token (ETH) transfers.
     /// @dev This receive function is intentionally unrestricted. It must accept ETH from multiple sources:
     /// - Bridge contracts (e.g., Optimism's StandardBridge, Arbitrum's gateway) delivering bridged native tokens.
-    /// - WETH contracts during unwrapping (e.g., CCIP sucker unwraps WETH via `withdraw()` which sends ETH here).
-    /// - Terminals returning native tokens during `cashOutTokensOf` (backing asset pulls).
+    /// - Wrapped native token contracts during unwrapping (e.g., CCIP sucker unwraps via `withdraw()` which sends
+    /// native tokens here). - Terminals returning native tokens during `cashOutTokensOf` (backing asset pulls).
     /// @dev Restricting this to known senders would risk breaking bridge integrations, as bridge contracts may change
     /// addresses or use proxy patterns. The sucker's accounting (`_outboxOf[token].balance` and
     /// `amountToAddToBalanceOf`) already tracks expected native token amounts, so excess ETH sent here does not

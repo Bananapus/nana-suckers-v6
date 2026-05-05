@@ -19,13 +19,13 @@ library JBCCIPLib {
     // ---------------------- external transactions ---------------------- //
     //*********************************************************************//
 
-    /// @notice Prepare token amounts for CCIP: wrap native ETH -> WETH, build token amounts array, approve router.
+    /// @notice Prepare token amounts for CCIP: wrap native tokens, build token amounts array, approve router.
     /// @dev Runs via DELEGATECALL so native ETH wrapping uses the caller's balance.
     /// @param ccipRouter The CCIP router.
     /// @param token The token to bridge (may be NATIVE_TOKEN).
     /// @param amount The amount to bridge.
     /// @return tokenAmounts The CCIP token amounts array (length 0 or 1).
-    /// @return bridgeToken The actual ERC-20 token address to bridge (WETH if native was wrapped).
+    /// @return bridgeToken The actual ERC-20 token address to bridge (wrapped native token if native was wrapped).
     function prepareTokenAmounts(
         ICCIPRouter ccipRouter,
         address token,
@@ -42,13 +42,13 @@ library JBCCIPLib {
         // Start with the original token as the bridge token.
         bridgeToken = token;
 
-        // Wrap native ETH -> WETH for CCIP bridging. CCIP only transports ERC-20s.
+        // Wrap native tokens for CCIP bridging. CCIP only transports ERC-20s.
         if (token == JBConstants.NATIVE_TOKEN) {
             // Get the wrapped native token address from the CCIP router.
             // slither-disable-next-line calls-loop
             IWrappedNativeToken wrappedNative = ccipRouter.getWrappedNative();
 
-            // Deposit ETH to receive WETH.
+            // Deposit native tokens to receive wrapped native tokens.
             // slither-disable-next-line calls-loop,arbitrary-send-eth
             wrappedNative.deposit{value: amount}();
 
@@ -157,8 +157,8 @@ library JBCCIPLib {
         }
     }
 
-    /// @notice Unwrap WETH -> ETH from received CCIP tokens if the delivered token is the router's wrapped native.
-    /// @dev Runs via DELEGATECALL so `address(this).balance` refers to the calling contract.
+    /// @notice Unwrap wrapped native tokens from received CCIP tokens if the delivered token matches the wrapped
+    /// native. @dev Runs via DELEGATECALL so `address(this).balance` refers to the calling contract.
     /// @param ccipRouter The CCIP router (used to look up wrapped native token).
     /// @param destTokenAmounts The token amounts delivered by CCIP (length 0 or 1).
     function unwrapReceivedTokens(ICCIPRouter ccipRouter, Client.EVMTokenAmount[] calldata destTokenAmounts) external {
@@ -171,12 +171,12 @@ library JBCCIPLib {
             // slither-disable-next-line calls-loop
             IWrappedNativeToken wrappedNative = ccipRouter.getWrappedNative();
 
-            // If the delivered token is WETH and the amount is non-zero, unwrap it.
+            // If the delivered token is the wrapped native token and the amount is non-zero, unwrap it.
             if (tokenAmount.token == address(wrappedNative) && tokenAmount.amount > 0) {
                 // Record the ETH balance before unwrapping.
                 uint256 balanceBefore = address(this).balance;
 
-                // Withdraw WETH to receive ETH.
+                // Withdraw wrapped native tokens to receive native tokens.
                 wrappedNative.withdraw(tokenAmount.amount);
 
                 // Assert the ETH balance increased by the expected amount.

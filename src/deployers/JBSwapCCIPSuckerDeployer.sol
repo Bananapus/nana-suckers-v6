@@ -41,7 +41,7 @@ contract JBSwapCCIPSuckerDeployer is JBCCIPSuckerDeployer, IJBSwapCCIPSuckerDepl
     /// @notice The Uniswap V4 hook address for pool discovery (optional).
     address public univ4Hook;
 
-    /// @notice The wrapped native token address (e.g., WETH).
+    /// @notice The ERC-20 wrapper address for the chain's native token (e.g. WETH on Ethereum).
     address public weth;
 
     //*********************************************************************//
@@ -72,7 +72,7 @@ contract JBSwapCCIPSuckerDeployer is JBCCIPSuckerDeployer, IJBSwapCCIPSuckerDepl
     /// @param _poolManager The Uniswap V4 PoolManager (can be address(0) if V4 unavailable).
     /// @param _v3Factory The Uniswap V3 factory (can be address(0) if V3 unavailable).
     /// @param _univ4Hook The V4 hook for pool discovery (optional, address(0) if none).
-    /// @param _weth The wrapped native token address (e.g., WETH).
+    /// @param _weth The ERC-20 wrapper address for the chain's native token (e.g. WETH on Ethereum).
     function setSwapConstants(
         IERC20 _bridgeToken,
         IPoolManager _poolManager,
