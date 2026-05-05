@@ -127,7 +127,7 @@ library JBSuckerLib {
                                 ethBalance += JBFixedPointNumber.adjustDecimals({
                                     value: bal, decimals: dec, targetDecimals: _ETH_DECIMALS
                                 });
-                            } else if (address(prices) != address(0)) {
+                            } else {
                                 // Otherwise, convert the balance to ETH using the price oracle.
                                 // slither-disable-next-line calls-loop
                                 try prices.pricePerUnitOf({
