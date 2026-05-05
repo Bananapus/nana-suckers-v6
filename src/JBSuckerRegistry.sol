@@ -19,7 +19,10 @@ import {IJBSuckerRegistry} from "./interfaces/IJBSuckerRegistry.sol";
 import {JBSuckerDeployerConfig} from "./structs/JBSuckerDeployerConfig.sol";
 import {JBSuckersPair} from "./structs/JBSuckersPair.sol";
 
-/// @notice A registry for deploying and tracking suckers across projects.
+/// @notice The canonical registry that deploys, tracks, and governs cross-chain suckers for Juicebox projects. It
+/// maintains an allowlist of approved deployer contracts, enforces one active sucker per peer chain per project,
+/// manages the global `toRemoteFee` (paid into the protocol fee project on each bridge send), and provides aggregate
+/// views of remote-chain balances, surplus, and token supply across all of a project's suckers.
 contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerRegistry {
     using EnumerableMap for EnumerableMap.AddressToUintMap;
 
@@ -105,8 +108,8 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
     // ------------------------- external views -------------------------- //
     //*********************************************************************//
 
-    /// @notice Returns true if the specified sucker belongs to the specified project, and was deployed through this
-    /// registry.
+    /// @notice Whether the given address is a sucker (active or deprecated) that was deployed through this registry for
+    /// the specified project. Used by controllers to authorize mint calls from suckers.
     /// @param projectId The ID of the project to check for.
     /// @param addr The address of the sucker to check.
     /// @return flag A flag indicating if the sucker belongs to the project, and was deployed through this registry.
@@ -115,7 +118,7 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
         return exists && (val == _SUCKER_EXISTS || val == _SUCKER_DEPRECATED);
     }
 
-    /// @notice Helper function for retrieving the projects suckers and their metadata.
+    /// @notice All active (non-deprecated) suckers for a project, with their remote peer address and chain ID.
     /// @param projectId The ID of the project to get the suckers of.
     /// @return pairs The pairs of suckers and their metadata.
     function suckerPairsOf(uint256 projectId) external view override returns (JBSuckersPair[] memory pairs) {
@@ -498,10 +501,10 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
         }
     }
 
-    /// @notice Deploy one or more suckers for the specified project.
-    /// @dev The caller must be the project's owner or have `JBPermissionIds.DEPLOY_SUCKERS` from the project's owner.
-    /// Each newly created sucker is immediately configured by calling `mapTokens`, so successful execution also
-    /// depends on this registry being authorized to perform `MAP_SUCKER_TOKEN` for the project.
+    /// @notice Deploy one or more cross-chain suckers for a project in a single transaction. Each sucker is created via
+    /// its deployer, registered in this registry, checked for duplicate peer chains, and immediately configured with
+    /// its token mappings. The caller must have `DEPLOY_SUCKERS` permission, and this registry must hold
+    /// `MAP_SUCKER_TOKEN` permission for the project.
     /// @param projectId The ID of the project to deploy suckers for.
     /// @param salt The salt used to deploy the contract. For the suckers to be peers, this must be the same value on
     /// each chain where suckers are deployed.

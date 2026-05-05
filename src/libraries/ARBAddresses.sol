@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.28;
 
-/// @notice Global constants used across Juicebox contracts.
+/// @notice Arbitrum bridge infrastructure addresses (Inbox and Gateway Routers) for mainnet and Sepolia.
 library ARBAddresses {
     /// @notice The respective Inbox used by L1 or Testnet L1
     address public constant L1_ETH_INBOX = 0x4Dbd4fc535Ac27206064B68FfCf827b0A60BAB3f;

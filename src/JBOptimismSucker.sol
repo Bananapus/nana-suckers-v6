@@ -17,7 +17,9 @@ import {IOPStandardBridge} from "./interfaces/IOPStandardBridge.sol";
 import {JBMessageRoot} from "./structs/JBMessageRoot.sol";
 import {JBRemoteToken} from "./structs/JBRemoteToken.sol";
 
-/// @notice A `JBSucker` implementation to suck tokens between two chains connected by an OP Bridge.
+/// @notice A `JBSucker` implementation that bridges Juicebox project tokens and terminal-token funds between two
+/// chains connected by an OP Stack bridge (Optimism, Base, etc.). Uses the `CrossDomainMessenger` for merkle-root
+/// messages and the `StandardBridge` for ERC-20/native token transfers.
 contract JBOptimismSucker is JBSucker, IJBOptimismSucker {
     //*********************************************************************//
     // --------------- public immutable stored properties ---------------- //

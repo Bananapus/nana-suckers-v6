@@ -43,17 +43,19 @@ import {JBOutboxTree} from "./structs/JBOutboxTree.sol";
 import {JBRemoteToken} from "./structs/JBRemoteToken.sol";
 import {JBTokenMapping} from "./structs/JBTokenMapping.sol";
 
-/// @notice An abstract contract for bridging a Juicebox project's tokens and the corresponding funds to and from a
-/// remote chain.
-/// @dev Beneficiaries and balances are tracked on two merkle trees: the outbox tree is used to send from the local
-/// chain to the remote chain, and the inbox tree is used to receive from the remote chain to the local chain.
+/// @notice Bridges a Juicebox project's tokens and their backing terminal-token funds between two chains. Token
+/// holders call `prepare` to cash out their project tokens and queue the resulting funds+tokens into an outbox merkle
+/// tree. Anyone can then call `toRemote` to send that tree's root (and the locked funds) across the bridge to the
+/// peer sucker on the remote chain. Once the root arrives, beneficiaries call `claim` with a merkle proof to mint
+/// project tokens and deposit the corresponding terminal tokens into the remote project's balance.
+///
+/// @dev Dual merkle trees: the **outbox** accumulates leaves for tokens leaving the local chain; the **inbox** stores
+/// the root received from the remote chain so claims can be verified locally.
 /// @dev Throughout this contract, "terminal token" refers to any token accepted by a project's terminal.
-/// @dev This contract does *NOT* support tokens that have a fee on regular transfers and rebasing tokens.
-/// @dev Cross-chain message authentication is delegated entirely to each bridge-specific subclass via the
-/// `_isRemotePeer` virtual function. Each implementation authenticates differently: Optimism uses its native
-/// `CrossDomainMessenger`, Arbitrum validates against the `Bridge` and `Outbox` contracts, and CCIP verifies
-/// through the Chainlink `Router`. Deployers of new bridge integrations must implement `_isRemotePeer` to
-/// guarantee that only messages from the legitimate remote peer are accepted.
+/// @dev This contract does *NOT* support fee-on-transfer or rebasing tokens.
+/// @dev Cross-chain message authentication is delegated to each bridge-specific subclass via `_isRemotePeer`.
+/// Optimism uses `CrossDomainMessenger`, Arbitrum validates against `Bridge`/`Outbox`, and CCIP verifies through
+/// Chainlink's `Router`.
 abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC165, IJBSuckerExtended {
     using BitMaps for BitMaps.BitMap;
     using MerkleLib for MerkleLib.Tree;
@@ -265,7 +267,8 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     // --------------------- external transactions ----------------------- //
     //*********************************************************************//
 
-    /// @notice Performs multiple claims.
+    /// @notice Claim multiple bridged entries in a single transaction. Each claim mints project tokens for the
+    /// beneficiary and deposits the corresponding terminal tokens into the project's local balance.
     /// @param claims A list of claims to perform (including the terminal token, merkle tree leaf, and proof for each
     /// claim).
     function claim(JBClaim[] calldata claims) external override {
@@ -278,7 +281,8 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         }
     }
 
-    /// @notice `JBClaim` project tokens which have been bridged from the remote chain for their beneficiary.
+    /// @notice Claim a single bridged entry: verifies the merkle proof against the inbox root, mints the specified
+    /// project tokens for the beneficiary, and deposits the terminal tokens into the project's local balance.
     /// @param claimData The terminal token, merkle tree leaf, and proof for the claim.
     function claim(JBClaim calldata claimData) public virtual override {
         // Attempt to validate the proof against the inbox tree for the terminal token.
@@ -334,8 +338,10 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         emit EmergencyHatchOpened({tokens: tokens, caller: _msgSender()});
     }
 
-    /// @notice Lets user exit on the chain they deposited in a scenario where the bridge is no longer functional.
-    /// @param claimData The terminal token, merkle tree leaf, and proof for the claim
+    /// @notice Emergency escape hatch: lets a user reclaim their project tokens and terminal tokens on the chain they
+    /// originally deposited from, when the bridge has become permanently non-functional. Must be enabled by the project
+    /// owner via the registry's `setEmergencyHatchStatusOf`.
+    /// @param claimData The terminal token, merkle tree leaf, and proof for the claim.
     function exitThroughEmergencyHatch(JBClaim calldata claimData) external override {
         // Does all the needed validation to ensure that the claim is valid *and* that claiming through the emergency
         // hatch is allowed.
@@ -368,7 +374,8 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         });
     }
 
-    /// @notice Receive a merkle root for a terminal token from the remote project.
+    /// @notice Receive a merkle root and peer-chain accounting snapshot from the remote sucker. Updates the inbox tree
+    /// so that users can claim bridged tokens. Also accepts any native-token funds delivered with the message.
     /// @dev This can only be called by the messenger contract on the local chain, with a message from the remote peer.
     /// @dev Nonce ordering: This function accepts any nonce strictly greater than the current inbox nonce, rather than
     /// requiring sequential (nonce == inbox.nonce + 1) processing. This is intentional because some bridges (e.g.,
@@ -448,8 +455,10 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         }
     }
 
-    /// @notice Map multiple ERC-20 tokens on the local chain to ERC-20 tokens on the remote chain, allowing those
-    /// tokens to be bridged.
+    /// @notice Configure which remote-chain tokens each local terminal token maps to, enabling (or disabling) those
+    /// tokens for cross-chain bridging. Setting a remote token to `bytes32(0)` disables bridging and flushes any
+    /// pending outbox entries. Requires `MAP_SUCKER_TOKEN` permission from the project owner (or called by the
+    /// registry during deployment).
     /// @param maps A list of local and remote terminal token addresses to map, and minimum amount/gas limits for
     /// bridging them.
     function mapTokens(JBTokenMapping[] calldata maps) external payable override {
@@ -495,7 +504,9 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         }
     }
 
-    /// @notice Prepare project tokens and the cash out amount backing them to be bridged to the remote chain.
+    /// @notice Queue project tokens for bridging to the remote chain. Transfers the caller's project tokens into this
+    /// contract, cashes them out for the specified terminal token, and inserts a leaf into the outbox merkle tree. The
+    /// queued entry will be bridged the next time anyone calls `toRemote` for the same `token`.
     /// @dev This adds the tokens and funds to the outbox tree for the `token`. They will be bridged by the next call to
     /// `toRemote` for the same `token`.
     /// @dev Reentrancy protection: This function has implicit reentrancy protection through `_pullBackingAssets`.
@@ -562,8 +573,9 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         });
     }
 
-    /// @notice Set or remove the time after which this sucker will be deprecated, once deprecated the sucker will no
-    /// longer be functional and it will let all users exit.
+    /// @notice Schedule (or cancel) the deprecation of this sucker. Once deprecated, no new outbound transfers are
+    /// accepted and users can exit via the emergency hatch. Requires `SET_SUCKER_DEPRECATION` permission. A mandatory
+    /// 14-day buffer ensures in-flight messages have time to arrive before the sucker fully shuts down.
     /// @param timestamp The time after which the sucker will be deprecated. Or `0` to remove the upcoming deprecation.
     function setDeprecation(uint40 timestamp) external override {
         // As long as the sucker has not started letting users withdrawal, its deprecation time can be
@@ -599,9 +611,9 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         emit DeprecationTimeUpdated({timestamp: timestamp, caller: _msgSender()});
     }
 
-    /// @notice Bridge the project tokens, cashed out funds, and beneficiary information for a given `token` to the
-    /// remote
-    /// chain.
+    /// @notice Send the accumulated outbox merkle root and locked terminal-token funds for a given `token` across the
+    /// bridge to the remote peer sucker. Anyone can call this once entries exist in the outbox. Requires `msg.value`
+    /// to cover the registry's `toRemoteFee` plus any bridge transport payment.
     /// @dev This sends the outbox root for the specified `token` to the remote chain.
     /// @dev Fee payment failure handling: The registry fee payment uses a best-effort pattern (try/catch). If the
     /// fee project's terminal doesn't exist or the `pay` call reverts, the fee ETH is retained as a refundable balance
