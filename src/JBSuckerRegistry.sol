@@ -20,9 +20,9 @@ import {JBSuckerDeployerConfig} from "./structs/JBSuckerDeployerConfig.sol";
 import {JBSuckersPair} from "./structs/JBSuckersPair.sol";
 
 /// @notice The canonical registry that deploys, tracks, and governs cross-chain suckers for Juicebox projects. It
-/// maintains an allowlist of approved deployer contracts, enforces one active sucker per peer chain per project,
-/// manages the global `toRemoteFee` (paid into the protocol fee project on each bridge send), and provides aggregate
-/// views of remote-chain balances, surplus, and token supply across all of a project's suckers.
+/// maintains an allowlist of approved deployer contracts, allows multiple active suckers per peer chain for bridge
+/// resilience, manages the global `toRemoteFee` (paid into the protocol fee project on each bridge send), and provides
+/// aggregate views of remote-chain balances, surplus, and token supply across all of a project's suckers.
 contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerRegistry {
     using EnumerableMap for EnumerableMap.AddressToUintMap;
 
@@ -30,7 +30,6 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
     // --------------------------- custom errors ------------------------- //
     //*********************************************************************//
 
-    error JBSuckerRegistry_DuplicatePeerChain(uint256 projectId, uint256 peerChainId);
     error JBSuckerRegistry_FeeExceedsMax(uint256 fee, uint256 max);
     error JBSuckerRegistry_InvalidDeployer(IJBSuckerDeployer deployer);
     error JBSuckerRegistry_SuckerDoesNotBelongToProject(uint256 projectId, address sucker);
@@ -420,8 +419,9 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
     {
         for (uint256 j; j < chainCount;) {
             if (chainIds[j] == chainId) {
-                // An active sucker is the live source for this chain. If several active suckers briefly exist during
-                // migration, keep the max value so a lower stale snapshot cannot undercount the project.
+                // Each sucker caches the entire remote chain's state (not a per-sucker share), so multiple
+                // suckers targeting the same chain report redundant snapshots. MAX picks the freshest value
+                // without double-counting — SUM would inflate bonding curve denominators.
                 if (isActive) {
                     if (!hasActiveValue[j] || value > values[j]) values[j] = value;
                     hasActiveValue[j] = true;
@@ -441,30 +441,6 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
         hasActiveValue[chainCount] = isActive;
         unchecked {
             return chainCount + 1;
-        }
-    }
-
-    /// @notice Reverts if any active sucker for the given project already targets the same peer chain as the new
-    /// sucker.
-    /// @param projectId The ID of the project to check.
-    /// @param newSucker The newly created sucker to validate.
-    function _revertIfDuplicatePeerChain(uint256 projectId, IJBSucker newSucker) internal view {
-        // The new sucker is registry-deployed and trusted for this validation.
-        // slither-disable-next-line calls-loop
-        uint256 newPeerChainId = newSucker.peerChainId();
-        address[] memory existing = _suckersOf[projectId].keys();
-        for (uint256 i; i < existing.length;) {
-            // slither-disable-next-line unused-return
-            (, uint256 val) = _suckersOf[projectId].tryGet(existing[i]);
-            if (val == _SUCKER_EXISTS) {
-                // slither-disable-next-line calls-loop
-                if (IJBSucker(existing[i]).peerChainId() == newPeerChainId) {
-                    revert JBSuckerRegistry_DuplicatePeerChain(projectId, newPeerChainId);
-                }
-            }
-            unchecked {
-                ++i;
-            }
         }
     }
 
@@ -502,9 +478,9 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
     }
 
     /// @notice Deploy one or more cross-chain suckers for a project in a single transaction. Each sucker is created via
-    /// its deployer, registered in this registry, checked for duplicate peer chains, and immediately configured with
-    /// its token mappings. The caller must have `DEPLOY_SUCKERS` permission, and this registry must hold
-    /// `MAP_SUCKER_TOKEN` permission for the project.
+    /// its deployer, registered in this registry, and immediately configured with its token mappings. Multiple suckers
+    /// targeting the same peer chain are allowed for bridge resilience. The caller must have `DEPLOY_SUCKERS`
+    /// permission, and this registry must hold `MAP_SUCKER_TOKEN` permission for the project.
     /// @param projectId The ID of the project to deploy suckers for.
     /// @param salt The salt used to deploy the contract. For the suckers to be peers, this must be the same value on
     /// each chain where suckers are deployed.
@@ -550,10 +526,6 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
             IJBSucker sucker = configuration.deployer
             .createForSender({localProjectId: projectId, salt: salt, peer: configuration.peer});
             suckers[i] = address(sucker);
-
-            // Make sure no active sucker already targets the same peer chain.
-            // slither-disable-next-line calls-loop
-            _revertIfDuplicatePeerChain({projectId: projectId, newSucker: sucker});
 
             // Store the sucker as being deployed for this project.
             // slither-disable-next-line unused-return

@@ -30,6 +30,7 @@ import "../../src/deployers/JBArbitrumSuckerDeployer.sol";
 import {JBArbitrumSucker} from "../../src/JBArbitrumSucker.sol";
 
 import {JBSuckerDeployerConfig} from "../../src/structs/JBSuckerDeployerConfig.sol";
+import {JBSuckersPair} from "../../src/structs/JBSuckersPair.sol";
 
 import {JBOptimismSuckerDeployer} from "../../src/deployers/JBOptimismSuckerDeployer.sol";
 import {JBSuckerRegistry} from "./../../src/JBSuckerRegistry.sol";
@@ -528,8 +529,8 @@ contract DeployerTests is Test, TestBaseWorkflow, IERC721Receiver {
         return sucker;
     }
 
-    /// @notice Deploying two suckers with the same peer chain ID should revert.
-    function testDuplicatePeerChainReverts(ICCIPRouter _ccipRouter) public {
+    /// @notice Deploying two suckers targeting the same peer chain should succeed (bridge resilience).
+    function testMultipleSuckersSameChainAllowed(ICCIPRouter _ccipRouter) public {
         vm.assume(uint160(address(_ccipRouter)) > 100);
         _assumeNotDeployed(address(_ccipRouter));
         vm.etch(address(_ccipRouter), "0x1");
@@ -541,26 +542,80 @@ contract DeployerTests is Test, TestBaseWorkflow, IERC721Receiver {
 
         // Deploy the first sucker targeting chain 10.
         IJBSuckerDeployer deployer1 = _addToRegistry(_setupCCIPDeployer(remoteChainId, remoteSelector, _ccipRouter));
-        _deployThroughRegistry(deployer1, projectId, bytes32("salt1"));
+        IJBSucker sucker1 = _deployThroughRegistry(deployer1, projectId, bytes32("salt1"));
 
-        // Deploy a second sucker also targeting chain 10 — should revert.
+        // Deploy a second sucker also targeting chain 10 — should succeed.
         IJBSuckerDeployer deployer2 = _addToRegistry(_setupCCIPDeployer(remoteChainId, remoteSelector + 1, _ccipRouter));
+        IJBSucker sucker2 = _deployThroughRegistry(deployer2, projectId, bytes32("salt2"));
 
-        JBTokenMapping[] memory mappings2 = new JBTokenMapping[](1);
-        mappings2[0] = JBTokenMapping({
-            localToken: address(JBConstants.NATIVE_TOKEN),
-            minGas: 300_000,
-            remoteToken: bytes32(uint256(uint160(JBConstants.NATIVE_TOKEN)))
-        });
-        JBSuckerDeployerConfig[] memory configs2 = new JBSuckerDeployerConfig[](1);
-        configs2[0] = JBSuckerDeployerConfig({deployer: deployer2, peer: bytes32(0), mappings: mappings2});
+        // Both should be registered.
+        assertTrue(registry.isSuckerOf(projectId, address(sucker1)), "sucker1 should be registered");
+        assertTrue(registry.isSuckerOf(projectId, address(sucker2)), "sucker2 should be registered");
 
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                JBSuckerRegistry.JBSuckerRegistry_DuplicatePeerChain.selector, projectId, remoteChainId
-            )
+        // suckersOf should return both.
+        address[] memory suckers = registry.suckersOf(projectId);
+        assertEq(suckers.length, 2, "should have 2 active suckers");
+
+        // suckerPairsOf should return both pairs.
+        JBSuckersPair[] memory pairs = registry.suckerPairsOf(projectId);
+        assertEq(pairs.length, 2, "should have 2 sucker pairs");
+    }
+
+    /// @notice When two suckers target the same chain, aggregate views use MAX (not SUM).
+    function testSameChainAggregateUsesMax(ICCIPRouter _ccipRouter) public {
+        vm.assume(uint160(address(_ccipRouter)) > 100);
+        _assumeNotDeployed(address(_ccipRouter));
+        vm.etch(address(_ccipRouter), "0x1");
+
+        uint256 remoteChainId = 10;
+
+        _allowMapping(projectId, address(registry));
+
+        // Deploy two suckers to the same chain.
+        IJBSuckerDeployer deployer1 = _addToRegistry(_setupCCIPDeployer(remoteChainId, 1, _ccipRouter));
+        IJBSucker sucker1 = _deployThroughRegistry(deployer1, projectId, bytes32("salt1"));
+
+        IJBSuckerDeployer deployer2 = _addToRegistry(_setupCCIPDeployer(remoteChainId, 2, _ccipRouter));
+        IJBSucker sucker2 = _deployThroughRegistry(deployer2, projectId, bytes32("salt2"));
+
+        uint256 ethCurrency = uint256(uint160(JBConstants.NATIVE_TOKEN));
+
+        // Mock: sucker1 reports 900e18, sucker2 reports 1000e18.
+        vm.mockCall(address(sucker1), abi.encodeCall(IJBSucker.peerChainTotalSupply, ()), abi.encode(900e18));
+        vm.mockCall(address(sucker2), abi.encodeCall(IJBSucker.peerChainTotalSupply, ()), abi.encode(1000e18));
+
+        // Mock peerChainId for both (same chain).
+        vm.mockCall(address(sucker1), abi.encodeCall(IJBSucker.peerChainId, ()), abi.encode(remoteChainId));
+        vm.mockCall(address(sucker2), abi.encodeCall(IJBSucker.peerChainId, ()), abi.encode(remoteChainId));
+
+        // remoteTotalSupplyOf should return MAX(900, 1000) = 1000, NOT SUM 1900.
+        assertEq(registry.remoteTotalSupplyOf(projectId), 1000e18, "should use MAX, not SUM");
+
+        // Same pattern for balance.
+        vm.mockCall(
+            address(sucker1),
+            abi.encodeCall(IJBSucker.peerChainBalanceOf, (18, ethCurrency)),
+            abi.encode(JBDenominatedAmount({value: 900e18, currency: uint32(ethCurrency), decimals: 18}))
         );
-        registry.deploySuckersFor(projectId, bytes32("salt2"), configs2);
+        vm.mockCall(
+            address(sucker2),
+            abi.encodeCall(IJBSucker.peerChainBalanceOf, (18, ethCurrency)),
+            abi.encode(JBDenominatedAmount({value: 1000e18, currency: uint32(ethCurrency), decimals: 18}))
+        );
+        assertEq(registry.remoteBalanceOf(projectId, 18, ethCurrency), 1000e18, "balance should use MAX");
+
+        // Same pattern for surplus.
+        vm.mockCall(
+            address(sucker1),
+            abi.encodeCall(IJBSucker.peerChainSurplusOf, (18, ethCurrency)),
+            abi.encode(JBDenominatedAmount({value: 900e18, currency: uint32(ethCurrency), decimals: 18}))
+        );
+        vm.mockCall(
+            address(sucker2),
+            abi.encodeCall(IJBSucker.peerChainSurplusOf, (18, ethCurrency)),
+            abi.encode(JBDenominatedAmount({value: 1000e18, currency: uint32(ethCurrency), decimals: 18}))
+        );
+        assertEq(registry.remoteSurplusOf(projectId, 18, ethCurrency), 1000e18, "surplus should use MAX");
     }
 
     /// @notice After deprecating and removing a sucker, a new sucker to the same peer chain should succeed.
