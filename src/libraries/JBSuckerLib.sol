@@ -227,7 +227,7 @@ library JBSuckerLib {
     /// @param prices The price oracle to use for non-ETH terminal-token balances.
     /// @param projectId The project ID.
     /// @param remoteToken The remote token bytes32 address.
-    /// @param amount The amount of terminal tokens being bridged.
+    /// @param amount The amount of terminal tokens to bridge.
     /// @param nonce The outbox nonce for this send.
     /// @param root The merkle root of the outbox tree.
     /// @param messageVersion The message format version.
@@ -269,8 +269,8 @@ library JBSuckerLib {
     /// @notice Optional project-specific adjusted accounts to add to peer-chain snapshots.
     /// @dev Reads the current ruleset's data hook and asks it for extra supply/surplus. Non-supporting hooks,
     /// broken hooks, and short return data are ignored so a project's baseline snapshot remains usable.
-    /// @param controller The controller for the project being snapshotted.
-    /// @param projectId The project being snapshotted.
+    /// @param controller The controller for the project to snapshot.
+    /// @param projectId The project to snapshot.
     /// @return additionalSupply The supply to add to `sourceTotalSupply`.
     /// @return additionalSurplus The surplus to add to `sourceSurplus`, denominated in ETH at 18 decimals.
     /// @return additionalBalance The balance to add to `sourceBalance`, denominated in ETH at 18 decimals.
@@ -308,7 +308,7 @@ library JBSuckerLib {
     /// @notice Builds the local accounting values used in outbound peer-chain snapshots.
     /// @param directory The JB directory to look up controllers and terminals.
     /// @param prices The price oracle to use for non-ETH terminal-token balances.
-    /// @param projectId The project being snapshotted.
+    /// @param projectId The project to snapshot.
     /// @return localTotalSupply The total project token supply, including reserved tokens.
     /// @return ethSurplus The terminal surplus denominated in ETH at 18 decimals.
     /// @return ethBalance The terminal balance denominated in ETH at 18 decimals.

@@ -401,8 +401,8 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
     /// @param values The aggregate values recorded so far.
     /// @param hasActiveValue Whether the recorded value for each index came from an active sucker.
     /// @param chainCount The number of populated chain entries.
-    /// @param chainId The peer-chain id being recorded.
-    /// @param value The value being recorded.
+    /// @param chainId The peer-chain id to record.
+    /// @param value The value to record.
     /// @param isActive Whether the value came from an active sucker.
     /// @return The updated number of populated chain entries.
     function _recordPeerValue(

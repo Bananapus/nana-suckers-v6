@@ -61,8 +61,8 @@ interface IJBSucker is IERC165 {
     event NewInboxTreeRoot(address indexed token, uint64 nonce, bytes32 root, address caller);
 
     /// @notice Emitted when the outbox tree root and bridged assets are sent to the remote peer.
-    /// @param root The outbox tree root being sent.
-    /// @param token The terminal token being bridged.
+    /// @param root The outbox tree root sent to the remote peer.
+    /// @param token The terminal token to bridge.
     /// @param index The current outbox tree index.
     /// @param nonce The nonce assigned to this root message.
     /// @param caller The address that initiated the send.

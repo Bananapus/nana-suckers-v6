@@ -4,7 +4,7 @@ pragma solidity ^0.8.0;
 /// @notice Optional data-hook interface for adding project-specific adjusted accounts to peer-chain snapshots.
 interface IJBPeerChainAdjustedAccounts {
     /// @notice Extra supply, surplus, and balance that should be included in cross-chain peer snapshots.
-    /// @param projectId The ID of the project being snapshotted.
+    /// @param projectId The ID of the project to snapshot.
     /// @param decimals The decimals the returned surplus and balance should use.
     /// @param currency The currency the returned surplus and balance should be in terms of.
     /// @return supply The extra supply to include in `sourceTotalSupply`.

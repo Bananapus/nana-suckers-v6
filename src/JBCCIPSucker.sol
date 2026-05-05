@@ -201,7 +201,7 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
     /// @param transportPayment The amount of `msg.value` that is going to get paid for sending this message.
     /// @param token The token to bridge the outbox tree for.
     /// @param amount The amount of tokens to bridge.
-    /// @param remoteToken Information about the remote token being bridged to.
+    /// @param remoteToken Information about the remote token to bridge to.
     /// @param sucker_message The message root to send to the remote peer.
     // forge-lint: disable-next-line(mixed-case-function)
     function _sendRootOverAMB(

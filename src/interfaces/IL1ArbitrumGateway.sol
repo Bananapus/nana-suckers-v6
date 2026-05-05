@@ -7,7 +7,7 @@ interface IL1ArbitrumGateway {
     /// @param _token The L1 token address.
     /// @param _from The sender on L1.
     /// @param _to The recipient on L2.
-    /// @param _amount The amount of tokens being bridged.
+    /// @param _amount The amount of tokens to bridge.
     /// @param _data Additional data (forwarded to the L2 gateway).
     /// @return The ABI-encoded calldata for `finalizeInboundTransfer` on the L2 gateway.
     function getOutboundCalldata(

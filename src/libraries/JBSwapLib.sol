@@ -54,7 +54,7 @@ library JBSwapLib {
     //*********************************************************************//
 
     /// @notice Estimate the price impact of a swap, scaled by IMPACT_PRECISION.
-    /// @param amountIn The amount of tokens being swapped in.
+    /// @param amountIn The amount of tokens to swap in.
     /// @param liquidity The pool's in-range liquidity.
     /// @param sqrtP The sqrt price in Q96 format.
     /// @param zeroForOne Whether the swap is token0 -> token1.
@@ -84,7 +84,7 @@ library JBSwapLib {
 
     /// @notice Compute a sqrtPriceLimitX96 from input/output amounts so the swap stops
     ///         if the execution price would be worse than the minimum acceptable rate.
-    /// @param amountIn The amount of tokens being swapped in.
+    /// @param amountIn The amount of tokens to swap in.
     /// @param minimumAmountOut The minimum acceptable output.
     /// @param zeroForOne True when selling token0 for token1 (price decreases).
     /// @return sqrtPriceLimit The V3-compatible sqrtPriceLimitX96.

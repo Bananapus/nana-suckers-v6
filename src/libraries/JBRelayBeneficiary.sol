@@ -19,7 +19,7 @@ library JBRelayBeneficiary {
     /// @dev Returns `beneficiary` unchanged if the payer is not a registered sucker or if no relay data is found.
     /// @param payer The address that called `terminal.pay()` (i.e. `context.payer`).
     /// @param beneficiary The beneficiary set in the payment context (i.e. `context.beneficiary`).
-    /// @param projectId The project being paid.
+    /// @param projectId The project to pay.
     /// @param metadata The payment metadata (`context.payerMetadata` or `context.metadata`).
     /// @param registry The sucker registry used to verify that `payer` is a legitimate sucker.
     /// @return effectiveBeneficiary The resolved beneficiary — the relay address if valid, or the original.
