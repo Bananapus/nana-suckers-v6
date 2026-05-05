@@ -735,13 +735,18 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     /// @param token The local terminal token to get the amount to add to balance for.
     /// @return The amount of terminal tokens available to add to the project's balance.
     function amountToAddToBalanceOf(address token) public view override returns (uint256) {
-        // Get the amount that is in this sucker to be bridged.
+        // Start with the local balance that is not already committed to the outbox. Outbox funds are waiting to be
+        // bridged and cannot also be claimed into the project's local balance.
         uint256 amount = _balanceOf({token: token, addr: address(this)}) - _outboxOf[token].balance;
         if (token == JBConstants.NATIVE_TOKEN) {
+            // Native ETH can include caller refunds retained after failed fee payouts. Keep those credits reserved for
+            // their claimants before reporting any claimable project balance.
             uint256 retainedFeeBalance = retainedToRemoteFeeBalance;
             if (amount <= retainedFeeBalance) return 0;
             amount -= retainedFeeBalance;
 
+            // Native ETH can also include failed transport-payment refunds. These share the contract's ETH balance, so
+            // exclude them from the amount that `claim` can add to the project balance.
             uint256 retainedRefundBalance = retainedTransportPaymentRefundBalance;
             if (amount <= retainedRefundBalance) return 0;
             amount -= retainedRefundBalance;
