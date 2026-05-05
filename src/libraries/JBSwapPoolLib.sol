@@ -855,7 +855,8 @@ library JBSwapPoolLib {
         if (sqrtP == 0) return _SLIPPAGE_DENOMINATOR;
 
         // Calculate the price impact of the swap.
-        uint256 impact = JBSwapLib.calculateImpact(amountIn, liquidity, sqrtP, zeroForOne);
+        uint256 impact =
+            JBSwapLib.calculateImpact({amountIn: amountIn, liquidity: liquidity, sqrtP: sqrtP, zeroForOne: zeroForOne});
 
         // Map the impact to a sigmoid slippage tolerance.
         return JBSwapLib.getSlippageTolerance({impact: impact, poolFeeBps: poolFeeBps});
