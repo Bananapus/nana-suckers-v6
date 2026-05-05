@@ -22,6 +22,7 @@ interface IJBSwapCCIPSuckerDeployer is IJBCCIPSuckerDeployer {
     /// @notice The Uniswap V4 hook address used during pool discovery (optional).
     function univ4Hook() external view returns (address);
 
-    /// @notice The wrapped native token address (e.g., WETH). Used for V3 native swaps.
+    /// @notice The ERC-20 wrapper address for the chain's native token (e.g. WETH on Ethereum). Used for V3 native
+    /// swaps.
     function weth() external view returns (address);
 }

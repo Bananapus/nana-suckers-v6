@@ -77,7 +77,7 @@ library JBSwapPoolLib {
     /// @custom:member v3Factory The Uniswap V3 factory used for pool discovery.
     /// @custom:member poolManager The Uniswap V4 pool manager used for V4 pool queries and swaps.
     /// @custom:member univ4Hook The address of the Uniswap V4 hook contract to search for hooked pools.
-    /// @custom:member weth The address of the wrapped native token (WETH) on this chain.
+    /// @custom:member weth The address of the ERC-20 wrapper for the chain's native token (e.g. WETH on Ethereum).
     struct SwapConfig {
         IUniswapV3Factory v3Factory;
         IPoolManager poolManager;
@@ -91,7 +91,7 @@ library JBSwapPoolLib {
 
     /// @notice Execute a full swap: discover the best V3/V4 pool, quote via TWAP, execute the swap.
     /// @dev Runs via DELEGATECALL so the calling contract's balance and callbacks are used.
-    /// @param config The swap configuration (factory, pool manager, hook, WETH addresses).
+    /// @param config The swap configuration (factory, pool manager, hook, wrapped native token addresses).
     /// @param tokenIn The input token (raw address, may be NATIVE_TOKEN sentinel).
     /// @param tokenOut The output token (raw address).
     /// @param amount The amount of input tokens to swap.
@@ -108,11 +108,11 @@ library JBSwapPoolLib {
         external
         returns (uint256 amountOut)
     {
-        // Normalize NATIVE_TOKEN sentinel to WETH for pool lookups.
+        // Normalize NATIVE_TOKEN sentinel to the wrapped native token for pool lookups.
         address normalizedIn = _normalize({token: tokenIn, weth: config.weth});
         address normalizedOut = _normalize({token: tokenOut, weth: config.weth});
 
-        // No swap needed if tokens are the same after normalization (e.g., NATIVE_TOKEN and WETH).
+        // No swap needed if tokens are the same after normalization (e.g., NATIVE_TOKEN and wrapped native token).
         if (normalizedIn == normalizedOut) return amount;
 
         // Discover the most liquid pool across V3 and V4.
@@ -163,16 +163,16 @@ library JBSwapPoolLib {
                     originalTokenIn: tokenIn
                 });
             }
-            // V3 outputs WETH for native pairs — unwrap to raw ETH.
+            // V3 outputs wrapped native token for native pairs — unwrap to raw native token.
             if (tokenOut == JBConstants.NATIVE_TOKEN) {
                 IWrappedNativeToken(config.weth).withdraw(amountOut);
             }
         }
 
-        // V4 outputs native ETH for WETH-paired pools. If the caller requested WETH (not NATIVE_TOKEN),
-        // wrap the received ETH so the caller gets the token they expect.
+        // V4 outputs native tokens for wrapped-native-paired pools. If the caller requested the wrapped form
+        // (not NATIVE_TOKEN), wrap the received native tokens so the caller gets the token they expect.
         if (isV4 && tokenOut != JBConstants.NATIVE_TOKEN && normalizedOut == config.weth) {
-            // Wrap through the configured WETH contract; this is not a user-selected ETH recipient.
+            // Wrap through the configured wrapped native token contract.
             // slither-disable-next-line arbitrary-send-eth
             IWrappedNativeToken(config.weth).deposit{value: amountOut}();
         }
@@ -236,7 +236,7 @@ library JBSwapPoolLib {
         // Settle input (pay what we owe to the PoolManager).
         Currency inputCurrency = zeroForOne ? key.currency0 : key.currency1;
         if (Currency.unwrap(inputCurrency) == address(0)) {
-            // Native ETH: unwrap WETH if needed, then settle by sending ETH value directly.
+            // Native token: unwrap if needed, then settle by sending native value directly.
             if (weth != address(0)) IWrappedNativeToken(weth).withdraw(amountIn);
             // slither-disable-next-line unused-return,arbitrary-send-eth
             poolManager.settle{value: amountIn}();
@@ -286,8 +286,8 @@ library JBSwapPoolLib {
         // forge-lint: disable-next-line(unsafe-typecast)
         uint256 amountToSend = amount0Delta < 0 ? uint256(amount1Delta) : uint256(amount0Delta);
 
-        // If input is native ETH, wrap to WETH for V3.
-        // When originalTokenIn == NATIVE_TOKEN, normalizedIn is already the WETH address.
+        // If input is the native token, wrap for V3.
+        // When originalTokenIn == NATIVE_TOKEN, normalizedIn is already the wrapped native address.
         if (originalTokenIn == JBConstants.NATIVE_TOKEN) {
             IWrappedNativeToken(normalizedIn).deposit{value: amountToSend}();
         }
@@ -302,7 +302,7 @@ library JBSwapPoolLib {
 
     /// @notice Externally accessible pool discovery for testing and off-chain queries.
     /// @param config The swap configuration (factory, pool manager, etc.).
-    /// @param normalizedTokenIn The normalized input token address (WETH, not NATIVE_TOKEN).
+    /// @param normalizedTokenIn The normalized input token address (wrapped native token, not NATIVE_TOKEN).
     /// @param normalizedTokenOut The normalized output token address.
     /// @return isV4 Whether the best pool is a V4 pool.
     /// @return v3Pool The best V3 pool (or address(0) if V4 is better).
@@ -327,8 +327,8 @@ library JBSwapPoolLib {
     //*********************************************************************//
 
     /// @notice Find the highest liquidity pool across all V3 fee tiers and V4 pool configurations.
-    /// @param config The swap configuration (factory, pool manager, hook, WETH addresses).
-    /// @param normalizedTokenIn The normalized input token address (WETH, not NATIVE_TOKEN).
+    /// @param config The swap configuration (factory, pool manager, hook, wrapped native token addresses).
+    /// @param normalizedTokenIn The normalized input token address (wrapped native token, not NATIVE_TOKEN).
     /// @param normalizedTokenOut The normalized output token address.
     /// @return isV4 Whether the best pool is a V4 pool.
     /// @return v3Pool The best V3 pool (or address(0) if V4 is better).
@@ -419,7 +419,7 @@ library JBSwapPoolLib {
 
     /// @notice Search V4 pools across 4 fee tiers and 2 hook configs for the best eligible liquidity.
     /// @dev TWAP-capable hooked pools are preferred over hookless spot pools. Broken hooked pools are skipped.
-    /// @param config The swap configuration (pool manager, hook, WETH addresses).
+    /// @param config The swap configuration (pool manager, hook, wrapped native token addresses).
     /// @param normalizedTokenIn The normalized input token address.
     /// @param normalizedTokenOut The normalized output token address.
     /// @return bestKey The selected V4 pool key.
@@ -439,8 +439,8 @@ library JBSwapPoolLib {
         PoolKey memory bestSpotKey;
         uint128 bestSpotLiquidity;
 
-        // Convert to V4 convention before sorting: WETH represents native ETH in the calling code, while V4 pool
-        // keys use address(0) for native ETH.
+        // Convert to V4 convention before sorting: the wrapped native token represents native tokens in the calling
+        // code, while V4 pool keys use address(0) for native tokens.
         address sorted0;
         address sorted1;
         {
@@ -604,7 +604,7 @@ library JBSwapPoolLib {
     }
 
     /// @notice Get a V4 quote with dynamic slippage. Hooked pools must serve TWAP; hookless pools use spot fallback.
-    /// @param config The swap configuration (pool manager, WETH addresses).
+    /// @param config The swap configuration (pool manager, wrapped native token addresses).
     /// @param key The V4 pool key to quote against.
     /// @param normalizedTokenIn The normalized input token address.
     /// @param normalizedTokenOut The normalized output token address.
@@ -867,7 +867,7 @@ library JBSwapPoolLib {
     //*********************************************************************//
 
     /// @notice Quote via V4 TWAP/spot and execute swap. Separate function for stack isolation.
-    /// @param config The swap configuration (pool manager, WETH addresses).
+    /// @param config The swap configuration (pool manager, wrapped native token addresses).
     /// @param key The V4 pool key to swap through.
     /// @param normalizedTokenIn The normalized input token address.
     /// @param normalizedTokenOut The normalized output token address.
@@ -976,7 +976,7 @@ library JBSwapPoolLib {
     }
 
     /// @notice Execute a swap through a V4 pool via `PoolManager.unlock()`.
-    /// @param config The swap configuration (pool manager, WETH addresses).
+    /// @param config The swap configuration (pool manager, wrapped native token addresses).
     /// @param key The V4 pool key to swap through.
     /// @param normalizedTokenIn The normalized input token address.
     /// @param amount The amount of input tokens to swap.
@@ -992,7 +992,7 @@ library JBSwapPoolLib {
         internal
         returns (uint256 amountOut)
     {
-        // Convert WETH to address(0) for V4's native ETH convention.
+        // Convert wrapped native token to address(0) for V4's native token convention.
         address v4In = normalizedTokenIn == config.weth ? address(0) : normalizedTokenIn;
 
         // Determine swap direction based on currency ordering in the pool key.
@@ -1021,9 +1021,9 @@ library JBSwapPoolLib {
         amountOut = abi.decode(result, (uint256));
     }
 
-    /// @notice Normalize a token address, converting the NATIVE_TOKEN sentinel to WETH.
+    /// @notice Normalize a token address, converting the NATIVE_TOKEN sentinel to the wrapped native token.
     /// @param token The token address to normalize.
-    /// @param weth The WETH address on this chain.
+    /// @param weth The wrapped native token address on this chain.
     /// @return The normalized token address.
     function _normalize(address token, address weth) internal pure returns (address) {
         return token == JBConstants.NATIVE_TOKEN ? weth : token;

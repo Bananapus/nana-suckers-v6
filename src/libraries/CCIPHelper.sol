@@ -61,7 +61,7 @@ library CCIPHelper {
     address public constant TEMPO_LINK = 0x15C03488B29e27d62BAf10E30b0c474bf60E0264;
     address public constant TEMPO_MOD_LINK = 0xEAB080c724587fFC9F2EFF82e36EE4Fb27774959;
 
-    /// @notice The WETH address of each chain
+    /// @notice The wrapped native token address of each chain
     address public constant ETH_WETH = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
     address public constant ETH_SEP_WETH = 0x097D90c9d3E0B50Ca60e1ae45F6A81010f9FB534;
     address public constant OP_WETH = 0x4200000000000000000000000000000000000006;
@@ -146,9 +146,9 @@ library CCIPHelper {
         }
     }
 
-    /// @notice Returns the WETH address for a given chain ID.
+    /// @notice Returns the wrapped native token address for a given chain ID.
     /// @param chainId The EVM chain ID to look up.
-    /// @return weth The WETH address.
+    /// @return weth The wrapped native token address.
     function wethOfChain(uint256 chainId) public pure returns (address weth) {
         if (chainId == ETH_ID) {
             return ETH_WETH;

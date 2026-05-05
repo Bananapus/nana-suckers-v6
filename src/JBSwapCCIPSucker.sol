@@ -121,8 +121,9 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
     /// @notice The Uniswap V3 factory for pool discovery and callback verification. Can be address(0).
     IUniswapV3Factory public immutable V3_FACTORY;
 
-    /// @notice The wrapped native token (e.g., WETH on Ethereum). Used for V3 native swaps.
-    IWrappedNativeToken public immutable WETH;
+    /// @notice The ERC-20 wrapper for the chain's native token (e.g. WETH on Ethereum, WCELO on Celo). Used for V3
+    /// native swaps.
+    IWrappedNativeToken public immutable WRAPPED_NATIVE_TOKEN;
 
     //*********************************************************************//
     // ------------------- internal stored properties -------------------- //
@@ -223,11 +224,11 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
         POOL_MANAGER = swapDeployer.poolManager();
         V3_FACTORY = swapDeployer.v3Factory();
         UNIV4_HOOK = swapDeployer.univ4Hook();
-        WETH = IWrappedNativeToken(swapDeployer.weth());
+        WRAPPED_NATIVE_TOKEN = IWrappedNativeToken(swapDeployer.weth());
 
         if (address(BRIDGE_TOKEN) == address(0)) revert JBSwapCCIPSucker_InvalidBridgeToken();
-        // BRIDGE_TOKEN must not be WETH — native/WETH wrapping and CCIP ERC-20 bridging conflict.
-        if (address(BRIDGE_TOKEN) == address(WETH) && address(WETH) != address(0)) {
+        // BRIDGE_TOKEN must not be the wrapped native token — wrapping and CCIP ERC-20 bridging conflict.
+        if (address(BRIDGE_TOKEN) == address(WRAPPED_NATIVE_TOKEN) && address(WRAPPED_NATIVE_TOKEN) != address(0)) {
             revert JBSwapCCIPSucker_InvalidBridgeToken();
         }
         // NOTE: V3_FACTORY and POOL_MANAGER can both be address(0) on chains where the local terminal token
@@ -239,7 +240,8 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
     // ------------------------- receive / fallback ---------------------- //
     //*********************************************************************//
 
-    /// @notice Allow this contract to receive ETH (from V4 swaps, WETH unwrap, and CCIP refunds).
+    /// @notice Allow this contract to receive native tokens (from V4 swaps, wrapped-native-token unwrap, and CCIP
+    /// refunds).
     receive() external payable override {}
 
     //*********************************************************************//
@@ -593,7 +595,10 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
     function _executeSwap(address tokenIn, address tokenOut, uint256 amount) internal returns (uint256 amountOut) {
         return JBSwapPoolLib.executeSwap({
             config: JBSwapPoolLib.SwapConfig({
-                v3Factory: V3_FACTORY, poolManager: POOL_MANAGER, univ4Hook: UNIV4_HOOK, weth: address(WETH)
+                v3Factory: V3_FACTORY,
+                poolManager: POOL_MANAGER,
+                univ4Hook: UNIV4_HOOK,
+                weth: address(WRAPPED_NATIVE_TOKEN)
             }),
             tokenIn: tokenIn,
             tokenOut: tokenOut,

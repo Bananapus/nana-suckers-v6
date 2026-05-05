@@ -124,7 +124,7 @@ contract SwapCCIPTestHarness is JBSwapCCIPSucker {
 
     /// @notice Expose _normalize for testing.
     function exposed_normalize(address token) external view returns (address) {
-        return token == JBConstants.NATIVE_TOKEN ? address(WETH) : token;
+        return token == JBConstants.NATIVE_TOKEN ? address(WRAPPED_NATIVE_TOKEN) : token;
     }
 
     /// @notice Set a remote token mapping for testing.
@@ -466,7 +466,7 @@ contract SwapCCIPScalingTest is Test {
     /// @notice Immutables are set correctly from deployer.
     function test_constructor_immutables() public view {
         assertEq(address(sucker.BRIDGE_TOKEN()), address(usdc));
-        assertEq(address(sucker.WETH()), address(weth));
+        assertEq(address(sucker.WRAPPED_NATIVE_TOKEN()), address(weth));
     }
 }
 

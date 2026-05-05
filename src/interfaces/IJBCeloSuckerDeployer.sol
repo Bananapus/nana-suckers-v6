@@ -10,7 +10,7 @@ import {IOPStandardBridge} from "./IOPStandardBridge.sol";
 interface IJBCeloSuckerDeployer is IJBOpSuckerDeployer {
     // View functions
 
-    /// @notice The wrapped native token (WETH) on the local chain.
+    /// @notice The ERC-20 wrapper for the chain's native token on the local chain.
     function wrappedNative() external view returns (IWrappedNativeToken);
 
     // State-changing functions

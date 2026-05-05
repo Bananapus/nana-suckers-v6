@@ -22,7 +22,7 @@ contract JBCeloSuckerDeployer is JBOptimismSuckerDeployer, IJBCeloSuckerDeployer
     // ---------------------- public stored properties ------------------- //
     //*********************************************************************//
 
-    /// @notice The wrapped native token (WETH) on the local chain.
+    /// @notice The ERC-20 wrapper for the chain's native token on the local chain.
     IWrappedNativeToken public override wrappedNative;
 
     //*********************************************************************//
@@ -63,7 +63,7 @@ contract JBCeloSuckerDeployer is JBOptimismSuckerDeployer, IJBCeloSuckerDeployer
     /// @notice Handles layer specific configuration including the wrapped native token.
     /// @param messenger The OPMessenger on this layer.
     /// @param bridge The OPStandardBridge on this layer.
-    /// @param _wrappedNative The wrapped native token (WETH) on this layer.
+    /// @param _wrappedNative The ERC-20 wrapper for the chain's native token on this layer.
     function setChainSpecificConstants(
         IOPMessenger messenger,
         IOPStandardBridge bridge,
