@@ -122,7 +122,7 @@ contract JBCeloSucker is JBOptimismSucker {
     /// `nativeValue = 0` because Celo's native token is CELO (not ETH), so we never attach ETH as msg.value.
     /// @param transportPayment the amount of `msg.value` that is going to get paid for sending this message.
     /// @param token The token to bridge the outbox tree for.
-    /// @param remoteToken Information about the remote token being bridged to.
+    /// @param remoteToken Information about the remote token to bridge to.
     // forge-lint: disable-next-line(mixed-case-function)
     function _sendRootOverAMB(
         uint256 transportPayment,

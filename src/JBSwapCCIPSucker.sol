@@ -184,7 +184,7 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
     // ------------------- transient stored properties ------------------- //
     //*********************************************************************//
 
-    /// @notice Leaf index + 1 of the claim currently being processed (set by `claim` override).
+    /// @notice Leaf index + 1 of the claim currently being processed (set by the `claim` override).
     /// @dev Transient storage — auto-resets to 0 each transaction, saving ~9,800 gas per claim vs SSTORE.
     /// Value 0 means no active claim (bypass scaling); non-zero means leafIndex = value - 1.
     uint256 transient _currentClaimLeafIndex;
@@ -370,8 +370,8 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
     }
 
     /// @notice Uniswap V3 swap callback — delegates to JBSwapPoolLib (via DELEGATECALL) to reduce bytecode.
-    /// @param amount0Delta The amount of token0 being used for the swap.
-    /// @param amount1Delta The amount of token1 being used for the swap.
+    /// @param amount0Delta The amount of token0 used for the swap.
+    /// @param amount1Delta The amount of token1 used for the swap.
     /// @param data Encoded (originalTokenIn, normalizedTokenIn, normalizedTokenOut).
     function uniswapV3SwapCallback(int256 amount0Delta, int256 amount1Delta, bytes calldata data) external override {
         JBSwapPoolLib.executeV3SwapCallback({
@@ -502,7 +502,7 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
     /// Delegates CCIP message construction to JBCCIPLib (via DELEGATECALL) to reduce bytecode.
     /// @param transportPayment The ETH sent for CCIP fees.
     /// @param index The last leaf index in the current batch.
-    /// @param token The local token being bridged.
+    /// @param token The local token to bridge.
     /// @param amount The amount of local tokens to bridge.
     /// @param remoteToken The remote token configuration (including minGas).
     /// @param sucker_message The merkle root message to send to the remote chain.

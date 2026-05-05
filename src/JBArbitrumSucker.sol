@@ -151,7 +151,7 @@ contract JBArbitrumSucker is JBSucker, IJBArbitrumSucker {
     /// @notice Uses the L1/L2 gateway to send the root and assets over the bridge to the peer.
     /// @param transportPayment the amount of `msg.value` that is going to get paid for sending this message.
     /// @param token The token to bridge the outbox tree for.
-    /// @param remoteToken Information about the remote token being bridged to.
+    /// @param remoteToken Information about the remote token to bridge to.
     // forge-lint: disable-next-line(mixed-case-function)
     function _sendRootOverAMB(
         uint256 transportPayment,

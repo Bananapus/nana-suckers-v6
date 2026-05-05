@@ -25,7 +25,7 @@ library JBCCIPLib {
     /// @param token The token to bridge (may be NATIVE_TOKEN).
     /// @param amount The amount to bridge.
     /// @return tokenAmounts The CCIP token amounts array (length 0 or 1).
-    /// @return bridgeToken The actual ERC-20 token address being bridged (WETH if native was wrapped).
+    /// @return bridgeToken The actual ERC-20 token address to bridge (WETH if native was wrapped).
     function prepareTokenAmounts(
         ICCIPRouter ccipRouter,
         address token,

@@ -389,7 +389,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     /// messages time to arrive, accepting roots after deprecation provides a stronger guarantee that users can always
     /// claim their bridged tokens. Double-spend is not a concern because `toRemote` is already disabled in
     /// `SENDING_DISABLED` and `DEPRECATED` states, so no new outbound transfers can occur.
-    /// @param root The merkle root, token, and amount being received.
+    /// @param root The merkle root, token, and amount to receive.
     function fromRemote(JBMessageRoot calldata root) external payable {
         // Make sure that the message came from our peer.
         // Use msg.sender (not _msgSender()) because bridge messengers never use ERC2771 meta-transactions.
@@ -620,7 +620,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     /// for the original caller instead of being added back to `transportPayment`. This preserves
     /// `transportPayment = msg.value - fee`, which is critical for zero-cost bridges (OP, Base, Celo, Arb L2->L1)
     /// that revert on non-zero transport payment. The retained fee is excluded from `amountToAddToBalanceOf`.
-    /// @param token The terminal token being bridged.
+    /// @param token The terminal token to bridge.
     function toRemote(address token) external payable override {
         JBRemoteToken memory remoteToken = _remoteTokenFor[token];
 
@@ -963,7 +963,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     }
 
     /// @notice The action(s) to perform after a user has succesfully proven their claim.
-    /// @param terminalToken The terminal token being sucked.
+    /// @param terminalToken The terminal token to suck.
     /// @param terminalTokenAmount The amount of terminal tokens.
     /// @param projectTokenAmount The amount of project tokens.
     /// @param beneficiary The beneficiary of the project tokens (bytes32 for cross-VM compatibility).
@@ -1000,8 +1000,8 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     }
 
     /// @notice Inserts a new leaf into the outbox merkle tree for the specified `token`.
-    /// @param projectTokenCount The amount of project tokens being cashed out.
-    /// @param token The terminal token being cashed out for.
+    /// @param projectTokenCount The amount of project tokens to cash out.
+    /// @param token The terminal token to cash out for.
     /// @param terminalTokenAmount The amount of terminal tokens reclaimed by cashing out.
     /// @param beneficiary The beneficiary of the project tokens on the remote chain (bytes32 for cross-VM
     /// compatibility).
@@ -1127,7 +1127,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     }
 
     /// @notice Cash out project tokens for terminal tokens.
-    /// @param projectToken The project token being cashed out (unused, kept for interface compatibility).
+    /// @param projectToken The project token to cash out (unused, kept for interface compatibility).
     /// @param count The number of project tokens to cash out.
     /// @param token The terminal token to cash out for.
     /// @param minTokensReclaimed The minimum amount of terminal tokens to reclaim. If the amount reclaimed is less than
@@ -1245,8 +1245,8 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     /// @dev This is chain/sucker/bridge specific logic.
     /// @param transportPayment The amount of `msg.value` that is going to get paid for sending this message.
     /// @param index The index of the most recent message that is part of the root.
-    /// @param token The terminal token being bridged.
-    /// @param amount The amount of terminal tokens being bridged.
+    /// @param token The terminal token to bridge.
+    /// @param amount The amount of terminal tokens to bridge.
     /// @param remoteToken The remote token which the terminal token is mapped to.
     /// @param message The message/root to send to the remote chain.
     // forge-lint: disable-next-line(mixed-case-function)
@@ -1268,7 +1268,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     /// @param terminalToken The terminal token that the project tokens were cashed out for.
     /// @param terminalTokenAmount The amount of terminal tokens reclaimed by the cash out.
     /// @param beneficiary The beneficiary of the project tokens (bytes32 for cross-VM compatibility).
-    /// @param index The index of the leaf being proved in the terminal token's inbox tree.
+    /// @param index The index of the leaf to prove in the terminal token's inbox tree.
     /// @param leaves The leaves that prove that the leaf at the `index` is in the tree (i.e. the merkle branch that the
     /// leaf is on).
     function _validate(
@@ -1364,7 +1364,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     /// @param terminalToken The terminal token that the project tokens were cashed out for.
     /// @param terminalTokenAmount The amount of terminal tokens reclaimed by the cash out.
     /// @param beneficiary The beneficiary of the project tokens (bytes32 for cross-VM compatibility).
-    /// @param index The index of the leaf being proved in the terminal token's inbox tree.
+    /// @param index The index of the leaf to prove in the terminal token's inbox tree.
     /// @param leaves The leaves that prove that the leaf at the `index` is in the tree (i.e. the merkle branch that the
     /// leaf is on).
     function _validateForEmergencyExit(
@@ -1467,8 +1467,8 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     }
 
     /// @notice Builds a hash as they are stored in the merkle tree.
-    /// @param projectTokenCount The number of project tokens being cashed out.
-    /// @param terminalTokenAmount The amount of terminal tokens being reclaimed by the cash out.
+    /// @param projectTokenCount The number of project tokens to cash out.
+    /// @param terminalTokenAmount The amount of terminal tokens to reclaim from the cash out.
     /// @param beneficiary The beneficiary which will receive the project tokens (bytes32 for cross-VM compatibility).
     /// @return hash The keccak256 hash of the leaf data.
     function _buildTreeHash(
@@ -1605,9 +1605,9 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     /// @dev Delegates snapshot construction to JBSuckerLib (deployed library, called via DELEGATECALL) to reduce
     /// child contract bytecode.
     /// @param transportPayment The amount of `msg.value` that is going to get paid for sending this message.
-    /// @param token The terminal token being bridged.
+    /// @param token The terminal token to bridge.
     /// @param remoteToken The remote token which the terminal token is mapped to.
-    /// @param amount The amount of terminal tokens being bridged.
+    /// @param amount The amount of terminal tokens to bridge.
     /// @param nonce The outbox nonce for this send.
     /// @param root The merkle root of the outbox tree.
     /// @param index The index of the most recent message that is part of the root.

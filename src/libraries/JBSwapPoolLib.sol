@@ -260,8 +260,8 @@ library JBSwapPoolLib {
     /// `uniswapV3SwapCallback` so the V3 callback logic lives in library bytecode.
     /// @dev DELEGATECALL preserves msg.sender (the V3 pool), allowing pool verification.
     /// @param v3Factory The Uniswap V3 factory for pool verification.
-    /// @param amount0Delta The amount of token0 being used for the swap.
-    /// @param amount1Delta The amount of token1 being used for the swap.
+    /// @param amount0Delta The amount of token0 used for the swap.
+    /// @param amount1Delta The amount of token1 used for the swap.
     /// @param data Encoded (originalTokenIn, normalizedTokenIn, normalizedTokenOut).
     function executeV3SwapCallback(
         IUniswapV3Factory v3Factory,
