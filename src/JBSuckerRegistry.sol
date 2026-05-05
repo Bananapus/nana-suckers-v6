@@ -58,7 +58,7 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
     // --------------- public immutable stored properties ---------------- //
     //*********************************************************************//
 
-    /// @notice The juicebox directory.
+    /// @notice The Juicebox directory used to look up project terminals and controllers.
     IJBDirectory public immutable override DIRECTORY;
 
     /// @notice A contract which mints ERC-721s that represent project ownership and transfers.
