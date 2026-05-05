@@ -4,6 +4,7 @@ pragma solidity 0.8.28;
 // External packages (alphabetized)
 import {IJBDirectory} from "@bananapus/core-v6/src/interfaces/IJBDirectory.sol";
 import {IJBPermissions} from "@bananapus/core-v6/src/interfaces/IJBPermissions.sol";
+import {IJBPrices} from "@bananapus/core-v6/src/interfaces/IJBPrices.sol";
 import {IJBTokens} from "@bananapus/core-v6/src/interfaces/IJBTokens.sol";
 import {JBConstants} from "@bananapus/core-v6/src/libraries/JBConstants.sol";
 import {IAny2EVMMessageReceiver} from "@chainlink/contracts-ccip/contracts/interfaces/IAny2EVMMessageReceiver.sol";
@@ -86,7 +87,7 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
         JBCCIPSuckerDeployer deployer,
         IJBDirectory directory,
         IJBPermissions permissions,
-        address prices,
+        IJBPrices prices,
         IJBTokens tokens,
         uint256 feeProjectId,
         IJBSuckerRegistry registry,

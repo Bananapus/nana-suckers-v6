@@ -5,6 +5,7 @@ import {Test} from "forge-std/Test.sol";
 
 import {IJBDirectory} from "@bananapus/core-v6/src/interfaces/IJBDirectory.sol";
 import {IJBPermissions} from "@bananapus/core-v6/src/interfaces/IJBPermissions.sol";
+import {IJBPrices} from "@bananapus/core-v6/src/interfaces/IJBPrices.sol";
 import {IJBProjects} from "@bananapus/core-v6/src/interfaces/IJBProjects.sol";
 import {IJBTokens} from "@bananapus/core-v6/src/interfaces/IJBTokens.sol";
 
@@ -95,7 +96,7 @@ contract RegistryPeerMismatchTest is Test {
             deployer,
             IJBDirectory(DIRECTORY),
             IJBPermissions(PERMISSIONS),
-            address(1),
+            IJBPrices(address(1)),
             IJBTokens(TOKENS),
             1,
             registry,

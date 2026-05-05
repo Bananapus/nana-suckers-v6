@@ -6,6 +6,7 @@ import "forge-std/Test.sol";
 import {Client} from "@chainlink/contracts-ccip/contracts/libraries/Client.sol";
 import {IJBDirectory} from "@bananapus/core-v6/src/interfaces/IJBDirectory.sol";
 import {IJBPermissions} from "@bananapus/core-v6/src/interfaces/IJBPermissions.sol";
+import {IJBPrices} from "@bananapus/core-v6/src/interfaces/IJBPrices.sol";
 import {IJBProjects} from "@bananapus/core-v6/src/interfaces/IJBProjects.sol";
 import {IJBTerminal} from "@bananapus/core-v6/src/interfaces/IJBTerminal.sol";
 import {IJBTokens} from "@bananapus/core-v6/src/interfaces/IJBTokens.sol";
@@ -208,7 +209,7 @@ contract CodexNemesisSwapHarness is JBSwapCCIPSucker {
         IJBPermissions permissions,
         IJBSuckerRegistry registry
     )
-        JBSwapCCIPSucker(deployer, directory, permissions, address(1), tokens, 1, registry, address(0))
+        JBSwapCCIPSucker(deployer, directory, permissions, IJBPrices(address(1)), tokens, 1, registry, address(0))
     {}
 
     function exposedAddToBalance(address token, uint256 amount, uint256 projectId, uint256 leafIndex) external {
@@ -336,7 +337,7 @@ contract CodexNemesisFreshRoundTest is Test {
             deployerA,
             IJBDirectory(DIRECTORY),
             IJBPermissions(PERMISSIONS),
-            address(1),
+            IJBPrices(address(1)),
             IJBTokens(TOKENS),
             1,
             registryA,
@@ -346,7 +347,7 @@ contract CodexNemesisFreshRoundTest is Test {
             deployerB,
             IJBDirectory(DIRECTORY),
             IJBPermissions(PERMISSIONS),
-            address(1),
+            IJBPrices(address(1)),
             IJBTokens(TOKENS),
             1,
             registryB,

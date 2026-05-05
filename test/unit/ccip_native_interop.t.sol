@@ -8,6 +8,7 @@ import {Client} from "@chainlink/contracts-ccip/contracts/libraries/Client.sol";
 import {IRouterClient} from "@chainlink/contracts-ccip/contracts/interfaces/IRouterClient.sol";
 import {IJBDirectory} from "@bananapus/core-v6/src/interfaces/IJBDirectory.sol";
 import {IJBPermissions} from "@bananapus/core-v6/src/interfaces/IJBPermissions.sol";
+import {IJBPrices} from "@bananapus/core-v6/src/interfaces/IJBPrices.sol";
 import {IJBTokens} from "@bananapus/core-v6/src/interfaces/IJBTokens.sol";
 import {JBConstants} from "@bananapus/core-v6/src/libraries/JBConstants.sol";
 import {LibClone} from "solady/src/utils/LibClone.sol";
@@ -77,7 +78,16 @@ contract CCIPTestSucker is JBCCIPSucker {
         IJBTokens tokens,
         IJBPermissions permissions
     )
-        JBCCIPSucker(deployer, directory, permissions, address(1), tokens, 1, IJBSuckerRegistry(address(1)), address(0))
+        JBCCIPSucker(
+            deployer,
+            directory,
+            permissions,
+            IJBPrices(address(1)),
+            tokens,
+            1,
+            IJBSuckerRegistry(address(1)),
+            address(0)
+        )
     {}
 
     // forge-lint: disable-next-line(mixed-case-function)
@@ -135,7 +145,7 @@ contract BaseTestSucker is JBSucker {
         IJBPermissions permissions,
         IJBTokens tokens
     )
-        JBSucker(directory, permissions, address(1), tokens, 1, IJBSuckerRegistry(address(1)), address(0))
+        JBSucker(directory, permissions, IJBPrices(address(1)), tokens, 1, IJBSuckerRegistry(address(1)), address(0))
     {}
 
     // forge-lint: disable-next-line(mixed-case-function)

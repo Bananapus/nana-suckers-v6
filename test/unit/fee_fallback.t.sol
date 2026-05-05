@@ -7,6 +7,7 @@ import "forge-std/Test.sol";
 import {IJBController} from "@bananapus/core-v6/src/interfaces/IJBController.sol";
 import {IJBDirectory} from "@bananapus/core-v6/src/interfaces/IJBDirectory.sol";
 import {IJBPermissions} from "@bananapus/core-v6/src/interfaces/IJBPermissions.sol";
+import {IJBPrices} from "@bananapus/core-v6/src/interfaces/IJBPrices.sol";
 import {IJBTerminal} from "@bananapus/core-v6/src/interfaces/IJBTerminal.sol";
 import {IJBTokens} from "@bananapus/core-v6/src/interfaces/IJBTokens.sol";
 import {JBConstants} from "@bananapus/core-v6/src/libraries/JBConstants.sol";
@@ -42,7 +43,7 @@ contract ZeroCostBridgeSucker is JBSucker {
         IJBSuckerRegistry registry,
         address forwarder
     )
-        JBSucker(directory, permissions, address(1), tokens, feeProjectId, registry, forwarder)
+        JBSucker(directory, permissions, IJBPrices(address(1)), tokens, feeProjectId, registry, forwarder)
     {}
 
     // forge-lint: disable-next-line(mixed-case-function)

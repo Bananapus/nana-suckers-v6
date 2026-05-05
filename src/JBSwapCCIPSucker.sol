@@ -4,6 +4,7 @@ pragma solidity 0.8.28;
 // Core JB imports.
 import {IJBDirectory} from "@bananapus/core-v6/src/interfaces/IJBDirectory.sol";
 import {IJBPermissions} from "@bananapus/core-v6/src/interfaces/IJBPermissions.sol";
+import {IJBPrices} from "@bananapus/core-v6/src/interfaces/IJBPrices.sol";
 import {IJBTokens} from "@bananapus/core-v6/src/interfaces/IJBTokens.sol";
 // CCIP imports.
 import {Client} from "@chainlink/contracts-ccip/contracts/libraries/Client.sol";
@@ -209,7 +210,7 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
         JBSwapCCIPSuckerDeployer deployer,
         IJBDirectory directory,
         IJBPermissions permissions,
-        address prices,
+        IJBPrices prices,
         IJBTokens tokens,
         uint256 feeProjectId,
         IJBSuckerRegistry registry,

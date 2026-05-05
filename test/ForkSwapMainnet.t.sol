@@ -124,7 +124,7 @@ abstract contract SwapCCIPSuckerForkTestBase is SuckerForkHelpers {
             directory: jbDirectory(),
             tokens: jbTokens(),
             permissions: jbPermissions(),
-            prices: address(jbPrices()),
+            prices: jbPrices(),
             feeProjectId: 1,
             registry: IJBSuckerRegistry(address(0)),
             trustedForwarder: address(0)

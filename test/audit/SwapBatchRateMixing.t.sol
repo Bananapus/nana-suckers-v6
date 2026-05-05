@@ -5,6 +5,7 @@ import "forge-std/Test.sol";
 
 import {IJBDirectory} from "@bananapus/core-v6/src/interfaces/IJBDirectory.sol";
 import {IJBPermissions} from "@bananapus/core-v6/src/interfaces/IJBPermissions.sol";
+import {IJBPrices} from "@bananapus/core-v6/src/interfaces/IJBPrices.sol";
 import {IJBTerminal} from "@bananapus/core-v6/src/interfaces/IJBTerminal.sol";
 import {IJBTokens} from "@bananapus/core-v6/src/interfaces/IJBTokens.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
@@ -39,7 +40,14 @@ contract CodexSwapBatchHarness is JBSwapCCIPSucker {
         IJBPermissions permissions
     )
         JBSwapCCIPSucker(
-            deployer, directory, permissions, address(1), tokens, 1, IJBSuckerRegistry(address(1)), address(0)
+            deployer,
+            directory,
+            permissions,
+            IJBPrices(address(1)),
+            tokens,
+            1,
+            IJBSuckerRegistry(address(1)),
+            address(0)
         )
     {}
 

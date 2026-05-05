@@ -6,6 +6,7 @@ import "forge-std/Test.sol";
 import {Client} from "@chainlink/contracts-ccip/contracts/libraries/Client.sol";
 import {IJBDirectory} from "@bananapus/core-v6/src/interfaces/IJBDirectory.sol";
 import {IJBPermissions} from "@bananapus/core-v6/src/interfaces/IJBPermissions.sol";
+import {IJBPrices} from "@bananapus/core-v6/src/interfaces/IJBPrices.sol";
 import {IJBTokens} from "@bananapus/core-v6/src/interfaces/IJBTokens.sol";
 import {JBCCIPSucker} from "../../src/JBCCIPSucker.sol";
 import {JBCCIPSuckerDeployer} from "../../src/deployers/JBCCIPSuckerDeployer.sol";
@@ -22,7 +23,16 @@ contract CodexCCIPLegacyFormatHarness is JBCCIPSucker {
         IJBTokens tokens,
         IJBPermissions permissions
     )
-        JBCCIPSucker(deployer, directory, permissions, address(1), tokens, 1, IJBSuckerRegistry(address(1)), address(0))
+        JBCCIPSucker(
+            deployer,
+            directory,
+            permissions,
+            IJBPrices(address(1)),
+            tokens,
+            1,
+            IJBSuckerRegistry(address(1)),
+            address(0)
+        )
     {}
 }
 
