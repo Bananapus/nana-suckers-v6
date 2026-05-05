@@ -434,14 +434,16 @@ library JBSwapPoolLib {
         view
         returns (PoolKey memory bestKey, uint128 bestLiquidity, bool bestUsesTwap)
     {
+        // Keep the best hookless pool separate. Hookless V4 pools only provide spot pricing, so they are a fallback
+        // candidate and should not beat a hooked pool that can serve the TWAP window.
         PoolKey memory bestSpotKey;
         uint128 bestSpotLiquidity;
 
-        // Convert to V4 convention: WETH -> address(0) for native ETH.
+        // Convert to V4 convention before sorting: WETH represents native ETH in the calling code, while V4 pool
+        // keys use address(0) for native ETH.
         address sorted0;
         address sorted1;
         {
-            // V4 uses address(0) for native ETH, so convert WETH addresses.
             address v4In = normalizedTokenIn == config.weth ? address(0) : normalizedTokenIn;
             address v4Out = normalizedTokenOut == config.weth ? address(0) : normalizedTokenOut;
 
@@ -475,11 +477,15 @@ library JBSwapPoolLib {
 
                 if (liq != 0) {
                     if (hookAddr == address(0)) {
+                        // Hookless pools can only be quoted at spot. Save the deepest one, but leave `bestKey`
+                        // reserved for TWAP-capable hooked pools.
                         if (liq > bestSpotLiquidity) {
                             bestSpotLiquidity = liq;
                             bestSpotKey = key;
                         }
                     } else if (_v4PoolHasTwap(key)) {
+                        // Hooked pools are only eligible if their hook can serve the configured TWAP window. Among
+                        // those, route through the deepest pool.
                         if (liq > bestLiquidity) {
                             bestLiquidity = liq;
                             bestKey = key;
@@ -499,6 +505,8 @@ library JBSwapPoolLib {
         }
 
         if (bestLiquidity == 0) {
+            // No hooked pool could serve TWAP, so return the deepest hookless spot pool as the V4 fallback. The
+            // caller still compares this against V3 TWAP liquidity before choosing a route.
             bestKey = bestSpotKey;
             bestLiquidity = bestSpotLiquidity;
         }
@@ -736,7 +744,11 @@ library JBSwapPoolLib {
         ok = true;
     }
 
-    /// @notice Returns true when a timestamp is at least `window` seconds old.
+    /// @notice Check whether an oracle observation is old enough to cover a TWAP window ending at the current block.
+    /// @dev Current or future timestamps are rejected before subtracting so the age check cannot underflow.
+    /// @param observationTimestamp The timestamp recorded in the pool's oracle observation.
+    /// @param window The required observation age, in seconds.
+    /// @return True if the observation is before the current block and at least `window` seconds old.
     function _observationIsOldEnough(uint32 observationTimestamp, uint256 window) internal view returns (bool) {
         // TWAP freshness is intentionally time-based.
         // forge-lint: disable-next-line(block-timestamp)
@@ -745,7 +757,11 @@ library JBSwapPoolLib {
         return block.timestamp - observationTimestamp >= window;
     }
 
-    /// @notice Checks whether a V4 hooked pool can serve the required TWAP window.
+    /// @notice Check whether a V4 hooked pool can return cumulative ticks for the required TWAP window.
+    /// @dev Hookless pools return false. Reverting hooks and hooks that return fewer than two cumulative tick values
+    /// are treated as unusable for TWAP routing.
+    /// @param key The V4 pool key whose hook should be probed.
+    /// @return True if the hook can serve both the historical and current cumulative tick observations.
     function _v4PoolHasTwap(PoolKey memory key) internal view returns (bool) {
         if (address(key.hooks) == address(0)) return false;
 
@@ -842,7 +858,7 @@ library JBSwapPoolLib {
         uint256 impact = JBSwapLib.calculateImpact(amountIn, liquidity, sqrtP, zeroForOne);
 
         // Map the impact to a sigmoid slippage tolerance.
-        return JBSwapLib.getSlippageTolerance(impact, poolFeeBps);
+        return JBSwapLib.getSlippageTolerance({impact: impact, poolFeeBps: poolFeeBps});
     }
 
     //*********************************************************************//
