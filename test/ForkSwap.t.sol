@@ -56,7 +56,10 @@ contract ForkSwapHarness is JBSwapCCIPSucker {
     {
         return JBSwapPoolLib.discoverPool(
             JBSwapPoolLib.SwapConfig({
-                v3Factory: V3_FACTORY, poolManager: POOL_MANAGER, univ4Hook: UNIV4_HOOK, weth: address(WRAPPED_NATIVE_TOKEN)
+                v3Factory: V3_FACTORY,
+                poolManager: POOL_MANAGER,
+                univ4Hook: UNIV4_HOOK,
+                weth: address(WRAPPED_NATIVE_TOKEN)
             }),
             normalizedIn,
             normalizedOut
