@@ -35,9 +35,6 @@ library JBSuckerLib {
     /// @dev A V6 ruleset return value contains one `JBRuleset` (9 words) and one `JBRulesetMetadata` (19 words).
     uint256 internal constant _CURRENT_RULESET_OF_RETURN_BYTES = (9 + 19) * 32;
 
-    /// @notice The ETH currency ID used for cross-chain peer snapshots.
-    uint32 internal constant _ETH_CURRENCY = JBCurrencyIds.ETH;
-
     /// @notice The ETH decimal precision used for cross-chain peer snapshots.
     uint8 internal constant _ETH_DECIMALS = 18;
 
@@ -92,7 +89,7 @@ library JBSuckerLib {
         for (uint256 i; i < numTerminals;) {
             // slither-disable-next-line calls-loop
             try terminals[i].currentSurplusOf({
-                projectId: projectId, tokens: new address[](0), decimals: _ETH_DECIMALS, currency: _ETH_CURRENCY
+                projectId: projectId, tokens: new address[](0), decimals: _ETH_DECIMALS, currency: JBCurrencyIds.ETH
             }) returns (
                 uint256 surplus
             ) {
@@ -126,7 +123,7 @@ library JBSuckerLib {
                     ) {
                         if (bal != 0) {
                             // If the token is already ETH-denominated, adjust decimals directly.
-                            if (tokenCurrency == _ETH_CURRENCY) {
+                            if (tokenCurrency == JBCurrencyIds.ETH) {
                                 ethBalance += JBFixedPointNumber.adjustDecimals({
                                     value: bal, decimals: dec, targetDecimals: _ETH_DECIMALS
                                 });
@@ -136,7 +133,7 @@ library JBSuckerLib {
                                 try prices.pricePerUnitOf({
                                     projectId: projectId,
                                     pricingCurrency: tokenCurrency,
-                                    unitCurrency: _ETH_CURRENCY,
+                                    unitCurrency: JBCurrencyIds.ETH,
                                     decimals: _ETH_DECIMALS
                                 }) returns (
                                     uint256 price
@@ -261,7 +258,7 @@ library JBSuckerLib {
             amount: amount,
             remoteRoot: JBInboxTreeRoot({nonce: nonce, root: root}),
             sourceTotalSupply: localTotalSupply,
-            sourceCurrency: _ETH_CURRENCY,
+            sourceCurrency: JBCurrencyIds.ETH,
             sourceDecimals: _ETH_DECIMALS,
             sourceSurplus: ethSurplus,
             sourceBalance: ethBalance,
@@ -300,7 +297,7 @@ library JBSuckerLib {
         // decimals. The hook decides what project-specific remote or hidden balances should be included.
         (bool success, bytes memory data) = dataHook.staticcall(
             abi.encodeCall(
-                IJBPeerChainAdjustedAccounts.peerChainAdjustedAccountsOf, (projectId, _ETH_DECIMALS, _ETH_CURRENCY)
+                IJBPeerChainAdjustedAccounts.peerChainAdjustedAccountsOf, (projectId, _ETH_DECIMALS, JBCurrencyIds.ETH)
             )
         );
         if (!success || data.length < 96) return (0, 0, 0);
