@@ -13,7 +13,8 @@ import {IJBCCIPSuckerDeployer} from "../interfaces/IJBCCIPSuckerDeployer.sol";
 // Local: deployers.
 import {JBSuckerDeployer} from "./JBSuckerDeployer.sol";
 
-/// @notice An `IJBSuckerDeployer` implementation to deploy `JBCCIPSucker` contracts.
+/// @notice Deployer for Chainlink CCIP suckers. Stores the CCIP router, remote chain ID, and remote chain selector,
+/// then clones `JBCCIPSucker` instances via CREATE2.
 contract JBCCIPSuckerDeployer is JBSuckerDeployer, IJBCCIPSuckerDeployer {
     //*********************************************************************//
     // ---------------------- public stored properties ------------------- //

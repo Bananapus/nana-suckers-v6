@@ -14,7 +14,8 @@ import {IOPStandardBridge} from "../interfaces/IOPStandardBridge.sol";
 // Local: deployers.
 import {JBSuckerDeployer} from "./JBSuckerDeployer.sol";
 
-/// @notice An `IJBSuckerDeployer` implementation to deploy `JBOptimismSucker` contracts.
+/// @notice Deployer for OP Stack suckers (Optimism, Base, etc.). Stores the CrossDomainMessenger and StandardBridge
+/// for this chain and clones `JBOptimismSucker` instances via CREATE2.
 contract JBOptimismSuckerDeployer is JBSuckerDeployer, IJBOpSuckerDeployer {
     //*********************************************************************//
     // ---------------------- public stored properties ------------------- //

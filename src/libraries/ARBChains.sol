@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.28;
 
-/// @notice Global constants used across Juicebox contracts.
+/// @notice Arbitrum chain IDs for mainnet and Sepolia testnet pairs.
 library ARBChains {
     /// @notice Arbitrum relevant chains and their respective ids.
     uint256 public constant ETH_CHAINID = 1;

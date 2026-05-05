@@ -17,7 +17,8 @@ import {IJBArbitrumSuckerDeployer} from "../interfaces/IJBArbitrumSuckerDeployer
 // Local: deployers.
 import {JBSuckerDeployer} from "./JBSuckerDeployer.sol";
 
-/// @notice An `IJBSuckerDeployer` implementation to deploy `JBArbitrumSucker` contracts.
+/// @notice Deployer for Arbitrum suckers. Stores the Inbox and Gateway Router for the target layer (L1 or L2) and
+/// clones `JBArbitrumSucker` instances via CREATE2.
 contract JBArbitrumSuckerDeployer is JBSuckerDeployer, IJBArbitrumSuckerDeployer {
     //*********************************************************************//
     // ---------------------- public stored properties ------------------- //

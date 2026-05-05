@@ -26,7 +26,9 @@ import {ARBChains} from "./libraries/ARBChains.sol";
 import {JBMessageRoot} from "./structs/JBMessageRoot.sol";
 import {JBRemoteToken} from "./structs/JBRemoteToken.sol";
 
-/// @notice A `JBSucker` implementation to suck tokens between two chains connected by an Arbitrum bridge.
+/// @notice A `JBSucker` implementation that bridges Juicebox project tokens and terminal-token funds between Ethereum
+/// L1 and Arbitrum L2 using the native Arbitrum Inbox/Outbox (for messages) and Gateway Router (for ERC-20 transfers).
+/// Deploys on both layers — L1 instances create retryable tickets, L2 instances call `ArbSys` for L2-to-L1 messages.
 contract JBArbitrumSucker is JBSucker, IJBArbitrumSucker {
     //*********************************************************************//
     // --------------------------- custom errors ------------------------- //

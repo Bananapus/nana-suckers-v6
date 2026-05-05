@@ -17,7 +17,10 @@ import {JBSucker} from "../JBSucker.sol";
 import {IJBSucker} from "../interfaces/IJBSucker.sol";
 import {IJBSuckerDeployer} from "../interfaces/IJBSuckerDeployer.sol";
 
-/// @notice A base implementation for deploying suckers.
+/// @notice Base factory for deploying cross-chain suckers using CREATE2 clones. Each bridge-specific deployer (OP,
+/// Arbitrum, CCIP) extends this contract with its own chain configuration. Setup is two-step: first the configurator
+/// calls `setChainSpecificConstants` (bridge addresses, chain selectors), then `configureSingleton` (the
+/// implementation to clone). After setup, anyone may call `createForSender` to deploy a new sucker for a project.
 abstract contract JBSuckerDeployer is ERC2771Context, JBPermissioned, IJBSuckerDeployer {
     //*********************************************************************//
     // --------------------------- custom errors ------------------------- //
@@ -47,7 +50,7 @@ abstract contract JBSuckerDeployer is ERC2771Context, JBPermissioned, IJBSuckerD
     // ---------------------- public stored properties ------------------- //
     //*********************************************************************//
 
-    /// @notice A mapping of suckers deployed by this contract.
+    /// @notice Whether a given address was deployed by this deployer.
     mapping(address => bool) public override isSucker;
 
     /// @notice The singleton used to clone suckers.
@@ -117,8 +120,8 @@ abstract contract JBSuckerDeployer is ERC2771Context, JBPermissioned, IJBSuckerD
     // --------------------- external transactions ----------------------- //
     //*********************************************************************//
 
-    /// @notice Configure the singleton instance that is used to clone suckers.
-    /// @dev Can only be called *once* by the layer specific configurator.
+    /// @notice Set the implementation contract that all future suckers will be cloned from. Can only be called once.
+    /// @dev Must be called by the layer-specific configurator after `setChainSpecificConstants`.
     /// @param _singleton The address of the singleton.
     function configureSingleton(JBSucker _singleton) external {
         // Make sure only the configurator can call this function.
@@ -138,8 +141,9 @@ abstract contract JBSuckerDeployer is ERC2771Context, JBPermissioned, IJBSuckerD
         singleton = _singleton;
     }
 
-    /// @notice Create a new `JBSucker` for a specific project with an explicit remote peer.
-    /// @dev Uses the sender address as the salt, which means the same sender must call this function on both chains.
+    /// @notice Deploy a new sucker clone for a project via CREATE2. The same sender must call this on both chains to
+    /// produce matching deterministic addresses.
+    /// @dev Called by the registry during `deploySuckersFor`.
     /// @param localProjectId The project's ID on the local chain.
     /// @param salt The salt to use for the `create2` address.
     /// @param peer The remote peer address. Leave zero to use the default deterministic same-address peer.

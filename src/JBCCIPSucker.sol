@@ -28,7 +28,9 @@ import {JBMessageRoot} from "./structs/JBMessageRoot.sol";
 import {JBRemoteToken} from "./structs/JBRemoteToken.sol";
 import {JBTokenMapping} from "./structs/JBTokenMapping.sol";
 
-/// @notice A `JBSucker` implementation to suck tokens between chains with Chainlink CCIP
+/// @notice A `JBSucker` implementation that bridges Juicebox project tokens and terminal-token funds across any pair of
+/// chains supported by Chainlink CCIP. Messages and token transfers are bundled into a single CCIP lane message, with
+/// the CCIP Router handling cross-chain delivery and fee estimation.
 contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
     //*********************************************************************//
     // --------------------------- custom errors ------------------------- //
