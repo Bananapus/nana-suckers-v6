@@ -107,12 +107,13 @@ contract MultiSuckerMockDeployer is IJBSuckerDeployer {
 /// @notice Fork tests for multiple suckers on the same chain pair.
 ///
 /// Covers:
-///  1. Duplicate active sucker for same peer chain is blocked by registry
+///  1. Multiple active suckers per peer chain allowed (bridge resilience)
 ///  2. Full deprecation → replacement lifecycle with real state delivery via `fromRemote()`
 ///  3. Registry aggregate views prefer the active sucker for each peer chain
 ///  4. Deprecated sucker with higher state — active replacement still wins
 ///  5. Multi-chain suckers sum across different chains (no spurious dedup)
 ///  6. Stale snapshot nonce on same sucker does NOT roll back state
+///  10. Dual active suckers for same chain use MAX aggregation (not SUM)
 ///
 /// Run with: FOUNDRY_PROFILE=fork forge test --match-contract MultiSuckerForkTest -vvv
 contract MultiSuckerForkTest is Test {
@@ -222,25 +223,26 @@ contract MultiSuckerForkTest is Test {
     }
 
     // ═══════════════════════════════════════════════════════════════════
-    // Test 1: Duplicate active sucker for same peer chain is blocked
+    // Test 1: Multiple active suckers per chain allowed (bridge resilience)
     // ═══════════════════════════════════════════════════════════════════
 
-    function test_duplicatePeerChainBlocked() external {
+    function test_multipleSuckersPerChainAllowed() external {
         MultiSuckerMock sucker1 = _createMockSucker("dup-a", ARBITRUM);
         MultiSuckerMock sucker2 = _createMockSucker("dup-b", ARBITRUM);
 
         // Deploy first sucker for Arbitrum — should succeed.
         _deployViaRegistry(sucker1);
 
-        // Deploy second sucker for Arbitrum — should revert.
-        deployer.addSucker(IJBSucker(address(sucker2)));
-        JBSuckerDeployerConfig[] memory configs = new JBSuckerDeployerConfig[](1);
-        configs[0] = JBSuckerDeployerConfig({deployer: deployer, peer: bytes32(0), mappings: new JBTokenMapping[](0)});
+        // Deploy second sucker for Arbitrum — should also succeed.
+        _deployViaRegistry(sucker2);
 
-        vm.expectRevert(
-            abi.encodeWithSelector(JBSuckerRegistry.JBSuckerRegistry_DuplicatePeerChain.selector, PROJECT_ID, ARBITRUM)
-        );
-        registry.deploySuckersFor({projectId: PROJECT_ID, salt: bytes32("dup-salt"), configurations: configs});
+        // Both should be registered.
+        assertTrue(registry.isSuckerOf(PROJECT_ID, address(sucker1)), "sucker1 should be registered");
+        assertTrue(registry.isSuckerOf(PROJECT_ID, address(sucker2)), "sucker2 should be registered");
+
+        // suckersOf should return both.
+        address[] memory active = registry.suckersOf(PROJECT_ID);
+        assertEq(active.length, 2, "should have 2 active suckers");
     }
 
     // ═══════════════════════════════════════════════════════════════════
@@ -455,45 +457,66 @@ contract MultiSuckerForkTest is Test {
     // Test 8: After deprecation, deploying replacement for same chain works
     // ═══════════════════════════════════════════════════════════════════
 
-    /// @notice Verify the full lifecycle: deploy → deprecate → remove → deploy replacement.
+    /// @notice Verify the full lifecycle: deploy both → deprecate one → verify remaining.
     function test_deprecateRemoveDeploy_fullLifecycle() external {
         // Step 1: Deploy sucker1 for Arbitrum.
         MultiSuckerMock sucker1 = _createMockSucker("lifecycle-a", ARBITRUM);
         _deployViaRegistry(sucker1);
         _deliverState(sucker1, 1, 1000e18, 500e18, 2000e18);
 
-        address[] memory activeBefore = registry.suckersOf(PROJECT_ID);
-        assertEq(activeBefore.length, 1, "1 active sucker before deprecation");
-
-        // Step 2: Cannot deploy sucker2 for same chain while sucker1 is active.
+        // Step 2: Deploy sucker2 for same chain — both coexist while sucker1 is active.
         MultiSuckerMock sucker2 = _createMockSucker("lifecycle-b", ARBITRUM);
-        deployer.addSucker(IJBSucker(address(sucker2)));
-        JBSuckerDeployerConfig[] memory configs = new JBSuckerDeployerConfig[](1);
-        configs[0] = JBSuckerDeployerConfig({deployer: deployer, peer: bytes32(0), mappings: new JBTokenMapping[](0)});
+        _deployViaRegistry(sucker2);
+        _deliverState(sucker2, 1, 1500e18, 700e18, 3000e18);
 
-        vm.expectRevert(
-            abi.encodeWithSelector(JBSuckerRegistry.JBSuckerRegistry_DuplicatePeerChain.selector, PROJECT_ID, ARBITRUM)
-        );
-        registry.deploySuckersFor({projectId: PROJECT_ID, salt: bytes32("blocked"), configurations: configs});
+        // Both active: suckersOf returns 2.
+        address[] memory activeBefore = registry.suckersOf(PROJECT_ID);
+        assertEq(activeBefore.length, 2, "2 active suckers before deprecation");
 
         // Step 3: Deprecate sucker1.
         _deprecateAndRemove(sucker1);
 
-        // Step 4: Now deploy sucker2 for same chain — should succeed.
-        _deployViaRegistry(sucker2);
-        _deliverState(sucker2, 1, 1500e18, 700e18, 3000e18);
-
-        // Verify lifecycle result.
+        // After deprecation: suckersOf returns 1 (only sucker2).
         address[] memory activeAfter = registry.suckersOf(PROJECT_ID);
-        assertEq(activeAfter.length, 1, "1 active sucker after replacement");
+        assertEq(activeAfter.length, 1, "1 active sucker after deprecation");
         assertEq(activeAfter[0], address(sucker2), "active sucker should be sucker2");
 
         // Both suckers recognized by isSuckerOf.
         assertTrue(registry.isSuckerOf(PROJECT_ID, address(sucker1)), "deprecated sucker1 still recognized");
         assertTrue(registry.isSuckerOf(PROJECT_ID, address(sucker2)), "active sucker2 recognized");
 
-        // Aggregate views: MAX(1000, 1500) = 1500.
+        // Aggregate views: MAX(1000, 1500) = 1500 (active wins over deprecated).
         assertEq(registry.remoteTotalSupplyOf(PROJECT_ID), 1500e18, "total supply should be MAX of both suckers");
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // Test 9: Zero state from active replacement hides deprecated state
+    // ═══════════════════════════════════════════════════════════════════
+
+    // ═══════════════════════════════════════════════════════════════════
+    // Test 10: Dual active suckers for same chain use MAX aggregation
+    // ═══════════════════════════════════════════════════════════════════
+
+    /// @notice Two active suckers targeting the same chain — aggregate views should use MAX, not SUM.
+    function test_dualActiveSuckersAggregateMax() external {
+        MultiSuckerMock sucker1 = _createMockSucker("dual-a", ARBITRUM);
+        MultiSuckerMock sucker2 = _createMockSucker("dual-b", ARBITRUM);
+
+        _deployViaRegistry(sucker1);
+        _deployViaRegistry(sucker2);
+
+        // Deliver different state to each: sucker1=900e18, sucker2=1000e18.
+        _deliverState(sucker1, 1, 900e18, 400e18, 1800e18);
+        _deliverState(sucker2, 2, 1000e18, 500e18, 2000e18);
+
+        // Aggregate should use MAX per chain, not SUM.
+        assertEq(registry.remoteTotalSupplyOf(PROJECT_ID), 1000e18, "totalSupply should be MAX(900, 1000) = 1000");
+        assertEq(
+            registry.remoteBalanceOf(PROJECT_ID, 18, ETH_CURRENCY), 2000e18, "balance should be MAX(1800, 2000) = 2000"
+        );
+        assertEq(
+            registry.remoteSurplusOf(PROJECT_ID, 18, ETH_CURRENCY), 500e18, "surplus should be MAX(400, 500) = 500"
+        );
     }
 
     // ═══════════════════════════════════════════════════════════════════
