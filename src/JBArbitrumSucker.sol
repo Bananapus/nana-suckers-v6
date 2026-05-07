@@ -274,7 +274,9 @@ contract JBArbitrumSucker is JBSucker, IJBArbitrumSucker {
 
             // Ensure we bridge enough for gas costs on L2 side
             if (transportPayment < callTransportCost + tokenTransportCost) {
-                revert JBArbitrumSucker_NotEnoughGas(transportPayment, callTransportCost + tokenTransportCost);
+                revert JBArbitrumSucker_NotEnoughGas({
+                    payment: transportPayment, cost: callTransportCost + tokenTransportCost
+                });
             }
 
             {
@@ -300,7 +302,7 @@ contract JBArbitrumSucker is JBSucker, IJBArbitrumSucker {
         } else {
             // Ensure we bridge enough for gas costs on L2 side
             if (transportPayment < callTransportCost) {
-                revert JBArbitrumSucker_NotEnoughGas(transportPayment, callTransportCost);
+                revert JBArbitrumSucker_NotEnoughGas({payment: transportPayment, cost: callTransportCost});
             }
 
             // If the token is the native token then we only need to do a single call.

@@ -395,7 +395,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         // Using _msgSender() would allow a trusted forwarder to spoof the bridge messenger address via the
         // ERC-2771 calldata suffix.
         if (!_isRemotePeer(msg.sender)) {
-            revert JBSucker_NotPeer(_toBytes32(msg.sender));
+            revert JBSucker_NotPeer({caller: _toBytes32(msg.sender)});
         }
 
         // Validate the message version to reject incompatible messages.
@@ -541,7 +541,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
 
         // Make sure that the token is mapped to a remote token.
         if (!_remoteTokenFor[token].enabled) {
-            revert JBSucker_TokenNotMapped(token);
+            revert JBSucker_TokenNotMapped({token: token});
         }
 
         // Make sure that the sucker still allows sending new messaged.
@@ -613,7 +613,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
 
         // Ensure that the token does not have an emergency hatch enabled.
         if (remoteToken.emergencyHatch) {
-            revert JBSucker_TokenHasInvalidEmergencyHatchState(token);
+            revert JBSucker_TokenHasInvalidEmergencyHatchState({token: token});
         }
 
         // Revert if nothing has changed since the last toRemote() call.
@@ -1040,7 +1040,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
 
         // Once the emergency hatch for a token is enabled it can't be disabled.
         if (currentMapping.emergencyHatch) {
-            revert JBSucker_TokenHasInvalidEmergencyHatchState(token);
+            revert JBSucker_TokenHasInvalidEmergencyHatchState({token: token});
         }
 
         // Validate the token mapping according to the rules of the sucker.
@@ -1365,7 +1365,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
             deprecationState != JBSuckerState.DEPRECATED && deprecationState != JBSuckerState.SENDING_DISABLED
                 && !_remoteTokenFor[terminalToken].emergencyHatch
         ) {
-            revert JBSucker_TokenHasInvalidEmergencyHatchState(terminalToken);
+            revert JBSucker_TokenHasInvalidEmergencyHatchState({token: terminalToken});
         }
 
         // Check that this claim is within the bounds of who can claim.
@@ -1572,7 +1572,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         // If the token being mapped is the native token, the `remoteToken` must also be the native token.
         // The native token can also be mapped to the 0 address, which is used to disable native token bridging.
         if (isNative && map.remoteToken != _toBytes32(JBConstants.NATIVE_TOKEN) && map.remoteToken != bytes32(0)) {
-            revert JBSucker_InvalidNativeRemoteAddress(map.remoteToken);
+            revert JBSucker_InvalidNativeRemoteAddress({remoteToken: map.remoteToken});
         }
 
         // Enforce a reasonable minimum gas limit for bridging. A minimum which is too low could lead to the loss of

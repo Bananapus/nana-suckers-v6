@@ -164,7 +164,7 @@ library CCIPHelper {
         } else if (chainId == TEMPO_MOD_ID) {
             return TEMPO_MOD_ROUTER;
         } else {
-            revert CCIPHelper_UnsupportedChain(chainId);
+            revert CCIPHelper_UnsupportedChain({chainId: chainId});
         }
     }
 
@@ -199,7 +199,7 @@ library CCIPHelper {
         } else if (chainId == TEMPO_MOD_ID) {
             return TEMPO_MOD_SEL;
         } else {
-            revert CCIPHelper_UnsupportedChain(chainId);
+            revert CCIPHelper_UnsupportedChain({chainId: chainId});
         }
     }
 
@@ -234,7 +234,7 @@ library CCIPHelper {
         } else if (chainId == TEMPO_MOD_ID) {
             return TEMPO_MOD_WETH;
         } else {
-            revert CCIPHelper_UnsupportedChain(chainId);
+            revert CCIPHelper_UnsupportedChain({chainId: chainId});
         }
     }
 
@@ -263,7 +263,7 @@ library CCIPHelper {
         } else if (chainId == TEMPO_MOD_ID) {
             return TEMPO_MOD_LINK;
         } else {
-            revert CCIPHelper_UnsupportedChain(chainId);
+            revert CCIPHelper_UnsupportedChain({chainId: chainId});
         }
     }
 }

@@ -265,7 +265,7 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
         address origin = abi.decode(any2EvmMessage.sender, (address));
 
         if (origin != _toAddress(peer()) || any2EvmMessage.sourceChainSelector != REMOTE_CHAIN_SELECTOR) {
-            revert JBSucker_NotPeer(_toBytes32(origin));
+            revert JBSucker_NotPeer({caller: _toBytes32(origin)});
         }
 
         // Decode the typed message: abi.encode(uint8 type, bytes payload).
@@ -372,7 +372,7 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
                 }
             }
         } else {
-            revert JBCCIPSucker_UnknownMessageType(messageType);
+            revert JBCCIPSucker_UnknownMessageType({messageType: messageType});
         }
     }
 
@@ -494,7 +494,7 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
                 // claims must wait. This check must come BEFORE the leafTotal gate so that
                 // failed swaps (where _conversionRateOf was never written) still block claims.
                 if (pendingSwapOf[token][nonce].bridgeAmount > 0) {
-                    revert JBSwapCCIPSucker_SwapPending(nonce);
+                    revert JBSwapCCIPSucker_SwapPending({nonce: nonce});
                 }
                 ConversionRate storage rate = _conversionRateOf[token][nonce];
                 if (rate.leafTotal > 0) {
@@ -651,7 +651,7 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
             if (_nonceContainsLeaf({token: token, nonce: n, leafIndex: leafIndex})) return n;
         }
 
-        revert JBSwapCCIPSucker_BatchNotReceived(0);
+        revert JBSwapCCIPSucker_BatchNotReceived({nonce: 0});
     }
 
     /// @notice Check whether the given nonce's batch range contains the leaf index.
