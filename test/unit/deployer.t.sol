@@ -364,7 +364,7 @@ contract DeployerTests is Test, TestBaseWorkflow, IERC721Receiver {
             trustedForwarder: address(0)
         });
 
-        vm.expectRevert(JBSuckerDeployer.JBSuckerDeployer_InvalidLayerSpecificConfiguration.selector);
+        vm.expectPartialRevert(JBSuckerDeployer.JBSuckerDeployer_InvalidLayerSpecificConfiguration.selector);
         ARBDeployer.setChainSpecificConstants(JBLayer.L1, IInbox(address(0)), _gatewayRouter);
     }
 
@@ -379,7 +379,7 @@ contract DeployerTests is Test, TestBaseWorkflow, IERC721Receiver {
             trustedForwarder: address(0)
         });
 
-        vm.expectRevert(JBSuckerDeployer.JBSuckerDeployer_InvalidLayerSpecificConfiguration.selector);
+        vm.expectPartialRevert(JBSuckerDeployer.JBSuckerDeployer_InvalidLayerSpecificConfiguration.selector);
         ARBDeployer.setChainSpecificConstants(JBLayer.L2, IInbox(address(0)), IArbGatewayRouter(address(0)));
     }
 
