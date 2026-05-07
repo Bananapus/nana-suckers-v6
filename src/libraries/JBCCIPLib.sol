@@ -45,11 +45,9 @@ library JBCCIPLib {
         // Wrap native tokens for CCIP bridging. CCIP only transports ERC-20s.
         if (token == JBConstants.NATIVE_TOKEN) {
             // Get the wrapped native token address from the CCIP router.
-            // slither-disable-next-line calls-loop
             IWrappedNativeToken wrappedNative = ccipRouter.getWrappedNative();
 
             // Deposit native tokens to receive wrapped native tokens.
-            // slither-disable-next-line calls-loop,arbitrary-send-eth
             wrappedNative.deposit{value: amount}();
 
             // Update the bridge token to the wrapped native address.
@@ -111,14 +109,12 @@ library JBCCIPLib {
         });
 
         // Get the CCIP fee for sending the message.
-        // slither-disable-next-line calls-loop
         uint256 fees = ICCIPRouter(router).getFee({destinationChainSelector: chainSel, message: message});
 
         if (feeToken != address(0)) {
             // LINK fee path: pull the fee from the caller so toRemote stays permissionless.
             // The caller must approve LINK to the sucker before calling toRemote.
             if (feeTokenPayer != address(0)) {
-                // slither-disable-next-line arbitrary-send-erc20
                 IERC20(feeToken).safeTransferFrom({from: feeTokenPayer, to: address(this), value: fees});
             }
 
@@ -136,11 +132,9 @@ library JBCCIPLib {
             }
             SafeERC20.forceApprove({token: IERC20(feeToken), spender: router, value: totalApproval});
 
-            // slither-disable-next-line calls-loop,unused-return
             ICCIPRouter(router).ccipSend({destinationChainSelector: chainSel, message: message});
         } else {
             // Native ETH fee path.
-            // slither-disable-next-line calls-loop,unused-return,arbitrary-send-eth
             ICCIPRouter(router).ccipSend{value: fees}({destinationChainSelector: chainSel, message: message});
 
             // Calculate the excess transport payment to refund.
@@ -148,7 +142,6 @@ library JBCCIPLib {
 
             // Refund excess transport payment to the recipient.
             if (refundAmount != 0) {
-                // slither-disable-next-line arbitrary-send-eth,missing-zero-check
                 (bool sent,) = refundRecipient.call{value: refundAmount}("");
 
                 // Record the refund failure if the transfer did not succeed.
@@ -168,7 +161,6 @@ library JBCCIPLib {
             Client.EVMTokenAmount calldata tokenAmount = destTokenAmounts[0];
 
             // Look up the wrapped native token from the CCIP router.
-            // slither-disable-next-line calls-loop
             IWrappedNativeToken wrappedNative = ccipRouter.getWrappedNative();
 
             // If the delivered token is the wrapped native token and the amount is non-zero, unwrap it.
@@ -180,7 +172,6 @@ library JBCCIPLib {
                 wrappedNative.withdraw(tokenAmount.amount);
 
                 // Assert the ETH balance increased by the expected amount.
-                // slither-disable-next-line incorrect-equality
                 assert(balanceBefore + tokenAmount.amount == address(this).balance);
             }
         }

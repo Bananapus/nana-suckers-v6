@@ -48,9 +48,11 @@ abstract contract SuckerForkHelpers is TestBaseWorkflow {
         address token = _terminalToken();
 
         // Ensure baseCurrency matches the terminal token so no price feed is needed.
+        // forge-lint: disable-next-line(unsafe-typecast)
         _metadata.baseCurrency = uint32(uint160(token));
 
         JBCurrencyAmount[] memory surplusAllowances = new JBCurrencyAmount[](1);
+        // forge-lint: disable-next-line(unsafe-typecast)
         surplusAllowances[0] = JBCurrencyAmount({amount: 5 * 10 ** 18, currency: uint32(uint160(token))});
 
         JBFundAccessLimitGroup[] memory fundAccessLimitGroup = new JBFundAccessLimitGroup[](1);
@@ -72,6 +74,7 @@ abstract contract SuckerForkHelpers is TestBaseWorkflow {
         rulesetConfigurations[0].fundAccessLimitGroups = fundAccessLimitGroup;
 
         JBAccountingContext[] memory tokensToAccept = new JBAccountingContext[](1);
+        // forge-lint: disable-next-line(unsafe-typecast)
         tokensToAccept[0] = JBAccountingContext({token: token, decimals: 18, currency: uint32(uint160(token))});
 
         JBTerminalConfig[] memory terminalConfigurations = new JBTerminalConfig[](1);

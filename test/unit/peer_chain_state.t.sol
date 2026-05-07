@@ -206,6 +206,7 @@ contract PeerChainStateTest is Test {
             totalSupply: 500 ether,
             surplus: 100 ether,
             balance: 200 ether,
+            // forge-lint: disable-next-line(unsafe-typecast)
             currency: uint256(uint32(ETH_CURRENCY)),
             decimals: ETH_DECIMALS
         });
@@ -220,12 +221,14 @@ contract PeerChainStateTest is Test {
         // Verify balance via public view (query in same currency/decimals as stored).
         JBDenominatedAmount memory storedBalance = sucker.peerChainBalanceOf(ETH_DECIMALS, ETH_CURRENCY);
         assertEq(storedBalance.value, 200 ether, "balance value should be stored");
+        // forge-lint: disable-next-line(unsafe-typecast)
         assertEq(storedBalance.currency, uint32(ETH_CURRENCY), "balance currency should be stored");
         assertEq(storedBalance.decimals, ETH_DECIMALS, "balance decimals should be stored");
 
         // Verify surplus via public view.
         JBDenominatedAmount memory storedSurplus = sucker.peerChainSurplusOf(ETH_DECIMALS, ETH_CURRENCY);
         assertEq(storedSurplus.value, 100 ether, "surplus value should be stored");
+        // forge-lint: disable-next-line(unsafe-typecast)
         assertEq(storedSurplus.currency, uint32(ETH_CURRENCY), "surplus currency should be stored");
         assertEq(storedSurplus.decimals, ETH_DECIMALS, "surplus decimals should be stored");
     }
@@ -238,6 +241,7 @@ contract PeerChainStateTest is Test {
             totalSupply: 500 ether,
             surplus: 100 ether,
             balance: 200 ether,
+            // forge-lint: disable-next-line(unsafe-typecast)
             currency: uint256(uint32(ETH_CURRENCY)),
             decimals: ETH_DECIMALS
         });
@@ -251,6 +255,7 @@ contract PeerChainStateTest is Test {
             totalSupply: 999 ether,
             surplus: 999 ether,
             balance: 999 ether,
+            // forge-lint: disable-next-line(unsafe-typecast)
             currency: uint256(uint32(ETH_CURRENCY)),
             decimals: ETH_DECIMALS
         });
@@ -276,6 +281,7 @@ contract PeerChainStateTest is Test {
             totalSupply: 500 ether,
             surplus: 100 ether,
             balance: 200 ether,
+            // forge-lint: disable-next-line(unsafe-typecast)
             currency: uint256(uint32(ETH_CURRENCY)),
             decimals: ETH_DECIMALS
         });
@@ -289,6 +295,7 @@ contract PeerChainStateTest is Test {
             totalSupply: 750 ether,
             surplus: 300 ether,
             balance: 400 ether,
+            // forge-lint: disable-next-line(unsafe-typecast)
             currency: uint256(uint32(ETH_CURRENCY)),
             decimals: ETH_DECIMALS
         });
@@ -318,6 +325,7 @@ contract PeerChainStateTest is Test {
             totalSupply: 100 ether,
             surplus: 50 ether,
             balance: 10 ether,
+            // forge-lint: disable-next-line(unsafe-typecast)
             currency: uint256(uint32(ETH_CURRENCY)),
             decimals: ETH_DECIMALS
         });
@@ -328,6 +336,7 @@ contract PeerChainStateTest is Test {
         // Query balance in ETH currency (JBCurrencyIds.ETH = 1) at 18 decimals — should return exact value.
         JBDenominatedAmount memory result = sucker.peerChainBalanceOf(18, ETH_CURRENCY);
         assertEq(result.value, 10 ether, "same currency same decimals should return exact value");
+        // forge-lint: disable-next-line(unsafe-typecast)
         assertEq(result.currency, uint32(ETH_CURRENCY), "returned currency should match requested");
         assertEq(result.decimals, 18, "returned decimals should match requested");
     }
@@ -339,6 +348,7 @@ contract PeerChainStateTest is Test {
             totalSupply: 100 ether,
             surplus: 50 ether,
             balance: 10 ether,
+            // forge-lint: disable-next-line(unsafe-typecast)
             currency: uint256(uint32(ETH_CURRENCY)),
             decimals: ETH_DECIMALS
         });
@@ -364,6 +374,7 @@ contract PeerChainStateTest is Test {
             totalSupply: 100 ether,
             surplus: 50 ether,
             balance: 10 ether,
+            // forge-lint: disable-next-line(unsafe-typecast)
             currency: uint256(uint32(ETH_CURRENCY)),
             decimals: ETH_DECIMALS
         });
@@ -379,6 +390,7 @@ contract PeerChainStateTest is Test {
         uint32 usdCurrency = 2;
         vm.mockCall(
             PRICES,
+            // forge-lint: disable-next-line(unsafe-typecast)
             abi.encodeCall(IJBPrices.pricePerUnitOf, (PROJECT_ID, uint32(ETH_CURRENCY), usdCurrency, 18)),
             abi.encode(uint256(2000e18))
         );
@@ -576,6 +588,7 @@ contract PeerChainStateTest is Test {
 
         // Set up a terminal with both ETH and an ERC20 token.
         address erc20Token = makeAddr("USDC");
+        // forge-lint: disable-next-line(unsafe-typecast)
         uint32 erc20Currency = uint32(uint160(erc20Token));
 
         IJBTerminal[] memory terminals = new IJBTerminal[](1);
@@ -586,7 +599,10 @@ contract PeerChainStateTest is Test {
         vm.mockCall(
             TERMINAL,
             abi.encodeCall(
-                IJBTerminal.currentSurplusOf, (PROJECT_ID, new address[](0), ETH_DECIMALS, uint32(ETH_CURRENCY))
+                // forge-lint: disable-next-line(unsafe-typecast)
+                IJBTerminal.currentSurplusOf,
+                // forge-lint: disable-next-line(unsafe-typecast)
+                (PROJECT_ID, new address[](0), ETH_DECIMALS, uint32(ETH_CURRENCY))
             ),
             abi.encode(uint256(25 ether))
         );
@@ -597,6 +613,7 @@ contract PeerChainStateTest is Test {
         vm.etch(PRICES, hex"00");
 
         // Set up two accounting contexts: ETH (18 decimals) + ERC20 (6 decimals).
+        // forge-lint: disable-next-line(unsafe-typecast)
         uint32 nativeTokenCurrency = uint32(uint160(TOKEN));
         JBAccountingContext[] memory contexts = new JBAccountingContext[](2);
         contexts[0] = JBAccountingContext({token: TOKEN, decimals: 18, currency: nativeTokenCurrency});
@@ -621,7 +638,10 @@ contract PeerChainStateTest is Test {
         vm.mockCall(
             PRICES,
             abi.encodeCall(
-                IJBPrices.pricePerUnitOf, (PROJECT_ID, nativeTokenCurrency, uint32(ETH_CURRENCY), ETH_DECIMALS)
+                // forge-lint: disable-next-line(unsafe-typecast)
+                IJBPrices.pricePerUnitOf,
+                // forge-lint: disable-next-line(unsafe-typecast)
+                (PROJECT_ID, nativeTokenCurrency, uint32(ETH_CURRENCY), ETH_DECIMALS)
             ),
             abi.encode(uint256(1e18))
         );
@@ -629,6 +649,7 @@ contract PeerChainStateTest is Test {
         // Mock price: 1 USDC = 0.0005 ETH (at 18 decimals).
         vm.mockCall(
             PRICES,
+            // forge-lint: disable-next-line(unsafe-typecast)
             abi.encodeCall(IJBPrices.pricePerUnitOf, (PROJECT_ID, erc20Currency, uint32(ETH_CURRENCY), ETH_DECIMALS)),
             abi.encode(uint256(0.0005 ether))
         );
@@ -699,7 +720,10 @@ contract PeerChainStateTest is Test {
         vm.mockCall(
             TERMINAL,
             abi.encodeCall(
-                IJBTerminal.currentSurplusOf, (PROJECT_ID, new address[](0), ETH_DECIMALS, uint32(ETH_CURRENCY))
+                // forge-lint: disable-next-line(unsafe-typecast)
+                IJBTerminal.currentSurplusOf,
+                // forge-lint: disable-next-line(unsafe-typecast)
+                (PROJECT_ID, new address[](0), ETH_DECIMALS, uint32(ETH_CURRENCY))
             ),
             abi.encode(ethSurplus)
         );
@@ -713,6 +737,7 @@ contract PeerChainStateTest is Test {
 
         // Single ETH accounting context.
         // Note: accounting context currency = uint32(uint160(TOKEN)) which differs from JBCurrencyIds.ETH.
+        // forge-lint: disable-next-line(unsafe-typecast)
         uint32 nativeTokenCurrency = uint32(uint160(TOKEN));
         JBAccountingContext[] memory contexts = new JBAccountingContext[](1);
         contexts[0] = JBAccountingContext({token: TOKEN, decimals: 18, currency: nativeTokenCurrency});
@@ -729,7 +754,10 @@ contract PeerChainStateTest is Test {
         vm.mockCall(
             PRICES,
             abi.encodeCall(
-                IJBPrices.pricePerUnitOf, (PROJECT_ID, nativeTokenCurrency, uint32(ETH_CURRENCY), ETH_DECIMALS)
+                // forge-lint: disable-next-line(unsafe-typecast)
+                IJBPrices.pricePerUnitOf,
+                // forge-lint: disable-next-line(unsafe-typecast)
+                (PROJECT_ID, nativeTokenCurrency, uint32(ETH_CURRENCY), ETH_DECIMALS)
             ),
             abi.encode(uint256(1e18))
         );

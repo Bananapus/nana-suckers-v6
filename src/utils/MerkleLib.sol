@@ -12,7 +12,7 @@ library MerkleLib {
     // --------------------------- custom errors ------------------------- //
     //*********************************************************************//
 
-    error MerkleLib_InsertTreeIsFull();
+    error MerkleLib_InsertTreeIsFull(uint256 size, uint256 maxLeaves);
 
     //*********************************************************************//
     // ------------------------- internal constants ----------------------- //
@@ -91,7 +91,7 @@ library MerkleLib {
     function insert(Tree storage tree, bytes32 node) internal {
         // Update tree.count to increase the current count by 1 since we'll be including a new node.
         uint256 size = ++tree.count;
-        if (size > MAX_LEAVES) revert MerkleLib_InsertTreeIsFull();
+        if (size > MAX_LEAVES) revert MerkleLib_InsertTreeIsFull({size: size, maxLeaves: MAX_LEAVES});
 
         // Loop starting at 0, ending when we've finished inserting the node (i.e. hashing it) into
         // the active branch. Each loop we cut size in half, hashing the inserted node up the active
@@ -120,7 +120,7 @@ library MerkleLib {
         }
         // As the loop should always end prematurely with the `return` statement, this code should
         // be unreachable. We revert here just to be safe.
-        revert MerkleLib_InsertTreeIsFull();
+        revert MerkleLib_InsertTreeIsFull({size: tree.count, maxLeaves: MAX_LEAVES});
     }
 
     //*********************************************************************//
@@ -396,12 +396,10 @@ library MerkleLib {
                         mstore(0, sload(add(TREE_SLOT, 31)))
                         mstore(0x20, Z_31)
                         _current := keccak256(0, 0x40)
-                        // slither-disable-next-line write-after-write
                         i := 31
                         break
                     }
 
-                    // slither-disable-next-line write-after-write
                     _current := Z_32
                     i := 32
                     break

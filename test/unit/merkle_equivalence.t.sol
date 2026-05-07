@@ -73,6 +73,7 @@ contract MerkleEquivalenceTest is Test {
         uint256 count = _tree.count;
         bytes32[32] memory branch;
         for (uint256 i; i < 32; i++) {
+            // forge-lint: disable-next-line(incorrect-shift)
             if (count & (1 << i) != 0) {
                 branch[i] = _tree.branch[i];
             }

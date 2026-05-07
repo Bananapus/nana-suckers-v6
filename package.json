@@ -26,7 +26,7 @@
     "deploy:mainnets": "source ./.env && npx sphinx propose ./script/Deploy.s.sol --networks mainnets",
     "deploy:testnets": "source ./.env && npx sphinx propose ./script/Deploy.s.sol --networks testnets",
     "artifacts": "source ./.env && npx sphinx artifacts --org-id 'ea165b21-7cdc-4d7b-be59-ecdd4c26bee4' --project-name 'nana-suckers-v6'",
-    "analyze": "slither . --config-file slither-ci.config.json"
+    "analyze": "forge lint --deny notes"
   },
   "dependencies": {
     "@arbitrum/nitro-contracts": "3.2.0",

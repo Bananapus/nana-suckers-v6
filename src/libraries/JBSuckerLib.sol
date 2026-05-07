@@ -87,7 +87,6 @@ library JBSuckerLib {
         if (numTerminals == 0) return (0, 0);
 
         for (uint256 i; i < numTerminals;) {
-            // slither-disable-next-line calls-loop
             try terminals[i].currentSurplusOf({
                 projectId: projectId, tokens: new address[](0), decimals: _ETH_DECIMALS, currency: JBCurrencyIds.ETH
             }) returns (
@@ -103,7 +102,6 @@ library JBSuckerLib {
 
         // Aggregate balance from each terminal, converting each token to ETH.
         for (uint256 i; i < numTerminals;) {
-            // slither-disable-next-line calls-loop
             try terminals[i].accountingContextsOf(projectId) returns (JBAccountingContext[] memory contexts) {
                 // Iterate over each accounting context (token) for this terminal.
                 for (uint256 j; j < contexts.length;) {
@@ -116,7 +114,6 @@ library JBSuckerLib {
                     // Get the currency ID for this context.
                     uint32 tokenCurrency = contexts[j].currency;
 
-                    // slither-disable-next-line calls-loop
                     try IJBMultiTerminal(address(terminals[i])).STORE()
                         .balanceOf({terminal: address(terminals[i]), projectId: projectId, token: tkn}) returns (
                         uint256 bal
@@ -129,7 +126,6 @@ library JBSuckerLib {
                                 });
                             } else {
                                 // Otherwise, convert the balance to ETH using the price oracle.
-                                // slither-disable-next-line calls-loop
                                 try prices.pricePerUnitOf({
                                     projectId: projectId,
                                     pricingCurrency: tokenCurrency,
@@ -184,7 +180,6 @@ library JBSuckerLib {
             });
         } else {
             // Convert using the price oracle.
-            // slither-disable-next-line calls-loop
             try prices.pricePerUnitOf({
                 projectId: projectId,
                 pricingCurrency: source.currency,
@@ -205,11 +200,9 @@ library JBSuckerLib {
     /// @param projectId The project ID.
     /// @return controller The project's controller, or zero if the lookup is not supported.
     function _controllerOf(IJBDirectory directory, uint256 projectId) internal view returns (IJBController controller) {
-        // slither-disable-next-line calls-loop
         try directory.controllerOf(projectId) returns (IERC165 controllerIERC165) {
             if (address(controllerIERC165) == address(0)) return IJBController(address(0));
 
-            // slither-disable-next-line calls-loop
             try controllerIERC165.supportsInterface(type(IJBController).interfaceId) returns (bool supported) {
                 if (supported) controller = IJBController(address(controllerIERC165));
             } catch {}
@@ -325,7 +318,6 @@ library JBSuckerLib {
         IJBController controller = _controllerOf({directory: directory, projectId: projectId});
 
         if (address(controller) != address(0)) {
-            // slither-disable-next-line calls-loop
             try controller.totalTokenSupplyWithReservedTokensOf(projectId) returns (uint256 supply) {
                 localTotalSupply = supply;
             } catch {}
@@ -360,7 +352,6 @@ library JBSuckerLib {
         // An empty tree has a well-known root.
         if (count == 0) return MerkleLib.Z_32;
 
-        // slither-disable-start incorrect-shift
         // solhint-disable-next-line no-inline-assembly
         assembly ("memory-safe") {
             // Build zero hashes on-the-fly: Z[0] = 0, Z[i+1] = keccak256(Z[i], Z[i]).
@@ -402,7 +393,6 @@ library JBSuckerLib {
                 }
             }
         }
-        // slither-disable-end incorrect-shift
     }
 
     /// @notice Compute a branch root from a leaf, branch, and index. Wraps MerkleLib.branchRoot so its

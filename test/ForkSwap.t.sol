@@ -167,6 +167,7 @@ contract ForkSwapTest is Test {
             IJBTokens(MOCK_TOKENS),
             IJBPermissions(MOCK_PERMISSIONS)
         );
+        // forge-lint: disable-next-line(unsafe-typecast)
         sucker = ForkSwapHarness(payable(LibClone.cloneDeterministic(address(singleton), bytes32("forkswap"))));
         sucker.initialize(1);
     }

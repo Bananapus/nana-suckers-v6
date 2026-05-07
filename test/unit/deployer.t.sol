@@ -542,10 +542,12 @@ contract DeployerTests is Test, TestBaseWorkflow, IERC721Receiver {
 
         // Deploy the first sucker targeting chain 10.
         IJBSuckerDeployer deployer1 = _addToRegistry(_setupCCIPDeployer(remoteChainId, remoteSelector, _ccipRouter));
+        // forge-lint: disable-next-line(unsafe-typecast)
         IJBSucker sucker1 = _deployThroughRegistry(deployer1, projectId, bytes32("salt1"));
 
         // Deploy a second sucker also targeting chain 10 — should succeed.
         IJBSuckerDeployer deployer2 = _addToRegistry(_setupCCIPDeployer(remoteChainId, remoteSelector + 1, _ccipRouter));
+        // forge-lint: disable-next-line(unsafe-typecast)
         IJBSucker sucker2 = _deployThroughRegistry(deployer2, projectId, bytes32("salt2"));
 
         // Both should be registered.
@@ -573,9 +575,11 @@ contract DeployerTests is Test, TestBaseWorkflow, IERC721Receiver {
 
         // Deploy two suckers to the same chain.
         IJBSuckerDeployer deployer1 = _addToRegistry(_setupCCIPDeployer(remoteChainId, 1, _ccipRouter));
+        // forge-lint: disable-next-line(unsafe-typecast)
         IJBSucker sucker1 = _deployThroughRegistry(deployer1, projectId, bytes32("salt1"));
 
         IJBSuckerDeployer deployer2 = _addToRegistry(_setupCCIPDeployer(remoteChainId, 2, _ccipRouter));
+        // forge-lint: disable-next-line(unsafe-typecast)
         IJBSucker sucker2 = _deployThroughRegistry(deployer2, projectId, bytes32("salt2"));
 
         uint256 ethCurrency = uint256(uint160(JBConstants.NATIVE_TOKEN));
@@ -595,11 +599,13 @@ contract DeployerTests is Test, TestBaseWorkflow, IERC721Receiver {
         vm.mockCall(
             address(sucker1),
             abi.encodeCall(IJBSucker.peerChainBalanceOf, (18, ethCurrency)),
+            // forge-lint: disable-next-line(unsafe-typecast)
             abi.encode(JBDenominatedAmount({value: 900e18, currency: uint32(ethCurrency), decimals: 18}))
         );
         vm.mockCall(
             address(sucker2),
             abi.encodeCall(IJBSucker.peerChainBalanceOf, (18, ethCurrency)),
+            // forge-lint: disable-next-line(unsafe-typecast)
             abi.encode(JBDenominatedAmount({value: 1000e18, currency: uint32(ethCurrency), decimals: 18}))
         );
         assertEq(registry.remoteBalanceOf(projectId, 18, ethCurrency), 1000e18, "balance should use MAX");
@@ -608,11 +614,13 @@ contract DeployerTests is Test, TestBaseWorkflow, IERC721Receiver {
         vm.mockCall(
             address(sucker1),
             abi.encodeCall(IJBSucker.peerChainSurplusOf, (18, ethCurrency)),
+            // forge-lint: disable-next-line(unsafe-typecast)
             abi.encode(JBDenominatedAmount({value: 900e18, currency: uint32(ethCurrency), decimals: 18}))
         );
         vm.mockCall(
             address(sucker2),
             abi.encodeCall(IJBSucker.peerChainSurplusOf, (18, ethCurrency)),
+            // forge-lint: disable-next-line(unsafe-typecast)
             abi.encode(JBDenominatedAmount({value: 1000e18, currency: uint32(ethCurrency), decimals: 18}))
         );
         assertEq(registry.remoteSurplusOf(projectId, 18, ethCurrency), 1000e18, "surplus should use MAX");
@@ -631,6 +639,7 @@ contract DeployerTests is Test, TestBaseWorkflow, IERC721Receiver {
 
         // Deploy the first sucker.
         IJBSuckerDeployer deployer = _addToRegistry(_setupCCIPDeployer(remoteChainId, remoteSelector, _ccipRouter));
+        // forge-lint: disable-next-line(unsafe-typecast)
         IJBSucker sucker = _deployThroughRegistry(deployer, projectId, bytes32("salt1"));
         assertTrue(registry.isSuckerOf(projectId, address(sucker)));
 
@@ -641,6 +650,7 @@ contract DeployerTests is Test, TestBaseWorkflow, IERC721Receiver {
 
         // Deploy a replacement to the same peer chain — should succeed.
         IJBSuckerDeployer deployer2 = _addToRegistry(_setupCCIPDeployer(remoteChainId, remoteSelector + 1, _ccipRouter));
+        // forge-lint: disable-next-line(unsafe-typecast)
         IJBSucker sucker2 = _deployThroughRegistry(deployer2, projectId, bytes32("salt2"));
         assertTrue(registry.isSuckerOf(projectId, address(sucker2)));
     }
@@ -659,9 +669,11 @@ contract DeployerTests is Test, TestBaseWorkflow, IERC721Receiver {
 
         // Deploy two suckers to different chains.
         IJBSuckerDeployer deployer1 = _addToRegistry(_setupCCIPDeployer(10, 1, _ccipRouter));
+        // forge-lint: disable-next-line(unsafe-typecast)
         IJBSucker sucker1 = _deployThroughRegistry(deployer1, projectId, bytes32("salt1"));
 
         IJBSuckerDeployer deployer2 = _addToRegistry(_setupCCIPDeployer(42_161, 2, _ccipRouter));
+        // forge-lint: disable-next-line(unsafe-typecast)
         IJBSucker sucker2 = _deployThroughRegistry(deployer2, projectId, bytes32("salt2"));
 
         // Mock peerChainTotalSupply on each sucker.
@@ -680,9 +692,11 @@ contract DeployerTests is Test, TestBaseWorkflow, IERC721Receiver {
         _allowMapping(projectId, address(registry));
 
         IJBSuckerDeployer deployer1 = _addToRegistry(_setupCCIPDeployer(10, 1, _ccipRouter));
+        // forge-lint: disable-next-line(unsafe-typecast)
         IJBSucker sucker1 = _deployThroughRegistry(deployer1, projectId, bytes32("salt1"));
 
         IJBSuckerDeployer deployer2 = _addToRegistry(_setupCCIPDeployer(42_161, 2, _ccipRouter));
+        // forge-lint: disable-next-line(unsafe-typecast)
         IJBSucker sucker2 = _deployThroughRegistry(deployer2, projectId, bytes32("salt2"));
 
         uint256 ethCurrency = uint256(uint160(JBConstants.NATIVE_TOKEN));
@@ -691,11 +705,13 @@ contract DeployerTests is Test, TestBaseWorkflow, IERC721Receiver {
         vm.mockCall(
             address(sucker1),
             abi.encodeCall(IJBSucker.peerChainBalanceOf, (18, ethCurrency)),
+            // forge-lint: disable-next-line(unsafe-typecast)
             abi.encode(JBDenominatedAmount({value: 5e18, currency: uint32(ethCurrency), decimals: 18}))
         );
         vm.mockCall(
             address(sucker2),
             abi.encodeCall(IJBSucker.peerChainBalanceOf, (18, ethCurrency)),
+            // forge-lint: disable-next-line(unsafe-typecast)
             abi.encode(JBDenominatedAmount({value: 3e18, currency: uint32(ethCurrency), decimals: 18}))
         );
 
@@ -711,9 +727,11 @@ contract DeployerTests is Test, TestBaseWorkflow, IERC721Receiver {
         _allowMapping(projectId, address(registry));
 
         IJBSuckerDeployer deployer1 = _addToRegistry(_setupCCIPDeployer(10, 1, _ccipRouter));
+        // forge-lint: disable-next-line(unsafe-typecast)
         IJBSucker sucker1 = _deployThroughRegistry(deployer1, projectId, bytes32("salt1"));
 
         IJBSuckerDeployer deployer2 = _addToRegistry(_setupCCIPDeployer(42_161, 2, _ccipRouter));
+        // forge-lint: disable-next-line(unsafe-typecast)
         IJBSucker sucker2 = _deployThroughRegistry(deployer2, projectId, bytes32("salt2"));
 
         uint256 ethCurrency = uint256(uint160(JBConstants.NATIVE_TOKEN));
@@ -722,11 +740,13 @@ contract DeployerTests is Test, TestBaseWorkflow, IERC721Receiver {
         vm.mockCall(
             address(sucker1),
             abi.encodeCall(IJBSucker.peerChainSurplusOf, (18, ethCurrency)),
+            // forge-lint: disable-next-line(unsafe-typecast)
             abi.encode(JBDenominatedAmount({value: 10e18, currency: uint32(ethCurrency), decimals: 18}))
         );
         vm.mockCall(
             address(sucker2),
             abi.encodeCall(IJBSucker.peerChainSurplusOf, (18, ethCurrency)),
+            // forge-lint: disable-next-line(unsafe-typecast)
             abi.encode(JBDenominatedAmount({value: 7e18, currency: uint32(ethCurrency), decimals: 18}))
         );
 
@@ -750,6 +770,7 @@ contract DeployerTests is Test, TestBaseWorkflow, IERC721Receiver {
         _allowMapping(projectId, address(registry));
 
         IJBSuckerDeployer deployer1 = _addToRegistry(_setupCCIPDeployer(10, 1, _ccipRouter));
+        // forge-lint: disable-next-line(unsafe-typecast)
         IJBSucker sucker1 = _deployThroughRegistry(deployer1, projectId, bytes32("salt1"));
 
         // Mock peerChainTotalSupply.
@@ -777,9 +798,11 @@ contract DeployerTests is Test, TestBaseWorkflow, IERC721Receiver {
 
         // Deploy two suckers.
         IJBSuckerDeployer deployer1 = _addToRegistry(_setupCCIPDeployer(10, 1, _ccipRouter));
+        // forge-lint: disable-next-line(unsafe-typecast)
         IJBSucker sucker1 = _deployThroughRegistry(deployer1, projectId, bytes32("salt1"));
 
         IJBSuckerDeployer deployer2 = _addToRegistry(_setupCCIPDeployer(42_161, 2, _ccipRouter));
+        // forge-lint: disable-next-line(unsafe-typecast)
         IJBSucker sucker2 = _deployThroughRegistry(deployer2, projectId, bytes32("salt2"));
 
         // sucker1 returns 100e18, sucker2 reverts.

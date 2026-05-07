@@ -90,11 +90,9 @@ contract JBCeloSucker is JBOptimismSucker {
             }
 
             // Unwrap wrapped native tokens → native tokens.
-            // slither-disable-next-line calls-loop
             WRAPPED_NATIVE_TOKEN.withdraw(amount);
 
             // Get the project's primary terminal for native token.
-            // slither-disable-next-line calls-loop
             IJBTerminal terminal =
                 DIRECTORY.primaryTerminalOf({projectId: cachedProjectId, token: JBConstants.NATIVE_TOKEN});
 
@@ -103,7 +101,6 @@ contract JBCeloSucker is JBOptimismSucker {
             }
 
             // Add native ETH to the project's balance.
-            // slither-disable-next-line arbitrary-send-eth,calls-loop
             terminal.addToBalanceOf{value: amount}({
                 projectId: cachedProjectId,
                 token: JBConstants.NATIVE_TOKEN,
@@ -151,17 +148,14 @@ contract JBCeloSucker is JBOptimismSucker {
             address bridgeToken = token;
             if (token == JBConstants.NATIVE_TOKEN) {
                 // Wrap native tokens so they can be bridged as ERC-20.
-                // slither-disable-next-line arbitrary-send-eth,calls-loop
                 WRAPPED_NATIVE_TOKEN.deposit{value: amount}();
                 bridgeToken = address(WRAPPED_NATIVE_TOKEN);
             }
 
             // Approve the bridge to spend the token.
-            // slither-disable-next-line reentrancy-events
             SafeERC20.forceApprove({token: IERC20(bridgeToken), spender: address(OPBRIDGE), value: amount});
 
             // Bridge the ERC-20 token to the peer.
-            // slither-disable-next-line reentrancy-events,calls-loop
             OPBRIDGE.bridgeERC20To({
                 localToken: bridgeToken,
                 remoteToken: _toAddress(remoteToken.addr),
@@ -175,7 +169,6 @@ contract JBCeloSucker is JBOptimismSucker {
         // Send the messenger message with nativeValue = 0.
         // Celo's native token is CELO, not ETH — we never attach ETH as msg.value on the messenger.
         // On L1, the ETH was already wrapped and bridged as ERC-20 above.
-        // slither-disable-next-line reentrancy-events,calls-loop
         OPMESSENGER.sendMessage({
             target: peerAddress,
             message: abi.encodeCall(JBSucker.fromRemote, (message)),

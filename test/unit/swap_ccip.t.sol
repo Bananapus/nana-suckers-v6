@@ -37,6 +37,7 @@ contract MockTerminal {
         payable
     {
         if (token != address(0x000000000000000000000000000000000000EEEe)) {
+            // forge-lint: disable-next-line(erc20-unchecked-transfer)
             IERC20(token).transferFrom(msg.sender, address(this), amount);
         }
     }
@@ -192,6 +193,7 @@ contract SwapCCIPScalingTest is Test {
             IJBTokens(MOCK_TOKENS),
             IJBPermissions(MOCK_PERMISSIONS)
         );
+        // forge-lint: disable-next-line(unsafe-typecast)
         sucker = SwapCCIPTestHarness(payable(LibClone.cloneDeterministic(address(singleton), bytes32("swap"))));
         sucker.initialize(PROJECT_ID);
     }

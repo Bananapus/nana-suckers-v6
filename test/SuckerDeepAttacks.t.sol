@@ -149,6 +149,7 @@ contract DeepAttackSucker is JBSucker {
     }
 
     function test_setNumberOfClaimsSent(address token, uint256 count) external {
+        // forge-lint: disable-next-line(unsafe-typecast)
         _outboxOf[token].numberOfClaimsSent = uint192(count);
     }
 

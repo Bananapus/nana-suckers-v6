@@ -73,7 +73,9 @@ contract JBCeloSuckerDeployer is JBOptimismSuckerDeployer, IJBCeloSuckerDeployer
     {
         // Make sure the layer specific configuration has not already been set.
         if (_layerSpecificConfigurationIsSet()) {
-            revert JBSuckerDeployer_AlreadyConfigured();
+            revert JBSuckerDeployer_AlreadyConfigured({
+                singleton: address(singleton), layerSpecificConfigurationIsSet: true
+            });
         }
 
         // Make sure only the configurator can call this function.
@@ -88,7 +90,7 @@ contract JBCeloSuckerDeployer is JBOptimismSuckerDeployer, IJBCeloSuckerDeployer
 
         // Make sure the layer specific configuration is properly configured.
         if (!_layerSpecificConfigurationIsSet()) {
-            revert JBSuckerDeployer_InvalidLayerSpecificConfiguration();
+            revert JBSuckerDeployer_InvalidLayerSpecificConfiguration({configurator: LAYER_SPECIFIC_CONFIGURATOR});
         }
     }
 }

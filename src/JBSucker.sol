@@ -67,9 +67,9 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
 
     error JBSucker_AmountExceedsUint128(uint256 amount);
     error JBSucker_BelowMinGas(uint256 minGas, uint256 minGasLimit);
-    error JBSucker_Deprecated();
+    error JBSucker_Deprecated(JBSuckerState state);
     error JBSucker_DeprecationTimestampTooSoon(uint256 givenTime, uint256 minimumTime);
-    error JBSucker_ExpectedMsgValue();
+    error JBSucker_ExpectedMsgValue(uint256 msgValue);
     error JBSucker_IndexOutOfRange(uint256 index);
     error JBSucker_InsufficientBalance(uint256 amount, uint256 balance);
     error JBSucker_InsufficientMsgValue(uint256 received, uint256 expected);
@@ -79,16 +79,16 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     error JBSucker_LeafAlreadyExecuted(address token, uint256 index);
     error JBSucker_NoTerminalForToken(uint256 projectId, address token);
     error JBSucker_NotPeer(bytes32 caller);
-    error JBSucker_NothingToSend();
+    error JBSucker_NothingToSend(address token, uint256 outboxBalance, uint256 treeCount, uint256 numberOfClaimsSent);
     error JBSucker_NoRetainedToRemoteFee(address account);
     error JBSucker_NoRetainedTransportPaymentRefund(address account);
-    error JBSucker_RefundFailed();
+    error JBSucker_RefundFailed(address beneficiary, uint256 amount);
     error JBSucker_TokenAlreadyMapped(address localToken, bytes32 mappedTo);
     error JBSucker_TokenHasInvalidEmergencyHatchState(address token);
     error JBSucker_TokenNotMapped(address token);
     error JBSucker_UnexpectedMsgValue(uint256 value);
-    error JBSucker_ZeroBeneficiary();
-    error JBSucker_ZeroERC20Token();
+    error JBSucker_ZeroBeneficiary(bytes32 beneficiary);
+    error JBSucker_ZeroERC20Token(uint256 projectId);
 
     //*********************************************************************//
     // ------------------------- public constants ------------------------ //
@@ -318,7 +318,6 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     /// @param tokens The terminal tokens to enable the emergency hatch for.
     function enableEmergencyHatchFor(address[] calldata tokens) external override {
         // The caller must be the project owner or have the `QUEUE_RULESETS` permission from them.
-        // slither-disable-next-line calls-loop
         uint256 _projectId = projectId();
 
         _requirePermissionFrom({
@@ -479,7 +478,6 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
 
         // Perform each token mapping.
         for (uint256 i; i < maps.length;) {
-            // slither-disable-next-line msg-value-loop
             _mapToken({map: maps[i], transportPaymentValue: numberToDisable > 0 ? msg.value / numberToDisable : 0});
             unchecked {
                 ++i;
@@ -490,14 +488,13 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         if (numberToDisable == 0) {
             if (msg.value > 0) {
                 (bool _ok,) = _msgSender().call{value: msg.value}("");
-                if (!_ok) revert JBSucker_RefundFailed();
+                if (!_ok) revert JBSucker_RefundFailed({beneficiary: _msgSender(), amount: msg.value});
             }
         } else {
             // Refund any remainder from integer division so dust wei isn't stuck in the contract.
             uint256 remainder = msg.value % numberToDisable;
             if (remainder > 0) {
                 // Best-effort refund — don't revert if caller can't accept ETH.
-                // slither-disable-next-line low-level-calls,unchecked-lowlevel
                 (bool _ok,) = _msgSender().call{value: remainder}("");
                 _ok; // Silence unused-variable warning; failure is intentionally ignored.
             }
@@ -534,13 +531,13 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     {
         // Make sure the beneficiary is not the zero address, as this would revert when minting on the remote chain.
         if (beneficiary == bytes32(0)) {
-            revert JBSucker_ZeroBeneficiary();
+            revert JBSucker_ZeroBeneficiary({beneficiary: beneficiary});
         }
 
         // Get the project's token.
         IERC20 projectToken = IERC20(address(TOKENS.tokenOf(projectId())));
         if (address(projectToken) == address(0)) {
-            revert JBSucker_ZeroERC20Token();
+            revert JBSucker_ZeroERC20Token({projectId: projectId()});
         }
 
         // Make sure that the token is mapped to a remote token.
@@ -551,15 +548,13 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         // Make sure that the sucker still allows sending new messaged.
         JBSuckerState deprecationState = state();
         if (deprecationState == JBSuckerState.DEPRECATED || deprecationState == JBSuckerState.SENDING_DISABLED) {
-            revert JBSucker_Deprecated();
+            revert JBSucker_Deprecated({state: deprecationState});
         }
 
         // Transfer the tokens to this contract.
-        // slither-disable-next-line reentrancy-events,reentrancy-benign
         projectToken.safeTransferFrom({from: _msgSender(), to: address(this), value: projectTokenCount});
 
         // Cash out the tokens.
-        // slither-disable-next-line reentrancy-events,reentrancy-benign
         uint256 terminalTokenAmount = _pullBackingAssets({
             projectToken: projectToken, count: projectTokenCount, token: token, minTokensReclaimed: minTokensReclaimed
         });
@@ -582,10 +577,9 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         // extended/shortened.
         JBSuckerState deprecationState = state();
         if (deprecationState == JBSuckerState.DEPRECATED || deprecationState == JBSuckerState.SENDING_DISABLED) {
-            revert JBSucker_Deprecated();
+            revert JBSucker_Deprecated({state: deprecationState});
         }
 
-        // slither-disable-next-line calls-loop
         uint256 _projectId = projectId();
 
         // The caller must be the project owner or have the `SET_SUCKER_DEPRECATION` permission from them.
@@ -632,7 +626,12 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         // Revert if nothing has changed since the last toRemote() call.
         JBOutboxTree storage outbox = _outboxOf[token];
         if (outbox.balance == 0 && outbox.tree.count == outbox.numberOfClaimsSent) {
-            revert JBSucker_NothingToSend();
+            revert JBSucker_NothingToSend({
+                token: token,
+                outboxBalance: outbox.balance,
+                treeCount: outbox.tree.count,
+                numberOfClaimsSent: outbox.numberOfClaimsSent
+            });
         }
 
         // Read the fee from the registry.
@@ -650,7 +649,6 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         IJBTerminal feeTerminal = _primaryTerminalOf({forProjectId: FEE_PROJECT_ID, token: JBConstants.NATIVE_TOKEN});
         bool feePaid;
         if (address(feeTerminal) != address(0) && _toRemoteFee != 0) {
-            // slither-disable-next-line unused-return,reentrancy-events,reentrancy-benign,arbitrary-send-eth
             try feeTerminal.pay{value: _toRemoteFee}({
                 projectId: FEE_PROJECT_ID,
                 token: JBConstants.NATIVE_TOKEN,
@@ -827,7 +825,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     /// @notice Claim retained failed-fee ETH.
     /// @param beneficiary The address that should receive the retained ETH.
     function claimRetainedToRemoteFee(address payable beneficiary) external override {
-        if (beneficiary == address(0)) revert JBSucker_ZeroBeneficiary();
+        if (beneficiary == address(0)) revert JBSucker_ZeroBeneficiary({beneficiary: bytes32(0)});
 
         address account = _msgSender();
         uint256 amount = retainedToRemoteFeeOf[account];
@@ -836,12 +834,10 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         retainedToRemoteFeeOf[account] = 0;
         retainedToRemoteFeeBalance -= amount;
 
-        // slither-disable-next-line arbitrary-send-eth
         (bool success,) = beneficiary.call{value: amount}("");
-        if (!success) revert JBSucker_RefundFailed();
+        if (!success) revert JBSucker_RefundFailed({beneficiary: beneficiary, amount: amount});
 
         // State was cleared before sending ETH; the event is emitted after the transfer so failed sends do not log.
-        // slither-disable-next-line reentrancy-events
         emit RetainedToRemoteFeeClaimed({
             account: account, beneficiary: beneficiary, amount: amount, caller: _msgSender()
         });
@@ -850,7 +846,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     /// @notice Claim retained failed transport-payment refund ETH.
     /// @param beneficiary The address that should receive the retained ETH.
     function claimRetainedTransportPaymentRefund(address payable beneficiary) external override {
-        if (beneficiary == address(0)) revert JBSucker_ZeroBeneficiary();
+        if (beneficiary == address(0)) revert JBSucker_ZeroBeneficiary({beneficiary: bytes32(0)});
 
         address account = _msgSender();
         uint256 amount = retainedTransportPaymentRefundOf[account];
@@ -859,12 +855,10 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         retainedTransportPaymentRefundOf[account] = 0;
         retainedTransportPaymentRefundBalance -= amount;
 
-        // slither-disable-next-line arbitrary-send-eth
         (bool success,) = beneficiary.call{value: amount}("");
-        if (!success) revert JBSucker_RefundFailed();
+        if (!success) revert JBSucker_RefundFailed({beneficiary: beneficiary, amount: amount});
 
         // State was cleared before sending ETH; the event is emitted after the transfer so failed sends do not log.
-        // slither-disable-next-line reentrancy-events
         emit RetainedTransportPaymentRefundClaimed({
             account: account, beneficiary: beneficiary, amount: amount, caller: _msgSender()
         });
@@ -887,7 +881,6 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     /// @param _projectId The ID of the project (on the local chain) that this sucker is associated with.
     /// @param remotePeer The remote peer address. Leave zero to use the default deterministic same-address peer.
     function _initialize(uint256 _projectId, bytes32 remotePeer) internal {
-        // slither-disable-next-line missing-zero-check
         _localProjectId = _projectId;
         _peer = remotePeer;
         deployer = _msgSender();
@@ -920,7 +913,6 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         IJBTerminal terminal = _primaryTerminalOf({forProjectId: cachedProjectId, token: token});
 
         // Revert if no terminal is configured for this token.
-        // slither-disable-next-line incorrect-equality
         if (address(terminal) == address(0)) {
             revert JBSucker_NoTerminalForToken({projectId: cachedProjectId, token: token});
         }
@@ -928,14 +920,12 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         // Perform the `addToBalance` for ERC-20 tokens.
         if (token != JBConstants.NATIVE_TOKEN) {
             // Record the balance before the transfer for the sanity check.
-            // slither-disable-next-line calls-loop
             uint256 balanceBefore = IERC20(token).balanceOf(address(this));
 
             // Approve the terminal to spend the ERC-20 tokens.
             SafeERC20.forceApprove({token: IERC20(token), spender: address(terminal), value: amount});
 
             // Add the tokens to the project's balance.
-            // slither-disable-next-line calls-loop
             terminal.addToBalanceOf({
                 projectId: cachedProjectId,
                 token: token,
@@ -946,11 +936,9 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
             });
 
             // Sanity check: make sure we transferred the full amount.
-            // slither-disable-next-line calls-loop,incorrect-equality
             assert(IERC20(token).balanceOf(address(this)) == balanceBefore - amount);
         } else {
             // If the token is the native token, send ETH with the call.
-            // slither-disable-next-line arbitrary-send-eth,calls-loop
             terminal.addToBalanceOf{value: amount}({
                 projectId: cachedProjectId,
                 token: token,
@@ -988,7 +976,6 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         // before enabling suckers.
         //
         // Mint the project tokens for the beneficiary via the project's controller.
-        // slither-disable-next-line calls-loop,unused-return
         IJBController(address(DIRECTORY.controllerOf(cachedProjectId)))
             .mintTokensOf({
             projectId: cachedProjectId,
@@ -1072,7 +1059,6 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         uint256 _projectId = projectId();
 
         // The registry can map during authorized deployment. Otherwise, require the project's mapping permission.
-        // slither-disable-next-line calls-loop
         _requirePermissionAllowingOverrideFrom({
             account: PROJECTS.ownerOf(_projectId),
             projectId: _projectId,
@@ -1171,7 +1157,6 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         });
 
         // Sanity check to make sure we received the expected amount.
-        // slither-disable-next-line incorrect-equality
         assert(reclaimedAmount == _balanceOf({token: token, addr: address(this)}) - balanceBefore);
     }
 
@@ -1190,7 +1175,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         {
             JBSuckerState deprecationState = state();
             if (deprecationState == JBSuckerState.DEPRECATED || deprecationState == JBSuckerState.SENDING_DISABLED) {
-                revert JBSucker_Deprecated();
+                revert JBSucker_Deprecated({state: deprecationState});
             }
         }
 
@@ -1440,7 +1425,6 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
             return addr.balance;
         }
 
-        // slither-disable-next-line calls-loop
         return IERC20(token).balanceOf(addr);
     }
 
@@ -1561,7 +1545,6 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     /// @return The primary terminal.
     function _primaryTerminalOf(uint256 forProjectId, address token) internal view returns (IJBTerminal) {
         // Claim processing may call this through a bounded claim list; each lookup must use the live directory state.
-        // slither-disable-next-line calls-loop
         return DIRECTORY.primaryTerminalOf({projectId: forProjectId, token: token});
     }
 
@@ -1641,7 +1624,14 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
             sourceTimestamp: sourceTimestamp
         });
 
-        // Send the root over the AMB (positional args — slither IR parser crashes on named args here).
-        _sendRootOverAMB(transportPayment, index, token, amount, remoteToken, message);
+        // Send the root over the AMB. This overloaded interface call is intentionally positional.
+        _sendRootOverAMB({
+            transportPayment: transportPayment,
+            index: index,
+            token: token,
+            amount: amount,
+            remoteToken: remoteToken,
+            message: message
+        });
     }
 }
