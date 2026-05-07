@@ -8,7 +8,7 @@ This repo lets a Juicebox project move a claimable position from one chain to an
 
 - users bridging project positions
 - operators relaying roots and managing emergency or deprecation flows
-- reviewers checking Merkle progression and token mapping correctness
+- auditors checking Merkle progression and token mapping correctness
 
 ## Journey 1: Prepare And Relay A Claim
 

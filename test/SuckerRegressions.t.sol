@@ -200,7 +200,7 @@ contract SuckerRegressionsTest is Test {
         assertEq(sucker.test_getOutboxCount(TOKEN), 0);
 
         // Call toRemote -- should revert with NothingToSend (balance=0, count==numberOfClaimsSent==0).
-        vm.expectRevert(abi.encodeWithSelector(JBSucker.JBSucker_NothingToSend.selector));
+        vm.expectRevert(JBSucker.JBSucker_NothingToSend.selector);
         sucker.toRemote(TOKEN);
     }
 

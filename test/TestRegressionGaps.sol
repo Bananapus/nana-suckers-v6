@@ -1068,7 +1068,7 @@ contract TestRegressionGaps is Test {
         assertEq(sucker.test_getOutboxCount(TOKEN), 0, "Tree should be empty");
 
         // toRemote should revert with NothingToSend (balance=0, count==numberOfClaimsSent==0).
-        vm.expectRevert(abi.encodeWithSelector(JBSucker.JBSucker_NothingToSend.selector));
+        vm.expectRevert(JBSucker.JBSucker_NothingToSend.selector);
         sucker.toRemote(TOKEN);
     }
 

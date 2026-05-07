@@ -8,7 +8,7 @@ User journeys: [USER_JOURNEYS.md](./USER_JOURNEYS.md)
 Skills: [SKILLS.md](./SKILLS.md)  
 Risks: [RISKS.md](./RISKS.md)  
 Administration: [ADMINISTRATION.md](./ADMINISTRATION.md)  
-Review instructions: [REVIEW_GUIDE.md](./REVIEW_GUIDE.md)
+Audit instructions: [AUDIT_INSTRUCTIONS.md](./AUDIT_INSTRUCTIONS.md)
 
 The codebase includes multiple bridge variants, but the canonical deployment and discovery tooling in this repo is narrower than the full runtime surface. Treat the deployment scripts and helper libraries as the source of truth for what is operationally supported today.
 

@@ -817,7 +817,7 @@ contract SuckerDeepAttacks is Test {
         assertEq(uint256(sucker.state()), uint256(JBSuckerState.SENDING_DISABLED));
 
         // Try to change deprecation — should revert (already in terminal path).
-        vm.expectRevert(abi.encodeWithSelector(JBSucker.JBSucker_Deprecated.selector));
+        vm.expectRevert(JBSucker.JBSucker_Deprecated.selector);
         sucker.setDeprecation(uint40(block.timestamp + 60 days));
     }
 
@@ -935,7 +935,7 @@ contract SuckerDeepAttacks is Test {
     function test_prepare_zeroBeneficiary_reverts() public {
         _enableTokenMapping(TOKEN);
 
-        vm.expectRevert(abi.encodeWithSelector(JBSucker.JBSucker_ZeroBeneficiary.selector));
+        vm.expectRevert(JBSucker.JBSucker_ZeroBeneficiary.selector);
         sucker.prepare(10 ether, bytes32(0), 0, TOKEN);
     }
 
@@ -952,7 +952,7 @@ contract SuckerDeepAttacks is Test {
         vm.warp(deprecateAt - 1);
         assertEq(uint256(sucker.state()), uint256(JBSuckerState.SENDING_DISABLED));
 
-        vm.expectRevert(abi.encodeWithSelector(JBSucker.JBSucker_Deprecated.selector));
+        vm.expectRevert(JBSucker.JBSucker_Deprecated.selector);
         sucker.prepare(10 ether, bytes32(uint256(uint160(address(this)))), 0, TOKEN);
     }
 
@@ -966,7 +966,7 @@ contract SuckerDeepAttacks is Test {
         sucker.test_setDeprecatedAfter(block.timestamp - 1);
         assertEq(uint256(sucker.state()), uint256(JBSuckerState.DEPRECATED));
 
-        vm.expectRevert(abi.encodeWithSelector(JBSucker.JBSucker_Deprecated.selector));
+        vm.expectRevert(JBSucker.JBSucker_Deprecated.selector);
         sucker.prepare(10 ether, bytes32(uint256(uint160(address(this)))), 0, TOKEN);
     }
 
@@ -1011,7 +1011,7 @@ contract SuckerDeepAttacks is Test {
         );
 
         // Nothing in the outbox — balance is 0, count == numberOfClaimsSent == 0.
-        vm.expectRevert(abi.encodeWithSelector(JBSucker.JBSucker_NothingToSend.selector));
+        vm.expectRevert(JBSucker.JBSucker_NothingToSend.selector);
         sucker.toRemote(TOKEN);
     }
 
@@ -1314,7 +1314,7 @@ contract SuckerDeepAttacks is Test {
         sucker.test_setDeprecatedAfter(block.timestamp - 1);
         assertEq(uint256(sucker.state()), uint256(JBSuckerState.DEPRECATED));
 
-        vm.expectRevert(abi.encodeWithSelector(JBSucker.JBSucker_Deprecated.selector));
+        vm.expectRevert(JBSucker.JBSucker_Deprecated.selector);
         sucker.toRemote(TOKEN);
     }
 
@@ -1328,7 +1328,7 @@ contract SuckerDeepAttacks is Test {
         vm.warp(deprecateAt - 1);
         assertEq(uint256(sucker.state()), uint256(JBSuckerState.SENDING_DISABLED));
 
-        vm.expectRevert(abi.encodeWithSelector(JBSucker.JBSucker_Deprecated.selector));
+        vm.expectRevert(JBSucker.JBSucker_Deprecated.selector);
         sucker.toRemote(TOKEN);
     }
 
@@ -1659,7 +1659,7 @@ contract SuckerDeepAttacks is Test {
     function test_prepare_zeroBeneficiaryBytes32_reverts() public {
         _enableTokenMapping(TOKEN);
 
-        vm.expectRevert(abi.encodeWithSelector(JBSucker.JBSucker_ZeroBeneficiary.selector));
+        vm.expectRevert(JBSucker.JBSucker_ZeroBeneficiary.selector);
         sucker.prepare(10 ether, bytes32(0), 0, TOKEN);
     }
 

@@ -441,14 +441,7 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
         }
 
         uint256 localAmount =
-            _executeSwap({tokenIn: pending.bridgeToken, tokenOut: localToken, amount: pending.bridgeAmount});
-
-        // Revert on zero output — matches outbound guard at toRemote.
-        if (localAmount == 0) {
-            revert JBSwapCCIPSucker_SwapFailed({
-                tokenIn: pending.bridgeToken, tokenOut: localToken, amountIn: pending.bridgeAmount
-            });
-        }
+            _executeSwapOrRevert({tokenIn: pending.bridgeToken, tokenOut: localToken, amount: pending.bridgeAmount});
 
         // Update the conversion rate so claims can proceed, then clear the pending swap.
         _conversionRateOf[localToken][nonce] = ConversionRate({leafTotal: pending.leafTotal, localTotal: localAmount});
@@ -553,12 +546,7 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
                     // (where the caller spends their own funds), here the swap output sets the conversion
                     // rate for ALL claimers of the batch. Caller-controlled slippage would allow sandwich
                     // attacks that lock in bad rates for everyone.
-                    bridgeAmount = _executeSwap({tokenIn: token, tokenOut: bridgeTokenAddr, amount: amount});
-                    if (bridgeAmount == 0) {
-                        revert JBSwapCCIPSucker_SwapFailed({
-                            tokenIn: token, tokenOut: bridgeTokenAddr, amountIn: amount
-                        });
-                    }
+                    bridgeAmount = _executeSwapOrRevert({tokenIn: token, tokenOut: bridgeTokenAddr, amount: amount});
                 }
 
                 tokenAmounts = new Client.EVMTokenAmount[](1);
@@ -624,6 +612,25 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
             amount: amount,
             minAmountOut: 0
         });
+    }
+
+    /// @notice Execute a swap and revert if it produces no output.
+    /// @param tokenIn The input token.
+    /// @param tokenOut The output token.
+    /// @param amount The input amount.
+    /// @return amountOut The output amount.
+    function _executeSwapOrRevert(
+        address tokenIn,
+        address tokenOut,
+        uint256 amount
+    )
+        internal
+        returns (uint256 amountOut)
+    {
+        amountOut = _executeSwap({tokenIn: tokenIn, tokenOut: tokenOut, amount: amount});
+        if (amountOut == 0) {
+            revert JBSwapCCIPSucker_SwapFailed({tokenIn: tokenIn, tokenOut: tokenOut, amountIn: amount});
+        }
     }
 
     //*********************************************************************//

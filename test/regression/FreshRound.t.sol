@@ -316,7 +316,7 @@ contract RegressionFreshRoundTest is Test {
         assertEq(pendingLeafTotal, 100);
 
         // Fixed: swap guards now revert on failed/zero-output swaps instead of silently continuing.
-        vm.expectRevert(abi.encodeWithSignature("JBSwapCCIPSucker_SwapFailed()"));
+        vm.expectRevert(JBSwapCCIPSucker.JBSwapCCIPSucker_SwapFailed.selector);
         sucker.retrySwap(address(localToken), 1);
     }
 

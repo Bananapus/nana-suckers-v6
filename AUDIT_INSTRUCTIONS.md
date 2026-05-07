@@ -1,8 +1,8 @@
-# Review Guide
+# Audit Instructions
 
-Review this repo as cross-chain claim and recovery logic, not as a generic ERC-20 bridge.
+Audit this repo as cross-chain claim and recovery logic, not as a generic ERC-20 bridge.
 
-## Review Objective
+## Audit Objective
 
 Find issues that:
 

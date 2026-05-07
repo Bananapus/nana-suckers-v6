@@ -487,8 +487,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         // If no tokens were disabled, the full `msg.value` is unused — refund it.
         if (numberToDisable == 0) {
             if (msg.value > 0) {
-                (bool _ok,) = _msgSender().call{value: msg.value}("");
-                if (!_ok) revert JBSucker_RefundFailed({beneficiary: _msgSender(), amount: msg.value});
+                _sendNativeTo({beneficiary: payable(_msgSender()), amount: msg.value});
             }
         } else {
             // Refund any remainder from integer division so dust wei isn't stuck in the contract.
@@ -546,10 +545,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         }
 
         // Make sure that the sucker still allows sending new messaged.
-        JBSuckerState deprecationState = state();
-        if (deprecationState == JBSuckerState.DEPRECATED || deprecationState == JBSuckerState.SENDING_DISABLED) {
-            revert JBSucker_Deprecated({state: deprecationState});
-        }
+        _requireSendingEnabled();
 
         // Transfer the tokens to this contract.
         projectToken.safeTransferFrom({from: _msgSender(), to: address(this), value: projectTokenCount});
@@ -575,10 +571,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     function setDeprecation(uint40 timestamp) external override {
         // As long as the sucker has not started letting users withdrawal, its deprecation time can be
         // extended/shortened.
-        JBSuckerState deprecationState = state();
-        if (deprecationState == JBSuckerState.DEPRECATED || deprecationState == JBSuckerState.SENDING_DISABLED) {
-            revert JBSucker_Deprecated({state: deprecationState});
-        }
+        _requireSendingEnabled();
 
         uint256 _projectId = projectId();
 
@@ -834,8 +827,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         retainedToRemoteFeeOf[account] = 0;
         retainedToRemoteFeeBalance -= amount;
 
-        (bool success,) = beneficiary.call{value: amount}("");
-        if (!success) revert JBSucker_RefundFailed({beneficiary: beneficiary, amount: amount});
+        _sendNativeTo({beneficiary: beneficiary, amount: amount});
 
         // State was cleared before sending ETH; the event is emitted after the transfer so failed sends do not log.
         emit RetainedToRemoteFeeClaimed({
@@ -855,8 +847,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         retainedTransportPaymentRefundOf[account] = 0;
         retainedTransportPaymentRefundBalance -= amount;
 
-        (bool success,) = beneficiary.call{value: amount}("");
-        if (!success) revert JBSucker_RefundFailed({beneficiary: beneficiary, amount: amount});
+        _sendNativeTo({beneficiary: beneficiary, amount: amount});
 
         // State was cleared before sending ETH; the event is emitted after the transfer so failed sends do not log.
         emit RetainedTransportPaymentRefundClaimed({
@@ -1172,12 +1163,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         if (remoteToken.addr == bytes32(0)) revert JBSucker_TokenNotMapped(token);
 
         // Make sure that the sucker still allows sending new messaged.
-        {
-            JBSuckerState deprecationState = state();
-            if (deprecationState == JBSuckerState.DEPRECATED || deprecationState == JBSuckerState.SENDING_DISABLED) {
-                revert JBSucker_Deprecated({state: deprecationState});
-            }
-        }
+        _requireSendingEnabled();
 
         // Drain the outbox: read balance/nonce/root, clear balance, advance nonce and numberOfClaimsSent.
         uint256 amount;
@@ -1224,6 +1210,14 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
             root: root,
             index: index
         });
+    }
+
+    /// @notice Send native tokens, reverting if the recipient rejects them.
+    /// @param beneficiary The recipient.
+    /// @param amount The amount to send.
+    function _sendNativeTo(address payable beneficiary, uint256 amount) internal {
+        (bool success,) = beneficiary.call{value: amount}("");
+        if (!success) revert JBSucker_RefundFailed({beneficiary: beneficiary, amount: amount});
     }
 
     /// @notice Performs the logic to send a message to the peer over the AMB.
@@ -1546,6 +1540,14 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     function _primaryTerminalOf(uint256 forProjectId, address token) internal view returns (IJBTerminal) {
         // Claim processing may call this through a bounded claim list; each lookup must use the live directory state.
         return DIRECTORY.primaryTerminalOf({projectId: forProjectId, token: token});
+    }
+
+    /// @notice Revert if new outbound sends are disabled or deprecated.
+    function _requireSendingEnabled() internal view {
+        JBSuckerState deprecationState = state();
+        if (deprecationState == JBSuckerState.DEPRECATED || deprecationState == JBSuckerState.SENDING_DISABLED) {
+            revert JBSucker_Deprecated({state: deprecationState});
+        }
     }
 
     /// @notice Convert a bytes32 remote address to a local EVM address.
