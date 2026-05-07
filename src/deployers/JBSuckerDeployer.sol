@@ -126,7 +126,7 @@ abstract contract JBSuckerDeployer is ERC2771Context, JBPermissioned, IJBSuckerD
     function configureSingleton(JBSucker _singleton) external {
         // Make sure only the configurator can call this function.
         if (_msgSender() != LAYER_SPECIFIC_CONFIGURATOR) {
-            revert JBSuckerDeployer_Unauthorized(_msgSender(), LAYER_SPECIFIC_CONFIGURATOR);
+            revert JBSuckerDeployer_Unauthorized({caller: _msgSender(), expected: LAYER_SPECIFIC_CONFIGURATOR});
         }
 
         // Ensure that the layer specific configuration is set.

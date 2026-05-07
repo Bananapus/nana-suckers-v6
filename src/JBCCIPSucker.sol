@@ -163,7 +163,7 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
 
         // Make sure that the message came from our peer.
         if (origin != _peerAddress() || any2EvmMessage.sourceChainSelector != REMOTE_CHAIN_SELECTOR) {
-            revert JBSucker_NotPeer(_toBytes32(origin));
+            revert JBSucker_NotPeer({caller: _toBytes32(origin)});
         }
 
         // Discriminate message type: abi.encode(uint8 type, bytes payload).
@@ -184,7 +184,7 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
             // Forward the root message to this contract's fromRemote handler.
             this.fromRemote(root);
         } else {
-            revert JBCCIPSucker_UnknownMessageType(messageType);
+            revert JBCCIPSucker_UnknownMessageType({messageType: messageType});
         }
     }
 

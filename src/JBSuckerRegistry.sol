@@ -504,7 +504,7 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
 
             // Make sure the deployer is allowed.
             if (!suckerDeployerIsAllowed[address(configuration.deployer)]) {
-                revert JBSuckerRegistry_InvalidDeployer(configuration.deployer);
+                revert JBSuckerRegistry_InvalidDeployer({deployer: configuration.deployer});
             }
 
             // Create the sucker.
@@ -535,13 +535,13 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
         // Sanity check, make sure that the sucker does actually belong to the project.
         (bool belongsToProject, uint256 val) = _suckersOf[projectId].tryGet(sucker);
         if (!belongsToProject || val != _SUCKER_EXISTS) {
-            revert JBSuckerRegistry_SuckerDoesNotBelongToProject(projectId, address(sucker));
+            revert JBSuckerRegistry_SuckerDoesNotBelongToProject({projectId: projectId, sucker: address(sucker)});
         }
 
         // Check if the sucker is deprecated.
         JBSuckerState state = IJBSucker(sucker).state();
         if (state != JBSuckerState.DEPRECATED) {
-            revert JBSuckerRegistry_SuckerIsNotDeprecated(address(sucker), state);
+            revert JBSuckerRegistry_SuckerIsNotDeprecated({sucker: address(sucker), suckerState: state});
         }
 
         // Mark the sucker as deprecated (retains mint permission, excluded from active listings).
@@ -556,7 +556,7 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
         if (fee > MAX_TO_REMOTE_FEE) revert JBSuckerRegistry_FeeExceedsMax(fee, MAX_TO_REMOTE_FEE);
         uint256 oldFee = toRemoteFee;
         toRemoteFee = fee;
-        emit ToRemoteFeeChanged(oldFee, fee, _msgSender());
+        emit ToRemoteFeeChanged({oldFee: oldFee, newFee: fee, caller: _msgSender()});
     }
 
     /// @notice Removes a sucker deployer from the allowlist.

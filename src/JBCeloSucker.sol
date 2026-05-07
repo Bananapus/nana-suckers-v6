@@ -137,7 +137,7 @@ contract JBCeloSucker is JBOptimismSucker {
 
         // Revert if there's a `msg.value`. The OP bridge does not expect to be paid.
         if (transportPayment != 0) {
-            revert JBSucker_UnexpectedMsgValue(transportPayment);
+            revert JBSucker_UnexpectedMsgValue({value: transportPayment});
         }
 
         // Cache peer address to avoid redundant calls.

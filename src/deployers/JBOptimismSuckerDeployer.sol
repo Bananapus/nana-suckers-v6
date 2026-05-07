@@ -76,7 +76,7 @@ contract JBOptimismSuckerDeployer is JBSuckerDeployer, IJBOpSuckerDeployer {
 
         // Make sure only the configurator can call this function.
         if (_msgSender() != LAYER_SPECIFIC_CONFIGURATOR) {
-            revert JBSuckerDeployer_Unauthorized(_msgSender(), LAYER_SPECIFIC_CONFIGURATOR);
+            revert JBSuckerDeployer_Unauthorized({caller: _msgSender(), expected: LAYER_SPECIFIC_CONFIGURATOR});
         }
 
         // Configure these layer specific properties.
