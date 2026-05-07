@@ -323,7 +323,7 @@ contract AdversarialSuckerForkTest is CCIPSuckerClaimForkTestBase {
         uint256 ccipFeeAmount = 1 ether;
         vm.deal(rootSender, ccipFeeAmount);
 
-        vm.expectRevert(abi.encodeWithSelector(JBSucker.JBSucker_NothingToSend.selector));
+        vm.expectPartialRevert(JBSucker.JBSucker_NothingToSend.selector);
         vm.prank(rootSender);
         suckerL1.toRemote{value: ccipFeeAmount}(token);
     }

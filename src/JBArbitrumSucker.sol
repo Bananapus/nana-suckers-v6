@@ -127,7 +127,6 @@ contract JBArbitrumSucker is JBSucker, IJBArbitrumSucker {
         internal
     {
         address peerAddress = _peerAddress();
-        // slither-disable-next-line unused-return,calls-loop
         ARBINBOX.unsafeCreateRetryableTicket{value: callTransportCost + nativeValue}({
             to: peerAddress,
             l2CallValue: nativeValue,
@@ -144,7 +143,6 @@ contract JBArbitrumSucker is JBSucker, IJBArbitrumSucker {
     /// @param token The ERC-20 token to approve.
     /// @param amount The amount to approve.
     function _approveGateway(address token, uint256 amount) internal {
-        // slither-disable-next-line calls-loop
         SafeERC20.forceApprove({token: IERC20(token), spender: GATEWAYROUTER.getGateway(token), value: amount});
     }
 
@@ -168,10 +166,9 @@ contract JBArbitrumSucker is JBSucker, IJBArbitrumSucker {
         bytes memory data = abi.encodeCall(JBSucker.fromRemote, (message));
 
         // Depending on which layer we are on, send the call to the other layer.
-        // slither-disable-start out-of-order-retryable
         if (LAYER == JBLayer.L1) {
             // L1→L2 requires transport payment for retryable tickets.
-            if (transportPayment == 0) revert JBSucker_ExpectedMsgValue();
+            if (transportPayment == 0) revert JBSucker_ExpectedMsgValue({msgValue: transportPayment});
             _toL2({
                 token: token, transportPayment: transportPayment, amount: amount, data: data, remoteToken: remoteToken
             });
@@ -180,7 +177,6 @@ contract JBArbitrumSucker is JBSucker, IJBArbitrumSucker {
             if (transportPayment != 0) revert JBSucker_UnexpectedMsgValue(transportPayment);
             _toL1({token: token, amount: amount, data: data, remoteToken: remoteToken});
         }
-        // slither-disable-end out-of-order-retryable
     }
 
     /// @notice Bridge the `token` and data to the remote L1 chain.
@@ -208,7 +204,6 @@ contract JBArbitrumSucker is JBSucker, IJBArbitrumSucker {
             _approveGateway({token: token, amount: amount});
 
             // Convert bytes32 types to address at the Arbitrum bridge API boundary.
-            // slither-disable-next-line calls-loop,unused-return
             IArbL2GatewayRouter(address(GATEWAYROUTER))
                 .outboundTransfer({
                 l1Token: _toAddress(remoteToken.addr), to: peerAddress, amount: amount, data: bytes("")
@@ -220,7 +215,6 @@ contract JBArbitrumSucker is JBSucker, IJBArbitrumSucker {
 
         // Send the message to the peer with the reclaimed ETH.
         // Address `100` is the ArbSys precompile address.
-        // slither-disable-next-line calls-loop,unused-return
         ArbSys(address(100)).sendTxToL1{value: nativeValue}({destination: peerAddress, data: data});
     }
 
@@ -251,7 +245,6 @@ contract JBArbitrumSucker is JBSucker, IJBArbitrumSucker {
         uint256 maxSubmissionCost;
 
         {
-            // slither-disable-next-line calls-loop
             maxSubmissionCost =
                 ARBINBOX.calculateRetryableSubmissionFee({dataLength: data.length, baseFee: maxFeePerGas});
 
@@ -267,15 +260,12 @@ contract JBArbitrumSucker is JBSucker, IJBArbitrumSucker {
             {
                 // Get the exact calldata length the gateway will create for the retryable ticket.
                 // The Arbitrum Inbox validates maxSubmissionCost against this actual payload, not the user data.
-                // slither-disable-next-line calls-loop
                 address gateway = GATEWAYROUTER.getGateway(token);
-                // slither-disable-next-line calls-loop
                 uint256 outboundCalldataLength =
                     IL1ArbitrumGateway(gateway)
                 .getOutboundCalldata({
                     _token: token, _from: address(this), _to: _peerAddress(), _amount: amount, _data: bytes("")
                 }).length;
-                // slither-disable-next-line calls-loop
                 maxSubmissionCostERC20 = ARBINBOX.calculateRetryableSubmissionFee({
                     dataLength: outboundCalldataLength, baseFee: maxFeePerGas
                 });
@@ -298,8 +288,6 @@ contract JBArbitrumSucker is JBSucker, IJBArbitrumSucker {
             _approveGateway({token: token, amount: amount});
 
             // Perform the ERC-20 bridge transfer. Convert bytes32 peer to address at the Arbitrum bridge API boundary.
-            // slither-disable-start out-of-order-retryable
-            // slither-disable-next-line calls-loop,unused-return
             IArbL1GatewayRouter(address(GATEWAYROUTER)).outboundTransferCustomRefund{value: tokenTransportCost}({
                 token: token,
                 refundTo: _msgSender(),
@@ -328,7 +316,6 @@ contract JBArbitrumSucker is JBSucker, IJBArbitrumSucker {
         // The above check is the same check that makes it `safeCreateRetryableTicket`.
 
         // Convert bytes32 peer to address at the Arbitrum inbox API boundary.
-        // slither-disable-next-line calls-loop,unused-return
         _createRetryableTicket({
             callTransportCost: callTransportCost,
             nativeValue: nativeValue,
@@ -336,6 +323,5 @@ contract JBArbitrumSucker is JBSucker, IJBArbitrumSucker {
             maxFeePerGas: maxFeePerGas,
             data: data
         });
-        // slither-disable-end out-of-order-retryable
     }
 }

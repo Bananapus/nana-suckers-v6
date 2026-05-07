@@ -37,6 +37,7 @@ contract MockTerminal {
         payable
     {
         if (token != address(0x000000000000000000000000000000000000EEEe)) {
+            // forge-lint: disable-next-line(erc20-unchecked-transfer)
             IERC20(token).transferFrom(msg.sender, address(this), amount);
         }
     }
@@ -192,6 +193,7 @@ contract SwapCCIPScalingTest is Test {
             IJBTokens(MOCK_TOKENS),
             IJBPermissions(MOCK_PERMISSIONS)
         );
+        // forge-lint: disable-next-line(unsafe-typecast)
         sucker = SwapCCIPTestHarness(payable(LibClone.cloneDeterministic(address(singleton), bytes32("swap"))));
         sucker.initialize(PROJECT_ID);
     }
@@ -506,7 +508,7 @@ contract SwapCCIPConstructorTest is Test {
     function test_constructor_reverts_zeroBridgeToken() public {
         _mockSwapConfig(address(0), address(0), address(0x1234), address(0), address(weth));
 
-        vm.expectRevert(JBSwapCCIPSucker.JBSwapCCIPSucker_InvalidBridgeToken.selector);
+        vm.expectPartialRevert(JBSwapCCIPSucker.JBSwapCCIPSucker_InvalidBridgeToken.selector);
         new SwapCCIPTestHarness(
             JBSwapCCIPSuckerDeployer(MOCK_DEPLOYER),
             IJBDirectory(MOCK_DIRECTORY),
@@ -519,7 +521,7 @@ contract SwapCCIPConstructorTest is Test {
     function test_constructor_reverts_bridgeTokenIsWeth() public {
         _mockSwapConfig(address(weth), address(0), address(0x1234), address(0), address(weth));
 
-        vm.expectRevert(JBSwapCCIPSucker.JBSwapCCIPSucker_InvalidBridgeToken.selector);
+        vm.expectPartialRevert(JBSwapCCIPSucker.JBSwapCCIPSucker_InvalidBridgeToken.selector);
         new SwapCCIPTestHarness(
             JBSwapCCIPSuckerDeployer(MOCK_DEPLOYER),
             IJBDirectory(MOCK_DIRECTORY),

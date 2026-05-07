@@ -26,12 +26,12 @@ abstract contract JBSuckerDeployer is ERC2771Context, JBPermissioned, IJBSuckerD
     // --------------------------- custom errors ------------------------- //
     //*********************************************************************//
 
-    error JBSuckerDeployer_AlreadyConfigured();
-    error JBSuckerDeployer_DeployerIsNotConfigured();
-    error JBSuckerDeployer_InvalidLayerSpecificConfiguration();
-    error JBSuckerDeployer_LayerSpecificNotConfigured();
+    error JBSuckerDeployer_AlreadyConfigured(address singleton, bool layerSpecificConfigurationIsSet);
+    error JBSuckerDeployer_DeployerIsNotConfigured(address singleton);
+    error JBSuckerDeployer_InvalidLayerSpecificConfiguration(address configurator);
+    error JBSuckerDeployer_LayerSpecificNotConfigured(address configurator);
     error JBSuckerDeployer_Unauthorized(address caller, address expected);
-    error JBSuckerDeployer_ZeroConfiguratorAddress();
+    error JBSuckerDeployer_ZeroConfiguratorAddress(address configurator);
 
     //*********************************************************************//
     // --------------- public immutable stored properties ---------------- //
@@ -86,7 +86,7 @@ abstract contract JBSuckerDeployer is ERC2771Context, JBPermissioned, IJBSuckerD
 
         // There has to be a configurator address or the layer specific configuration has to already be configured.
         if (configurator == address(0) && !_layerSpecificConfigurationIsSet()) {
-            revert JBSuckerDeployer_ZeroConfiguratorAddress();
+            revert JBSuckerDeployer_ZeroConfiguratorAddress({configurator: configurator});
         }
     }
 
@@ -131,11 +131,15 @@ abstract contract JBSuckerDeployer is ERC2771Context, JBPermissioned, IJBSuckerD
 
         // Ensure that the layer specific configuration is set.
         if (!_layerSpecificConfigurationIsSet()) {
-            revert JBSuckerDeployer_LayerSpecificNotConfigured();
+            revert JBSuckerDeployer_LayerSpecificNotConfigured({configurator: LAYER_SPECIFIC_CONFIGURATOR});
         }
 
         // Make sure the singleton is not already configured.
-        if (address(singleton) != address(0)) revert JBSuckerDeployer_AlreadyConfigured();
+        if (address(singleton) != address(0)) {
+            revert JBSuckerDeployer_AlreadyConfigured({
+                singleton: address(singleton), layerSpecificConfigurationIsSet: _layerSpecificConfigurationIsSet()
+            });
+        }
 
         // Store the singleton.
         singleton = _singleton;
@@ -159,7 +163,7 @@ abstract contract JBSuckerDeployer is ERC2771Context, JBPermissioned, IJBSuckerD
     {
         // Make sure that this deployer is configured properly.
         if (address(singleton) == address(0)) {
-            revert JBSuckerDeployer_DeployerIsNotConfigured();
+            revert JBSuckerDeployer_DeployerIsNotConfigured({singleton: address(singleton)});
         }
 
         // Hash the salt with the sender address to ensure only a specific sender can create this sucker.

@@ -83,7 +83,7 @@ contract PoolDiscoveryHarness {
 }
 
 /// @title JBSwapPoolLib_PoolDiscoveryTest
-/// @notice Unit tests for the M-1 audit fix: V3/V4 pool preference logic in _discoverPool.
+/// @notice Unit tests for the regression fix: V3/V4 pool preference logic in _discoverPool.
 /// @dev The fix removed the V3 preference guard that blocked hookless V4 pools from being selected
 /// even when they had deeper liquidity than any V3 pool.
 contract JBSwapPoolLib_PoolDiscoveryTest is Test {

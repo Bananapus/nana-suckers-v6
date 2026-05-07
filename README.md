@@ -72,8 +72,8 @@ That means every bridge path has two trust surfaces:
 1. `test/unit/registry.t.sol`
 2. `test/unit/multi_chain_evolution.t.sol`
 3. `test/ForkClaimMainnet.t.sol`
-4. `test/audit/PeerSnapshotDesync.t.sol`
-5. `test/audit/ToRemoteFeeIrrecoverable.t.sol`
+4. `test/regression/PeerSnapshotDesync.t.sol`
+5. `test/regression/ToRemoteFeeIrrecoverable.t.sol`
 
 ## Install
 
@@ -113,7 +113,7 @@ src/
   structs/
   utils/
 test/
-  unit, fork, interoperability, attack, audit, and regression coverage
+  unit, fork, interoperability, attack, review, and regression coverage
 script/
   Deploy.s.sol
   helpers/

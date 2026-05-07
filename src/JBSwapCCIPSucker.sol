@@ -88,10 +88,10 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
 
     error JBSwapCCIPSucker_BatchNotReceived(uint64 nonce);
     error JBSwapCCIPSucker_CallerNotPoolManager(address caller);
-    error JBSwapCCIPSucker_InvalidBridgeToken();
-    error JBSwapCCIPSucker_NoPendingSwap();
-    error JBSwapCCIPSucker_OnlySelf();
-    error JBSwapCCIPSucker_SwapFailed();
+    error JBSwapCCIPSucker_InvalidBridgeToken(address bridgeToken, address wrappedNativeToken);
+    error JBSwapCCIPSucker_NoPendingSwap(address localToken, uint64 nonce, bool retrySwapLocked);
+    error JBSwapCCIPSucker_OnlySelf(address caller, address expected);
+    error JBSwapCCIPSucker_SwapFailed(address tokenIn, address tokenOut, uint256 amountIn);
     error JBSwapCCIPSucker_SwapPending(uint64 nonce);
 
     //*********************************************************************//
@@ -226,10 +226,16 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
         UNIV4_HOOK = swapDeployer.univ4Hook();
         WRAPPED_NATIVE_TOKEN = IWrappedNativeToken(swapDeployer.weth());
 
-        if (address(BRIDGE_TOKEN) == address(0)) revert JBSwapCCIPSucker_InvalidBridgeToken();
+        if (address(BRIDGE_TOKEN) == address(0)) {
+            revert JBSwapCCIPSucker_InvalidBridgeToken({
+                bridgeToken: address(BRIDGE_TOKEN), wrappedNativeToken: address(WRAPPED_NATIVE_TOKEN)
+            });
+        }
         // BRIDGE_TOKEN must not be the wrapped native token — wrapping and CCIP ERC-20 bridging conflict.
         if (address(BRIDGE_TOKEN) == address(WRAPPED_NATIVE_TOKEN) && address(WRAPPED_NATIVE_TOKEN) != address(0)) {
-            revert JBSwapCCIPSucker_InvalidBridgeToken();
+            revert JBSwapCCIPSucker_InvalidBridgeToken({
+                bridgeToken: address(BRIDGE_TOKEN), wrappedNativeToken: address(WRAPPED_NATIVE_TOKEN)
+            });
         }
         // NOTE: V3_FACTORY and POOL_MANAGER can both be address(0) on chains where the local terminal token
         // IS the bridge token (e.g., USDC on Tempo). No swap is ever needed in that case. If a swap IS attempted
@@ -286,7 +292,6 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
                     // Wrapped in try-catch so a swap failure doesn't revert the entire CCIP message
                     // (which would leave tokens stuck in the OffRamp). On failure, bridge tokens are
                     // stored for later retry via `retrySwap` (written below, after nonce validation).
-                    // slither-disable-next-line reentrancy-benign,reentrancy-events
                     try this.executeSwapExternal({
                         tokenIn: tokenAmount.token, tokenOut: localToken, amount: tokenAmount.amount
                     }) returns (
@@ -403,7 +408,9 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
         external
         returns (uint256 amountOut)
     {
-        if (msg.sender != address(this)) revert JBSwapCCIPSucker_OnlySelf();
+        if (msg.sender != address(this)) {
+            revert JBSwapCCIPSucker_OnlySelf({caller: msg.sender, expected: address(this)});
+        }
         return _executeSwap({tokenIn: tokenIn, tokenOut: tokenOut, amount: amount});
     }
 
@@ -419,18 +426,22 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
         // Reentrancy guard: prevents re-entry into retrySwap AND prevents claims from executing
         // during the swap window (which would see the stale {leafTotal > 0, localTotal: 0} rate
         // and mint project tokens backed by zero terminal tokens).
-        if (_retrySwapLocked) revert JBSwapCCIPSucker_NoPendingSwap();
+        if (_retrySwapLocked) {
+            revert JBSwapCCIPSucker_NoPendingSwap({
+                localToken: localToken, nonce: nonce, retrySwapLocked: _retrySwapLocked
+            });
+        }
         _retrySwapLocked = true;
 
         PendingSwap memory pending = pendingSwapOf[localToken][nonce];
-        if (pending.bridgeAmount == 0) revert JBSwapCCIPSucker_NoPendingSwap();
+        if (pending.bridgeAmount == 0) {
+            revert JBSwapCCIPSucker_NoPendingSwap({
+                localToken: localToken, nonce: nonce, retrySwapLocked: _retrySwapLocked
+            });
+        }
 
-        // slither-disable-next-line reentrancy-no-eth,reentrancy-benign,reentrancy-events,reentrancy-eth
         uint256 localAmount =
-            _executeSwap({tokenIn: pending.bridgeToken, tokenOut: localToken, amount: pending.bridgeAmount});
-
-        // Revert on zero output — matches outbound guard at toRemote.
-        if (localAmount == 0) revert JBSwapCCIPSucker_SwapFailed();
+            _executeSwapOrRevert({tokenIn: pending.bridgeToken, tokenOut: localToken, amount: pending.bridgeAmount});
 
         // Update the conversion rate so claims can proceed, then clear the pending swap.
         _conversionRateOf[localToken][nonce] = ConversionRate({leafTotal: pending.leafTotal, localTotal: localAmount});
@@ -453,9 +464,7 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
     function claim(JBClaim calldata claimData) public override {
         // Block claims during retrySwap to prevent zero-backed minting via reentrancy.
         if (_retrySwapLocked) revert JBSwapCCIPSucker_SwapPending(0);
-        // slither-disable-next-line events-maths
         _currentClaimLeafIndex = claimData.leaf.index + 1;
-        // slither-disable-next-line reentrancy-eth
         super.claim(claimData);
         // Clear stale transient context to prevent leaking into same-tx emergency exits.
         _currentClaimLeafIndex = 0;
@@ -537,9 +546,7 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
                     // (where the caller spends their own funds), here the swap output sets the conversion
                     // rate for ALL claimers of the batch. Caller-controlled slippage would allow sandwich
                     // attacks that lock in bad rates for everyone.
-                    // slither-disable-next-line reentrancy-events,reentrancy-benign
-                    bridgeAmount = _executeSwap({tokenIn: token, tokenOut: bridgeTokenAddr, amount: amount});
-                    if (bridgeAmount == 0) revert JBSwapCCIPSucker_SwapFailed();
+                    bridgeAmount = _executeSwapOrRevert({tokenIn: token, tokenOut: bridgeTokenAddr, amount: amount});
                 }
 
                 tokenAmounts = new Client.EVMTokenAmount[](1);
@@ -605,6 +612,25 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
             amount: amount,
             minAmountOut: 0
         });
+    }
+
+    /// @notice Execute a swap and revert if it produces no output.
+    /// @param tokenIn The input token.
+    /// @param tokenOut The output token.
+    /// @param amount The input amount.
+    /// @return amountOut The output amount.
+    function _executeSwapOrRevert(
+        address tokenIn,
+        address tokenOut,
+        uint256 amount
+    )
+        internal
+        returns (uint256 amountOut)
+    {
+        amountOut = _executeSwap({tokenIn: tokenIn, tokenOut: tokenOut, amount: amount});
+        if (amountOut == 0) {
+            revert JBSwapCCIPSucker_SwapFailed({tokenIn: tokenIn, tokenOut: tokenOut, amountIn: amount});
+        }
     }
 
     //*********************************************************************//

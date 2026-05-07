@@ -305,7 +305,7 @@ contract SuckerCrossChainAdversarial is Test {
         assertEq(uint8(sucker.state()), uint8(JBSuckerState.SENDING_DISABLED));
 
         // Trying to change deprecation reverts.
-        vm.expectRevert(JBSucker.JBSucker_Deprecated.selector);
+        vm.expectRevert(abi.encodeWithSelector(JBSucker.JBSucker_Deprecated.selector, JBSuckerState.SENDING_DISABLED));
         sucker.setDeprecation(uint40(block.timestamp + 100 days));
     }
 

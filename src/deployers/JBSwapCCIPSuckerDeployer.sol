@@ -22,8 +22,8 @@ contract JBSwapCCIPSuckerDeployer is JBCCIPSuckerDeployer, IJBSwapCCIPSuckerDepl
     // --------------------------- custom errors ------------------------- //
     //*********************************************************************//
 
-    error JBSwapCCIPSuckerDeployer_InvalidSwapConfig();
-    error JBSwapCCIPSuckerDeployer_SwapAlreadyConfigured();
+    error JBSwapCCIPSuckerDeployer_InvalidSwapConfig(address bridgeToken);
+    error JBSwapCCIPSuckerDeployer_SwapAlreadyConfigured(address bridgeToken);
 
     //*********************************************************************//
     // ---------------------- public stored properties ------------------- //
@@ -84,7 +84,7 @@ contract JBSwapCCIPSuckerDeployer is JBCCIPSuckerDeployer, IJBSwapCCIPSuckerDepl
     {
         // Make sure the swap configuration has not already been set.
         if (address(bridgeToken) != address(0)) {
-            revert JBSwapCCIPSuckerDeployer_SwapAlreadyConfigured();
+            revert JBSwapCCIPSuckerDeployer_SwapAlreadyConfigured({bridgeToken: address(bridgeToken)});
         }
 
         // Make sure only the configurator can call this function.
@@ -94,7 +94,7 @@ contract JBSwapCCIPSuckerDeployer is JBCCIPSuckerDeployer, IJBSwapCCIPSuckerDepl
 
         // Make sure the bridge token is not the zero address.
         if (address(_bridgeToken) == address(0)) {
-            revert JBSwapCCIPSuckerDeployer_InvalidSwapConfig();
+            revert JBSwapCCIPSuckerDeployer_InvalidSwapConfig({bridgeToken: address(_bridgeToken)});
         }
 
         // Store the bridge token.
@@ -107,11 +107,9 @@ contract JBSwapCCIPSuckerDeployer is JBCCIPSuckerDeployer, IJBSwapCCIPSuckerDepl
         v3Factory = _v3Factory;
 
         // Store the Uniswap V4 hook address.
-        // slither-disable-next-line missing-zero-check
         univ4Hook = _univ4Hook;
 
         // Store the wrapped native token address.
-        // slither-disable-next-line missing-zero-check
         weth = _weth;
     }
 }

@@ -48,9 +48,9 @@ library JBSwapPoolLib {
 
     error JBSwapPoolLib_AmountOverflow(uint256 amount);
     error JBSwapPoolLib_CallerNotPool(address caller);
-    error JBSwapPoolLib_InsufficientTwapHistory();
-    error JBSwapPoolLib_NoLiquidity();
-    error JBSwapPoolLib_NoPool();
+    error JBSwapPoolLib_InsufficientTwapHistory(address pool, uint256 availableWindow, uint256 requiredWindow);
+    error JBSwapPoolLib_NoLiquidity(address pool, PoolId poolId);
+    error JBSwapPoolLib_NoPool(address tokenIn, address tokenOut);
     error JBSwapPoolLib_SlippageExceeded(uint256 amountOut, uint256 minAmountOut);
 
     //*********************************************************************//
@@ -120,7 +120,9 @@ library JBSwapPoolLib {
             _discoverPool({config: config, normalizedTokenIn: normalizedIn, normalizedTokenOut: normalizedOut});
 
         // Revert if no pool was found on either protocol.
-        if (!isV4 && address(v3Pool) == address(0)) revert JBSwapPoolLib_NoPool();
+        if (!isV4 && address(v3Pool) == address(0)) {
+            revert JBSwapPoolLib_NoPool({tokenIn: normalizedIn, tokenOut: normalizedOut});
+        }
 
         if (isV4) {
             if (minAmountOut > 0) {
@@ -173,7 +175,6 @@ library JBSwapPoolLib {
         // (not NATIVE_TOKEN), wrap the received native tokens so the caller gets the token they expect.
         if (isV4 && tokenOut != JBConstants.NATIVE_TOKEN && normalizedOut == config.weth) {
             // Wrap through the configured wrapped native token contract.
-            // slither-disable-next-line arbitrary-send-eth
             IWrappedNativeToken(config.weth).deposit{value: amountOut}();
         }
     }
@@ -238,13 +239,11 @@ library JBSwapPoolLib {
         if (Currency.unwrap(inputCurrency) == address(0)) {
             // Native token: unwrap if needed, then settle by sending native value directly.
             if (weth != address(0)) IWrappedNativeToken(weth).withdraw(amountIn);
-            // slither-disable-next-line unused-return,arbitrary-send-eth
             poolManager.settle{value: amountIn}();
         } else {
             // ERC-20: sync the currency balance, transfer tokens, then settle.
             poolManager.sync(inputCurrency);
             IERC20(Currency.unwrap(inputCurrency)).safeTransfer({to: address(poolManager), value: amountIn});
-            // slither-disable-next-line unused-return
             poolManager.settle();
         }
 
@@ -276,7 +275,6 @@ library JBSwapPoolLib {
             abi.decode(data, (address, address, address));
 
         // Verify caller is a legitimate V3 pool via the factory.
-        // slither-disable-next-line calls-loop
         uint24 fee = IUniswapV3Pool(msg.sender).fee();
         address expectedPool = v3Factory.getPool({tokenA: normalizedIn, tokenB: normalizedOut, fee: fee});
         if (msg.sender != expectedPool) revert JBSwapPoolLib_CallerNotPool(msg.sender);
@@ -386,7 +384,6 @@ library JBSwapPoolLib {
 
         // Iterate over all 4 standard fee tiers.
         for (uint256 i; i < 4;) {
-            // slither-disable-next-line calls-loop
             address poolAddr =
                 v3Factory.getPool({tokenA: normalizedTokenIn, tokenB: normalizedTokenOut, fee: _feeTier(i)});
 
@@ -401,7 +398,6 @@ library JBSwapPoolLib {
                 }
 
                 // Query the pool's current in-range liquidity.
-                // slither-disable-next-line calls-loop
                 uint128 poolLiquidity = IUniswapV3Pool(poolAddr).liquidity();
 
                 // Track the pool with the highest liquidity.
@@ -547,13 +543,10 @@ library JBSwapPoolLib {
         PoolId id = key.toId();
 
         // Check if pool is initialized (sqrtPriceX96 != 0).
-        // slither-disable-next-line unused-return,calls-loop
         (uint160 sqrtPriceX96,,,) = poolManager.getSlot0(id);
-        // slither-disable-next-line incorrect-equality
         if (sqrtPriceX96 == 0) return (key, 0);
 
         // Query the pool's current in-range liquidity.
-        // slither-disable-next-line calls-loop
         poolLiquidity = poolManager.getLiquidity(id);
     }
 
@@ -580,17 +573,27 @@ library JBSwapPoolLib {
         uint32 oldestObservation = OracleLibrary.getOldestObservationSecondsAgo(address(pool));
 
         // Revert if the pool has no TWAP history at all.
-        if (oldestObservation == 0) revert JBSwapPoolLib_InsufficientTwapHistory();
+        if (oldestObservation == 0) {
+            revert JBSwapPoolLib_InsufficientTwapHistory({
+                pool: address(pool), availableWindow: oldestObservation, requiredWindow: _DEFAULT_TWAP_WINDOW
+            });
+        }
 
         // Revert if the available history cannot serve the full default TWAP window.
-        if (oldestObservation < _DEFAULT_TWAP_WINDOW) revert JBSwapPoolLib_InsufficientTwapHistory();
+        if (oldestObservation < _DEFAULT_TWAP_WINDOW) {
+            revert JBSwapPoolLib_InsufficientTwapHistory({
+                pool: address(pool), availableWindow: oldestObservation, requiredWindow: _DEFAULT_TWAP_WINDOW
+            });
+        }
 
         // Consult the V3 oracle for the arithmetic mean tick and harmonic mean liquidity.
         (int24 arithmeticMeanTick, uint128 liquidity) =
             OracleLibrary.consult({pool: address(pool), secondsAgo: _DEFAULT_TWAP_WINDOW});
 
         // Revert if the pool has no in-range liquidity.
-        if (liquidity == 0) revert JBSwapPoolLib_NoLiquidity();
+        if (liquidity == 0) {
+            revert JBSwapPoolLib_NoLiquidity({pool: address(pool), poolId: PoolId.wrap(bytes32(0))});
+        }
 
         // Compute the minimum output with sigmoid-based dynamic slippage.
         minAmountOut = _quoteWithSlippage({
@@ -625,10 +628,9 @@ library JBSwapPoolLib {
         uint256 feeBps = uint256(key.fee) / 100;
         int24 tick;
         uint128 liquidity;
+        PoolId id = key.toId();
 
         {
-            // Derive the pool ID from the key.
-            PoolId id = key.toId();
             // If the pool has a hook, require a TWAP from the geomean oracle.
             if (address(key.hooks) != address(0)) {
                 // Build the observation window: [_V4_TWAP_WINDOW seconds ago, now].
@@ -638,10 +640,13 @@ library JBSwapPoolLib {
 
                 // Read the TWAP from the hook's geomean oracle. The seconds-per-liquidity array is not used for
                 // price checks.
-                // slither-disable-next-line unused-return
                 (int56[] memory tickCumulatives,) =
                     IGeomeanOracle(address(key.hooks)).observe({key: key, secondsAgos: secondsAgos});
-                if (tickCumulatives.length < 2) revert JBSwapPoolLib_InsufficientTwapHistory();
+                if (tickCumulatives.length < 2) {
+                    revert JBSwapPoolLib_InsufficientTwapHistory({
+                        pool: address(key.hooks), availableWindow: tickCumulatives.length, requiredWindow: 2
+                    });
+                }
 
                 // Compute the arithmetic mean tick from the cumulative tick difference.
                 // The geomean oracle returns the same int24 tick domain used by Uniswap pools.
@@ -649,7 +654,6 @@ library JBSwapPoolLib {
                 tick = int24((tickCumulatives[1] - tickCumulatives[0]) / int56(int32(_V4_TWAP_WINDOW)));
             } else {
                 // Hookless V4 spot pools are only selected when no TWAP-capable route exists.
-                // slither-disable-next-line unused-return
                 (, tick,,) = config.poolManager.getSlot0(id);
             }
 
@@ -658,7 +662,7 @@ library JBSwapPoolLib {
         }
 
         // Revert if the pool has no in-range liquidity.
-        if (liquidity == 0) revert JBSwapPoolLib_NoLiquidity();
+        if (liquidity == 0) revert JBSwapPoolLib_NoLiquidity({pool: address(0), poolId: id});
 
         // V4 uses address(0) for native ETH — compute quoting addresses inline to save stack slots.
         minAmountOut = _quoteWithSlippage({
@@ -709,7 +713,6 @@ library JBSwapPoolLib {
         returns (bool ok, uint16 observationIndex, uint16 observationCardinality)
     {
         // Pool discovery intentionally probes candidate pools in a bounded fee-tier list; failed probes mean "skip".
-        // slither-disable-next-line calls-loop
         (bool success, bytes memory data) =
             address(pool).staticcall(abi.encodeWithSelector(IUniswapV3PoolState.slot0.selector));
         if (!success || data.length < 224) return (false, 0, 0);
@@ -735,7 +738,6 @@ library JBSwapPoolLib {
         returns (bool ok, uint32 observationTimestamp, bool initialized)
     {
         // Pool discovery intentionally probes candidate pools in a bounded fee-tier list; failed probes mean "skip".
-        // slither-disable-next-line calls-loop
         (bool success, bytes memory data) =
             address(pool).staticcall(abi.encodeWithSelector(IUniswapV3PoolState.observations.selector, index));
         if (!success || data.length < 128) return (false, 0, false);
@@ -771,7 +773,6 @@ library JBSwapPoolLib {
 
         // Pool discovery intentionally probes candidate hooks in a bounded pool list. The seconds-per-liquidity array
         // is not needed for the history check.
-        // slither-disable-next-line calls-loop,unused-return
         try IGeomeanOracle(address(key.hooks)).observe({key: key, secondsAgos: secondsAgos}) returns (
             int56[] memory tickCumulatives, uint160[] memory
         ) {
@@ -802,7 +803,14 @@ library JBSwapPoolLib {
         returns (uint256 minAmountOut)
     {
         // Compute the dynamic slippage tolerance based on price impact.
-        uint256 slippageTolerance = _getSlippageTolerance(amount, liquidity, tokenOut, tokenIn, tick, poolFeeBps);
+        uint256 slippageTolerance = _getSlippageTolerance({
+            amountIn: amount,
+            liquidity: liquidity,
+            tokenOut: tokenOut,
+            tokenIn: tokenIn,
+            arithmeticMeanTick: tick,
+            poolFeeBps: poolFeeBps
+        });
 
         // If the slippage tolerance is 100% or more, accept any output.
         if (slippageTolerance >= _SLIPPAGE_DENOMINATOR) return 0;

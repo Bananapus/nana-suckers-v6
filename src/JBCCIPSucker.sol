@@ -225,7 +225,6 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
             gasLimit += remoteToken.minGas;
 
             // Wrap native tokens if needed, build the CCIP token amounts array, and approve the router.
-            // slither-disable-next-line unused-return
             (tokenAmounts,) = JBCCIPLib.prepareTokenAmounts({ccipRouter: CCIP_ROUTER, token: token, amount: amount});
         } else {
             // No tokens to bridge — use an empty array.
@@ -239,7 +238,6 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
         address feeToken = transportPayment == 0 ? CCIPHelper.linkOfChain(block.chainid) : address(0);
 
         // Build and send the CCIP message with the root payload.
-        // slither-disable-next-line reentrancy-events
         (bool refundFailed, uint256 refundAmount) = JBCCIPLib.sendCCIPMessage({
             ccipRouter: CCIP_ROUTER,
             remoteChainSelector: REMOTE_CHAIN_SELECTOR,
@@ -256,7 +254,6 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
         // Retain failed refunds as caller credit instead of leaving them project-addable or stranded.
         if (refundFailed) {
             // Refund accounting is isolated per caller; reentry cannot increase the retained credit.
-            // slither-disable-next-line reentrancy-benign
             _retainTransportPaymentRefund({account: _msgSender(), amount: refundAmount});
             emit TransportPaymentRefundFailed({recipient: _msgSender(), amount: refundAmount});
         }

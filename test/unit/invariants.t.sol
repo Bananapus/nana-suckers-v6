@@ -134,6 +134,7 @@ contract InvariantSucker is JBSucker {
     }
 
     function test_setNumberOfClaimsSent(address token, uint256 count) external {
+        // forge-lint: disable-next-line(unsafe-typecast)
         _outboxOf[token].numberOfClaimsSent = uint192(count);
     }
 
@@ -272,6 +273,7 @@ contract SuckerHandler is Test {
         if (sucker.test_isEmergencyExecuted(TOKEN, index)) return;
 
         // Ensure sucker is deprecated for emergency exit.
+        // forge-lint: disable-next-line(block-timestamp)
         if (sucker.test_getDeprecatedAfter() == 0 || block.timestamp < sucker.test_getDeprecatedAfter()) {
             sucker.test_setDeprecatedAfter(block.timestamp);
         }
