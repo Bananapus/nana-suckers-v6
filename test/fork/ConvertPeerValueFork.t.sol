@@ -56,7 +56,7 @@ contract ConvertPeerValueForkTest is Test {
         vm.mockCall(
             PRICES,
             abi.encodeCall(IJBPrices.pricePerUnitOf, (PROJECT_ID, USD_CURRENCY, ETH_CURRENCY, 6)),
-            abi.encode(uint256(2_000e6))
+            abi.encode(uint256(2000e6))
         );
 
         // Mock: 1:1 ETH→ETH for same-currency sanity check.
@@ -69,8 +69,7 @@ contract ConvertPeerValueForkTest is Test {
 
     /// @notice 10 ETH (18 dec) → USD (6 dec) at $2000/ETH should yield 20,000 USDC.
     function test_ethToUsdc() external view {
-        JBDenominatedAmount memory source =
-            JBDenominatedAmount({value: 10 ether, currency: ETH_CURRENCY, decimals: 18});
+        JBDenominatedAmount memory source = JBDenominatedAmount({value: 10 ether, currency: ETH_CURRENCY, decimals: 18});
 
         uint256 converted = harness.convert(IJBPrices(PRICES), PROJECT_ID, source, 6, uint256(USD_CURRENCY));
         assertEq(converted, 20_000e6, "10 ETH at $2000 should convert to 20,000 USDC");
@@ -78,8 +77,7 @@ contract ConvertPeerValueForkTest is Test {
 
     /// @notice 20,000 USDC (6 dec) → ETH (18 dec) at $2000/ETH should yield 10 ETH.
     function test_usdcToEth() external view {
-        JBDenominatedAmount memory source =
-            JBDenominatedAmount({value: 20_000e6, currency: USD_CURRENCY, decimals: 6});
+        JBDenominatedAmount memory source = JBDenominatedAmount({value: 20_000e6, currency: USD_CURRENCY, decimals: 6});
 
         uint256 converted = harness.convert(IJBPrices(PRICES), PROJECT_ID, source, 18, uint256(ETH_CURRENCY));
         assertEq(converted, 10 ether, "20,000 USDC at $2000/ETH should convert to 10 ETH");
@@ -87,8 +85,7 @@ contract ConvertPeerValueForkTest is Test {
 
     /// @notice Same-currency conversion (18 → 18) should return the original value.
     function test_sameCurrencySameDecimals() external view {
-        JBDenominatedAmount memory source =
-            JBDenominatedAmount({value: 5 ether, currency: ETH_CURRENCY, decimals: 18});
+        JBDenominatedAmount memory source = JBDenominatedAmount({value: 5 ether, currency: ETH_CURRENCY, decimals: 18});
 
         uint256 converted = harness.convert(IJBPrices(PRICES), PROJECT_ID, source, 18, uint256(ETH_CURRENCY));
         assertEq(converted, 5 ether, "same currency same decimals should return original");
