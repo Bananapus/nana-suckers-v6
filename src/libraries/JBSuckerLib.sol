@@ -185,12 +185,11 @@ library JBSuckerLib {
                 pricingCurrency: source.currency,
                 // forge-lint: disable-next-line(unsafe-typecast)
                 unitCurrency: uint32(currency),
-                // forge-lint: disable-next-line(unsafe-typecast)
-                decimals: uint8(decimals)
+                decimals: source.decimals
             }) returns (
                 uint256 price
             ) {
-                converted = mulDiv({x: source.value, y: price, denominator: 10 ** source.decimals});
+                converted = mulDiv({x: source.value, y: 10 ** decimals, denominator: price});
             } catch {}
         }
     }

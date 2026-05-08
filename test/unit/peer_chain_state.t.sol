@@ -385,18 +385,18 @@ contract PeerChainStateTest is Test {
         // Set up terminal mocks for price conversion.
         _mockSingleETHTerminal({ethBalance: 5 ether, ethSurplus: 3 ether});
 
-        // Mock price: 1 ETH = 2000 USD (pricingCurrency = ETH, unitCurrency = USD).
-        // convertPeerValue calls: pricePerUnitOf(projectId, sourceCurrency=ETH, unitCurrency=USD, decimals=18)
+        // Mock price: 1 USD = 0.0005 ETH (pricingCurrency = ETH, unitCurrency = USD, decimals = 18).
+        // pricePerUnitOf returns "price of 1 unitCurrency in pricingCurrency": 5e14 at 18 decimals.
         uint32 usdCurrency = 2;
         vm.mockCall(
             PRICES,
             // forge-lint: disable-next-line(unsafe-typecast)
             abi.encodeCall(IJBPrices.pricePerUnitOf, (PROJECT_ID, uint32(ETH_CURRENCY), usdCurrency, 18)),
-            abi.encode(uint256(2000e18))
+            abi.encode(uint256(5e14))
         );
 
         // Query balance in USD at 18 decimals.
-        // convertPeerValue: mulDiv(10e18, 2000e18, 10^18) = 10 * 2000 * 1e18 = 20000e18
+        // convertPeerValue: mulDiv(10e18, 10^18, 5e14) = 20000e18
         JBDenominatedAmount memory result = sucker.peerChainBalanceOf(18, uint256(usdCurrency));
         assertEq(result.value, 20_000 ether, "10 ETH at 2000 USD/ETH should return 20000 USD");
         assertEq(result.currency, usdCurrency, "returned currency should be USD");
