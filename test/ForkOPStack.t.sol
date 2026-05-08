@@ -76,9 +76,9 @@ abstract contract OPStackNativeBridgeForkTestBase is SuckerForkHelpers {
     function setUp() public override {
         _initMetadata();
 
-        // ── L1 (Ethereum)
+        // ── L1 (Ethereum, roll back a few blocks to avoid RPC race where latest block isn't fully available)
         l1Fork = vm.createSelectFork("ethereum");
-        vm.rollFork(block.number - 1);
+        vm.rollFork(block.number - 5);
         super.setUp();
         vm.stopPrank();
 
@@ -109,9 +109,9 @@ abstract contract OPStackNativeBridgeForkTestBase is SuckerForkHelpers {
         projectToken = jbController().deployERC20For(1, "SuckerToken", "SOOK", bytes32(0));
         vm.stopPrank();
 
-        // ── L2
+        // ── L2 (roll back a few blocks to avoid RPC race where latest block isn't fully available)
         l2Fork = vm.createSelectFork(_l2RpcUrl());
-        vm.rollFork(block.number - 1);
+        vm.rollFork(block.number - 5);
         super.setUp();
         vm.stopPrank();
 

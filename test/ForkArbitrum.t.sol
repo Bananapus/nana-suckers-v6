@@ -64,10 +64,10 @@ contract ForkArbitrumDeployerTest is TestBaseWorkflow, IERC721Receiver {
             metadata: 0
         });
 
-        // ── L1 (Ethereum mainnet)
+        // ── L1 (Ethereum mainnet, roll back a few blocks to avoid RPC race where latest block isn't fully
+        // available)
         l1Fork = vm.createSelectFork("ethereum");
-        // Some RPCs report a new head before its account state is queryable. Stay one executed block behind.
-        vm.rollFork(block.number - 1);
+        vm.rollFork(block.number - 5);
         super.setUp();
         vm.stopPrank();
 
@@ -255,10 +255,10 @@ contract ForkArbitrumNativeTransferTest is TestBaseWorkflow {
             metadata: 0
         });
 
-        // ── L1 (Ethereum mainnet)
+        // ── L1 (Ethereum mainnet, roll back a few blocks to avoid RPC race where latest block isn't fully
+        // available)
         l1Fork = vm.createSelectFork("ethereum");
-        // Some RPCs report a new head before its account state is queryable. Stay one executed block behind.
-        vm.rollFork(block.number - 1);
+        vm.rollFork(block.number - 5);
         super.setUp();
         vm.stopPrank();
 

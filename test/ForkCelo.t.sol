@@ -84,10 +84,10 @@ contract ForkCeloTest is TestBaseWorkflow {
             metadata: 0
         });
 
-        // ── L1 (Ethereum)
+        // ── L1 (Ethereum, roll back a few blocks to avoid RPC race where latest block isn't fully available)
         // ────────────────────────────────────────────────────────────
         l1Fork = vm.createSelectFork("ethereum");
-        vm.rollFork(block.number - 1);
+        vm.rollFork(block.number - 5);
 
         // Deploy full JB infrastructure on L1.
         super.setUp();
@@ -130,10 +130,10 @@ contract ForkCeloTest is TestBaseWorkflow {
         projectToken = jbController().deployERC20For(1, "SuckerToken", "SOOK", bytes32(0));
         vm.stopPrank();
 
-        // ── L2 (Celo)
+        // ── L2 (Celo, roll back a few blocks to avoid RPC race where latest block isn't fully available)
         // ────────────────────────────────────────────────────────────
         l2Fork = vm.createSelectFork("celo");
-        vm.rollFork(block.number - 1);
+        vm.rollFork(block.number - 5);
 
         // Deploy full JB infrastructure on Celo.
         super.setUp();
