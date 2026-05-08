@@ -77,7 +77,7 @@ contract ForkCeloTest is TestBaseWorkflow {
             allowAddPriceFeed: true,
             ownerMustSendPayouts: false,
             holdFees: false,
-            useTotalSurplusForCashOuts: true,
+            scopeCashOutsToLocalBalances: true,
             useDataHookForPay: false,
             useDataHookForCashOut: false,
             dataHook: address(0),
