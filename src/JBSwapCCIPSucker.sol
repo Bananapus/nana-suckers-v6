@@ -224,7 +224,7 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
         POOL_MANAGER = swapDeployer.poolManager();
         V3_FACTORY = swapDeployer.v3Factory();
         UNIV4_HOOK = swapDeployer.univ4Hook();
-        WRAPPED_NATIVE_TOKEN = IWrappedNativeToken(swapDeployer.weth());
+        WRAPPED_NATIVE_TOKEN = IWrappedNativeToken(swapDeployer.wrappedNativeToken());
 
         if (address(BRIDGE_TOKEN) == address(0)) {
             revert JBSwapCCIPSucker_InvalidBridgeToken({
@@ -306,20 +306,25 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
                 }
             }
 
-            // Capture the inbox nonce before fromRemote to detect whether the root was accepted.
-            uint64 inboxNonceBefore = _inboxOf[localToken].nonce;
-
             // Store the inbox merkle root for later claims.
             // Must be called BEFORE writing batch metadata and conversion rates so that stale
             // (duplicate/replayed) roots that fromRemote silently rejects do not overwrite
             // metadata from the original accepted delivery.
             this.fromRemote(root);
 
-            // Only write batch metadata and conversion rates if fromRemote accepted this root.
-            // fromRemote updates _inboxOf[localToken].nonce when the root's nonce is strictly
-            // greater than the current inbox nonce; stale roots are silently rejected.
-            // We detect acceptance by checking if the nonce actually changed.
-            if (_inboxOf[localToken].nonce > inboxNonceBefore) {
+            // Write batch metadata if this nonce hasn't been seen before.
+            // Decoupled from nonce advancement to support out-of-order CCIP delivery:
+            // if nonce 2 arrives before nonce 1, fromRemote only advances the inbox for nonce 2,
+            // but we still need to record nonce 1's batch metadata when it arrives later.
+            // The Merkle tree is append-only, so nonce 1's leaves are provable against nonce 2's root.
+            //
+            // Detect "already seen" without extra storage: a nonce has been processed if it has
+            // either a batch range (batchEnd > 0) or a conversion rate / pending swap recorded.
+            if (
+                _batchEndOf[localToken][root.remoteRoot.nonce] == 0
+                    && _conversionRateOf[localToken][root.remoteRoot.nonce].leafTotal == 0
+                    && pendingSwapOf[localToken][root.remoteRoot.nonce].leafTotal == 0
+            ) {
                 // Record the batch range so _findNonceForLeafIndex can resolve leaf ownership
                 // independently of nonce ordering. Each nonce is self-describing: [start, end).
                 if (batchEnd > 0) {
@@ -605,7 +610,7 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
                 v3Factory: V3_FACTORY,
                 poolManager: POOL_MANAGER,
                 univ4Hook: UNIV4_HOOK,
-                weth: address(WRAPPED_NATIVE_TOKEN)
+                wrappedNativeToken: address(WRAPPED_NATIVE_TOKEN)
             }),
             tokenIn: tokenIn,
             tokenOut: tokenOut,

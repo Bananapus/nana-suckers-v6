@@ -203,7 +203,7 @@ contract JBSwapPoolLib_PoolDiscoveryTest is Test {
             v3Factory: IUniswapV3Factory(v3Factory),
             poolManager: IPoolManager(address(poolManager)),
             univ4Hook: HOOK_ADDR,
-            weth: WETH
+            wrappedNativeToken: WETH
         });
     }
 
@@ -328,7 +328,7 @@ contract JBSwapPoolLib_PoolDiscoveryTest is Test {
             v3Factory: IUniswapV3Factory(v3Factory),
             poolManager: IPoolManager(address(0)), // No V4.
             univ4Hook: HOOK_ADDR,
-            weth: WETH
+            wrappedNativeToken: WETH
         });
 
         (bool isV4, IUniswapV3Pool v3Pool,) = harness.discoverPool(config, TOKEN_A, TOKEN_B);

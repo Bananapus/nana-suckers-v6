@@ -77,12 +77,13 @@ library JBSwapPoolLib {
     /// @custom:member v3Factory The Uniswap V3 factory used for pool discovery.
     /// @custom:member poolManager The Uniswap V4 pool manager used for V4 pool queries and swaps.
     /// @custom:member univ4Hook The address of the Uniswap V4 hook contract to search for hooked pools.
-    /// @custom:member weth The address of the ERC-20 wrapper for the chain's native token (e.g. WETH on Ethereum).
+    /// @custom:member wrappedNativeToken The address of the ERC-20 wrapper for the chain's native token (e.g. WETH on
+    /// Ethereum).
     struct SwapConfig {
         IUniswapV3Factory v3Factory;
         IPoolManager poolManager;
         address univ4Hook;
-        address weth;
+        address wrappedNativeToken;
     }
 
     //*********************************************************************//
@@ -109,8 +110,8 @@ library JBSwapPoolLib {
         returns (uint256 amountOut)
     {
         // Normalize NATIVE_TOKEN sentinel to the wrapped native token for pool lookups.
-        address normalizedIn = _normalize({token: tokenIn, weth: config.weth});
-        address normalizedOut = _normalize({token: tokenOut, weth: config.weth});
+        address normalizedIn = _normalize({token: tokenIn, wrappedNativeToken: config.wrappedNativeToken});
+        address normalizedOut = _normalize({token: tokenOut, wrappedNativeToken: config.wrappedNativeToken});
 
         // No swap needed if tokens are the same after normalization (e.g., NATIVE_TOKEN and wrapped native token).
         if (normalizedIn == normalizedOut) return amount;
@@ -167,15 +168,15 @@ library JBSwapPoolLib {
             }
             // V3 outputs wrapped native token for native pairs — unwrap to raw native token.
             if (tokenOut == JBConstants.NATIVE_TOKEN) {
-                IWrappedNativeToken(config.weth).withdraw(amountOut);
+                IWrappedNativeToken(config.wrappedNativeToken).withdraw(amountOut);
             }
         }
 
         // V4 outputs native tokens for wrapped-native-paired pools. If the caller requested the wrapped form
         // (not NATIVE_TOKEN), wrap the received native tokens so the caller gets the token they expect.
-        if (isV4 && tokenOut != JBConstants.NATIVE_TOKEN && normalizedOut == config.weth) {
+        if (isV4 && tokenOut != JBConstants.NATIVE_TOKEN && normalizedOut == config.wrappedNativeToken) {
             // Wrap through the configured wrapped native token contract.
-            IWrappedNativeToken(config.weth).deposit{value: amountOut}();
+            IWrappedNativeToken(config.wrappedNativeToken).deposit{value: amountOut}();
         }
     }
 
@@ -193,7 +194,7 @@ library JBSwapPoolLib {
             int256 amountSpecified,
             uint160 sqrtPriceLimitX96,
             uint256 minAmountOut,
-            address weth
+            address wrappedNativeToken
         ) = abi.decode(data, (PoolKey, bool, int256, uint160, uint256, address));
 
         uint256 amountIn;
@@ -237,8 +238,14 @@ library JBSwapPoolLib {
         // Settle input (pay what we owe to the PoolManager).
         Currency inputCurrency = zeroForOne ? key.currency0 : key.currency1;
         if (Currency.unwrap(inputCurrency) == address(0)) {
-            // Native token: unwrap if needed, then settle by sending native value directly.
-            if (weth != address(0)) IWrappedNativeToken(weth).withdraw(amountIn);
+            // Native token: unwrap wrapped native token if the caller holds it, then settle directly.
+            // The buyback hook holds wrapped native tokens (needs unwrap), while suckers hold raw ETH (skip unwrap).
+            if (wrappedNativeToken != address(0)) {
+                uint256 wrappedBalance = IERC20(wrappedNativeToken).balanceOf(address(this));
+                if (wrappedBalance >= amountIn) {
+                    IWrappedNativeToken(wrappedNativeToken).withdraw(amountIn);
+                }
+            }
             poolManager.settle{value: amountIn}();
         } else {
             // ERC-20: sync the currency balance, transfer tokens, then settle.
@@ -440,8 +447,8 @@ library JBSwapPoolLib {
         address sorted0;
         address sorted1;
         {
-            address v4In = normalizedTokenIn == config.weth ? address(0) : normalizedTokenIn;
-            address v4Out = normalizedTokenOut == config.weth ? address(0) : normalizedTokenOut;
+            address v4In = normalizedTokenIn == config.wrappedNativeToken ? address(0) : normalizedTokenIn;
+            address v4Out = normalizedTokenOut == config.wrappedNativeToken ? address(0) : normalizedTokenOut;
 
             // Sort tokens to match the V4 currency ordering convention.
             (sorted0, sorted1) = v4In < v4Out ? (v4In, v4Out) : (v4Out, v4In);
@@ -668,8 +675,8 @@ library JBSwapPoolLib {
         minAmountOut = _quoteWithSlippage({
             amount: amount,
             liquidity: liquidity,
-            tokenIn: normalizedTokenIn == config.weth ? address(0) : normalizedTokenIn,
-            tokenOut: normalizedTokenOut == config.weth ? address(0) : normalizedTokenOut,
+            tokenIn: normalizedTokenIn == config.wrappedNativeToken ? address(0) : normalizedTokenIn,
+            tokenOut: normalizedTokenOut == config.wrappedNativeToken ? address(0) : normalizedTokenOut,
             tick: tick,
             poolFeeBps: feeBps
         });
@@ -1001,7 +1008,7 @@ library JBSwapPoolLib {
         returns (uint256 amountOut)
     {
         // Convert wrapped native token to address(0) for V4's native token convention.
-        address v4In = normalizedTokenIn == config.weth ? address(0) : normalizedTokenIn;
+        address v4In = normalizedTokenIn == config.wrappedNativeToken ? address(0) : normalizedTokenIn;
 
         // Determine swap direction based on currency ordering in the pool key.
         bool zeroForOne = Currency.unwrap(key.currency0) == v4In;
@@ -1019,7 +1026,9 @@ library JBSwapPoolLib {
             // forge-lint: disable-next-line(unsafe-typecast)
             int256 exactInputAmount = -int256(amount);
 
-            unlockData = abi.encode(key, zeroForOne, exactInputAmount, sqrtPriceLimitX96, minAmountOut, config.weth);
+            unlockData = abi.encode(
+                key, zeroForOne, exactInputAmount, sqrtPriceLimitX96, minAmountOut, config.wrappedNativeToken
+            );
         }
 
         // Unlock the PoolManager and encode the swap parameters for the callback.
@@ -1031,10 +1040,10 @@ library JBSwapPoolLib {
 
     /// @notice Normalize a token address, converting the NATIVE_TOKEN sentinel to the wrapped native token.
     /// @param token The token address to normalize.
-    /// @param weth The wrapped native token address on this chain.
+    /// @param wrappedNativeToken The wrapped native token address on this chain.
     /// @return The normalized token address.
-    function _normalize(address token, address weth) internal pure returns (address) {
-        return token == JBConstants.NATIVE_TOKEN ? weth : token;
+    function _normalize(address token, address wrappedNativeToken) internal pure returns (address) {
+        return token == JBConstants.NATIVE_TOKEN ? wrappedNativeToken : token;
     }
 
     /// @notice Get the Uniswap V3 fee tier for a given index.

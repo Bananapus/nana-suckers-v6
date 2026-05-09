@@ -246,7 +246,7 @@ contract FreshV3TwapOverrideTest is Test {
             v3Factory: IUniswapV3Factory(V3_FACTORY),
             poolManager: IPoolManager(address(poolManager)),
             univ4Hook: address(0),
-            weth: WETH
+            wrappedNativeToken: WETH
         });
 
         (bool isV4, IUniswapV3Pool chosenV3Pool, PoolKey memory chosenV4Key) =
