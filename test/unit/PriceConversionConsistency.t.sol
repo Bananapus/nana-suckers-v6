@@ -59,11 +59,7 @@ contract PriceConversionConsistencyTest is Test {
         JBDenominatedAmount memory source =
             JBDenominatedAmount({value: balance, currency: uint32(JBCurrencyIds.USD), decimals: 6});
         uint256 converted = JBSuckerLib.convertPeerValue({
-            prices: IJBPrices(PRICES),
-            projectId: PROJECT_ID,
-            source: source,
-            decimals: 18,
-            currency: JBCurrencyIds.ETH
+            prices: IJBPrices(PRICES), projectId: PROJECT_ID, source: source, decimals: 18, currency: JBCurrencyIds.ETH
         });
 
         assertEq(message.sourceBalance, converted, "buildSnapshotMessage and convertPeerValue must agree");
@@ -115,24 +111,25 @@ contract PriceConversionConsistencyTest is Test {
         contexts[0] = JBAccountingContext({token: token, decimals: dec, currency: uint32(currency)});
 
         vm.mockCall(DIRECTORY, abi.encodeCall(IJBDirectory.terminalsOf, (PROJECT_ID)), abi.encode(terminals));
-        vm.mockCall(
-            DIRECTORY, abi.encodeCall(IJBDirectory.controllerOf, (PROJECT_ID)), abi.encode(IERC165(address(0)))
-        );
+        vm.mockCall(DIRECTORY, abi.encodeCall(IJBDirectory.controllerOf, (PROJECT_ID)), abi.encode(IERC165(address(0))));
         vm.mockCall(
             TERMINAL,
-            abi.encodeCall(IJBTerminal.currentSurplusOf, (PROJECT_ID, new address[](0), uint256(18), uint256(JBCurrencyIds.ETH))),
+            abi.encodeCall(
+                IJBTerminal.currentSurplusOf, (PROJECT_ID, new address[](0), uint256(18), uint256(JBCurrencyIds.ETH))
+            ),
             abi.encode(uint256(0))
         );
         vm.mockCall(TERMINAL, abi.encodeCall(IJBTerminal.accountingContextsOf, (PROJECT_ID)), abi.encode(contexts));
         vm.mockCall(TERMINAL, abi.encodeCall(IJBMultiTerminal.STORE, ()), abi.encode(IJBTerminalStore(STORE)));
-        vm.mockCall(STORE, abi.encodeCall(IJBTerminalStore.balanceOf, (TERMINAL, PROJECT_ID, token)), abi.encode(balance));
+        vm.mockCall(
+            STORE, abi.encodeCall(IJBTerminalStore.balanceOf, (TERMINAL, PROJECT_ID, token)), abi.encode(balance)
+        );
         vm.mockCall(STORE, abi.encodeCall(IJBTerminalStore.PRICES, ()), abi.encode(PRICES));
 
         vm.mockCall(
             PRICES,
             abi.encodeCall(
-                IJBPrices.pricePerUnitOf,
-                (PROJECT_ID, uint256(currency), uint256(JBCurrencyIds.ETH), uint256(dec))
+                IJBPrices.pricePerUnitOf, (PROJECT_ID, uint256(currency), uint256(JBCurrencyIds.ETH), uint256(dec))
             ),
             abi.encode(price)
         );

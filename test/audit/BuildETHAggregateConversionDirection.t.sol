@@ -40,38 +40,19 @@ contract BuildETHAggregateConversionDirectionTest is Test {
         JBAccountingContext[] memory contexts = new JBAccountingContext[](1);
         contexts[0] = JBAccountingContext({token: USDC, decimals: 6, currency: JBCurrencyIds.USD});
 
-        vm.mockCall(
-            DIRECTORY,
-            abi.encodeCall(IJBDirectory.terminalsOf, (PROJECT_ID)),
-            abi.encode(terminals)
-        );
-        vm.mockCall(
-            DIRECTORY,
-            abi.encodeCall(IJBDirectory.controllerOf, (PROJECT_ID)),
-            abi.encode(IERC165(address(0)))
-        );
+        vm.mockCall(DIRECTORY, abi.encodeCall(IJBDirectory.terminalsOf, (PROJECT_ID)), abi.encode(terminals));
+        vm.mockCall(DIRECTORY, abi.encodeCall(IJBDirectory.controllerOf, (PROJECT_ID)), abi.encode(IERC165(address(0))));
         vm.mockCall(
             TERMINAL,
             abi.encodeCall(
-                IJBTerminal.currentSurplusOf,
-                (PROJECT_ID, new address[](0), uint256(18), uint256(JBCurrencyIds.ETH))
+                IJBTerminal.currentSurplusOf, (PROJECT_ID, new address[](0), uint256(18), uint256(JBCurrencyIds.ETH))
             ),
             abi.encode(uint256(0))
         );
+        vm.mockCall(TERMINAL, abi.encodeCall(IJBTerminal.accountingContextsOf, (PROJECT_ID)), abi.encode(contexts));
+        vm.mockCall(TERMINAL, abi.encodeCall(IJBMultiTerminal.STORE, ()), abi.encode(IJBTerminalStore(STORE)));
         vm.mockCall(
-            TERMINAL,
-            abi.encodeCall(IJBTerminal.accountingContextsOf, (PROJECT_ID)),
-            abi.encode(contexts)
-        );
-        vm.mockCall(
-            TERMINAL,
-            abi.encodeCall(IJBMultiTerminal.STORE, ()),
-            abi.encode(IJBTerminalStore(STORE))
-        );
-        vm.mockCall(
-            STORE,
-            abi.encodeCall(IJBTerminalStore.balanceOf, (TERMINAL, PROJECT_ID, USDC)),
-            abi.encode(USDC_BALANCE)
+            STORE, abi.encodeCall(IJBTerminalStore.balanceOf, (TERMINAL, PROJECT_ID, USDC)), abi.encode(USDC_BALANCE)
         );
 
         // Core semantics: pricePerUnitOf(USD, ETH, 6) returns the USD price of one ETH at source decimals.
