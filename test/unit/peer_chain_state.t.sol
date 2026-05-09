@@ -646,12 +646,14 @@ contract PeerChainStateTest is Test {
             abi.encode(uint256(1e18))
         );
 
-        // Mock price: 1 USDC = 0.0005 ETH (at 18 decimals).
+        // Mock price: pricePerUnitOf(erc20Currency, ETH, 6) = 2000e6
+        // Semantics: "2000 USDC (at 6 decimals) per 1 ETH".
+        // mulDiv(5000e6, 1e18, 2000e6) = 2.5 ETH.
         vm.mockCall(
             PRICES,
             // forge-lint: disable-next-line(unsafe-typecast)
-            abi.encodeCall(IJBPrices.pricePerUnitOf, (PROJECT_ID, erc20Currency, uint32(ETH_CURRENCY), ETH_DECIMALS)),
-            abi.encode(uint256(0.0005 ether))
+            abi.encodeCall(IJBPrices.pricePerUnitOf, (PROJECT_ID, erc20Currency, uint32(ETH_CURRENCY), uint256(6))),
+            abi.encode(uint256(2000e6))
         );
 
         sucker.test_resetSendRootOverAMBCalled();
@@ -663,7 +665,7 @@ contract PeerChainStateTest is Test {
 
         assertEq(m.sourceSurplus, 25 ether, "surplus should be the aggregated ETH surplus");
 
-        // Expected balance: 10 ETH + mulDiv(5000e6, 0.0005e18, 10^6) = 10e18 + 2.5e18 = 12.5e18
+        // Expected balance: 10 ETH + mulDiv(5000e6, 1e18, 2000e6) = 10e18 + 2.5e18 = 12.5e18
         assertEq(m.sourceBalance, 12.5 ether, "balance should aggregate ETH + ERC20 converted to ETH");
     }
 

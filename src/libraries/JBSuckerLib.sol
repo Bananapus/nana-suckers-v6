@@ -130,11 +130,11 @@ library JBSuckerLib {
                                     projectId: projectId,
                                     pricingCurrency: tokenCurrency,
                                     unitCurrency: JBCurrencyIds.ETH,
-                                    decimals: _ETH_DECIMALS
+                                    decimals: dec
                                 }) returns (
                                     uint256 price
                                 ) {
-                                    ethBalance += mulDiv({x: bal, y: price, denominator: 10 ** dec});
+                                    ethBalance += mulDiv({x: bal, y: 10 ** _ETH_DECIMALS, denominator: price});
                                 } catch {}
                             }
                         }
