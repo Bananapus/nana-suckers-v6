@@ -124,7 +124,7 @@ contract ZeroOutputRetryClaimTest is Test {
             _poolManager: IPoolManager(address(0)),
             _v3Factory: IUniswapV3Factory(address(0)),
             _univ4Hook: address(0),
-            _weth: WETH
+            _wrappedNativeToken: WETH
         });
 
         ZeroOutputRetryHarness singleton = new ZeroOutputRetryHarness({

@@ -200,7 +200,7 @@ contract FreshV3LiquidityOverrideDoSTest is Test {
             v3Factory: IUniswapV3Factory(V3_FACTORY),
             poolManager: IPoolManager(address(poolManager)),
             univ4Hook: address(0),
-            weth: WETH
+            wrappedNativeToken: WETH
         });
 
         (bool v4Wins, IUniswapV3Pool chosenV3Pool, PoolKey memory chosenV4Key) =

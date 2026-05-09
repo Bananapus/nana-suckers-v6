@@ -24,5 +24,5 @@ interface IJBSwapCCIPSuckerDeployer is IJBCCIPSuckerDeployer {
 
     /// @notice The ERC-20 wrapper address for the chain's native token (e.g. WETH on Ethereum). Used for V3 native
     /// swaps.
-    function weth() external view returns (address);
+    function wrappedNativeToken() external view returns (address);
 }

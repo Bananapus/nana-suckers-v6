@@ -128,7 +128,7 @@ contract TransientClaimContextRegression is Test {
         vm.mockCall(MOCK_DEPLOYER, abi.encodeWithSignature("poolManager()"), abi.encode(address(0)));
         vm.mockCall(MOCK_DEPLOYER, abi.encodeWithSignature("v3Factory()"), abi.encode(address(0)));
         vm.mockCall(MOCK_DEPLOYER, abi.encodeWithSignature("univ4Hook()"), abi.encode(address(0)));
-        vm.mockCall(MOCK_DEPLOYER, abi.encodeWithSignature("weth()"), abi.encode(address(weth)));
+        vm.mockCall(MOCK_DEPLOYER, abi.encodeWithSignature("wrappedNativeToken()"), abi.encode(address(weth)));
 
         vm.mockCall(MOCK_DIRECTORY, abi.encodeWithSelector(IJBDirectory.PROJECTS.selector), abi.encode(MOCK_PROJECTS));
         vm.mockCall(

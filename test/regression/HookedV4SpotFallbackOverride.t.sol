@@ -206,7 +206,7 @@ contract HookedV4SpotFallbackOverrideTest is Test {
             v3Factory: IUniswapV3Factory(V3_FACTORY),
             poolManager: IPoolManager(address(poolManager)),
             univ4Hook: address(hook),
-            weth: WETH
+            wrappedNativeToken: WETH
         });
 
         (bool isV4, IUniswapV3Pool v3Pool, PoolKey memory chosenKey) = harness.discoverPool(config, TOKEN_A, TOKEN_B);

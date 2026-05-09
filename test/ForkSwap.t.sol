@@ -59,7 +59,7 @@ contract ForkSwapHarness is JBSwapCCIPSucker {
                 v3Factory: V3_FACTORY,
                 poolManager: POOL_MANAGER,
                 univ4Hook: UNIV4_HOOK,
-                weth: address(WRAPPED_NATIVE_TOKEN)
+                wrappedNativeToken: address(WRAPPED_NATIVE_TOKEN)
             }),
             normalizedIn,
             normalizedOut
@@ -154,7 +154,7 @@ contract ForkSwapTest is Test {
         vm.mockCall(MOCK_DEPLOYER, abi.encodeWithSignature("poolManager()"), abi.encode(address(0)));
         vm.mockCall(MOCK_DEPLOYER, abi.encodeWithSignature("v3Factory()"), abi.encode(V3_FACTORY));
         vm.mockCall(MOCK_DEPLOYER, abi.encodeWithSignature("univ4Hook()"), abi.encode(address(0)));
-        vm.mockCall(MOCK_DEPLOYER, abi.encodeWithSignature("weth()"), abi.encode(MAINNET_WETH));
+        vm.mockCall(MOCK_DEPLOYER, abi.encodeWithSignature("wrappedNativeToken()"), abi.encode(MAINNET_WETH));
 
         // Mock directory (needed by JBSucker base constructor).
         vm.mockCall(MOCK_DIRECTORY, abi.encodeWithSignature("PROJECTS()"), abi.encode(MOCK_PROJECTS));

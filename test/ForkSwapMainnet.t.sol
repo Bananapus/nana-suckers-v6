@@ -115,7 +115,7 @@ abstract contract SwapCCIPSuckerForkTestBase is SuckerForkHelpers {
             _poolManager: IPoolManager(address(0)),
             _v3Factory: IUniswapV3Factory(_v3Factory()),
             _univ4Hook: address(0),
-            _weth: _weth()
+            _wrappedNativeToken: _weth()
         });
 
         vm.startPrank(address(0x1112222));
