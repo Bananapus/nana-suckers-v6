@@ -367,13 +367,8 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
 
                 // Store pendingSwapOf for failed swaps now that nonce is validated.
                 if (swapFailed) {
-                    _storePendingSwap({
-                        localToken: localToken,
-                        nonce: nonce,
-                        bridgeToken: deliveredToken,
-                        bridgeAmount: deliveredAmount,
-                        leafTotal: leafTotal
-                    });
+                    pendingSwapOf[localToken][nonce] =
+                        PendingSwap({bridgeToken: deliveredToken, bridgeAmount: deliveredAmount, leafTotal: leafTotal});
                 }
 
                 // Zero-output swap guard: When a swap succeeds but returns zero local tokens, the
@@ -387,12 +382,8 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
                 // the swap produced a positive local amount.
                 if (leafTotal > 0 && !swapFailed) {
                     if (localAmount == 0 && deliveredAmount > 0) {
-                        _storePendingSwap({
-                            localToken: localToken,
-                            nonce: nonce,
-                            bridgeToken: deliveredToken,
-                            bridgeAmount: deliveredAmount,
-                            leafTotal: leafTotal
+                        pendingSwapOf[localToken][nonce] = PendingSwap({
+                            bridgeToken: deliveredToken, bridgeAmount: deliveredAmount, leafTotal: leafTotal
                         });
                     } else {
                         _conversionRateOf[localToken][nonce] =
@@ -660,22 +651,6 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
         if (amountOut == 0) {
             revert JBSwapCCIPSucker_SwapFailed({tokenIn: tokenIn, tokenOut: tokenOut, amountIn: amount});
         }
-    }
-
-    /// @notice Record a pending swap so the bridge tokens can be retried later via `retrySwap`.
-    /// @dev Consolidates the two identical `pendingSwapOf` writes in `ccipReceive` (swap-failed branch and
-    /// zero-output branch) into one helper, eliminating the duplicated struct-literal construction.
-    function _storePendingSwap(
-        address localToken,
-        uint64 nonce,
-        address bridgeToken,
-        uint256 bridgeAmount,
-        uint256 leafTotal
-    )
-        internal
-    {
-        pendingSwapOf[localToken][nonce] =
-            PendingSwap({bridgeToken: bridgeToken, bridgeAmount: bridgeAmount, leafTotal: leafTotal});
     }
 
     //*********************************************************************//
