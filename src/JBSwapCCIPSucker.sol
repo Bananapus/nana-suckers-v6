@@ -91,11 +91,8 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
     error JBSwapCCIPSucker_InvalidBridgeToken(address bridgeToken, address wrappedNativeToken);
     error JBSwapCCIPSucker_NoPendingSwap(address localToken, uint64 nonce, bool retrySwapLocked);
     error JBSwapCCIPSucker_OnlySelf(address caller, address expected);
-    error JBSwapCCIPSucker_PositiveRootWithoutDelivery(uint256 rootAmount);
     error JBSwapCCIPSucker_SwapFailed(address tokenIn, address tokenOut, uint256 amountIn);
     error JBSwapCCIPSucker_SwapPending(uint64 nonce);
-    error JBSwapCCIPSucker_UnexpectedDeliveredTokens(uint256 count);
-    error JBSwapCCIPSucker_WrongDeliveredToken(address delivered, address expected);
 
     //*********************************************************************//
     // ------------------------------ events ----------------------------- //
@@ -279,28 +276,6 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
             // Decode the root and batch range [batchStart, batchEnd).
             (JBMessageRoot memory root, uint256 batchStart, uint256 batchEnd) =
                 abi.decode(payload, (JBMessageRoot, uint256, uint256));
-
-            // Send-side guarantees: at most one entry in `destTokenAmounts` (length 0 for zero-value batches,
-            // length 1 for value-bearing batches), and when present the delivered token is `BRIDGE_TOKEN`.
-            // Refuse anything that deviates so a peer compromise (or a malformed CCIP delivery) cannot register
-            // positive root accounting against zero or wrong-token backing.
-            if (any2EvmMessage.destTokenAmounts.length > 1) {
-                revert JBSwapCCIPSucker_UnexpectedDeliveredTokens(any2EvmMessage.destTokenAmounts.length);
-            }
-            if (any2EvmMessage.destTokenAmounts.length == 1) {
-                address deliveredToken = any2EvmMessage.destTokenAmounts[0].token;
-                if (deliveredToken != address(BRIDGE_TOKEN)) {
-                    revert JBSwapCCIPSucker_WrongDeliveredToken({
-                        delivered: deliveredToken, expected: address(BRIDGE_TOKEN)
-                    });
-                }
-            }
-            // A positive root with zero delivered tokens cannot arise from the honest send-side path: when
-            // `amount == 0` the sender produces an empty `tokenAmounts`, and when `amount > 0` the swap-or-revert
-            // either delivers a positive bridge amount or reverts before the CCIP message is built.
-            if (root.amount > 0 && any2EvmMessage.destTokenAmounts.length == 0) {
-                revert JBSwapCCIPSucker_PositiveRootWithoutDelivery(root.amount);
-            }
 
             address localToken = _toAddress(root.token);
             uint256 localAmount;
