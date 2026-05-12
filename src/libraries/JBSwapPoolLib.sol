@@ -132,6 +132,7 @@ library JBSwapPoolLib {
                     config: config,
                     key: v4Key,
                     normalizedTokenIn: normalizedIn,
+                    originalTokenIn: tokenIn,
                     amount: amount,
                     minAmountOut: minAmountOut
                 });
@@ -142,6 +143,7 @@ library JBSwapPoolLib {
                     key: v4Key,
                     normalizedTokenIn: normalizedIn,
                     normalizedTokenOut: normalizedOut,
+                    originalTokenIn: tokenIn,
                     amount: amount
                 });
             }
@@ -893,6 +895,7 @@ library JBSwapPoolLib {
         PoolKey memory key,
         address normalizedTokenIn,
         address normalizedTokenOut,
+        address originalTokenIn,
         uint256 amount
     )
         internal
@@ -909,7 +912,12 @@ library JBSwapPoolLib {
 
         // Execute the swap through the V4 PoolManager.
         amountOut = _executeV4Swap({
-            config: config, key: key, normalizedTokenIn: normalizedTokenIn, amount: amount, minAmountOut: minOut
+            config: config,
+            key: key,
+            normalizedTokenIn: normalizedTokenIn,
+            originalTokenIn: originalTokenIn,
+            amount: amount,
+            minAmountOut: minOut
         });
     }
 
@@ -1001,6 +1009,7 @@ library JBSwapPoolLib {
         SwapConfig memory config,
         PoolKey memory key,
         address normalizedTokenIn,
+        address originalTokenIn,
         uint256 amount,
         uint256 minAmountOut
     )
@@ -1012,6 +1021,16 @@ library JBSwapPoolLib {
 
         // Determine swap direction based on currency ordering in the pool key.
         bool zeroForOne = Currency.unwrap(key.currency0) == v4In;
+
+        // Tell the unlock callback whether to consume any wrapped-native-token balance the caller may hold.
+        // The pool's input side is native iff the swap input came from the wrapped-native ERC-20 (not the
+        // NATIVE_TOKEN sentinel). If the caller's input was already native (NATIVE_TOKEN sentinel), the caller
+        // holds raw ETH for THIS swap; any wrapped balance it holds is for unrelated reasons (e.g., backing other
+        // claims) and must not be consumed here.
+        address callbackWrappedNativeToken;
+        if (v4In == address(0) && originalTokenIn != JBConstants.NATIVE_TOKEN) {
+            callbackWrappedNativeToken = config.wrappedNativeToken;
+        }
 
         // Build the encoded unlock data in a scoped block to avoid stack-too-deep.
         bytes memory unlockData;
@@ -1027,7 +1046,7 @@ library JBSwapPoolLib {
             int256 exactInputAmount = -int256(amount);
 
             unlockData = abi.encode(
-                key, zeroForOne, exactInputAmount, sqrtPriceLimitX96, minAmountOut, config.wrappedNativeToken
+                key, zeroForOne, exactInputAmount, sqrtPriceLimitX96, minAmountOut, callbackWrappedNativeToken
             );
         }
 
