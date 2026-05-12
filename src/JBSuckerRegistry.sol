@@ -497,6 +497,13 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
         // default peer symmetry assumption will not hold.
         salt = keccak256(abi.encode(sender, salt));
 
+        // Cache the project owner so the explicit-peer gate can check against the original authority, not a
+        // delegated operator. The default same-address peering invariant (peer == 0 or peer == address(this))
+        // does not need this stronger gate, but a non-symmetric explicit peer authorizes that arbitrary address
+        // to deliver outbox roots and mint project tokens — so it must require a permission strictly broader
+        // than ops automation's `DEPLOY_SUCKERS`.
+        address projectOwner = PROJECTS.ownerOf(projectId);
+
         // Iterate through the configurations and deploy the suckers.
         for (uint256 i; i < configurations.length;) {
             // Get the configuration being iterated over.
@@ -505,6 +512,16 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
             // Make sure the deployer is allowed.
             if (!suckerDeployerIsAllowed[address(configuration.deployer)]) {
                 revert JBSuckerRegistry_InvalidDeployer({deployer: configuration.deployer});
+            }
+
+            // If the configuration specifies a non-symmetric explicit peer, require the additional
+            // `SET_SUCKER_PEER` permission. Default peering (peer == 0 or peer == address(this)) is unaffected.
+            // Without this gate, a delegated operator with only `DEPLOY_SUCKERS` could register an attacker peer
+            // and use the resulting sucker's mint authority to deliver fabricated outbox roots.
+            if (configuration.peer != address(0) && configuration.peer != address(this)) {
+                _requirePermissionFrom({
+                    account: projectOwner, projectId: projectId, permissionId: JBPermissionIds.SET_SUCKER_PEER
+                });
             }
 
             // Create the sucker.
