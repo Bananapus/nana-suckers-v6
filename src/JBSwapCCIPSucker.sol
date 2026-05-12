@@ -91,8 +91,11 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
     error JBSwapCCIPSucker_InvalidBridgeToken(address bridgeToken, address wrappedNativeToken);
     error JBSwapCCIPSucker_NoPendingSwap(address localToken, uint64 nonce, bool retrySwapLocked);
     error JBSwapCCIPSucker_OnlySelf(address caller, address expected);
+    error JBSwapCCIPSucker_PositiveRootWithoutDelivery(uint256 rootAmount);
     error JBSwapCCIPSucker_SwapFailed(address tokenIn, address tokenOut, uint256 amountIn);
     error JBSwapCCIPSucker_SwapPending(uint64 nonce);
+    error JBSwapCCIPSucker_UnexpectedDeliveredTokens(uint256 count);
+    error JBSwapCCIPSucker_WrongDeliveredToken(address delivered, address expected);
 
     //*********************************************************************//
     // ------------------------------ events ----------------------------- //
@@ -278,22 +281,50 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
                 abi.decode(payload, (JBMessageRoot, uint256, uint256));
 
             address localToken = _toAddress(root.token);
+            uint64 nonce = root.remoteRoot.nonce;
+            uint256 leafTotal = root.amount;
             uint256 localAmount;
             bool swapFailed;
+            // Cache the single delivered entry once so subsequent branches reuse it without re-indexing
+            // calldata. `deliveredAmount > 0` later implies a delivery was present.
+            address deliveredToken;
+            uint256 deliveredAmount;
+            {
+                // Send-side guarantees: at most one entry in `destTokenAmounts` (length 0 for zero-value
+                // batches, length 1 for value-bearing batches), and when present the delivered token is
+                // `BRIDGE_TOKEN`. Refuse anything that deviates so a peer compromise or a malformed CCIP
+                // delivery cannot register positive root accounting against zero or wrong-token backing.
+                uint256 deliveryCount = any2EvmMessage.destTokenAmounts.length;
+                if (deliveryCount > 1) {
+                    revert JBSwapCCIPSucker_UnexpectedDeliveredTokens(deliveryCount);
+                }
+                if (deliveryCount == 0) {
+                    if (leafTotal > 0) revert JBSwapCCIPSucker_PositiveRootWithoutDelivery(leafTotal);
+                } else {
+                    Client.EVMTokenAmount calldata delivered = any2EvmMessage.destTokenAmounts[0];
+                    deliveredToken = delivered.token;
+                    deliveredAmount = delivered.amount;
+                    if (deliveredToken != address(BRIDGE_TOKEN)) {
+                        revert JBSwapCCIPSucker_WrongDeliveredToken({
+                            delivered: deliveredToken, expected: address(BRIDGE_TOKEN)
+                        });
+                    }
+                }
+            }
 
-            if (any2EvmMessage.destTokenAmounts.length == 1) {
-                Client.EVMTokenAmount memory tokenAmount = any2EvmMessage.destTokenAmounts[0];
-
-                if (localToken == address(BRIDGE_TOKEN) || localToken == tokenAmount.token) {
+            // After the validation block above, `deliveredToken != address(0)` iff a delivery was present,
+            // because the invariants ensure it equals `BRIDGE_TOKEN` (a non-zero ERC-20) whenever there is one.
+            if (deliveredToken != address(0)) {
+                if (localToken == address(BRIDGE_TOKEN) || localToken == deliveredToken) {
                     // No swap needed — bridge token IS the local token.
-                    localAmount = tokenAmount.amount;
+                    localAmount = deliveredAmount;
                 } else {
                     // Swap bridge token -> local token via best V3/V4 pool.
                     // Wrapped in try-catch so a swap failure doesn't revert the entire CCIP message
                     // (which would leave tokens stuck in the OffRamp). On failure, bridge tokens are
                     // stored for later retry via `retrySwap` (written below, after nonce validation).
                     try this.executeSwapExternal({
-                        tokenIn: tokenAmount.token, tokenOut: localToken, amount: tokenAmount.amount
+                        tokenIn: deliveredToken, tokenOut: localToken, amount: deliveredAmount
                     }) returns (
                         uint256 swapped
                     ) {
@@ -321,28 +352,23 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
             // Detect "already seen" without extra storage: a nonce has been processed if it has
             // either a batch range (batchEnd > 0) or a conversion rate / pending swap recorded.
             if (
-                _batchEndOf[localToken][root.remoteRoot.nonce] == 0
-                    && _conversionRateOf[localToken][root.remoteRoot.nonce].leafTotal == 0
-                    && pendingSwapOf[localToken][root.remoteRoot.nonce].leafTotal == 0
+                _batchEndOf[localToken][nonce] == 0 && _conversionRateOf[localToken][nonce].leafTotal == 0
+                    && pendingSwapOf[localToken][nonce].leafTotal == 0
             ) {
                 // Record the batch range so _findNonceForLeafIndex can resolve leaf ownership
                 // independently of nonce ordering. Each nonce is self-describing: [start, end).
                 if (batchEnd > 0) {
-                    _batchStartOf[localToken][root.remoteRoot.nonce] = batchStart;
-                    _batchEndOf[localToken][root.remoteRoot.nonce] = batchEnd;
-                    if (root.remoteRoot.nonce > _highestReceivedNonce[localToken]) {
-                        _highestReceivedNonce[localToken] = root.remoteRoot.nonce;
+                    _batchStartOf[localToken][nonce] = batchStart;
+                    _batchEndOf[localToken][nonce] = batchEnd;
+                    if (nonce > _highestReceivedNonce[localToken]) {
+                        _highestReceivedNonce[localToken] = nonce;
                     }
                 }
 
                 // Store pendingSwapOf for failed swaps now that nonce is validated.
                 if (swapFailed) {
-                    Client.EVMTokenAmount memory failedTokenAmount = any2EvmMessage.destTokenAmounts[0];
-                    pendingSwapOf[localToken][root.remoteRoot.nonce] = PendingSwap({
-                        bridgeToken: failedTokenAmount.token,
-                        bridgeAmount: failedTokenAmount.amount,
-                        leafTotal: root.amount
-                    });
+                    pendingSwapOf[localToken][nonce] =
+                        PendingSwap({bridgeToken: deliveredToken, bridgeAmount: deliveredAmount, leafTotal: leafTotal});
                 }
 
                 // Zero-output swap guard: When a swap succeeds but returns zero local tokens, the
@@ -354,25 +380,14 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
                 // Route zero-output swaps into `pendingSwapOf` so the swap can be retried via
                 // `retrySwap` once pool conditions improve. Only store the conversion rate when
                 // the swap produced a positive local amount.
-                if (root.amount > 0 && !swapFailed) {
-                    if (localAmount == 0 && any2EvmMessage.destTokenAmounts.length == 1) {
-                        Client.EVMTokenAmount memory zeroSwapTokenAmount = any2EvmMessage.destTokenAmounts[0];
-                        // Only route to pending if there were actual bridge tokens delivered.
-                        // If bridgeAmount is also 0 (zero-value batch), store the conversion rate
-                        // normally — there is nothing to retry.
-                        if (zeroSwapTokenAmount.amount > 0) {
-                            pendingSwapOf[localToken][root.remoteRoot.nonce] = PendingSwap({
-                                bridgeToken: zeroSwapTokenAmount.token,
-                                bridgeAmount: zeroSwapTokenAmount.amount,
-                                leafTotal: root.amount
-                            });
-                        } else {
-                            _conversionRateOf[localToken][root.remoteRoot.nonce] =
-                                ConversionRate({leafTotal: root.amount, localTotal: 0});
-                        }
+                if (leafTotal > 0 && !swapFailed) {
+                    if (localAmount == 0 && deliveredAmount > 0) {
+                        pendingSwapOf[localToken][nonce] = PendingSwap({
+                            bridgeToken: deliveredToken, bridgeAmount: deliveredAmount, leafTotal: leafTotal
+                        });
                     } else {
-                        _conversionRateOf[localToken][root.remoteRoot.nonce] =
-                            ConversionRate({leafTotal: root.amount, localTotal: localAmount});
+                        _conversionRateOf[localToken][nonce] =
+                            ConversionRate({leafTotal: leafTotal, localTotal: localAmount});
                     }
                 }
             }
