@@ -515,10 +515,12 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
             }
 
             // If the configuration specifies a non-symmetric explicit peer, require the additional
-            // `SET_SUCKER_PEER` permission. Default peering (peer == 0 or peer == address(this)) is unaffected.
-            // Without this gate, a delegated operator with only `DEPLOY_SUCKERS` could register an attacker peer
-            // and use the resulting sucker's mint authority to deliver fabricated outbox roots.
-            if (configuration.peer != address(0) && configuration.peer != address(this)) {
+            // `SET_SUCKER_PEER` permission. Default peering (peer == 0 or peer == bytes32 of address(this)) is
+            // unaffected. Without this gate, a delegated operator with only `DEPLOY_SUCKERS` could register an
+            // attacker peer and use the resulting sucker's mint authority to deliver fabricated outbox roots.
+            // forge-lint: disable-next-line(unsafe-typecast)
+            bytes32 selfPeer = bytes32(uint256(uint160(address(this))));
+            if (configuration.peer != bytes32(0) && configuration.peer != selfPeer) {
                 _requirePermissionFrom({
                     account: projectOwner, projectId: projectId, permissionId: JBPermissionIds.SET_SUCKER_PEER
                 });
