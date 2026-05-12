@@ -24,12 +24,11 @@ contract ConvertPeerValueHarness {
     }
 }
 
-/// @notice Fork test validating `convertPeerValue` with asymmetric decimal currencies (ETH ↔ USDC).
+/// @notice Validates `convertPeerValue` with asymmetric decimal currencies (ETH ↔ USDC).
 ///
-/// Uses mocked price feeds on a mainnet fork to verify the conversion math when source and target tokens
-/// have different decimal precisions (18 vs 6).
-///
-/// Run with: forge test --match-contract ConvertPeerValueForkTest --fork-url $RPC_ETHEREUM_MAINNET -vvv
+/// All chain state (PRICES) is mocked via `vm.etch` + `vm.mockCall`, so the test does not need a fork.
+/// Previously this used `vm.createSelectFork("ethereum")`, but the implicit latest-block pin made CI flaky
+/// whenever the upstream RPC pruned the block forge had cached during setup.
 contract ConvertPeerValueForkTest is Test {
     address internal constant PRICES = address(0xA00);
 
@@ -40,8 +39,6 @@ contract ConvertPeerValueForkTest is Test {
     ConvertPeerValueHarness internal harness;
 
     function setUp() external {
-        vm.createSelectFork("ethereum");
-
         harness = new ConvertPeerValueHarness();
         vm.etch(PRICES, hex"00");
 
