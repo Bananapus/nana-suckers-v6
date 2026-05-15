@@ -666,29 +666,69 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
     //*********************************************************************//
 
     /// @notice Find the nonce whose batch contains the given leaf index.
-    /// @dev Scans from the newest nonce backwards so recent batches resolve first without storing extra cache state.
+    /// @dev Binary search by nonce. Source-side `prepare()` appends batches in nonce order with each
+    /// new batch's `batchStart` equal to the previous batch's `batchEnd`, so across populated
+    /// destination slots `_batchStartOf` is strictly increasing in nonce — the populated subset is
+    /// monotonic even when CCIP delivery is out of order and leaves intermediate slots empty.
+    /// Binary search exploits that monotonicity for O(log N) lookup.
+    /// @dev Gap handling: when the midpoint slot is empty (CCIP out-of-order delivery or sparse
+    /// attacker writes), the search falls back to a single linear scan over the remaining window.
+    /// This matches the previous linear-scan cost in the worst case, so the change is never worse
+    /// than the prior implementation. The fallback also keeps bytecode small enough that
+    /// JBSwapCCIPSucker stays under EIP-170.
     /// @param token The local token address.
     /// @param leafIndex The leaf index from the claim.
-    /// @return The nonce of the batch containing this leaf, or 0 if no conversion rates exist.
+    /// @return The nonce of the batch containing this leaf, or 0 if no batches have been recorded.
     function _findNonceForLeafIndex(address token, uint256 leafIndex) internal view returns (uint64) {
+        // `_highestReceivedNonce` upper-bounds any populated slot for this token; zero means
+        // nothing has been received yet, so the leaf belongs to no batch.
         uint64 maxNonce = _highestReceivedNonce[token];
         if (maxNonce == 0) return 0;
 
-        // Scan from most recent nonce backwards so the normal just-bridged claim path exits quickly.
-        for (uint64 n = maxNonce; n >= 1; n--) {
-            if (_nonceContainsLeaf({token: token, nonce: n, leafIndex: leafIndex})) return n;
+        // Nonce 0 is reserved by inbox initialization and never holds a batch, so search [1, max].
+        uint64 lo = 1;
+        uint64 hi = maxNonce;
+
+        // Wrap arithmetic in `unchecked` — `lo` and `hi` are always in `[1, maxNonce]` and the
+        // edge-guards (`mid == lo` / `mid == hi` breaks) prevent the only ways `mid - 1` or
+        // `mid + 1` could over/underflow. Skipping the compiler checks shaves enough bytecode to
+        // stay under EIP-170 without changing semantics.
+        unchecked {
+            while (lo <= hi) {
+                uint64 mid = lo + (hi - lo) / 2;
+                // `batchEnd == 0` is the established sentinel for "no batch recorded" (see the
+                // write guard in `ccipReceive`); a real batch always has `batchEnd > batchStart`.
+                uint256 end = _batchEndOf[token][mid];
+
+                // Empty midpoint from out-of-order CCIP delivery. Fall back to a tight linear
+                // scan over the remaining window — same complexity as the pre-fix path, but only
+                // on the gap branch (the audit's dense-nonce attack never trips this).
+                if (end == 0) {
+                    for (uint64 n = lo; n <= hi; n++) {
+                        uint256 nEnd = _batchEndOf[token][n];
+                        if (nEnd == 0) continue;
+                        uint256 nStart = _batchStartOf[token][n];
+                        if (leafIndex >= nStart && leafIndex < nEnd) return n;
+                    }
+                    break;
+                }
+
+                // Each batch covers [batchStart, batchEnd). Across populated nonces these ranges
+                // are non-overlapping and strictly increasing, so the standard comparison applies.
+                uint256 start = _batchStartOf[token][mid];
+                if (leafIndex < start) {
+                    if (mid == lo) break; // Guard against `mid - 1` underflow at the lower edge.
+                    hi = mid - 1;
+                } else if (leafIndex >= end) {
+                    if (mid == hi) break; // Mirror guard at the upper edge.
+                    lo = mid + 1;
+                } else {
+                    return mid; // `start <= leafIndex < end`: leaf is inside this batch.
+                }
+            }
         }
 
+        // Window collapsed without a hit — surface the same error the legacy linear scan used.
         revert JBSwapCCIPSucker_BatchNotReceived({nonce: 0});
-    }
-
-    /// @notice Check whether the given nonce's batch range contains the leaf index.
-    /// @param token The local token address.
-    /// @param nonce The nonce to check.
-    /// @param leafIndex The leaf index to look for.
-    /// @return True if the nonce's [start, end) range contains `leafIndex`.
-    function _nonceContainsLeaf(address token, uint64 nonce, uint256 leafIndex) internal view returns (bool) {
-        uint256 end = _batchEndOf[token][nonce];
-        return end != 0 && leafIndex >= _batchStartOf[token][nonce] && leafIndex < end;
     }
 }
