@@ -309,6 +309,14 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
                             delivered: deliveredToken, expected: address(BRIDGE_TOKEN)
                         });
                     }
+                    // Zero delivery alongside a positive root is structurally indistinguishable from
+                    // "no delivery + positive root" — both leave the local sucker with nothing to back
+                    // the leaves the root advertises. Reject so a peer cannot mint a claimable rate
+                    // that records `leafTotal=N, localTotal=0` and lets later claims withdraw against
+                    // unrelated balance.
+                    if (leafTotal > 0 && deliveredAmount == 0) {
+                        revert JBSwapCCIPSucker_PositiveRootWithoutDelivery(leafTotal);
+                    }
                 }
             }
 
