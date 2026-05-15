@@ -65,6 +65,11 @@ contract RegressionSwapBatchHarness is JBSwapCCIPSucker {
         _conversionRateOf[token][nonce] = ConversionRate({leafTotal: leafTotal, localTotal: localTotal});
         _batchStartOf[token][nonce] = batchStart;
         _batchEndOf[token][nonce] = batchEnd;
+        // Mirror the bookkeeping `ccipReceive` performs on real deliveries — populated nonces are
+        // appended to `_populatedNonceByIndex` so the empty-midpoint fallback can walk only them.
+        uint64 priorCount = _populatedNonceCount[token];
+        _populatedNonceByIndex[token][priorCount] = nonce;
+        _populatedNonceCount[token] = priorCount + 1;
         if (nonce > _highestReceivedNonce[token]) {
             _highestReceivedNonce[token] = nonce;
         }
@@ -230,5 +235,88 @@ contract RegressionSwapNonceScanGasTest is Test {
         assertLt(
             oldestGasUsed, 1_000_000, "binary-search nonce lookup keeps old-leaf claim gas bounded under inflation"
         );
+    }
+}
+
+contract RegressionSwapSparseEmptyMidpointTest is Test {
+    address internal constant MOCK_DEPLOYER = address(0xDE);
+    address internal constant MOCK_DIRECTORY = address(0xD1);
+    address internal constant MOCK_TOKENS = address(0xD2);
+    address internal constant MOCK_PERMISSIONS = address(0xD3);
+    address internal constant MOCK_ROUTER = address(0xD4);
+    address internal constant MOCK_PROJECTS = address(0xD5);
+
+    uint256 internal constant PROJECT_ID = 1;
+    uint64 internal constant SPAN = 2500;
+
+    ERC20Mock internal usdc;
+    ERC20Mock internal weth;
+    RegressionMockTerminal internal terminal;
+    RegressionSwapBatchHarness internal sucker;
+
+    function setUp() external {
+        usdc = new ERC20Mock("USDC", "USDC", address(this), 0);
+        weth = new ERC20Mock("WETH", "WETH", address(this), 0);
+        terminal = new RegressionMockTerminal();
+
+        vm.etch(MOCK_ROUTER, hex"01");
+
+        vm.mockCall(MOCK_DEPLOYER, abi.encodeWithSignature("ccipRemoteChainId()"), abi.encode(uint256(4217)));
+        vm.mockCall(MOCK_DEPLOYER, abi.encodeWithSignature("ccipRemoteChainSelector()"), abi.encode(uint64(7)));
+        vm.mockCall(MOCK_DEPLOYER, abi.encodeWithSignature("ccipRouter()"), abi.encode(MOCK_ROUTER));
+        vm.mockCall(MOCK_DEPLOYER, abi.encodeWithSignature("bridgeToken()"), abi.encode(address(usdc)));
+        vm.mockCall(MOCK_DEPLOYER, abi.encodeWithSignature("poolManager()"), abi.encode(address(0)));
+        vm.mockCall(MOCK_DEPLOYER, abi.encodeWithSignature("v3Factory()"), abi.encode(address(0x1234)));
+        vm.mockCall(MOCK_DEPLOYER, abi.encodeWithSignature("univ4Hook()"), abi.encode(address(0)));
+        vm.mockCall(MOCK_DEPLOYER, abi.encodeWithSignature("wrappedNativeToken()"), abi.encode(address(weth)));
+
+        vm.mockCall(MOCK_ROUTER, abi.encodeWithSignature("getWrappedNative()"), abi.encode(address(weth)));
+        vm.mockCall(MOCK_DIRECTORY, abi.encodeWithSignature("PROJECTS()"), abi.encode(MOCK_PROJECTS));
+        vm.mockCall(MOCK_PROJECTS, abi.encodeWithSignature("ownerOf(uint256)"), abi.encode(address(this)));
+        vm.mockCall(
+            MOCK_DIRECTORY,
+            abi.encodeWithSelector(IJBDirectory.primaryTerminalOf.selector),
+            abi.encode(address(terminal))
+        );
+
+        RegressionSwapBatchHarness singleton = new RegressionSwapBatchHarness(
+            JBSwapCCIPSuckerDeployer(MOCK_DEPLOYER),
+            IJBDirectory(MOCK_DIRECTORY),
+            IJBTokens(MOCK_TOKENS),
+            IJBPermissions(MOCK_PERMISSIONS)
+        );
+
+        sucker =
+        // forge-lint: disable-next-line(unsafe-typecast)
+        RegressionSwapBatchHarness(
+            payable(LibClone.cloneDeterministic(address(singleton), keccak256(bytes("regression-swap-sparse-mid"))))
+        );
+        sucker.initialize(PROJECT_ID);
+
+        // Populate only nonces {1, SPAN}. All midpoints between them are empty, so every
+        // probe in the outer binary search hits the empty-midpoint fallback path.
+        sucker.test_setConversionRate({
+            token: address(usdc), nonce: 1, leafTotal: 1, localTotal: 1, batchStart: 0, batchEnd: 1
+        });
+        sucker.test_setConversionRate({
+            token: address(usdc), nonce: SPAN, leafTotal: 1, localTotal: 1, batchStart: SPAN - 1, batchEnd: SPAN
+        });
+        usdc.mint(address(sucker), 1);
+    }
+
+    /// @notice When only the boundary nonces are populated and the leaf lives in the LAST one, the
+    /// pre-fix linear-window scan walked every empty slot in `[1, SPAN]` (O(N) SLOADs). The fix
+    /// walks `_populatedNonceByIndex` directly, so the work is O(K) SLOADs where K = number of
+    /// received batches (2 here) — well below the linear bound.
+    function test_lastPopulatedLeafStaysCheapWithEmptyMidpoints() external {
+        uint256 gasBefore = gasleft();
+        sucker.exposed_addToBalance(address(usdc), 1, PROJECT_ID, uint256(SPAN) - 1);
+        uint256 gasUsed = gasBefore - gasleft();
+
+        // Pre-fix worst case was ~5M+ gas (2500 cold SLOADs at ~2.1k each); the populated-walk
+        // fallback uses ~2 SLOADs per populated nonce, so even with surrounding bookkeeping the
+        // total stays under 250k. The strict bound surfaces regressions if the fallback gets
+        // re-broadened.
+        assertLt(gasUsed, 250_000, "populated-nonce fallback keeps last-leaf claim O(K) under sparse pattern");
     }
 }
