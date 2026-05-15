@@ -51,6 +51,7 @@ library JBSwapPoolLib {
     error JBSwapPoolLib_InsufficientTwapHistory(address pool, uint256 availableWindow, uint256 requiredWindow);
     error JBSwapPoolLib_NoLiquidity(address pool, PoolId poolId);
     error JBSwapPoolLib_NoPool(address tokenIn, address tokenOut);
+    error JBSwapPoolLib_PartialFill(uint256 consumed, uint256 requested);
     error JBSwapPoolLib_SlippageExceeded(uint256 amountOut, uint256 minAmountOut);
 
     //*********************************************************************//
@@ -988,6 +989,18 @@ library JBSwapPoolLib {
             }),
             data: abi.encode(originalTokenIn, normalizedTokenIn, normalizedTokenOut)
         });
+
+        // Reject partial fills: when the V3 pool's price limit is hit before the full input is
+        // consumed, the pool returns only the consumed portion of `amount` and the caller is left
+        // holding the unconsumed remainder. The sucker's accounting assumes the full bridge amount
+        // was either swapped or made retryable, so a silent partial fill strands input tokens and
+        // breaks cross-chain solvency. Revert so the caller can either retry with a smaller size
+        // or wait for liquidity to return.
+        // forge-lint: disable-next-line(unsafe-typecast)
+        uint256 consumedAmount = uint256(zeroForOne ? amount0 : amount1);
+        if (consumedAmount < amount) {
+            revert JBSwapPoolLib_PartialFill({consumed: consumedAmount, requested: amount});
+        }
 
         // Extract the output amount from the signed delta (negative = tokens received).
         amountOut = uint256(-(zeroForOne ? amount1 : amount0));

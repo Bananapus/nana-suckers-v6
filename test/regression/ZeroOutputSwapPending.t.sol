@@ -226,4 +226,57 @@ contract ZeroOutputSwapPendingTest is Test {
         assertEq(bridgeToken, address(0), "pending swap should not be set for non-swap path");
         assertEq(pendingBridgeAmount, 0, "pending swap amount should be 0 for non-swap path");
     }
+
+    /// @notice A positive root with a delivered bridge-token entry whose destination amount is zero
+    /// is structurally indistinguishable from "no delivery + positive root" — both leave the local
+    /// sucker with no backing for the advertised leaves. The CCIP receive path now reverts so a peer
+    /// cannot register a zero-backed conversion rate that allows later claims to draw against
+    /// unrelated balance.
+    function test_zeroDeliveredAmountRevertsAtCcipReceive() external {
+        uint256 leafTotal = 100e6;
+        uint64 nonce = 1;
+
+        JBMessageRoot memory msgRoot = JBMessageRoot({
+            version: 1,
+            token: bytes32(uint256(uint160(address(usdc)))),
+            amount: leafTotal,
+            remoteRoot: JBInboxTreeRoot({nonce: nonce, root: bytes32(uint256(0xcafe))}),
+            sourceTotalSupply: 0,
+            sourceCurrency: 0,
+            sourceDecimals: 0,
+            sourceSurplus: 0,
+            sourceBalance: 0,
+            sourceTimestamp: 1
+        });
+
+        Client.EVMTokenAmount[] memory tokenAmounts = new Client.EVMTokenAmount[](1);
+        tokenAmounts[0] = Client.EVMTokenAmount({token: address(usdc), amount: 0});
+
+        Client.Any2EVMMessage memory message = Client.Any2EVMMessage({
+            messageId: bytes32(uint256(3)),
+            sourceChainSelector: REMOTE_CHAIN_SELECTOR,
+            sender: abi.encode(address(sucker)),
+            data: abi.encode(uint8(0), abi.encode(msgRoot, uint256(0), uint256(1))),
+            destTokenAmounts: tokenAmounts
+        });
+
+        vm.mockCall(
+            address(sucker),
+            abi.encodeWithSignature(
+                "fromRemote((uint8,bytes32,uint256,(uint64,bytes32),uint256,uint256,uint256,uint256,uint256,uint64))"
+            ),
+            abi.encode()
+        );
+
+        vm.prank(MOCK_ROUTER);
+        vm.expectRevert(
+            abi.encodeWithSelector(JBSwapCCIPSucker.JBSwapCCIPSucker_PositiveRootWithoutDelivery.selector, leafTotal)
+        );
+        sucker.ccipReceive(message);
+
+        // No conversion rate was recorded — the message reverted before any state was written.
+        (uint256 convLeafTotal, uint256 convLocalTotal) = sucker.exposed_conversionRateOf(address(usdc), nonce);
+        assertEq(convLeafTotal, 0, "no leaf total recorded for the rejected message");
+        assertEq(convLocalTotal, 0, "no local total recorded for the rejected message");
+    }
 }
