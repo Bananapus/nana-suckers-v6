@@ -151,3 +151,84 @@ contract RegressionSwapBatchRateMixingTest is Test {
         assertEq(paid2, 50e6, "batch 2 should use its own rate 0.5");
     }
 }
+
+contract RegressionSwapNonceScanGasTest is Test {
+    address internal constant MOCK_DEPLOYER = address(0xDE);
+    address internal constant MOCK_DIRECTORY = address(0xD1);
+    address internal constant MOCK_TOKENS = address(0xD2);
+    address internal constant MOCK_PERMISSIONS = address(0xD3);
+    address internal constant MOCK_ROUTER = address(0xD4);
+    address internal constant MOCK_PROJECTS = address(0xD5);
+
+    uint256 internal constant PROJECT_ID = 1;
+    uint64 internal constant BATCH_COUNT = 2500;
+
+    ERC20Mock internal usdc;
+    ERC20Mock internal weth;
+    RegressionMockTerminal internal terminal;
+    RegressionSwapBatchHarness internal sucker;
+
+    function setUp() external {
+        usdc = new ERC20Mock("USDC", "USDC", address(this), 0);
+        weth = new ERC20Mock("WETH", "WETH", address(this), 0);
+        terminal = new RegressionMockTerminal();
+
+        vm.etch(MOCK_ROUTER, hex"01");
+
+        vm.mockCall(MOCK_DEPLOYER, abi.encodeWithSignature("ccipRemoteChainId()"), abi.encode(uint256(4217)));
+        vm.mockCall(MOCK_DEPLOYER, abi.encodeWithSignature("ccipRemoteChainSelector()"), abi.encode(uint64(7)));
+        vm.mockCall(MOCK_DEPLOYER, abi.encodeWithSignature("ccipRouter()"), abi.encode(MOCK_ROUTER));
+        vm.mockCall(MOCK_DEPLOYER, abi.encodeWithSignature("bridgeToken()"), abi.encode(address(usdc)));
+        vm.mockCall(MOCK_DEPLOYER, abi.encodeWithSignature("poolManager()"), abi.encode(address(0)));
+        vm.mockCall(MOCK_DEPLOYER, abi.encodeWithSignature("v3Factory()"), abi.encode(address(0x1234)));
+        vm.mockCall(MOCK_DEPLOYER, abi.encodeWithSignature("univ4Hook()"), abi.encode(address(0)));
+        vm.mockCall(MOCK_DEPLOYER, abi.encodeWithSignature("wrappedNativeToken()"), abi.encode(address(weth)));
+
+        vm.mockCall(MOCK_ROUTER, abi.encodeWithSignature("getWrappedNative()"), abi.encode(address(weth)));
+        vm.mockCall(MOCK_DIRECTORY, abi.encodeWithSignature("PROJECTS()"), abi.encode(MOCK_PROJECTS));
+        vm.mockCall(MOCK_PROJECTS, abi.encodeWithSignature("ownerOf(uint256)"), abi.encode(address(this)));
+        vm.mockCall(
+            MOCK_DIRECTORY,
+            abi.encodeWithSelector(IJBDirectory.primaryTerminalOf.selector),
+            abi.encode(address(terminal))
+        );
+
+        RegressionSwapBatchHarness singleton = new RegressionSwapBatchHarness(
+            JBSwapCCIPSuckerDeployer(MOCK_DEPLOYER),
+            IJBDirectory(MOCK_DIRECTORY),
+            IJBTokens(MOCK_TOKENS),
+            IJBPermissions(MOCK_PERMISSIONS)
+        );
+
+        sucker =
+        // forge-lint: disable-next-line(unsafe-typecast)
+        RegressionSwapBatchHarness(
+            payable(LibClone.cloneDeterministic(address(singleton), keccak256(bytes("regression-swap-scan-gas"))))
+        );
+        sucker.initialize(PROJECT_ID);
+
+        sucker.test_setConversionRate(address(usdc), 1, 1, 1, 0, 1);
+        for (uint64 nonce = 2; nonce <= BATCH_COUNT; nonce++) {
+            uint256 leafIndex = uint256(nonce) - 1;
+            sucker.test_setConversionRate(address(usdc), nonce, 0, 0, leafIndex, leafIndex + 1);
+        }
+        usdc.mint(address(sucker), 1);
+    }
+
+    /// @notice With ~2500 sparse-but-recorded nonces, claiming the oldest leaf used to scan every
+    /// later range and cost >10M gas — a griefing surface that could lock legitimate operators out
+    /// of recovering old stuck batches. Binary search collapses that to O(log N) so even adversarial
+    /// nonce inflation cannot make old-leaf claims unaffordable.
+    function test_oldLeafClaimStaysCheapUnderSparseNonceInflation() external {
+        uint256 oldestGasBefore = gasleft();
+        sucker.exposed_addToBalance(address(usdc), 1, PROJECT_ID, 0);
+        uint256 oldestGasUsed = oldestGasBefore - gasleft();
+
+        // Binary search over 2500 nonces is ~11 iterations. Allow generous headroom for the
+        // surrounding bookkeeping (terminal call, allowance set/clear, etc.) while still proving
+        // the path is no longer linear-in-nonce-count.
+        assertLt(
+            oldestGasUsed, 1_000_000, "binary-search nonce lookup keeps old-leaf claim gas bounded under inflation"
+        );
+    }
+}

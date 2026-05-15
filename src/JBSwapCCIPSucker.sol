@@ -666,20 +666,135 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
     //*********************************************************************//
 
     /// @notice Find the nonce whose batch contains the given leaf index.
-    /// @dev Scans from the newest nonce backwards so recent batches resolve first without storing extra cache state.
+    /// @dev Binary search by nonce. Source-side `prepare()` appends batches in nonce order with each
+    /// new batch's `batchStart` equal to the previous batch's `batchEnd`, so across populated
+    /// destination slots `_batchStartOf` is strictly increasing in nonce — the populated subset is
+    /// monotonic even when CCIP delivery is out of order and leaves intermediate slots empty.
+    /// Binary search exploits that monotonicity for O(log N) lookup. When the midpoint slot is
+    /// empty (CCIP gap), `_nearestPopulatedNonceIn` probes outward symmetrically to find the
+    /// closest populated anchor; in the gap-heavy worst case this matches the previous linear-scan
+    /// cost, so the change is never worse than the prior implementation.
     /// @param token The local token address.
     /// @param leafIndex The leaf index from the claim.
-    /// @return The nonce of the batch containing this leaf, or 0 if no conversion rates exist.
+    /// @return The nonce of the batch containing this leaf, or 0 if no batches have been recorded.
     function _findNonceForLeafIndex(address token, uint256 leafIndex) internal view returns (uint64) {
+        // `_highestReceivedNonce` is the upper bound of any populated slot for this token.
+        // Zero means nothing has been received yet — the caller's leaf cannot belong to a batch
+        // that does not exist, so signal "no batch" without consulting storage.
         uint64 maxNonce = _highestReceivedNonce[token];
         if (maxNonce == 0) return 0;
 
-        // Scan from most recent nonce backwards so the normal just-bridged claim path exits quickly.
-        for (uint64 n = maxNonce; n >= 1; n--) {
-            if (_nonceContainsLeaf({token: token, nonce: n, leafIndex: leafIndex})) return n;
+        // Standard binary-search bounds over the populated nonce range [1, maxNonce]. Nonce 0 is
+        // reserved by the inbox initialization and never holds a batch, so the search starts at 1.
+        uint64 lo = 1;
+        uint64 hi = maxNonce;
+
+        while (lo <= hi) {
+            // `lo + (hi - lo) / 2` instead of `(lo + hi) / 2` so we cannot overflow even though
+            // uint64 is far from the practical nonce ceiling. Cheap defensive habit; the optimizer
+            // collapses it for typical inputs.
+            uint64 mid = lo + (hi - lo) / 2;
+
+            // `batchEnd == 0` is the established sentinel for "this nonce has no recorded batch
+            // yet" (see the write guard in `ccipReceive`). It distinguishes an empty slot from a
+            // legitimate batch — a real batch always has `batchEnd > batchStart`.
+            uint256 end = _batchEndOf[token][mid];
+
+            // Empty midpoint (out-of-order CCIP delivery, or an attacker-bridged sparse batch).
+            // We cannot decide which half to keep without a real `start`/`end` to compare against,
+            // so shift `mid` sideways to the nearest populated slot inside the current window.
+            // If the entire window is empty, the leaf is not represented in any batch covered by
+            // `[lo, hi]` and we exit the loop to the bottom revert.
+            if (end == 0) {
+                uint64 anchor = _nearestPopulatedNonceIn({token: token, low: lo, high: hi, near: mid});
+                if (anchor == 0) break;
+                mid = anchor;
+                end = _batchEndOf[token][mid];
+            }
+
+            // Each batch covers the half-open range [batchStart, batchEnd). Across populated
+            // nonces these ranges are non-overlapping and strictly increasing, so the standard
+            // binary-search comparison applies directly.
+            uint256 start = _batchStartOf[token][mid];
+
+            if (leafIndex < start) {
+                // The leaf belongs to an earlier batch. Narrow to the lower half. Guard against
+                // `mid == lo` (lower edge already reached) so we don't underflow `mid - 1`.
+                if (mid == lo) break;
+                hi = mid - 1;
+            } else if (leafIndex >= end) {
+                // The leaf belongs to a later batch. Narrow to the upper half. Mirror guard
+                // against `mid == hi` so `mid + 1` cannot overflow past `hi` — defensive even
+                // though uint64 overflow is unreachable in practice.
+                if (mid == hi) break;
+                lo = mid + 1;
+            } else {
+                // `start <= leafIndex < end` — the leaf is inside this batch.
+                return mid;
+            }
         }
 
+        // Either the window collapsed without a hit (no populated batch covers the leaf), or the
+        // gap walk found that the entire remaining window is empty. Either way the leaf cannot be
+        // resolved; surface the same error the legacy linear scan used.
         revert JBSwapCCIPSucker_BatchNotReceived({nonce: 0});
+    }
+
+    /// @notice Find the populated nonce closest to `near` inside the inclusive range `[low, high]`.
+    /// @dev Used by `_findNonceForLeafIndex` to recover from empty midpoints. Probes outward
+    /// symmetrically so the search degenerates to current-style linear scan only in the worst case
+    /// (every slot in the window is empty), never worse than the prior implementation.
+    /// @param token The local token address.
+    /// @param low The lower bound of the search window (inclusive).
+    /// @param high The upper bound of the search window (inclusive).
+    /// @param near The starting nonce to probe outward from.
+    /// @return The nearest populated nonce in the window, or 0 if the window is entirely empty.
+    function _nearestPopulatedNonceIn(
+        address token,
+        uint64 low,
+        uint64 high,
+        uint64 near
+    )
+        internal
+        view
+        returns (uint64)
+    {
+        // `left` walks toward `low`; `right` walks toward `high`. Both start at `near` because
+        // the caller already knows `near` itself is empty — the first move on each side is a step
+        // outward.
+        uint64 left = near;
+        uint64 right = near;
+
+        while (true) {
+            // Cache the edge-reached flags so we don't double-evaluate the bounds in the side
+            // branches below. `exhaustedRight` means we've already walked up to `high`; same for
+            // `exhaustedLeft` toward `low`.
+            bool exhaustedRight = right >= high;
+            bool exhaustedLeft = left <= low;
+
+            // Both sides hit their bounds without seeing a populated slot: the entire window is
+            // empty. Return the agreed sentinel (0) so the caller can break out of the search.
+            if (exhaustedRight && exhaustedLeft) return 0;
+
+            // Step right first. Probing alternates right/left so a populated slot a few steps
+            // away on either side is found in O(distance) rather than O(window) — important when
+            // out-of-order CCIP delivery leaves small gaps but the buffer is otherwise dense.
+            if (!exhaustedRight) {
+                right++;
+                if (_batchEndOf[token][right] != 0) return right;
+            }
+
+            // Then step left. Order is arbitrary as long as both sides advance each iteration;
+            // alternating keeps the search symmetric around `near`.
+            if (!exhaustedLeft) {
+                left--;
+                if (_batchEndOf[token][left] != 0) return left;
+            }
+        }
+        // Unreachable: every loop iteration either steps inward, returns a hit, or returns 0 on
+        // the exhausted-both branch. Kept as a defensive backstop so future edits that change the
+        // loop guard cannot silently fall through without a return value.
+        return 0;
     }
 
     /// @notice Check whether the given nonce's batch range contains the leaf index.
