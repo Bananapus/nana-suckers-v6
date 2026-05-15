@@ -204,6 +204,7 @@ contract RegistrySetSuckerPeerGateTest is Test, TestBaseWorkflow, IERC721Receive
             ownerMustSendPayouts: false,
             holdFees: false,
             scopeCashOutsToLocalBalances: true,
+            pauseCrossProjectFeeFreeInflows: false,
             useDataHookForPay: false,
             useDataHookForCashOut: false,
             dataHook: address(0),

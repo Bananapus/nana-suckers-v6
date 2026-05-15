@@ -15,6 +15,15 @@ This file describes the verified change from `nana-suckers-v5` to the current `n
 - `JBCeloSucker`
 - the deployers, structs, and interfaces under `src/`
 
+## 0.0.46 — Bump nana-core-v6 to 0.0.53
+
+`@bananapus/core-v6@0.0.53` ([nana-core-v6 PR #145](https://github.com/Bananapus/nana-core-v6/pull/145)) drops the `via_ir` requirement on `JBCashOutHookSpecsLib`, which lets this package consume the cross-project cashout work (`payAfterCashOutTokensOf` / `addToBalanceAfterCashOutTokensOf`) without needing `via_ir = true` in its own foundry profile.
+
+- No src changes — suckers doesn't reference `IJBFeeTerminal.FEE()` or any of the touched core surfaces.
+- All `JBRulesetMetadata` test literals patched to include `pauseCrossProjectFeeFreeInflows: false`.
+
+`package.json`: version `0.0.44 → 0.0.46` (skipping 0.0.45 because nothing shipped at that intermediate revision), core dep `^0.0.48 → ^0.0.53`.
+
 ## Summary
 
 - Cross-chain identifiers are now modeled for a wider address space. The v6 repo uses `bytes32` where the v5 repo used EVM `address` assumptions.
