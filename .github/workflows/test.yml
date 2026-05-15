@@ -22,6 +22,12 @@ jobs:
         uses: foundry-rs/foundry-toolchain@v1
         with:
           cache: false
+        env:
+          # `foundryup` queries the GitHub releases API to resolve the latest stable tag.
+          # Unauthenticated runners share a 60-req/h pool and routinely get HTTP 403 on busy
+          # repos, which surfaces as `failed to fetch release tags from GitHub API`. Passing the
+          # workflow-scoped `GITHUB_TOKEN` lifts the limit to 1k-5k req/h per repo.
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Run tests
         run: forge test --deny notes --fail-fast --summary --detailed --skip "*/script/**"
         env:
