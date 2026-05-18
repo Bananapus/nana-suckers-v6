@@ -264,7 +264,7 @@ contract JBArbitrumSucker is JBSucker, IJBArbitrumSucker {
                 uint256 outboundCalldataLength =
                     IL1ArbitrumGateway(gateway)
                 .getOutboundCalldata({
-                    _token: token, _from: address(this), _to: _peerAddress(), _amount: amount, _data: bytes("")
+                    token: token, from: address(this), to: _peerAddress(), amount: amount, data: bytes("")
                 }).length;
                 maxSubmissionCostERC20 = ARBINBOX.calculateRetryableSubmissionFee({
                     dataLength: outboundCalldataLength, baseFee: maxFeePerGas

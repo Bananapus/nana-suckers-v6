@@ -32,38 +32,23 @@ import {CCIPHelper} from "../src/libraries/CCIPHelper.sol";
 contract DeployScript is Script, Sphinx {
     /// @notice tracks the deployment of the core contracts for the chain we are deploying to.
     CoreDeployment core;
-    /// @notice tracks the addressed of the deployers that will get pre-approved.
-    // forge-lint: disable-next-line(mixed-case-variable)
-    address[] PRE_APPROVED_DEPLOYERS;
-
-    // forge-lint: disable-next-line(mixed-case-variable)
-    address TRUSTED_FORWARDER;
+    /// @notice Tracks the addresses of deployers that will get pre-approved.
+    address[] private preApprovedDeployers;
+    address private trustedForwarder;
 
     /// @notice the nonces that are used to deploy the contracts.
-    // forge-lint: disable-next-line(mixed-case-variable)
-    bytes32 OP_SALT = "_SUCKER_ETH_OP_V6_";
-    // forge-lint: disable-next-line(mixed-case-variable)
-    bytes32 BASE_SALT = "_SUCKER_ETH_BASE_V6_";
-    // forge-lint: disable-next-line(mixed-case-variable)
-    bytes32 ARB_SALT = "_SUCKER_ETH_ARB_V6_";
-
-    // forge-lint: disable-next-line(mixed-case-variable)
-    bytes32 ARB_BASE_SALT = "_SUCKER_ARB_BASE_V6_";
-    // forge-lint: disable-next-line(mixed-case-variable)
-    bytes32 ARB_OP_SALT = "_SUCKER_ARB_OP_V6_";
-    // forge-lint: disable-next-line(mixed-case-variable)
-    bytes32 OP_BASE_SALT = "_SUCKER_OP_BASE_V6_";
-    // forge-lint: disable-next-line(mixed-case-variable)
-    bytes32 TEMPO_SALT = "_SUCKER_ETH_TEMPO_V6_";
-
-    // forge-lint: disable-next-line(mixed-case-variable)
-    IJBSuckerRegistry REGISTRY;
-
-    // forge-lint: disable-next-line(mixed-case-variable)
-    bytes32 REGISTRY_SALT = "REGISTRYV6";
+    bytes32 private constant _OP_SALT = "_SUCKER_ETH_OP_V6_";
+    bytes32 private constant _BASE_SALT = "_SUCKER_ETH_BASE_V6_";
+    bytes32 private constant _ARB_SALT = "_SUCKER_ETH_ARB_V6_";
+    bytes32 private constant _ARB_BASE_SALT = "_SUCKER_ARB_BASE_V6_";
+    bytes32 private constant _ARB_OP_SALT = "_SUCKER_ARB_OP_V6_";
+    bytes32 private constant _OP_BASE_SALT = "_SUCKER_OP_BASE_V6_";
+    bytes32 private constant _TEMPO_SALT = "_SUCKER_ETH_TEMPO_V6_";
+    IJBSuckerRegistry private registry;
+    bytes32 private constant _REGISTRY_SALT = "REGISTRYV6";
 
     function configureSphinx() public override {
-        // TODO: Update to contain JB Emergency Developers
+        // Safe owners and threshold are resolved by the Sphinx project config.
         sphinxConfig.projectName = "nana-suckers-v6";
         sphinxConfig.mainnets = ["ethereum", "optimism", "base", "arbitrum", "tempo"];
         sphinxConfig.testnets =
@@ -78,7 +63,7 @@ contract DeployScript is Script, Sphinx {
         );
 
         // We use the same trusted forwarder as the core deployment.
-        TRUSTED_FORWARDER = core.permissions.trustedForwarder();
+        trustedForwarder = core.permissions.trustedForwarder();
 
         // Perform the deployment transactions.
         deploy();
@@ -97,31 +82,31 @@ contract DeployScript is Script, Sphinx {
         // If the registry is already deployed we don't have to deploy it
         // (and we can't add more pre_approved deployers etc.)
         bool registryAlreadyDeployed = _isDeployed({
-            salt: REGISTRY_SALT,
+            salt: _REGISTRY_SALT,
             creationCode: type(JBSuckerRegistry).creationCode,
-            arguments: abi.encode(core.directory, core.permissions, safeAddress(), TRUSTED_FORWARDER)
+            arguments: abi.encode(core.directory, core.permissions, safeAddress(), trustedForwarder)
         });
 
         if (!registryAlreadyDeployed) {
-            REGISTRY = IJBSuckerRegistry(
+            registry = IJBSuckerRegistry(
                 address(
-                    new JBSuckerRegistry{salt: REGISTRY_SALT}({
+                    new JBSuckerRegistry{salt: _REGISTRY_SALT}({
                         directory: core.directory,
                         permissions: core.permissions,
                         initialOwner: safeAddress(),
-                        trustedForwarder: TRUSTED_FORWARDER
+                        trustedForwarder: trustedForwarder
                     })
                 )
             );
         } else {
             // Compute the existing registry address.
-            REGISTRY = IJBSuckerRegistry(
+            registry = IJBSuckerRegistry(
                 vm.computeCreate2Address({
-                    salt: REGISTRY_SALT,
+                    salt: _REGISTRY_SALT,
                     initCodeHash: keccak256(
                         abi.encodePacked(
                             type(JBSuckerRegistry).creationCode,
-                            abi.encode(core.directory, core.permissions, safeAddress(), TRUSTED_FORWARDER)
+                            abi.encode(core.directory, core.permissions, safeAddress(), trustedForwarder)
                         )
                     ),
                     deployer: address(0x4e59b44847b379578588920cA78FbF26c0B4956C)
@@ -137,8 +122,8 @@ contract DeployScript is Script, Sphinx {
 
         // Synchronize any deployers discovered or resumed during this run into the registry as long as the
         // current safe still controls it. This keeps partial-deployment recovery idempotent.
-        if (PRE_APPROVED_DEPLOYERS.length != 0 && Ownable(address(REGISTRY)).owner() == safeAddress()) {
-            REGISTRY.allowSuckerDeployers(PRE_APPROVED_DEPLOYERS);
+        if (preApprovedDeployers.length != 0 && Ownable(address(registry)).owner() == safeAddress()) {
+            registry.allowSuckerDeployers(preApprovedDeployers);
         }
 
         if (!registryAlreadyDeployed) {
@@ -150,7 +135,7 @@ contract DeployScript is Script, Sphinx {
             address feeProjectOwner = core.projects.ownerOf(1);
             if (feeProjectOwner != address(0) && feeProjectOwner != safeAddress()) {
                 // Transfer ownership to JBDAO.
-                Ownable(address(REGISTRY)).transferOwnership(feeProjectOwner);
+                Ownable(address(registry)).transferOwnership(feeProjectOwner);
             }
         }
     }
@@ -160,21 +145,21 @@ contract DeployScript is Script, Sphinx {
     function _optimismSucker() internal {
         // Check if the deployer already exists at the CREATE2 address.
         bool alreadyDeployed = _isDeployed({
-            salt: OP_SALT,
+            salt: _OP_SALT,
             creationCode: type(JBOptimismSuckerDeployer).creationCode,
-            arguments: abi.encode(core.directory, core.permissions, core.tokens, safeAddress(), TRUSTED_FORWARDER)
+            arguments: abi.encode(core.directory, core.permissions, core.tokens, safeAddress(), trustedForwarder)
         });
 
         // If already deployed, verify the full pipeline completed (singleton + registry allowlisting).
         // Only skip if everything is fully configured; otherwise fall through to resume.
         if (alreadyDeployed) {
             address deployerAddr = _computeAddress({
-                salt: OP_SALT,
+                salt: _OP_SALT,
                 creationCode: type(JBOptimismSuckerDeployer).creationCode,
-                arguments: abi.encode(core.directory, core.permissions, core.tokens, safeAddress(), TRUSTED_FORWARDER)
+                arguments: abi.encode(core.directory, core.permissions, core.tokens, safeAddress(), trustedForwarder)
             });
             bool singletonSet = address(JBOptimismSuckerDeployer(deployerAddr).singleton()) != address(0);
-            bool registryAllowed = REGISTRY.suckerDeployerIsAllowed(deployerAddr);
+            bool registryAllowed = registry.suckerDeployerIsAllowed(deployerAddr);
             if (singletonSet && registryAllowed) return;
         }
 
@@ -187,20 +172,20 @@ contract DeployScript is Script, Sphinx {
                 // Resume from a partial deployment — deployer exists, recompute its address.
                 _opDeployer = JBOptimismSuckerDeployer(
                     _computeAddress({
-                        salt: OP_SALT,
+                        salt: _OP_SALT,
                         creationCode: type(JBOptimismSuckerDeployer).creationCode,
                         arguments: abi.encode(
-                            core.directory, core.permissions, core.tokens, safeAddress(), TRUSTED_FORWARDER
+                            core.directory, core.permissions, core.tokens, safeAddress(), trustedForwarder
                         )
                     })
                 );
             } else {
-                _opDeployer = new JBOptimismSuckerDeployer{salt: OP_SALT}({
+                _opDeployer = new JBOptimismSuckerDeployer{salt: _OP_SALT}({
                     directory: core.directory,
                     permissions: core.permissions,
                     tokens: core.tokens,
                     configurator: safeAddress(),
-                    trustedForwarder: TRUSTED_FORWARDER
+                    trustedForwarder: trustedForwarder
                 });
             }
 
@@ -221,22 +206,22 @@ contract DeployScript is Script, Sphinx {
 
             if (address(_opDeployer.singleton()) == address(0)) {
                 // Deploy the singleton instance.
-                JBOptimismSucker _singleton = new JBOptimismSucker{salt: OP_SALT}({
+                JBOptimismSucker _singleton = new JBOptimismSucker{salt: _OP_SALT}({
                     deployer: _opDeployer,
                     directory: core.directory,
                     permissions: core.permissions,
                     prices: core.prices,
                     tokens: core.tokens,
                     feeProjectId: 1,
-                    registry: REGISTRY,
-                    trustedForwarder: TRUSTED_FORWARDER
+                    registry: registry,
+                    trustedForwarder: trustedForwarder
                 });
 
                 // Configure the deployer to use the singleton instance.
                 _opDeployer.configureSingleton(_singleton);
             }
 
-            PRE_APPROVED_DEPLOYERS.push(address(_opDeployer));
+            preApprovedDeployers.push(address(_opDeployer));
         }
 
         // Check if we should do the L2 portion.
@@ -247,20 +232,20 @@ contract DeployScript is Script, Sphinx {
             if (alreadyDeployed) {
                 _opDeployer = JBOptimismSuckerDeployer(
                     _computeAddress({
-                        salt: OP_SALT,
+                        salt: _OP_SALT,
                         creationCode: type(JBOptimismSuckerDeployer).creationCode,
                         arguments: abi.encode(
-                            core.directory, core.permissions, core.tokens, safeAddress(), TRUSTED_FORWARDER
+                            core.directory, core.permissions, core.tokens, safeAddress(), trustedForwarder
                         )
                     })
                 );
             } else {
-                _opDeployer = new JBOptimismSuckerDeployer{salt: OP_SALT}({
+                _opDeployer = new JBOptimismSuckerDeployer{salt: _OP_SALT}({
                     directory: core.directory,
                     permissions: core.permissions,
                     tokens: core.tokens,
                     configurator: safeAddress(),
-                    trustedForwarder: TRUSTED_FORWARDER
+                    trustedForwarder: trustedForwarder
                 });
             }
 
@@ -273,22 +258,22 @@ contract DeployScript is Script, Sphinx {
 
             if (address(_opDeployer.singleton()) == address(0)) {
                 // Deploy the singleton instance.
-                JBOptimismSucker _singleton = new JBOptimismSucker{salt: OP_SALT}({
+                JBOptimismSucker _singleton = new JBOptimismSucker{salt: _OP_SALT}({
                     deployer: _opDeployer,
                     directory: core.directory,
                     permissions: core.permissions,
                     prices: core.prices,
                     tokens: core.tokens,
                     feeProjectId: 1,
-                    registry: REGISTRY,
-                    trustedForwarder: TRUSTED_FORWARDER
+                    registry: registry,
+                    trustedForwarder: trustedForwarder
                 });
 
                 // Configure the deployer to use the singleton instance.
                 _opDeployer.configureSingleton(_singleton);
             }
 
-            PRE_APPROVED_DEPLOYERS.push(address(_opDeployer));
+            preApprovedDeployers.push(address(_opDeployer));
         }
     }
 
@@ -296,21 +281,21 @@ contract DeployScript is Script, Sphinx {
     function _baseSucker() internal {
         // Check if the deployer already exists at the CREATE2 address.
         bool alreadyDeployed = _isDeployed({
-            salt: BASE_SALT,
+            salt: _BASE_SALT,
             creationCode: type(JBBaseSuckerDeployer).creationCode,
-            arguments: abi.encode(core.directory, core.permissions, core.tokens, safeAddress(), TRUSTED_FORWARDER)
+            arguments: abi.encode(core.directory, core.permissions, core.tokens, safeAddress(), trustedForwarder)
         });
 
         // If already deployed, verify the full pipeline completed (singleton + registry allowlisting).
         // Only skip if everything is fully configured; otherwise fall through to resume.
         if (alreadyDeployed) {
             address deployerAddr = _computeAddress({
-                salt: BASE_SALT,
+                salt: _BASE_SALT,
                 creationCode: type(JBBaseSuckerDeployer).creationCode,
-                arguments: abi.encode(core.directory, core.permissions, core.tokens, safeAddress(), TRUSTED_FORWARDER)
+                arguments: abi.encode(core.directory, core.permissions, core.tokens, safeAddress(), trustedForwarder)
             });
             bool singletonSet = address(JBBaseSuckerDeployer(deployerAddr).singleton()) != address(0);
-            bool registryAllowed = REGISTRY.suckerDeployerIsAllowed(deployerAddr);
+            bool registryAllowed = registry.suckerDeployerIsAllowed(deployerAddr);
             if (singletonSet && registryAllowed) return;
         }
 
@@ -322,20 +307,20 @@ contract DeployScript is Script, Sphinx {
             if (alreadyDeployed) {
                 _baseDeployer = JBBaseSuckerDeployer(
                     _computeAddress({
-                        salt: BASE_SALT,
+                        salt: _BASE_SALT,
                         creationCode: type(JBBaseSuckerDeployer).creationCode,
                         arguments: abi.encode(
-                            core.directory, core.permissions, core.tokens, safeAddress(), TRUSTED_FORWARDER
+                            core.directory, core.permissions, core.tokens, safeAddress(), trustedForwarder
                         )
                     })
                 );
             } else {
-                _baseDeployer = new JBBaseSuckerDeployer{salt: BASE_SALT}({
+                _baseDeployer = new JBBaseSuckerDeployer{salt: _BASE_SALT}({
                     directory: core.directory,
                     permissions: core.permissions,
                     tokens: core.tokens,
                     configurator: safeAddress(),
-                    trustedForwarder: TRUSTED_FORWARDER
+                    trustedForwarder: trustedForwarder
                 });
             }
 
@@ -356,22 +341,22 @@ contract DeployScript is Script, Sphinx {
 
             if (address(_baseDeployer.singleton()) == address(0)) {
                 // Deploy the singleton instance.
-                JBBaseSucker _singleton = new JBBaseSucker{salt: BASE_SALT}({
+                JBBaseSucker _singleton = new JBBaseSucker{salt: _BASE_SALT}({
                     deployer: _baseDeployer,
                     directory: core.directory,
                     permissions: core.permissions,
                     prices: core.prices,
                     tokens: core.tokens,
                     feeProjectId: 1,
-                    registry: REGISTRY,
-                    trustedForwarder: TRUSTED_FORWARDER
+                    registry: registry,
+                    trustedForwarder: trustedForwarder
                 });
 
                 // Configure the deployer to use the singleton instance.
                 _baseDeployer.configureSingleton(_singleton);
             }
 
-            PRE_APPROVED_DEPLOYERS.push(address(_baseDeployer));
+            preApprovedDeployers.push(address(_baseDeployer));
         }
 
         // Check if we should do the L2 portion.
@@ -382,20 +367,20 @@ contract DeployScript is Script, Sphinx {
             if (alreadyDeployed) {
                 _baseDeployer = JBBaseSuckerDeployer(
                     _computeAddress({
-                        salt: BASE_SALT,
+                        salt: _BASE_SALT,
                         creationCode: type(JBBaseSuckerDeployer).creationCode,
                         arguments: abi.encode(
-                            core.directory, core.permissions, core.tokens, safeAddress(), TRUSTED_FORWARDER
+                            core.directory, core.permissions, core.tokens, safeAddress(), trustedForwarder
                         )
                     })
                 );
             } else {
-                _baseDeployer = new JBBaseSuckerDeployer{salt: BASE_SALT}({
+                _baseDeployer = new JBBaseSuckerDeployer{salt: _BASE_SALT}({
                     directory: core.directory,
                     permissions: core.permissions,
                     tokens: core.tokens,
                     configurator: safeAddress(),
-                    trustedForwarder: TRUSTED_FORWARDER
+                    trustedForwarder: trustedForwarder
                 });
             }
 
@@ -408,22 +393,22 @@ contract DeployScript is Script, Sphinx {
 
             if (address(_baseDeployer.singleton()) == address(0)) {
                 // Deploy the singleton instance.
-                JBBaseSucker _singleton = new JBBaseSucker{salt: BASE_SALT}({
+                JBBaseSucker _singleton = new JBBaseSucker{salt: _BASE_SALT}({
                     deployer: _baseDeployer,
                     directory: core.directory,
                     permissions: core.permissions,
                     prices: core.prices,
                     tokens: core.tokens,
                     feeProjectId: 1,
-                    registry: REGISTRY,
-                    trustedForwarder: TRUSTED_FORWARDER
+                    registry: registry,
+                    trustedForwarder: trustedForwarder
                 });
 
                 // Configure the deployer to use the singleton instance.
                 _baseDeployer.configureSingleton(_singleton);
             }
 
-            PRE_APPROVED_DEPLOYERS.push(address(_baseDeployer));
+            preApprovedDeployers.push(address(_baseDeployer));
         }
     }
 
@@ -432,21 +417,21 @@ contract DeployScript is Script, Sphinx {
     function _arbitrumSucker() internal {
         // Check if the deployer already exists at the CREATE2 address.
         bool alreadyDeployed = _isDeployed({
-            salt: ARB_SALT,
+            salt: _ARB_SALT,
             creationCode: type(JBArbitrumSuckerDeployer).creationCode,
-            arguments: abi.encode(core.directory, core.permissions, core.tokens, safeAddress(), TRUSTED_FORWARDER)
+            arguments: abi.encode(core.directory, core.permissions, core.tokens, safeAddress(), trustedForwarder)
         });
 
         // If already deployed, verify the full pipeline completed (singleton + registry allowlisting).
         // Only skip if everything is fully configured; otherwise fall through to resume.
         if (alreadyDeployed) {
             address deployerAddr = _computeAddress({
-                salt: ARB_SALT,
+                salt: _ARB_SALT,
                 creationCode: type(JBArbitrumSuckerDeployer).creationCode,
-                arguments: abi.encode(core.directory, core.permissions, core.tokens, safeAddress(), TRUSTED_FORWARDER)
+                arguments: abi.encode(core.directory, core.permissions, core.tokens, safeAddress(), trustedForwarder)
             });
             bool singletonSet = address(JBArbitrumSuckerDeployer(deployerAddr).singleton()) != address(0);
-            bool registryAllowed = REGISTRY.suckerDeployerIsAllowed(deployerAddr);
+            bool registryAllowed = registry.suckerDeployerIsAllowed(deployerAddr);
             if (singletonSet && registryAllowed) return;
         }
 
@@ -458,20 +443,20 @@ contract DeployScript is Script, Sphinx {
             if (alreadyDeployed) {
                 _arbDeployer = JBArbitrumSuckerDeployer(
                     _computeAddress({
-                        salt: ARB_SALT,
+                        salt: _ARB_SALT,
                         creationCode: type(JBArbitrumSuckerDeployer).creationCode,
                         arguments: abi.encode(
-                            core.directory, core.permissions, core.tokens, safeAddress(), TRUSTED_FORWARDER
+                            core.directory, core.permissions, core.tokens, safeAddress(), trustedForwarder
                         )
                     })
                 );
             } else {
-                _arbDeployer = new JBArbitrumSuckerDeployer{salt: ARB_SALT}({
+                _arbDeployer = new JBArbitrumSuckerDeployer{salt: _ARB_SALT}({
                     directory: core.directory,
                     permissions: core.permissions,
                     tokens: core.tokens,
                     configurator: safeAddress(),
-                    trustedForwarder: TRUSTED_FORWARDER
+                    trustedForwarder: trustedForwarder
                 });
             }
 
@@ -487,22 +472,22 @@ contract DeployScript is Script, Sphinx {
 
             if (address(_arbDeployer.singleton()) == address(0)) {
                 // Deploy the singleton instance.
-                JBArbitrumSucker _singleton = new JBArbitrumSucker{salt: ARB_SALT}({
+                JBArbitrumSucker _singleton = new JBArbitrumSucker{salt: _ARB_SALT}({
                     deployer: _arbDeployer,
                     directory: core.directory,
                     permissions: core.permissions,
                     prices: core.prices,
                     tokens: core.tokens,
                     feeProjectId: 1,
-                    registry: REGISTRY,
-                    trustedForwarder: TRUSTED_FORWARDER
+                    registry: registry,
+                    trustedForwarder: trustedForwarder
                 });
 
                 // Configure the deployer to use the singleton instance.
                 _arbDeployer.configureSingleton(_singleton);
             }
 
-            PRE_APPROVED_DEPLOYERS.push(address(_arbDeployer));
+            preApprovedDeployers.push(address(_arbDeployer));
         }
 
         // Check if we should do the L2 portion.
@@ -513,20 +498,20 @@ contract DeployScript is Script, Sphinx {
             if (alreadyDeployed) {
                 _arbDeployer = JBArbitrumSuckerDeployer(
                     _computeAddress({
-                        salt: ARB_SALT,
+                        salt: _ARB_SALT,
                         creationCode: type(JBArbitrumSuckerDeployer).creationCode,
                         arguments: abi.encode(
-                            core.directory, core.permissions, core.tokens, safeAddress(), TRUSTED_FORWARDER
+                            core.directory, core.permissions, core.tokens, safeAddress(), trustedForwarder
                         )
                     })
                 );
             } else {
-                _arbDeployer = new JBArbitrumSuckerDeployer{salt: ARB_SALT}({
+                _arbDeployer = new JBArbitrumSuckerDeployer{salt: _ARB_SALT}({
                     directory: core.directory,
                     permissions: core.permissions,
                     tokens: core.tokens,
                     configurator: safeAddress(),
-                    trustedForwarder: TRUSTED_FORWARDER
+                    trustedForwarder: trustedForwarder
                 });
             }
 
@@ -542,22 +527,22 @@ contract DeployScript is Script, Sphinx {
 
             if (address(_arbDeployer.singleton()) == address(0)) {
                 // Deploy the singleton instance.
-                JBArbitrumSucker _singleton = new JBArbitrumSucker{salt: ARB_SALT}({
+                JBArbitrumSucker _singleton = new JBArbitrumSucker{salt: _ARB_SALT}({
                     deployer: _arbDeployer,
                     directory: core.directory,
                     permissions: core.permissions,
                     prices: core.prices,
                     tokens: core.tokens,
                     feeProjectId: 1,
-                    registry: REGISTRY,
-                    trustedForwarder: TRUSTED_FORWARDER
+                    registry: registry,
+                    trustedForwarder: trustedForwarder
                 });
 
                 // Configure the deployer to use the singleton instance.
                 _arbDeployer.configureSingleton(_singleton);
             }
 
-            PRE_APPROVED_DEPLOYERS.push(address(_arbDeployer));
+            preApprovedDeployers.push(address(_arbDeployer));
         }
     }
 
@@ -565,37 +550,38 @@ contract DeployScript is Script, Sphinx {
         // Deploy all the L1 suckers.
         if (block.chainid == 1 || block.chainid == 11_155_111) {
             // Optimsim
-            PRE_APPROVED_DEPLOYERS.push(
+            preApprovedDeployers.push(
                 address(
                     _deployCCIPSuckerFor({
-                        salt: OP_SALT, remoteChainId: block.chainid == 1 ? CCIPHelper.OP_ID : CCIPHelper.OP_SEP_ID
+                        salt: _OP_SALT, remoteChainId: block.chainid == 1 ? CCIPHelper.OP_ID : CCIPHelper.OP_SEP_ID
                     })
                 )
             );
 
             // Base
-            PRE_APPROVED_DEPLOYERS.push(
+            preApprovedDeployers.push(
                 address(
                     _deployCCIPSuckerFor({
-                        salt: BASE_SALT, remoteChainId: block.chainid == 1 ? CCIPHelper.BASE_ID : CCIPHelper.BASE_SEP_ID
+                        salt: _BASE_SALT,
+                        remoteChainId: block.chainid == 1 ? CCIPHelper.BASE_ID : CCIPHelper.BASE_SEP_ID
                     })
                 )
             );
 
             // Arbitrum
-            PRE_APPROVED_DEPLOYERS.push(
+            preApprovedDeployers.push(
                 address(
                     _deployCCIPSuckerFor({
-                        salt: ARB_SALT, remoteChainId: block.chainid == 1 ? CCIPHelper.ARB_ID : CCIPHelper.ARB_SEP_ID
+                        salt: _ARB_SALT, remoteChainId: block.chainid == 1 ? CCIPHelper.ARB_ID : CCIPHelper.ARB_SEP_ID
                     })
                 )
             );
 
             // Tempo
-            PRE_APPROVED_DEPLOYERS.push(
+            preApprovedDeployers.push(
                 address(
                     _deployCCIPSuckerFor({
-                        salt: TEMPO_SALT,
+                        salt: _TEMPO_SALT,
                         remoteChainId: block.chainid == 1 ? CCIPHelper.TEMPO_ID : CCIPHelper.TEMPO_MOD_ID
                     })
                 )
@@ -606,30 +592,30 @@ contract DeployScript is Script, Sphinx {
         // ARB & ARB Sepolia.
         if (block.chainid == 42_161 || block.chainid == 421_614) {
             // L1.
-            PRE_APPROVED_DEPLOYERS.push(
+            preApprovedDeployers.push(
                 address(
                     _deployCCIPSuckerFor({
-                        salt: ARB_SALT,
+                        salt: _ARB_SALT,
                         remoteChainId: block.chainid == 42_161 ? CCIPHelper.ETH_ID : CCIPHelper.ETH_SEP_ID
                     })
                 )
             );
 
             // ARB -> OP.
-            PRE_APPROVED_DEPLOYERS.push(
+            preApprovedDeployers.push(
                 address(
                     _deployCCIPSuckerFor({
-                        salt: ARB_OP_SALT,
+                        salt: _ARB_OP_SALT,
                         remoteChainId: block.chainid == 42_161 ? CCIPHelper.OP_ID : CCIPHelper.OP_SEP_ID
                     })
                 )
             );
 
             // ARB -> BASE.
-            PRE_APPROVED_DEPLOYERS.push(
+            preApprovedDeployers.push(
                 address(
                     _deployCCIPSuckerFor({
-                        salt: ARB_BASE_SALT,
+                        salt: _ARB_BASE_SALT,
                         remoteChainId: block.chainid == 42_161 ? CCIPHelper.BASE_ID : CCIPHelper.BASE_SEP_ID
                     })
                 )
@@ -638,29 +624,29 @@ contract DeployScript is Script, Sphinx {
             // OP & OP Sepolia.
         } else if (block.chainid == 10 || block.chainid == 11_155_420) {
             // L1.
-            PRE_APPROVED_DEPLOYERS.push(
+            preApprovedDeployers.push(
                 address(
                     _deployCCIPSuckerFor({
-                        salt: OP_SALT, remoteChainId: block.chainid == 10 ? CCIPHelper.ETH_ID : CCIPHelper.ETH_SEP_ID
+                        salt: _OP_SALT, remoteChainId: block.chainid == 10 ? CCIPHelper.ETH_ID : CCIPHelper.ETH_SEP_ID
                     })
                 )
             );
 
             // OP -> ARB.
-            PRE_APPROVED_DEPLOYERS.push(
+            preApprovedDeployers.push(
                 address(
                     _deployCCIPSuckerFor({
-                        salt: ARB_OP_SALT,
+                        salt: _ARB_OP_SALT,
                         remoteChainId: block.chainid == 10 ? CCIPHelper.ARB_ID : CCIPHelper.ARB_SEP_ID
                     })
                 )
             );
 
             // OP -> BASE.
-            PRE_APPROVED_DEPLOYERS.push(
+            preApprovedDeployers.push(
                 address(
                     _deployCCIPSuckerFor({
-                        salt: OP_BASE_SALT,
+                        salt: _OP_BASE_SALT,
                         remoteChainId: block.chainid == 10 ? CCIPHelper.BASE_ID : CCIPHelper.BASE_SEP_ID
                     })
                 )
@@ -669,30 +655,30 @@ contract DeployScript is Script, Sphinx {
             // BASE & BASE Sepolia.
         } else if (block.chainid == 8453 || block.chainid == 84_532) {
             // L1.
-            PRE_APPROVED_DEPLOYERS.push(
+            preApprovedDeployers.push(
                 address(
                     _deployCCIPSuckerFor({
-                        salt: BASE_SALT,
+                        salt: _BASE_SALT,
                         remoteChainId: block.chainid == 8453 ? CCIPHelper.ETH_ID : CCIPHelper.ETH_SEP_ID
                     })
                 )
             );
 
             // BASE -> OP.
-            PRE_APPROVED_DEPLOYERS.push(
+            preApprovedDeployers.push(
                 address(
                     _deployCCIPSuckerFor({
-                        salt: OP_BASE_SALT,
+                        salt: _OP_BASE_SALT,
                         remoteChainId: block.chainid == 8453 ? CCIPHelper.OP_ID : CCIPHelper.OP_SEP_ID
                     })
                 )
             );
 
             // BASE -> ARB.
-            PRE_APPROVED_DEPLOYERS.push(
+            preApprovedDeployers.push(
                 address(
                     _deployCCIPSuckerFor({
-                        salt: ARB_BASE_SALT,
+                        salt: _ARB_BASE_SALT,
                         remoteChainId: block.chainid == 8453 ? CCIPHelper.ARB_ID : CCIPHelper.ARB_SEP_ID
                     })
                 )
@@ -702,10 +688,10 @@ contract DeployScript is Script, Sphinx {
         // Tempo / Tempo Moderato.
         if (block.chainid == 4217 || block.chainid == 42_431) {
             // Tempo -> ETH.
-            PRE_APPROVED_DEPLOYERS.push(
+            preApprovedDeployers.push(
                 address(
                     _deployCCIPSuckerFor({
-                        salt: TEMPO_SALT,
+                        salt: _TEMPO_SALT,
                         remoteChainId: block.chainid == 4217 ? CCIPHelper.ETH_ID : CCIPHelper.ETH_SEP_ID
                     })
                 )
@@ -725,7 +711,7 @@ contract DeployScript is Script, Sphinx {
             prices: core.prices,
             tokens: core.tokens,
             configurator: safeAddress(),
-            trustedForwarder: TRUSTED_FORWARDER,
+            forwarder: trustedForwarder,
             remoteChainId: remoteChainId,
             // Get the selector of the other side.
             remoteChainSelector: CCIPHelper.selectorOfChain(remoteChainId),
@@ -742,7 +728,7 @@ contract DeployScript is Script, Sphinx {
         IJBPrices prices,
         IJBTokens tokens,
         address configurator,
-        address trustedForwarder,
+        address forwarder,
         uint256 remoteChainId,
         uint64 remoteChainSelector,
         ICCIPRouter router
@@ -754,7 +740,7 @@ contract DeployScript is Script, Sphinx {
         bool alreadyDeployed = _isDeployed({
             salt: salt,
             creationCode: type(JBCCIPSuckerDeployer).creationCode,
-            arguments: abi.encode(directory, permissions, tokens, configurator, trustedForwarder)
+            arguments: abi.encode(directory, permissions, tokens, configurator, forwarder)
         });
 
         if (alreadyDeployed) {
@@ -762,13 +748,13 @@ contract DeployScript is Script, Sphinx {
                 _computeAddress({
                     salt: salt,
                     creationCode: type(JBCCIPSuckerDeployer).creationCode,
-                    arguments: abi.encode(directory, permissions, tokens, configurator, trustedForwarder)
+                    arguments: abi.encode(directory, permissions, tokens, configurator, forwarder)
                 })
             );
 
             // If the full pipeline is complete (singleton configured + registry allowlisted), return early.
             bool singletonSet = address(deployer.singleton()) != address(0);
-            bool registryAllowed = REGISTRY.suckerDeployerIsAllowed(address(deployer));
+            bool registryAllowed = registry.suckerDeployerIsAllowed(address(deployer));
             if (singletonSet && registryAllowed) return deployer;
 
             // Otherwise, resume the partial deployment below.
@@ -778,7 +764,7 @@ contract DeployScript is Script, Sphinx {
                 permissions: permissions,
                 tokens: tokens,
                 configurator: configurator,
-                trustedForwarder: trustedForwarder
+                trustedForwarder: forwarder
             });
         }
 
@@ -797,8 +783,8 @@ contract DeployScript is Script, Sphinx {
                 permissions: permissions,
                 prices: prices,
                 feeProjectId: 1,
-                registry: REGISTRY,
-                trustedForwarder: trustedForwarder
+                registry: registry,
+                trustedForwarder: forwarder
             });
 
             // Configure the singleton.

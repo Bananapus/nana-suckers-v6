@@ -849,187 +849,187 @@ library MerkleLib {
     }
 
     /**
-     * @notice Calculates and returns the merkle root for the given leaf `_item`,
-     * a merkle branch, and the index of `_item` in the tree.
-     * @param _item Merkle leaf
-     * @param _branch Merkle proof
-     * @param _index Index of `_item` in tree
-     * @return _current Calculated merkle root
+     * @notice Calculates and returns the merkle root for the given leaf `item`,
+     * a merkle branch, and the index of `item` in the tree.
+     * @param item Merkle leaf
+     * @param branch Merkle proof
+     * @param index Index of `item` in tree
+     * @return current Calculated merkle root
      *
      */
     function branchRoot(
-        bytes32 _item,
-        bytes32[TREE_DEPTH] memory _branch,
-        uint256 _index
+        bytes32 item,
+        bytes32[TREE_DEPTH] memory branch,
+        uint256 index
     )
         internal
         pure
-        returns (bytes32 _current)
+        returns (bytes32 current)
     {
         assembly {
-            _current := _item
-            let BRANCH_DATA_OFFSET := _branch
+            current := item
+            let BRANCH_DATA_OFFSET := branch
             let f
 
-            f := shl(5, and(_index, 1))
-            mstore(f, _current)
+            f := shl(5, and(index, 1))
+            mstore(f, current)
             mstore(sub(0x20, f), mload(BRANCH_DATA_OFFSET))
-            _current := keccak256(0, 0x40)
+            current := keccak256(0, 0x40)
 
-            f := shl(5, iszero(and(_index, shl(1, 1))))
-            mstore(sub(0x20, f), _current)
+            f := shl(5, iszero(and(index, shl(1, 1))))
+            mstore(sub(0x20, f), current)
             mstore(f, mload(add(BRANCH_DATA_OFFSET, shl(5, 1))))
-            _current := keccak256(0, 0x40)
+            current := keccak256(0, 0x40)
 
-            f := shl(5, iszero(and(_index, shl(2, 1))))
-            mstore(sub(0x20, f), _current)
+            f := shl(5, iszero(and(index, shl(2, 1))))
+            mstore(sub(0x20, f), current)
             mstore(f, mload(add(BRANCH_DATA_OFFSET, shl(5, 2))))
-            _current := keccak256(0, 0x40)
+            current := keccak256(0, 0x40)
 
-            f := shl(5, iszero(and(_index, shl(3, 1))))
-            mstore(sub(0x20, f), _current)
+            f := shl(5, iszero(and(index, shl(3, 1))))
+            mstore(sub(0x20, f), current)
             mstore(f, mload(add(BRANCH_DATA_OFFSET, shl(5, 3))))
-            _current := keccak256(0, 0x40)
+            current := keccak256(0, 0x40)
 
-            f := shl(5, iszero(and(_index, shl(4, 1))))
-            mstore(sub(0x20, f), _current)
+            f := shl(5, iszero(and(index, shl(4, 1))))
+            mstore(sub(0x20, f), current)
             mstore(f, mload(add(BRANCH_DATA_OFFSET, shl(5, 4))))
-            _current := keccak256(0, 0x40)
+            current := keccak256(0, 0x40)
 
-            f := shl(5, iszero(and(_index, shl(5, 1))))
-            mstore(sub(0x20, f), _current)
+            f := shl(5, iszero(and(index, shl(5, 1))))
+            mstore(sub(0x20, f), current)
             mstore(f, mload(add(BRANCH_DATA_OFFSET, shl(5, 5))))
-            _current := keccak256(0, 0x40)
+            current := keccak256(0, 0x40)
 
-            f := shl(5, iszero(and(_index, shl(6, 1))))
-            mstore(sub(0x20, f), _current)
+            f := shl(5, iszero(and(index, shl(6, 1))))
+            mstore(sub(0x20, f), current)
             mstore(f, mload(add(BRANCH_DATA_OFFSET, shl(5, 6))))
-            _current := keccak256(0, 0x40)
+            current := keccak256(0, 0x40)
 
-            f := shl(5, iszero(and(_index, shl(7, 1))))
-            mstore(sub(0x20, f), _current)
+            f := shl(5, iszero(and(index, shl(7, 1))))
+            mstore(sub(0x20, f), current)
             mstore(f, mload(add(BRANCH_DATA_OFFSET, shl(5, 7))))
-            _current := keccak256(0, 0x40)
+            current := keccak256(0, 0x40)
 
-            f := shl(5, iszero(and(_index, shl(8, 1))))
-            mstore(sub(0x20, f), _current)
+            f := shl(5, iszero(and(index, shl(8, 1))))
+            mstore(sub(0x20, f), current)
             mstore(f, mload(add(BRANCH_DATA_OFFSET, shl(5, 8))))
-            _current := keccak256(0, 0x40)
+            current := keccak256(0, 0x40)
 
-            f := shl(5, iszero(and(_index, shl(9, 1))))
-            mstore(sub(0x20, f), _current)
+            f := shl(5, iszero(and(index, shl(9, 1))))
+            mstore(sub(0x20, f), current)
             mstore(f, mload(add(BRANCH_DATA_OFFSET, shl(5, 9))))
-            _current := keccak256(0, 0x40)
+            current := keccak256(0, 0x40)
 
-            f := shl(5, iszero(and(_index, shl(10, 1))))
-            mstore(sub(0x20, f), _current)
+            f := shl(5, iszero(and(index, shl(10, 1))))
+            mstore(sub(0x20, f), current)
             mstore(f, mload(add(BRANCH_DATA_OFFSET, shl(5, 10))))
-            _current := keccak256(0, 0x40)
+            current := keccak256(0, 0x40)
 
-            f := shl(5, iszero(and(_index, shl(11, 1))))
-            mstore(sub(0x20, f), _current)
+            f := shl(5, iszero(and(index, shl(11, 1))))
+            mstore(sub(0x20, f), current)
             mstore(f, mload(add(BRANCH_DATA_OFFSET, shl(5, 11))))
-            _current := keccak256(0, 0x40)
+            current := keccak256(0, 0x40)
 
-            f := shl(5, iszero(and(_index, shl(12, 1))))
-            mstore(sub(0x20, f), _current)
+            f := shl(5, iszero(and(index, shl(12, 1))))
+            mstore(sub(0x20, f), current)
             mstore(f, mload(add(BRANCH_DATA_OFFSET, shl(5, 12))))
-            _current := keccak256(0, 0x40)
+            current := keccak256(0, 0x40)
 
-            f := shl(5, iszero(and(_index, shl(13, 1))))
-            mstore(sub(0x20, f), _current)
+            f := shl(5, iszero(and(index, shl(13, 1))))
+            mstore(sub(0x20, f), current)
             mstore(f, mload(add(BRANCH_DATA_OFFSET, shl(5, 13))))
-            _current := keccak256(0, 0x40)
+            current := keccak256(0, 0x40)
 
-            f := shl(5, iszero(and(_index, shl(14, 1))))
-            mstore(sub(0x20, f), _current)
+            f := shl(5, iszero(and(index, shl(14, 1))))
+            mstore(sub(0x20, f), current)
             mstore(f, mload(add(BRANCH_DATA_OFFSET, shl(5, 14))))
-            _current := keccak256(0, 0x40)
+            current := keccak256(0, 0x40)
 
-            f := shl(5, iszero(and(_index, shl(15, 1))))
-            mstore(sub(0x20, f), _current)
+            f := shl(5, iszero(and(index, shl(15, 1))))
+            mstore(sub(0x20, f), current)
             mstore(f, mload(add(BRANCH_DATA_OFFSET, shl(5, 15))))
-            _current := keccak256(0, 0x40)
+            current := keccak256(0, 0x40)
 
-            f := shl(5, iszero(and(_index, shl(16, 1))))
-            mstore(sub(0x20, f), _current)
+            f := shl(5, iszero(and(index, shl(16, 1))))
+            mstore(sub(0x20, f), current)
             mstore(f, mload(add(BRANCH_DATA_OFFSET, shl(5, 16))))
-            _current := keccak256(0, 0x40)
+            current := keccak256(0, 0x40)
 
-            f := shl(5, iszero(and(_index, shl(17, 1))))
-            mstore(sub(0x20, f), _current)
+            f := shl(5, iszero(and(index, shl(17, 1))))
+            mstore(sub(0x20, f), current)
             mstore(f, mload(add(BRANCH_DATA_OFFSET, shl(5, 17))))
-            _current := keccak256(0, 0x40)
+            current := keccak256(0, 0x40)
 
-            f := shl(5, iszero(and(_index, shl(18, 1))))
-            mstore(sub(0x20, f), _current)
+            f := shl(5, iszero(and(index, shl(18, 1))))
+            mstore(sub(0x20, f), current)
             mstore(f, mload(add(BRANCH_DATA_OFFSET, shl(5, 18))))
-            _current := keccak256(0, 0x40)
+            current := keccak256(0, 0x40)
 
-            f := shl(5, iszero(and(_index, shl(19, 1))))
-            mstore(sub(0x20, f), _current)
+            f := shl(5, iszero(and(index, shl(19, 1))))
+            mstore(sub(0x20, f), current)
             mstore(f, mload(add(BRANCH_DATA_OFFSET, shl(5, 19))))
-            _current := keccak256(0, 0x40)
+            current := keccak256(0, 0x40)
 
-            f := shl(5, iszero(and(_index, shl(20, 1))))
-            mstore(sub(0x20, f), _current)
+            f := shl(5, iszero(and(index, shl(20, 1))))
+            mstore(sub(0x20, f), current)
             mstore(f, mload(add(BRANCH_DATA_OFFSET, shl(5, 20))))
-            _current := keccak256(0, 0x40)
+            current := keccak256(0, 0x40)
 
-            f := shl(5, iszero(and(_index, shl(21, 1))))
-            mstore(sub(0x20, f), _current)
+            f := shl(5, iszero(and(index, shl(21, 1))))
+            mstore(sub(0x20, f), current)
             mstore(f, mload(add(BRANCH_DATA_OFFSET, shl(5, 21))))
-            _current := keccak256(0, 0x40)
+            current := keccak256(0, 0x40)
 
-            f := shl(5, iszero(and(_index, shl(22, 1))))
-            mstore(sub(0x20, f), _current)
+            f := shl(5, iszero(and(index, shl(22, 1))))
+            mstore(sub(0x20, f), current)
             mstore(f, mload(add(BRANCH_DATA_OFFSET, shl(5, 22))))
-            _current := keccak256(0, 0x40)
+            current := keccak256(0, 0x40)
 
-            f := shl(5, iszero(and(_index, shl(23, 1))))
-            mstore(sub(0x20, f), _current)
+            f := shl(5, iszero(and(index, shl(23, 1))))
+            mstore(sub(0x20, f), current)
             mstore(f, mload(add(BRANCH_DATA_OFFSET, shl(5, 23))))
-            _current := keccak256(0, 0x40)
+            current := keccak256(0, 0x40)
 
-            f := shl(5, iszero(and(_index, shl(24, 1))))
-            mstore(sub(0x20, f), _current)
+            f := shl(5, iszero(and(index, shl(24, 1))))
+            mstore(sub(0x20, f), current)
             mstore(f, mload(add(BRANCH_DATA_OFFSET, shl(5, 24))))
-            _current := keccak256(0, 0x40)
+            current := keccak256(0, 0x40)
 
-            f := shl(5, iszero(and(_index, shl(25, 1))))
-            mstore(sub(0x20, f), _current)
+            f := shl(5, iszero(and(index, shl(25, 1))))
+            mstore(sub(0x20, f), current)
             mstore(f, mload(add(BRANCH_DATA_OFFSET, shl(5, 25))))
-            _current := keccak256(0, 0x40)
+            current := keccak256(0, 0x40)
 
-            f := shl(5, iszero(and(_index, shl(26, 1))))
-            mstore(sub(0x20, f), _current)
+            f := shl(5, iszero(and(index, shl(26, 1))))
+            mstore(sub(0x20, f), current)
             mstore(f, mload(add(BRANCH_DATA_OFFSET, shl(5, 26))))
-            _current := keccak256(0, 0x40)
+            current := keccak256(0, 0x40)
 
-            f := shl(5, iszero(and(_index, shl(27, 1))))
-            mstore(sub(0x20, f), _current)
+            f := shl(5, iszero(and(index, shl(27, 1))))
+            mstore(sub(0x20, f), current)
             mstore(f, mload(add(BRANCH_DATA_OFFSET, shl(5, 27))))
-            _current := keccak256(0, 0x40)
+            current := keccak256(0, 0x40)
 
-            f := shl(5, iszero(and(_index, shl(28, 1))))
-            mstore(sub(0x20, f), _current)
+            f := shl(5, iszero(and(index, shl(28, 1))))
+            mstore(sub(0x20, f), current)
             mstore(f, mload(add(BRANCH_DATA_OFFSET, shl(5, 28))))
-            _current := keccak256(0, 0x40)
+            current := keccak256(0, 0x40)
 
-            f := shl(5, iszero(and(_index, shl(29, 1))))
-            mstore(sub(0x20, f), _current)
+            f := shl(5, iszero(and(index, shl(29, 1))))
+            mstore(sub(0x20, f), current)
             mstore(f, mload(add(BRANCH_DATA_OFFSET, shl(5, 29))))
-            _current := keccak256(0, 0x40)
+            current := keccak256(0, 0x40)
 
-            f := shl(5, iszero(and(_index, shl(30, 1))))
-            mstore(sub(0x20, f), _current)
+            f := shl(5, iszero(and(index, shl(30, 1))))
+            mstore(sub(0x20, f), current)
             mstore(f, mload(add(BRANCH_DATA_OFFSET, shl(5, 30))))
-            _current := keccak256(0, 0x40)
+            current := keccak256(0, 0x40)
 
-            f := shl(5, iszero(and(_index, shl(31, 1))))
-            mstore(sub(0x20, f), _current)
+            f := shl(5, iszero(and(index, shl(31, 1))))
+            mstore(sub(0x20, f), current)
             mstore(f, mload(add(BRANCH_DATA_OFFSET, shl(5, 31))))
-            _current := keccak256(0, 0x40)
+            current := keccak256(0, 0x40)
         }
     }
 }

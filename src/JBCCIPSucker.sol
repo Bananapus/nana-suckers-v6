@@ -202,7 +202,7 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
     /// @param token The token to bridge the outbox tree for.
     /// @param amount The amount of tokens to bridge.
     /// @param remoteToken Information about the remote token to bridge to.
-    /// @param sucker_message The message root to send to the remote peer.
+    /// @param suckerMessage The message root to send to the remote peer.
     // forge-lint: disable-next-line(mixed-case-function)
     function _sendRootOverAMB(
         uint256 transportPayment,
@@ -210,7 +210,7 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
         address token,
         uint256 amount,
         JBRemoteToken memory remoteToken,
-        JBMessageRoot memory sucker_message
+        JBMessageRoot memory suckerMessage
     )
         internal
         virtual
@@ -246,7 +246,7 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
             feeToken: feeToken,
             feeTokenPayer: feeToken != address(0) ? _msgSender() : address(0),
             gasLimit: gasLimit,
-            encodedPayload: abi.encode(_CCIP_MSG_TYPE_ROOT, abi.encode(sucker_message)),
+            encodedPayload: abi.encode(_CCIP_MSG_TYPE_ROOT, abi.encode(suckerMessage)),
             tokenAmounts: tokenAmounts,
             refundRecipient: _msgSender()
         });

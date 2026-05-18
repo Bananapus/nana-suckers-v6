@@ -573,7 +573,7 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
     }
 
     /// @notice Override to swap local tokens into bridge tokens before CCIP bridging.
-    /// @dev Does NOT modify `sucker_message.amount` — keeps the original leaf-denomination total so the
+    /// @dev Does NOT modify `suckerMessage.amount` — keeps the original leaf-denomination total so the
     /// receiving chain can use it (along with the actual delivered amount) to compute the proportional
     /// scaling factor for individual claims.
     /// Delegates CCIP message construction to JBCCIPLib (via DELEGATECALL) to reduce bytecode.
@@ -582,7 +582,7 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
     /// @param token The local token to bridge.
     /// @param amount The amount of local tokens to bridge.
     /// @param remoteToken The remote token configuration (including minGas).
-    /// @param sucker_message The merkle root message to send to the remote chain.
+    /// @param suckerMessage The merkle root message to send to the remote chain.
     // forge-lint: disable-next-line(mixed-case-function)
     function _sendRootOverAMB(
         uint256 transportPayment,
@@ -590,7 +590,7 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
         address token,
         uint256 amount,
         JBRemoteToken memory remoteToken,
-        JBMessageRoot memory sucker_message
+        JBMessageRoot memory suckerMessage
     )
         internal
         override
@@ -620,13 +620,13 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
                 BRIDGE_TOKEN.forceApprove({spender: address(CCIP_ROUTER), value: bridgeAmount});
             }
 
-            // NOTE: sucker_message.amount stays as the original leaf-denomination total.
+            // NOTE: suckerMessage.amount stays as the original leaf-denomination total.
             // Encode batch range [batchStart, batchEnd) so the receiver can resolve leaf ownership
             // per-nonce without requiring contiguous nonce delivery.
             uint256 batchStart = _lastSentCount[token];
             uint256 batchEnd = index + 1;
             _lastSentCount[token] = batchEnd;
-            encodedPayload = abi.encode(_CCIP_MSG_TYPE_ROOT, abi.encode(sucker_message, batchStart, batchEnd));
+            encodedPayload = abi.encode(_CCIP_MSG_TYPE_ROOT, abi.encode(suckerMessage, batchStart, batchEnd));
         }
 
         {

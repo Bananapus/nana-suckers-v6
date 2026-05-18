@@ -219,7 +219,7 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
             (, uint256 val) = _suckersOf[projectId].tryGet(allSuckers[i]);
             // Include both active and deprecated suckers in aggregate economic views.
             if (val == _SUCKER_EXISTS || val == _SUCKER_DEPRECATED) {
-                try IJBSucker(allSuckers[i]).peerChainBalanceOf(decimals, currency) returns (
+                try IJBSucker(allSuckers[i]).peerChainBalanceOf({decimals: decimals, currency: currency}) returns (
                     JBDenominatedAmount memory amt
                 ) {
                     uint256 chainId = IJBSucker(allSuckers[i]).peerChainId();
@@ -280,7 +280,7 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
             (, uint256 val) = _suckersOf[projectId].tryGet(allSuckers[i]);
             // Include both active and deprecated suckers in aggregate economic views.
             if (val == _SUCKER_EXISTS || val == _SUCKER_DEPRECATED) {
-                try IJBSucker(allSuckers[i]).peerChainSurplusOf(decimals, currency) returns (
+                try IJBSucker(allSuckers[i]).peerChainSurplusOf({decimals: decimals, currency: currency}) returns (
                     JBDenominatedAmount memory amt
                 ) {
                     uint256 chainId = IJBSucker(allSuckers[i]).peerChainId();
@@ -564,7 +564,7 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
         }
 
         // Mark the sucker as deprecated (retains mint permission, excluded from active listings).
-        _suckersOf[projectId].set(address(sucker), _SUCKER_DEPRECATED);
+        _suckersOf[projectId].set({key: address(sucker), value: _SUCKER_DEPRECATED});
         emit SuckerDeprecated({projectId: projectId, sucker: address(sucker), caller: _msgSender()});
     }
 

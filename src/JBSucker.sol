@@ -856,23 +856,23 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     }
 
     /// @notice Initializes the sucker with the project ID.
-    /// @param _projectId The ID of the project (on the local chain) that this sucker is associated with.
-    function initialize(uint256 _projectId) public initializer {
-        _initialize({_projectId: _projectId, remotePeer: bytes32(0)});
+    /// @param initialProjectId The ID of the project (on the local chain) that this sucker is associated with.
+    function initialize(uint256 initialProjectId) public initializer {
+        _initialize({initialProjectId: initialProjectId, remotePeer: bytes32(0)});
     }
 
     /// @notice Initializes the sucker with the project ID and an explicit peer address.
     /// @param localProjectId The ID of the project (on the local chain) that this sucker is associated with.
     /// @param remotePeer The remote peer address. Leave zero to use the default deterministic same-address peer.
     function initialize(uint256 localProjectId, bytes32 remotePeer) public initializer {
-        _initialize({_projectId: localProjectId, remotePeer: remotePeer});
+        _initialize({initialProjectId: localProjectId, remotePeer: remotePeer});
     }
 
     /// @notice Initializes the sucker's project and optional peer address.
-    /// @param _projectId The ID of the project (on the local chain) that this sucker is associated with.
+    /// @param initialProjectId The ID of the project (on the local chain) that this sucker is associated with.
     /// @param remotePeer The remote peer address. Leave zero to use the default deterministic same-address peer.
-    function _initialize(uint256 _projectId, bytes32 remotePeer) internal {
-        _localProjectId = _projectId;
+    function _initialize(uint256 initialProjectId, bytes32 remotePeer) internal {
+        _localProjectId = initialProjectId;
         _peer = remotePeer;
         deployer = _msgSender();
     }

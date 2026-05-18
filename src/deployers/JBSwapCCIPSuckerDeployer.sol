@@ -68,17 +68,17 @@ contract JBSwapCCIPSuckerDeployer is JBCCIPSuckerDeployer, IJBSwapCCIPSuckerDepl
     //*********************************************************************//
 
     /// @notice Configure the swap-specific constants. Can only be called once by the configurator.
-    /// @param _bridgeToken The ERC-20 token used for CCIP bridging.
-    /// @param _poolManager The Uniswap V4 PoolManager (can be address(0) if V4 unavailable).
-    /// @param _v3Factory The Uniswap V3 factory (can be address(0) if V3 unavailable).
-    /// @param _univ4Hook The V4 hook for pool discovery (optional, address(0) if none).
-    /// @param _wrappedNativeToken The ERC-20 wrapper address for the chain's native token (e.g. WETH on Ethereum).
+    /// @param newBridgeToken The ERC-20 token used for CCIP bridging.
+    /// @param newPoolManager The Uniswap V4 PoolManager (can be address(0) if V4 unavailable).
+    /// @param newV3Factory The Uniswap V3 factory (can be address(0) if V3 unavailable).
+    /// @param newUniv4Hook The V4 hook for pool discovery (optional, address(0) if none).
+    /// @param newWrappedNativeToken The ERC-20 wrapper address for the chain's native token (e.g. WETH on Ethereum).
     function setSwapConstants(
-        IERC20 _bridgeToken,
-        IPoolManager _poolManager,
-        IUniswapV3Factory _v3Factory,
-        address _univ4Hook,
-        address _wrappedNativeToken
+        IERC20 newBridgeToken,
+        IPoolManager newPoolManager,
+        IUniswapV3Factory newV3Factory,
+        address newUniv4Hook,
+        address newWrappedNativeToken
     )
         external
     {
@@ -93,23 +93,23 @@ contract JBSwapCCIPSuckerDeployer is JBCCIPSuckerDeployer, IJBSwapCCIPSuckerDepl
         }
 
         // Make sure the bridge token is not the zero address.
-        if (address(_bridgeToken) == address(0)) {
-            revert JBSwapCCIPSuckerDeployer_InvalidSwapConfig({bridgeToken: address(_bridgeToken)});
+        if (address(newBridgeToken) == address(0)) {
+            revert JBSwapCCIPSuckerDeployer_InvalidSwapConfig({bridgeToken: address(newBridgeToken)});
         }
 
         // Store the bridge token.
-        bridgeToken = _bridgeToken;
+        bridgeToken = newBridgeToken;
 
         // Store the Uniswap V4 pool manager.
-        poolManager = _poolManager;
+        poolManager = newPoolManager;
 
         // Store the Uniswap V3 factory.
-        v3Factory = _v3Factory;
+        v3Factory = newV3Factory;
 
         // Store the Uniswap V4 hook address.
-        univ4Hook = _univ4Hook;
+        univ4Hook = newUniv4Hook;
 
         // Store the wrapped native token address.
-        wrappedNativeToken = _wrappedNativeToken;
+        wrappedNativeToken = newWrappedNativeToken;
     }
 }
