@@ -111,11 +111,11 @@ abstract contract SwapCCIPSuckerForkTestBase is SuckerForkHelpers {
         );
 
         suckerDeployer.setSwapConstants({
-            _bridgeToken: IERC20(_bridgeToken()),
-            _poolManager: IPoolManager(address(0)),
-            _v3Factory: IUniswapV3Factory(_v3Factory()),
-            _univ4Hook: address(0),
-            _wrappedNativeToken: _weth()
+            newBridgeToken: IERC20(_bridgeToken()),
+            newPoolManager: IPoolManager(address(0)),
+            newV3Factory: IUniswapV3Factory(_v3Factory()),
+            newUniv4Hook: address(0),
+            newWrappedNativeToken: _weth()
         });
 
         vm.startPrank(address(0x1112222));

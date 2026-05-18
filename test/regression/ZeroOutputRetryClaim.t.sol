@@ -120,11 +120,11 @@ contract ZeroOutputRetryClaimTest is Test {
         });
         deployer.setChainSpecificConstants({remoteChainId: 2, remoteChainSelector: 2, router: ICCIPRouter(CCIP_ROUTER)});
         deployer.setSwapConstants({
-            _bridgeToken: IERC20(BRIDGE_TOKEN),
-            _poolManager: IPoolManager(address(0)),
-            _v3Factory: IUniswapV3Factory(address(0)),
-            _univ4Hook: address(0),
-            _wrappedNativeToken: WETH
+            newBridgeToken: IERC20(BRIDGE_TOKEN),
+            newPoolManager: IPoolManager(address(0)),
+            newV3Factory: IUniswapV3Factory(address(0)),
+            newUniv4Hook: address(0),
+            newWrappedNativeToken: WETH
         });
 
         ZeroOutputRetryHarness singleton = new ZeroOutputRetryHarness({

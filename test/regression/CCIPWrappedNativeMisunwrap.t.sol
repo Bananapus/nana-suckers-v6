@@ -172,9 +172,9 @@ contract RegressionCCIPWrappedNativeMisunwrapTest is Test {
             remoteRoot: JBInboxTreeRoot({
                 nonce: 1,
                 root: MerkleLib.branchRoot({
-                    _item: keccak256(abi.encode(uint256(10 ether), amount, bytes32(uint256(uint160(beneficiary))))),
-                    _branch: proof,
-                    _index: 0
+                    item: keccak256(abi.encode(uint256(10 ether), amount, bytes32(uint256(uint160(beneficiary))))),
+                    branch: proof,
+                    index: 0
                 })
             }),
             sourceTotalSupply: 0,

@@ -23,11 +23,10 @@ library SuckerDeploymentLib {
     Vm internal constant vm = Vm(VM_ADDRESS);
 
     function getDeployment(string memory path) internal returns (SuckerDeployment memory deployment) {
-        // get chainId for which we need to get the deployment.
+        // Match the current chain ID to the Sphinx network name used in deployment artifacts.
         uint256 chainId = block.chainid;
 
-        // Deploy to get the constants.
-        // TODO: get constants without deploy.
+        // `SphinxConstants` exposes Sphinx's supported chain ID to network name mapping.
         SphinxConstants sphinxConstants = new SphinxConstants();
         NetworkInfo[] memory networks = sphinxConstants.getNetworkInfoArray();
 
@@ -55,14 +54,13 @@ library SuckerDeploymentLib {
             })
         );
 
-        bytes32 _network = keccak256(abi.encodePacked(networkName));
-        bool _isMainnet = _network == keccak256("ethereum") || _network == keccak256("ethereum_sepolia");
-        // forge-lint: disable-next-line(mixed-case-variable)
-        bool _isOP = _network == keccak256("optimism") || _network == keccak256("optimism_sepolia");
-        bool _isBase = _network == keccak256("base") || _network == keccak256("base_sepolia");
-        bool _isArb = _network == keccak256("arbitrum") || _network == keccak256("arbitrum_sepolia");
+        bytes32 networkHash = keccak256(abi.encodePacked(networkName));
+        bool isMainnet = networkHash == keccak256("ethereum") || networkHash == keccak256("ethereum_sepolia");
+        bool isOp = networkHash == keccak256("optimism") || networkHash == keccak256("optimism_sepolia");
+        bool isBase = networkHash == keccak256("base") || networkHash == keccak256("base_sepolia");
+        bool isArb = networkHash == keccak256("arbitrum") || networkHash == keccak256("arbitrum_sepolia");
 
-        if (_isMainnet || _isOP) {
+        if (isMainnet || isOp) {
             deployment.optimismDeployer = IJBSuckerDeployer(
                 _getDeploymentAddress({
                     path: path,
@@ -73,7 +71,7 @@ library SuckerDeploymentLib {
             );
         }
 
-        if (_isMainnet || _isBase) {
+        if (isMainnet || isBase) {
             deployment.baseDeployer = IJBSuckerDeployer(
                 _getDeploymentAddress({
                     path: path,
@@ -84,7 +82,7 @@ library SuckerDeploymentLib {
             );
         }
 
-        if (_isMainnet || _isArb) {
+        if (isMainnet || isArb) {
             deployment.arbitrumDeployer = IJBSuckerDeployer(
                 _getDeploymentAddress({
                     path: path,

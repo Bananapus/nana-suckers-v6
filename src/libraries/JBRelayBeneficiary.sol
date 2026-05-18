@@ -35,7 +35,7 @@ library JBRelayBeneficiary {
         returns (address effectiveBeneficiary)
     {
         // Only trust relay metadata when the payer is a registered sucker for this project.
-        if (!registry.isSuckerOf(projectId, payer)) {
+        if (!registry.isSuckerOf({projectId: projectId, addr: payer})) {
             return beneficiary;
         }
 

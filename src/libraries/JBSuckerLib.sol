@@ -402,6 +402,6 @@ library JBSuckerLib {
     /// @return The computed merkle root.
     function computeBranchRoot(bytes32 item, bytes32[32] memory branch, uint256 index) external pure returns (bytes32) {
         // Delegate to MerkleLib's unrolled assembly implementation.
-        return MerkleLib.branchRoot({_item: item, _branch: branch, _index: index});
+        return MerkleLib.branchRoot({item: item, branch: branch, index: index});
     }
 }
