@@ -110,7 +110,6 @@ contract OptimismSuckerForkTest is TestBaseWorkflow {
             ownerMustSendPayouts: false, // Anyone can trigger payouts.
             holdFees: false, // Fees not held.
             scopeCashOutsToLocalBalances: true, // Use total surplus across terminals.
-            pauseCrossProjectFeeFreeInflows: false,
             useDataHookForPay: false, // No pay data hook.
             useDataHookForCashOut: false, // No cash-out data hook.
             dataHook: address(0), // No data hook address.
