@@ -44,7 +44,8 @@ contract OPStackReceiveSideFork is SuckerForkHelpers {
 
         // Deploy the sucker on the L2 fork using the canonical L2 messenger + bridge.
         vm.startPrank(address(0x1112222));
-        suckerDeployer = new JBOptimismSuckerDeployer(jbDirectory(), jbPermissions(), jbTokens(), address(this), address(0));
+        suckerDeployer =
+            new JBOptimismSuckerDeployer(jbDirectory(), jbPermissions(), jbTokens(), address(this), address(0));
         vm.stopPrank();
 
         suckerDeployer.setChainSpecificConstants(L2_MESSENGER, L2_BRIDGE);
@@ -65,7 +66,9 @@ contract OPStackReceiveSideFork is SuckerForkHelpers {
         suckerDeployer.configureSingleton(singleton);
         // Bind a known peer address that's deterministically the L1 sucker (same address via CREATE2).
         peerAddress = makeAddr("L1Peer");
-        sucker = JBOptimismSucker(payable(address(suckerDeployer.createForSender(1, "l2-recv-salt", bytes32(uint256(uint160(peerAddress)))))));
+        sucker = JBOptimismSucker(
+            payable(address(suckerDeployer.createForSender(1, "l2-recv-salt", bytes32(uint256(uint160(peerAddress))))))
+        );
 
         vm.label(address(sucker), "suckerL2");
         vm.label(address(L2_MESSENGER), "L2_MESSENGER");
@@ -124,9 +127,7 @@ contract OPStackReceiveSideFork is SuckerForkHelpers {
 
         JBMessageRoot memory root = _buildRoot(1, bytes32(uint256(0xDEAD)));
         vm.prank(impostor);
-        vm.expectRevert(
-            abi.encodeWithSelector(JBSucker.JBSucker_NotPeer.selector, bytes32(uint256(uint160(impostor))))
-        );
+        vm.expectRevert(abi.encodeWithSelector(JBSucker.JBSucker_NotPeer.selector, bytes32(uint256(uint160(impostor)))));
         sucker.fromRemote(root);
     }
 
@@ -144,9 +145,7 @@ contract OPStackReceiveSideFork is SuckerForkHelpers {
         JBMessageRoot memory root = _buildRoot(1, bytes32(uint256(0xC0FFEE)));
         vm.prank(address(L2_MESSENGER));
         vm.expectRevert(
-            abi.encodeWithSelector(
-                JBSucker.JBSucker_NotPeer.selector, bytes32(uint256(uint160(address(L2_MESSENGER))))
-            )
+            abi.encodeWithSelector(JBSucker.JBSucker_NotPeer.selector, bytes32(uint256(uint160(address(L2_MESSENGER)))))
         );
         sucker.fromRemote(root);
     }
