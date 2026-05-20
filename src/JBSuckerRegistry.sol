@@ -18,6 +18,7 @@ import {IJBSuckerDeployer} from "./interfaces/IJBSuckerDeployer.sol";
 import {IJBSuckerRegistry} from "./interfaces/IJBSuckerRegistry.sol";
 import {JBSuckerDeployerConfig} from "./structs/JBSuckerDeployerConfig.sol";
 import {JBSuckersPair} from "./structs/JBSuckersPair.sol";
+import {PeerValueScratch} from "./structs/PeerValueScratch.sol";
 
 /// @notice The canonical registry that deploys, tracks, and governs cross-chain suckers for Juicebox projects. It
 /// maintains an allowlist of approved deployer contracts, allows multiple active suckers per peer chain for bridge
@@ -25,14 +26,6 @@ import {JBSuckersPair} from "./structs/JBSuckersPair.sol";
 /// aggregate views of remote-chain balances, surplus, and token supply across all of a project's suckers.
 contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerRegistry {
     using EnumerableMap for EnumerableMap.AddressToUintMap;
-
-    struct PeerValueScratch {
-        uint256[] chainIds;
-        uint256[] values;
-        uint256[] snapshotTimestamps;
-        bool[] hasActiveValue;
-        uint256 chainCount;
-    }
 
     //*********************************************************************//
     // --------------------------- custom errors ------------------------- //
@@ -431,14 +424,26 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
         }
     }
 
+    /// @notice Allocates scratch arrays used to collapse many suckers into one aggregate value per peer chain.
+    /// @dev `len` is the number of suckers being scanned, which is the maximum possible number of distinct peer
+    /// chains. `chainCount` starts at zero and is incremented as new peer chains are discovered.
+    /// @param len The maximum number of peer-chain entries the aggregation can need.
+    /// @return scratch Empty scratch space sized for the current aggregation pass.
     function _peerValueScratch(uint256 len) internal pure returns (PeerValueScratch memory scratch) {
+        // Allocate each parallel array up front so `_recordPeerValue` can update by index without resizing memory.
         scratch.chainIds = new uint256[](len);
         scratch.values = new uint256[](len);
         scratch.snapshotTimestamps = new uint256[](len);
         scratch.hasActiveValue = new bool[](len);
     }
 
+    /// @notice Reads a sucker's snapshot timestamp, returning zero if the sucker does not expose it.
+    /// @dev Older or malformed suckers should not brick aggregate registry views. A zero timestamp makes their value
+    /// lose to any successful fresh read for the same peer chain.
+    /// @param sucker The sucker to query.
+    /// @return timestamp The reported snapshot timestamp, or zero if the call fails.
     function _snapshotTimestampOf(address sucker) internal view returns (uint256 timestamp) {
+        // Keep aggregate views available even if one registered sucker has a stale ABI or reverts unexpectedly.
         try IJBSucker(sucker).snapshotTimestamp() returns (uint256 result) {
             timestamp = result;
         } catch {}
