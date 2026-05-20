@@ -101,14 +101,37 @@ contract JBSuckerLibHalmos {
         _assertBranchRootMatchesReference({item: item, branch: branch, index: MerkleLib.MAX_LEAVES});
     }
 
-    /// @notice Proves the loop-based tree-root helper matches a simple reference implementation for valid counts.
+    /// @notice Proves tree-root helper parity for every single-active-branch level.
+    /// @dev The arbitrary symbolic `count` proof exceeds the 30-minute CI budget. These fixed counts still keep
+    /// `branch` fully symbolic and exercise each one-bit count shape from leaf 1 through the top active branch slot.
     /// @param branch The active merkle branch entries.
-    /// @param count The number of inserted leaves.
-    function check_treeRootMatchesReference(bytes32[32] memory branch, uint256 count) public pure {
-        // `computeTreeRoot` is only called with real tree counts. Counts above `MAX_LEAVES` are unreachable because
-        // `MerkleLib.insert` rejects a full tree before any caller can send that count across this helper boundary.
-        if (count > MerkleLib.MAX_LEAVES) return;
+    function check_treeRootPowerOfTwoCountsMatchReference(bytes32[32] memory branch) public pure {
+        _assertTreeRootMatchesReference({branch: branch, count: 0});
 
+        for (uint256 i; i < MerkleLib.TREE_DEPTH;) {
+            _assertTreeRootMatchesReference({branch: branch, count: uint256(1) << i});
+
+            unchecked {
+                ++i;
+            }
+        }
+    }
+
+    /// @notice Proves tree-root helper parity for dense low-bit count masks at every depth.
+    /// @dev These counts exercise the opposite shape from powers of two: every lower branch bit is active.
+    /// @param branch The active merkle branch entries.
+    function check_treeRootDenseCountsMatchReference(bytes32[32] memory branch) public pure {
+        for (uint256 i = 1; i <= MerkleLib.TREE_DEPTH;) {
+            _assertTreeRootMatchesReference({branch: branch, count: (uint256(1) << i) - 1});
+
+            unchecked {
+                ++i;
+            }
+        }
+    }
+
+    /// @notice Asserts one fixed tree count against the readable reference implementation.
+    function _assertTreeRootMatchesReference(bytes32[32] memory branch, uint256 count) internal pure {
         bytes32 optimized = JBSuckerLib.computeTreeRoot({branch: branch, count: count});
         bytes32 expected = _referenceTreeRoot({branch: branch, count: count});
 
