@@ -10,10 +10,10 @@ import {IRouterClient} from "@chainlink/contracts-ccip/contracts/interfaces/IRou
 import {JBCCIPLib} from "../../src/libraries/JBCCIPLib.sol";
 import {ICCIPRouter, IWrappedNativeToken} from "../../src/interfaces/ICCIPRouter.sol";
 
-/// @notice ERC-20 that mimics LINK's historical quirk: `transferFrom` returns `false` instead of reverting on
-/// insufficient allowance / balance. Without SafeERC20, the sucker would proceed as if the pull succeeded and
-/// then attempt to bridge with no LINK in hand — silently dropping the message. SafeERC20.safeTransferFrom must
-/// turn `returns (false)` into a revert.
+/// @notice ERC-20 that mimics the historical "returns false instead of reverting" footgun. Real LINK on mainnet
+/// doesn't exhibit this quirk (it reverts), so a fork-based test against canonical LINK cannot exercise the
+/// protection. The mock is the test subject — it reproduces the adversarial token class we're defending against.
+/// SafeERC20.safeTransferFrom must turn `returns (false)` into a revert.
 contract MaliciousLINK {
     string public name = "ChainLink Token";
     string public symbol = "LINK";
