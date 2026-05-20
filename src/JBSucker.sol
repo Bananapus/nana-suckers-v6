@@ -176,14 +176,6 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     /// @custom:param token The local terminal token to get the inbox for.
     mapping(address token => JBInboxTreeRoot root) internal _inboxOf;
 
-    /// @notice The outbox merkle tree for a given token.
-    /// @custom:param token The local terminal token to get the outbox for.
-    mapping(address token => JBOutboxTree) internal _outboxOf;
-
-    /// @notice Information about the token on the remote chain that the given token on the local chain is mapped to.
-    /// @custom:param token The local terminal token to get the remote token for.
-    mapping(address token => JBRemoteToken remoteToken) internal _remoteTokenFor;
-
     /// @notice The local token that has reserved each remote token address in this sucker.
     /// @dev Inbound roots are keyed by `root.token` on the destination chain. Within a single sucker, allowing two
     /// local tokens to send roots to the same remote token would give them independent source nonces but one shared
@@ -191,6 +183,14 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     /// separate bridge lanes for the same asset pair can coexist.
     /// @custom:param remoteToken The remote terminal token address encoded as bytes32.
     mapping(bytes32 remoteToken => address localToken) internal _localTokenForRemoteToken;
+
+    /// @notice The outbox merkle tree for a given token.
+    /// @custom:param token The local terminal token to get the outbox for.
+    mapping(address token => JBOutboxTree) internal _outboxOf;
+
+    /// @notice Information about the token on the remote chain that the given token on the local chain is mapped to.
+    /// @custom:param token The local terminal token to get the remote token for.
+    mapping(address token => JBRemoteToken remoteToken) internal _remoteTokenFor;
 
     //*********************************************************************//
     // -------------------- private stored properties -------------------- //

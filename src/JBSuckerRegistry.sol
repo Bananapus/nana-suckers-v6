@@ -364,6 +364,19 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
         return ERC2771Context._msgSender();
     }
 
+    /// @notice Allocates scratch arrays used to collapse many suckers into one aggregate value per peer chain.
+    /// @dev `len` is the number of suckers being scanned, which is the maximum possible number of distinct peer
+    /// chains. `chainCount` starts at zero and is incremented as new peer chains are discovered.
+    /// @param len The maximum number of peer-chain entries the aggregation can need.
+    /// @return scratch Empty scratch space sized for the current aggregation pass.
+    function _peerValueScratch(uint256 len) internal pure returns (PeerValueScratch memory scratch) {
+        // Allocate each parallel array up front so `_recordPeerValue` can update by index without resizing memory.
+        scratch.chainIds = new uint256[](len);
+        scratch.values = new uint256[](len);
+        scratch.snapshotTimestamps = new uint256[](len);
+        scratch.hasActiveValue = new bool[](len);
+    }
+
     /// @notice Records a project-scoped peer-chain aggregate value.
     /// @dev Callers pass scratch arrays sized from `_suckersOf[projectId].keys()`, so entries are already scoped to
     /// the project being aggregated. For each peer chain, active suckers replace deprecated suckers; deprecated
@@ -422,19 +435,6 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
         unchecked {
             return scratch.chainCount + 1;
         }
-    }
-
-    /// @notice Allocates scratch arrays used to collapse many suckers into one aggregate value per peer chain.
-    /// @dev `len` is the number of suckers being scanned, which is the maximum possible number of distinct peer
-    /// chains. `chainCount` starts at zero and is incremented as new peer chains are discovered.
-    /// @param len The maximum number of peer-chain entries the aggregation can need.
-    /// @return scratch Empty scratch space sized for the current aggregation pass.
-    function _peerValueScratch(uint256 len) internal pure returns (PeerValueScratch memory scratch) {
-        // Allocate each parallel array up front so `_recordPeerValue` can update by index without resizing memory.
-        scratch.chainIds = new uint256[](len);
-        scratch.values = new uint256[](len);
-        scratch.snapshotTimestamps = new uint256[](len);
-        scratch.hasActiveValue = new bool[](len);
     }
 
     /// @notice Reads a sucker's snapshot timestamp, returning zero if the sucker does not expose it.

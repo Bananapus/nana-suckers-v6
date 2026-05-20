@@ -155,15 +155,6 @@ library JBCCIPLib {
         }
     }
 
-    /// @notice Clear token approvals granted to the CCIP router for the current message.
-    /// @param router The CCIP router whose allowances should be revoked.
-    /// @param tokenAmounts The bridged token amounts approved for this message.
-    function _clearTokenAmountApprovals(address router, Client.EVMTokenAmount[] memory tokenAmounts) private {
-        for (uint256 i; i < tokenAmounts.length; i++) {
-            SafeERC20.forceApprove({token: IERC20(tokenAmounts[i].token), spender: router, value: 0});
-        }
-    }
-
     /// @notice Unwrap wrapped native tokens from received CCIP tokens if the delivered token matches the wrapped
     /// native. @dev Runs via DELEGATECALL so `address(this).balance` refers to the calling contract.
     /// @param ccipRouter The CCIP router (used to look up wrapped native token).
@@ -202,5 +193,18 @@ library JBCCIPLib {
     function decodeTypedMessage(bytes memory data) external pure returns (uint8 messageType, bytes memory payload) {
         // ABI-decode the type and payload from the raw data.
         (messageType, payload) = abi.decode(data, (uint8, bytes));
+    }
+
+    //*********************************************************************//
+    // ----------------------- private helpers --------------------------- //
+    //*********************************************************************//
+
+    /// @notice Clear token approvals granted to the CCIP router for the current message.
+    /// @param router The CCIP router whose allowances should be revoked.
+    /// @param tokenAmounts The bridged token amounts approved for this message.
+    function _clearTokenAmountApprovals(address router, Client.EVMTokenAmount[] memory tokenAmounts) private {
+        for (uint256 i; i < tokenAmounts.length; i++) {
+            SafeERC20.forceApprove({token: IERC20(tokenAmounts[i].token), spender: router, value: 0});
+        }
     }
 }

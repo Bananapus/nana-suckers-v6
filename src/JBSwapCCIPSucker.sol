@@ -197,6 +197,10 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
     // ------------------- transient stored properties ------------------- //
     //*********************************************************************//
 
+    /// @dev Reentrancy guard for the initial `ccipReceive` swap. Prevents claims from consuming newly received
+    /// swap output before the batch's conversion rate has been recorded.
+    bool transient _ccipReceiveSwapLocked;
+
     /// @notice Leaf index + 1 of the claim currently in progress (set by the `claim` override).
     /// @dev Transient storage — auto-resets to 0 each transaction, saving ~9,800 gas per claim vs SSTORE.
     /// Value 0 means no active claim (bypass scaling); non-zero means leafIndex = value - 1.
@@ -206,10 +210,6 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
     /// (between delete pendingSwapOf and writing the conversion rate), which would allow zero-backed
     /// minting. Also prevents re-entry into `retrySwap` itself. Transient — auto-resets each tx.
     bool transient _retrySwapLocked;
-
-    /// @dev Reentrancy guard for the initial `ccipReceive` swap. Prevents claims from consuming newly received
-    /// swap output before the batch's conversion rate has been recorded.
-    bool transient _ccipReceiveSwapLocked;
 
     //*********************************************************************//
     // ---------------------------- constructor -------------------------- //

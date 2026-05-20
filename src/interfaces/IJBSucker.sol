@@ -128,17 +128,6 @@ interface IJBSucker is IERC165 {
     /// @return chainId The remote chain ID.
     function peerChainId() external view returns (uint256 chainId);
 
-    /// @notice The last known total token supply on the peer chain, updated each time a bridge message is received.
-    /// @dev Used by data hooks to compute `effectiveTotalSupply = localSupply + sum(peerChainTotalSupply)` across all
-    /// suckers, preventing cash out tax bypass on chains where a holder dominates the local supply.
-    /// @return The peer chain's total supply.
-    function peerChainTotalSupply() external view returns (uint256);
-
-    /// @notice The freshness key of the latest accepted peer-chain economic snapshot.
-    /// @dev Higher values are fresher. The key is source-chain monotonic, not a value magnitude.
-    /// @return The latest peer-chain snapshot freshness key.
-    function snapshotTimestamp() external view returns (uint256);
-
     /// @notice The aggregate peer chain balance, normalized to a desired currency and decimal precision using JBPrices.
     /// @dev The balance is stored as ETH-denominated (18 decimals) and converted to the requested currency/decimals
     /// using the local JBPrices oracle.
@@ -155,6 +144,12 @@ interface IJBSucker is IERC165 {
     /// @return A `JBDenominatedAmount` with the converted value.
     function peerChainSurplusOf(uint256 decimals, uint256 currency) external view returns (JBDenominatedAmount memory);
 
+    /// @notice The last known total token supply on the peer chain, updated each time a bridge message is received.
+    /// @dev Used by data hooks to compute `effectiveTotalSupply = localSupply + sum(peerChainTotalSupply)` across all
+    /// suckers, preventing cash out tax bypass on chains where a holder dominates the local supply.
+    /// @return The peer chain's total supply.
+    function peerChainTotalSupply() external view returns (uint256);
+
     /// @notice The ID of the project on the local chain that this sucker is associated with.
     /// @return The project ID.
     function projectId() external view returns (uint256);
@@ -163,6 +158,11 @@ interface IJBSucker is IERC165 {
     /// @param token The local terminal token.
     /// @return The remote token info.
     function remoteTokenFor(address token) external view returns (JBRemoteToken memory);
+
+    /// @notice The freshness key of the latest accepted peer-chain economic snapshot.
+    /// @dev Higher values are fresher. The key is source-chain monotonic, not a value magnitude.
+    /// @return The latest peer-chain snapshot freshness key.
+    function snapshotTimestamp() external view returns (uint256);
 
     /// @notice The current deprecation state of this sucker.
     /// @return The sucker state.
