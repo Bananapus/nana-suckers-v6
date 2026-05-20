@@ -28,7 +28,11 @@ contract _RecordPeerValueHarness is JBSuckerRegistry {
         uint256[] memory values,
         uint256[] memory snapshotTimestamps,
         bool[] memory isActives
-    ) external pure returns (PeerValueScratch memory) {
+    )
+        external
+        pure
+        returns (PeerValueScratch memory)
+    {
         PeerValueScratch memory scratch = _peerValueScratch(len);
         for (uint256 i; i < chainIds.length; ++i) {
             scratch.chainCount = _recordPeerValue({
@@ -64,7 +68,13 @@ contract RecordPeerValueAggregationTest is Test {
         h = new _RecordPeerValueHarness(directory);
     }
 
-    function _exec(uint256 len, uint256[] memory ids, uint256[] memory vals, uint256[] memory ts, bool[] memory act)
+    function _exec(
+        uint256 len,
+        uint256[] memory ids,
+        uint256[] memory vals,
+        uint256[] memory ts,
+        bool[] memory act
+    )
         internal
         view
         returns (PeerValueScratch memory)
@@ -76,26 +86,31 @@ contract RecordPeerValueAggregationTest is Test {
         r = new uint256[](1);
         r[0] = a;
     }
+
     function _arr2(uint256 a, uint256 b) internal pure returns (uint256[] memory r) {
         r = new uint256[](2);
         r[0] = a;
         r[1] = b;
     }
+
     function _arr3(uint256 a, uint256 b, uint256 c) internal pure returns (uint256[] memory r) {
         r = new uint256[](3);
         r[0] = a;
         r[1] = b;
         r[2] = c;
     }
+
     function _b1(bool a) internal pure returns (bool[] memory r) {
         r = new bool[](1);
         r[0] = a;
     }
+
     function _b2(bool a, bool b) internal pure returns (bool[] memory r) {
         r = new bool[](2);
         r[0] = a;
         r[1] = b;
     }
+
     function _b3(bool a, bool b, bool c) internal pure returns (bool[] memory r) {
         r = new bool[](3);
         r[0] = a;
@@ -210,7 +225,10 @@ contract RecordPeerValueAggregationTest is Test {
     function testFuzz_sameChain_activeOnly_freshestWinsWithMaxTiebreak(
         uint256[16] memory vals,
         uint256[16] memory tss
-    ) public view {
+    )
+        public
+        view
+    {
         uint256 n = 16;
         uint256[] memory ids = new uint256[](n);
         uint256[] memory vsArr = new uint256[](n);
