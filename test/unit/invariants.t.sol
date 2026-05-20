@@ -233,7 +233,9 @@ contract SuckerHandler is Test {
         // Skip if already claimed.
         if (sucker.test_isExecuted(TOKEN, index)) return;
 
-        // Set inbox root so claim can proceed.
+        // Normal claims consume the inbox namespace: these leaves came from the peer sucker and are being redeemed on
+        // this chain. The harness mirrors the local outbox root into the inbox so the claim path can be exercised
+        // without deploying a second sucker, but the executed bitmap remains the normal inbound-claim bitmap.
         bytes32 root = sucker.test_getOutboxRoot(TOKEN);
         uint64 currentNonce = sucker.test_getOutboxNonce(TOKEN);
         sucker.test_setInboxRoot(TOKEN, currentNonce > 0 ? currentNonce : 1, root);
@@ -269,7 +271,9 @@ contract SuckerHandler is Test {
         uint256 claimsSent = sucker.test_getNumberOfClaimsSent(TOKEN);
         if (index < claimsSent) return;
 
-        // Skip if already emergency-exited.
+        // Emergency exits consume local outbox leaves, not peer inbox leaves. They therefore use a derived execution
+        // bitmap key, so the same numeric index can exist in both directions without creating a double-spend.
+        // Skip if this local outbox leaf was already emergency-exited.
         if (sucker.test_isEmergencyExecuted(TOKEN, index)) return;
 
         // Ensure sucker is deprecated for emergency exit.
@@ -422,6 +426,20 @@ contract SuckerInvariantsTest is Test {
         for (uint256 i; i < len; i++) {
             uint256 idx = handler.claimedIndices(i);
             assertTrue(sucker.test_isExecuted(TOKEN, idx), "Claimed index should be marked executed");
+        }
+    }
+
+    // =========================================================================
+    // Invariant: All emergency-exited indices are marked in the emergency bitmap
+    // =========================================================================
+
+    function invariant_eachEmergencyExitMarkedOnce() public view {
+        uint256 len = handler.getEmergencyExitedIndicesLength();
+        for (uint256 i; i < len; i++) {
+            uint256 idx = handler.emergencyExitedIndices(i);
+            // Do not require `test_isExecuted(TOKEN, idx)` to be false. The normal bitmap is for inbound peer leaves;
+            // the emergency bitmap is for local outbox leaves. Only the emergency namespace must be marked here.
+            assertTrue(sucker.test_isEmergencyExecuted(TOKEN, idx), "Emergency exit index should be marked executed");
         }
     }
 
