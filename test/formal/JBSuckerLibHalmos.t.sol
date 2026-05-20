@@ -101,6 +101,20 @@ contract JBSuckerLibHalmos {
         _assertBranchRootMatchesReference({item: item, branch: branch, index: MerkleLib.MAX_LEAVES});
     }
 
+    /// @notice Proves the loop-based tree-root helper matches a simple reference implementation for valid counts.
+    /// @param branch The active merkle branch entries.
+    /// @param count The number of inserted leaves.
+    function check_treeRootMatchesReference(bytes32[32] memory branch, uint256 count) public pure {
+        // `computeTreeRoot` is only called with real tree counts. Counts above `MAX_LEAVES` are unreachable because
+        // `MerkleLib.insert` rejects a full tree before any caller can send that count across this helper boundary.
+        if (count > MerkleLib.MAX_LEAVES) return;
+
+        bytes32 optimized = JBSuckerLib.computeTreeRoot({branch: branch, count: count});
+        bytes32 expected = _referenceTreeRoot({branch: branch, count: count});
+
+        assert(optimized == expected);
+    }
+
     /// @notice Asserts one fixed claim-proof index against the readable reference implementation.
     function _assertBranchRootMatchesReference(bytes32 item, bytes32[32] memory branch, uint256 index) internal pure {
         bytes32 optimized = JBSuckerLib.computeBranchRoot({item: item, branch: branch, index: index});
@@ -125,6 +139,39 @@ contract JBSuckerLibHalmos {
         for (uint256 i; i < MerkleLib.TREE_DEPTH;) {
             if (index & (uint256(1) << i) == 0) {
                 current = keccak256(abi.encodePacked(current, branch[i]));
+            } else {
+                current = keccak256(abi.encodePacked(branch[i], current));
+            }
+
+            unchecked {
+                ++i;
+            }
+        }
+    }
+
+    /// @notice Reference implementation for an incremental tree root from branch entries and leaf count.
+    /// @dev Mirrors the eth2-style zero-hash merge rules without using assembly.
+    function _referenceTreeRoot(bytes32[32] memory branch, uint256 count) internal pure returns (bytes32 current) {
+        if (count == 0) return MerkleLib.Z_32;
+
+        bytes32[33] memory zeroes;
+        for (uint256 i; i < MerkleLib.TREE_DEPTH;) {
+            zeroes[i + 1] = keccak256(abi.encodePacked(zeroes[i], zeroes[i]));
+
+            unchecked {
+                ++i;
+            }
+        }
+
+        bool started;
+        for (uint256 i; i < MerkleLib.TREE_DEPTH;) {
+            if (!started) {
+                if (count & (uint256(1) << i) != 0) {
+                    current = keccak256(abi.encodePacked(branch[i], zeroes[i]));
+                    started = true;
+                }
+            } else if (count & (uint256(1) << i) == 0) {
+                current = keccak256(abi.encodePacked(current, zeroes[i]));
             } else {
                 current = keccak256(abi.encodePacked(branch[i], current));
             }

@@ -7,7 +7,8 @@ pragma solidity ^0.8.0;
 /// @custom:member values The selected aggregate value for each observed peer chain.
 /// @custom:member snapshotTimestamps The freshness key associated with each selected value.
 /// @custom:member hasActiveValue Whether the selected value came from an active sucker instead of a deprecated
-/// fallback. @custom:member chainCount The number of populated peer-chain entries.
+/// fallback.
+/// @custom:member chainCount The number of populated peer-chain entries.
 struct PeerValueScratch {
     uint256[] chainIds;
     uint256[] values;
