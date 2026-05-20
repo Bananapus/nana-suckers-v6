@@ -65,14 +65,11 @@ contract RegressionSwapBatchHarness is JBSwapCCIPSucker {
         _conversionRateOf[token][nonce] = ConversionRate({leafTotal: leafTotal, localTotal: localTotal});
         _batchStartOf[token][nonce] = batchStart;
         _batchEndOf[token][nonce] = batchEnd;
-        // Mirror the bookkeeping `ccipReceive` performs on real deliveries — populated nonces are
-        // appended to `_populatedNonceByIndex` so the empty-midpoint fallback can walk only them.
+        // Mirror the bookkeeping `ccipReceive` performs on real deliveries so
+        // `_findNonceForLeafIndex` can walk only populated nonces.
         uint64 priorCount = _populatedNonceCount[token];
         _populatedNonceByIndex[token][priorCount] = nonce;
         _populatedNonceCount[token] = priorCount + 1;
-        if (nonce > _highestReceivedNonce[token]) {
-            _highestReceivedNonce[token] = nonce;
-        }
     }
 
     function exposed_addToBalance(address token, uint256 amount, uint256 projectId, uint256 leafIndex) external {
@@ -293,8 +290,8 @@ contract RegressionSwapSparseEmptyMidpointTest is Test {
         );
         sucker.initialize(PROJECT_ID);
 
-        // Populate only nonces {1, SPAN}. All midpoints between them are empty, so every
-        // probe in the outer binary search hits the empty-midpoint fallback path.
+        // Populate only nonces {1, SPAN}. Lookup must walk this compact populated list instead of
+        // assuming nonces arrived contiguously.
         sucker.test_setConversionRate({
             token: address(usdc), nonce: 1, leafTotal: 1, localTotal: 1, batchStart: 0, batchEnd: 1
         });

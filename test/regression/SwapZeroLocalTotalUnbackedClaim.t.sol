@@ -88,12 +88,11 @@ contract RegressionSwapZeroLocalHarness is JBSwapCCIPSucker {
         _conversionRateOf[token][nonce] = ConversionRate({leafTotal: leafTotal, localTotal: localTotal});
         _batchStartOf[token][nonce] = batchStart;
         _batchEndOf[token][nonce] = batchEnd;
-        // Mirror the bookkeeping `ccipReceive` performs on real deliveries so the empty-midpoint
-        // fallback in `_findNonceForLeafIndex` can walk only the populated nonces.
+        // Mirror the bookkeeping `ccipReceive` performs on real deliveries so
+        // `_findNonceForLeafIndex` can walk only populated nonces.
         uint64 priorCount = _populatedNonceCount[token];
         _populatedNonceByIndex[token][priorCount] = nonce;
         _populatedNonceCount[token] = priorCount + 1;
-        _highestReceivedNonce[token] = nonce;
     }
 
     function test_handleClaim(

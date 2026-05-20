@@ -61,9 +61,9 @@ contract StaleNonceTestHarness is JBSwapCCIPSucker {
         return _batchEndOf[token][nonce];
     }
 
-    /// @notice Read the highest received nonce for a token.
-    function exposed_highestReceivedNonce(address token) external view returns (uint64) {
-        return _highestReceivedNonce[token];
+    /// @notice Read the compact populated-nonce index length for a token.
+    function exposed_populatedNonceCount(address token) external view returns (uint64) {
+        return _populatedNonceCount[token];
     }
 }
 
@@ -252,8 +252,8 @@ contract StaleNonceMetadataOverwriteTest is Test {
         );
         assertEq(sucker.exposed_batchEndOf(token, 1), 5, "CRITICAL: stale replay must not overwrite nonce 1 batchEnd");
 
-        // Verify highest nonce was NOT rolled back.
-        assertEq(sucker.exposed_highestReceivedNonce(token), 2, "highestReceivedNonce must not be rolled back");
+        // Verify the stale replay did not append another populated nonce.
+        assertEq(sucker.exposed_populatedNonceCount(token), 2, "stale replay must not append another nonce");
     }
 
     // =========================================================================
@@ -319,7 +319,7 @@ contract StaleNonceMetadataOverwriteTest is Test {
         assertEq(localTotal, 2000e6, "fresh nonce should write localTotal");
         assertEq(sucker.exposed_batchStartOf(token, 2), 5, "fresh nonce should write batchStart");
         assertEq(sucker.exposed_batchEndOf(token, 2), 10, "fresh nonce should write batchEnd");
-        assertEq(sucker.exposed_highestReceivedNonce(token), 2, "highestReceivedNonce should advance");
+        assertEq(sucker.exposed_populatedNonceCount(token), 2, "fresh nonces should populate the compact index");
 
         // Verify nonce 1 is still intact.
         (uint256 leaf1, uint256 local1) = sucker.exposed_conversionRateOf(token, 1);

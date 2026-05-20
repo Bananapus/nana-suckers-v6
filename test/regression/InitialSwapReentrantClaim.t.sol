@@ -265,7 +265,6 @@ contract InitialSwapReentrantHarness is JBSwapCCIPSucker {
         uint64 priorCount = _populatedNonceCount[token];
         _populatedNonceByIndex[token][priorCount] = nonce;
         _populatedNonceCount[token] = priorCount + 1;
-        if (nonce > _highestReceivedNonce[token]) _highestReceivedNonce[token] = nonce;
     }
 
     function exposed_conversionRateOf(

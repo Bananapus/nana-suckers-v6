@@ -79,14 +79,11 @@ contract SwapCCIPTestHarness is JBSwapCCIPSucker {
         _conversionRateOf[token][nonce] = ConversionRate({leafTotal: leafTotal, localTotal: localTotal});
         _batchStartOf[token][nonce] = batchStart;
         _batchEndOf[token][nonce] = batchEnd;
-        // Mirror the bookkeeping `ccipReceive` performs on real deliveries so the empty-midpoint
-        // fallback in `_findNonceForLeafIndex` can walk only the populated nonces.
+        // Mirror the bookkeeping `ccipReceive` performs on real deliveries so
+        // `_findNonceForLeafIndex` can walk only populated nonces.
         uint64 priorCount = _populatedNonceCount[token];
         _populatedNonceByIndex[token][priorCount] = nonce;
         _populatedNonceCount[token] = priorCount + 1;
-        if (nonce > _highestReceivedNonce[token]) {
-            _highestReceivedNonce[token] = nonce;
-        }
     }
 
     /// @notice Read a conversion rate for a given nonce.
@@ -112,9 +109,9 @@ contract SwapCCIPTestHarness is JBSwapCCIPSucker {
         return _batchEndOf[token][nonce];
     }
 
-    /// @notice Read the highest received nonce for a token.
-    function exposed_highestReceivedNonce(address token) external view returns (uint64) {
-        return _highestReceivedNonce[token];
+    /// @notice Read the compact populated-nonce index length for a token.
+    function exposed_populatedNonceCount(address token) external view returns (uint64) {
+        return _populatedNonceCount[token];
     }
 
     /// @notice Expose _addToBalance for direct testing (with leaf index context).

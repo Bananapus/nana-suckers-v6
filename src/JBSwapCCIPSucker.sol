@@ -175,19 +175,15 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
     /// @custom:param nonce The CCIP nonce identifying the batch.
     mapping(address token => mapping(uint64 nonce => ConversionRate)) internal _conversionRateOf;
 
-    /// @notice Highest nonce received so far per token. Used as upper bound for nonce iteration.
-    /// @custom:param token The local token address.
-    mapping(address token => uint64) internal _highestReceivedNonce;
-
     /// @notice Count of populated batch nonces per token. Appended exactly once per batch in
     /// `ccipReceive`, so it equals the number of received batches independent of CCIP ordering.
     /// @custom:param token The local token address.
     mapping(address token => uint64) internal _populatedNonceCount;
 
-    /// @notice Populated batch nonces per token, indexed by insertion order. Enables the
-    /// empty-midpoint fallback in `_findNonceForLeafIndex` to walk only the K populated nonces
-    /// (O(K) worst case) instead of the full [lo, hi] nonce span (O(N) worst case under sparse
-    /// adversarial patterns).
+    /// @notice Populated batch nonces per token, indexed by insertion order.
+    /// @dev `_findNonceForLeafIndex` walks this list directly. That bounds lookup by the number of
+    /// received batches, not by the highest nonce, so sparse or out-of-order CCIP delivery cannot
+    /// force the claim path to scan empty nonce slots.
     /// @custom:param token The local token address.
     /// @custom:param index The insertion index in [0, _populatedNonceCount[token]).
     mapping(address token => mapping(uint64 index => uint64 nonce)) internal _populatedNonceByIndex;
@@ -407,14 +403,6 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
                     _populatedNonceByIndex[localToken][priorCount] = nonce;
                     unchecked {
                         _populatedNonceCount[localToken] = priorCount + 1;
-                    }
-
-                    // Track the highest nonce ever observed for this token. Read by
-                    // `_findNonceForLeafIndex` as the binary-search upper bound. Out-of-order
-                    // delivery keeps this monotonic — we only advance it when the new nonce is
-                    // strictly higher than the prior maximum.
-                    if (nonce > _highestReceivedNonce[localToken]) {
-                        _highestReceivedNonce[localToken] = nonce;
                     }
                 }
 
@@ -710,94 +698,36 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
     // ----------------------- internal views ---------------------------- //
     //*********************************************************************//
 
-    /// @notice Find the nonce whose batch contains the given leaf index.
-    /// @dev Binary search by nonce. Source-side `prepare()` appends batches in nonce order with each
-    /// new batch's `batchStart` equal to the previous batch's `batchEnd`, so across populated
-    /// destination slots `_batchStartOf` is strictly increasing in nonce — the populated subset is
-    /// monotonic even when CCIP delivery is out of order and leaves intermediate slots empty.
-    /// Binary search exploits that monotonicity for O(log N) lookup.
-    /// @dev Gap handling: when the midpoint slot is empty (CCIP out-of-order delivery or sparse
-    /// attacker writes), the fallback walks `_populatedNonceByIndex` — the list of every nonce
-    /// actually populated. That bounds the worst case at `O(K)` SLOADs, where `K` is the number
-    /// of received batches, regardless of how sparse the populated set is inside `[1, maxNonce]`.
-    /// The empty-slot scans that drove `O(N)` under the prior linear fallback are eliminated.
+    /// @notice Find the received nonce whose batch contains the given leaf index.
+    /// @dev Walks `_populatedNonceByIndex` instead of `[1, highestNonce]`. The populated list is the
+    /// only set that can contain a claimable batch, and it stays compact even when CCIP delivers
+    /// nonce 10 before nonce 2. This keeps lookup O(K) where K is received batches, avoids sparse
+    /// empty-slot scans, and keeps the deployable bytecode below the EIP-170 size limit.
     /// @param token The local token address.
     /// @param leafIndex The leaf index from the claim.
     /// @return The nonce of the batch containing this leaf, or 0 if no batches have been recorded.
     function _findNonceForLeafIndex(address token, uint256 leafIndex) internal view returns (uint64) {
-        // `_highestReceivedNonce` upper-bounds any populated slot for this token; zero means
-        // nothing has been received yet, so the leaf belongs to no batch.
-        uint64 maxNonce = _highestReceivedNonce[token];
-        if (maxNonce == 0) return 0;
+        // No populated batches for this token means there is no conversion rate to apply. Preserve
+        // nonce 0 as the "unbatched" sentinel used by `_addToBalance`'s non-claim path.
+        uint64 count = _populatedNonceCount[token];
+        if (count == 0) return 0;
 
-        // Nonce 0 is reserved by inbox initialization and never holds a batch, so search [1, max].
-        uint64 lo = 1;
-        uint64 hi = maxNonce;
-
-        // Wrap arithmetic in `unchecked` — `lo` and `hi` are always in `[1, maxNonce]` and the
-        // edge-guards (`mid == lo` / `mid == hi` breaks) prevent the only ways `mid - 1` or
-        // `mid + 1` could over/underflow. Skipping the compiler checks shaves enough bytecode to
-        // stay under EIP-170 without changing semantics.
+        // Walk only nonces that actually received a batch. The array is insertion-ordered, not
+        // sorted, because CCIP can deliver batches out of nonce order; each entry still points to a
+        // self-contained `[batchStart, batchEnd)` range written before the append.
         unchecked {
-            while (lo <= hi) {
-                uint64 mid = lo + (hi - lo) / 2;
-                // `batchEnd == 0` is the established sentinel for "no batch recorded" (see the
-                // write guard in `ccipReceive`); a real batch always has `batchEnd > batchStart`.
-                uint256 end = _batchEndOf[token][mid];
+            for (uint64 i; i < count; i++) {
+                uint64 nonce = _populatedNonceByIndex[token][i];
+                uint256 end = _batchEndOf[token][nonce];
 
-                // Empty midpoint from out-of-order CCIP delivery (the sender minted a higher nonce
-                // than the inbox has yet received, leaving holes in `[1, maxNonce]`) or a sparse
-                // pattern an attacker assembled by inflating `_highestReceivedNonce` without
-                // populating intermediate slots. The earlier linear `[lo, hi]` scan walked every
-                // empty slot, so worst-case cost was `O(maxNonce)` SLOADs — that's the residual
-                // the audit flagged. Walk `_populatedNonceByIndex` instead: it's `K` entries (one
-                // per received batch) and contains exactly the slots a real batch can cover.
-                if (end == 0) {
-                    // Number of populated batch slots for this token — equal to the array length.
-                    // Maintained by `ccipReceive`'s append (one SSTORE per first-time receive).
-                    uint64 count = _populatedNonceCount[token];
-
-                    // Linear walk over the populated set. Bounded by `count`, not `maxNonce`, so
-                    // sparse adversarial patterns can't inflate this loop with empty slots.
-                    for (uint64 i; i < count; i++) {
-                        // Insertion-ordered nonce at index `i`. May be any value in `[1, maxNonce]`
-                        // because CCIP delivery is out-of-order; the array is not sorted by nonce.
-                        uint64 n = _populatedNonceByIndex[token][i];
-
-                        // Read end of this batch's leaf range. Always `> 0` here — we only push to
-                        // `_populatedNonceByIndex` after the corresponding `_batchEndOf` write.
-                        uint256 nEnd = _batchEndOf[token][n];
-
-                        // Coverage test: each batch's `[batchStart, batchEnd)` is non-overlapping
-                        // across populated nonces, so a hit is unique. The `[lo, hi]` window from
-                        // the binary search isn't applied — the binary-search invariant guarantees
-                        // the leaf can only live in a populated nonce, so an out-of-window match
-                        // would mean the binary search was already wrong; falling through to the
-                        // next iteration costs less than the extra two compares per iteration.
-                        if (leafIndex >= _batchStartOf[token][n] && leafIndex < nEnd) return n;
-                    }
-
-                    // No populated nonce contains `leafIndex` for this token. Break out of the
-                    // outer binary-search loop and fall through to the shared revert below.
-                    break;
-                }
-
-                // Each batch covers [batchStart, batchEnd). Across populated nonces these ranges
-                // are non-overlapping and strictly increasing, so the standard comparison applies.
-                uint256 start = _batchStartOf[token][mid];
-                if (leafIndex < start) {
-                    if (mid == lo) break; // Guard against `mid - 1` underflow at the lower edge.
-                    hi = mid - 1;
-                } else if (leafIndex >= end) {
-                    if (mid == hi) break; // Mirror guard at the upper edge.
-                    lo = mid + 1;
-                } else {
-                    return mid; // `start <= leafIndex < end`: leaf is inside this batch.
-                }
+                // Ranges are non-overlapping across populated nonces. The first hit is therefore
+                // the unique conversion-rate batch for this claim leaf.
+                if (leafIndex >= _batchStartOf[token][nonce] && leafIndex < end) return nonce;
             }
         }
 
-        // Window collapsed without a hit — surface the same error the legacy linear scan used.
+        // Batches exist for the token, but none cover this leaf index; surface the same error used
+        // before the compact populated-nonce index was introduced.
         revert JBSwapCCIPSucker_BatchNotReceived({nonce: 0});
     }
 }
