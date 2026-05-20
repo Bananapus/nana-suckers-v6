@@ -211,6 +211,10 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
     /// minting. Also prevents re-entry into `retrySwap` itself. Transient — auto-resets each tx.
     bool transient _retrySwapLocked;
 
+    /// @dev Reentrancy guard for the initial `ccipReceive` swap. Prevents claims from consuming newly received
+    /// swap output before the batch's conversion rate has been recorded.
+    bool transient _ccipReceiveSwapLocked;
+
     //*********************************************************************//
     // ---------------------------- constructor -------------------------- //
     //*********************************************************************//
@@ -344,13 +348,16 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
                     // Wrapped in try-catch so a swap failure doesn't revert the entire CCIP message
                     // (which would leave tokens stuck in the OffRamp). On failure, bridge tokens are
                     // stored for later retry via `retrySwap` (written below, after nonce validation).
+                    _ccipReceiveSwapLocked = true;
                     try this.executeSwapExternal({
                         tokenIn: deliveredToken, tokenOut: localToken, amount: deliveredAmount
                     }) returns (
                         uint256 swapped
                     ) {
+                        _ccipReceiveSwapLocked = false;
                         localAmount = swapped;
                     } catch {
+                        _ccipReceiveSwapLocked = false;
                         swapFailed = true;
                         // localAmount stays 0 — pendingSwapOf and conversion rate are written
                         // below, after fromRemote validates the nonce.
@@ -529,7 +536,7 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
     /// @param claimData The claim data containing the leaf and proof.
     function claim(JBClaim calldata claimData) public override {
         // Block claims during retrySwap to prevent zero-backed minting via reentrancy.
-        if (_retrySwapLocked) revert JBSwapCCIPSucker_SwapPending(0);
+        if (_retrySwapLocked || _ccipReceiveSwapLocked) revert JBSwapCCIPSucker_SwapPending(0);
         _currentClaimLeafIndex = claimData.leaf.index + 1;
         super.claim(claimData);
         // Clear stale transient context to prevent leaking into same-tx emergency exits.

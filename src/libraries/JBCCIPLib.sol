@@ -133,9 +133,14 @@ library JBCCIPLib {
             SafeERC20.forceApprove({token: IERC20(feeToken), spender: router, value: totalApproval});
 
             ICCIPRouter(router).ccipSend({destinationChainSelector: chainSel, message: message});
+
+            _clearTokenAmountApprovals({router: router, tokenAmounts: tokenAmounts});
+            SafeERC20.forceApprove({token: IERC20(feeToken), spender: router, value: 0});
         } else {
             // Native ETH fee path.
             ICCIPRouter(router).ccipSend{value: fees}({destinationChainSelector: chainSel, message: message});
+
+            _clearTokenAmountApprovals({router: router, tokenAmounts: tokenAmounts});
 
             // Calculate the excess transport payment to refund.
             refundAmount = transportPayment - fees;
@@ -147,6 +152,15 @@ library JBCCIPLib {
                 // Record the refund failure if the transfer did not succeed.
                 if (!sent) refundFailed = true;
             }
+        }
+    }
+
+    /// @notice Clear token approvals granted to the CCIP router for the current message.
+    /// @param router The CCIP router whose allowances should be revoked.
+    /// @param tokenAmounts The bridged token amounts approved for this message.
+    function _clearTokenAmountApprovals(address router, Client.EVMTokenAmount[] memory tokenAmounts) private {
+        for (uint256 i; i < tokenAmounts.length; i++) {
+            SafeERC20.forceApprove({token: IERC20(tokenAmounts[i].token), spender: router, value: 0});
         }
     }
 

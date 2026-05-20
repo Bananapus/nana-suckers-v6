@@ -77,13 +77,15 @@ interface IJBSuckerRegistry {
     function suckersOf(uint256 projectId) external view returns (address[] memory);
 
     /// @notice The cumulative total supply across all remote peer chains for a project.
-    /// @dev Sums `peerChainTotalSupply` from each active sucker. Silently skips suckers that revert.
+    /// @dev Dedupes same-peer active suckers by freshest snapshot, then sums peer-chain values. Silently skips suckers
+    /// that revert.
     /// @param projectId The ID of the project.
     /// @return totalSupply The combined peer chain total supply.
     function remoteTotalSupplyOf(uint256 projectId) external view returns (uint256 totalSupply);
 
     /// @notice The cumulative balance across all remote peer chains for a project, denominated in a given currency.
-    /// @dev Sums `peerChainBalanceOf` from each active sucker. Silently skips suckers that revert.
+    /// @dev Dedupes same-peer active suckers by freshest snapshot, then sums peer-chain values. Silently skips suckers
+    /// that revert.
     /// @param projectId The ID of the project.
     /// @param decimals The decimal precision for the returned value.
     /// @param currency The currency to normalize to.
@@ -98,7 +100,8 @@ interface IJBSuckerRegistry {
         returns (uint256 balance);
 
     /// @notice The cumulative surplus across all remote peer chains for a project, denominated in a given currency.
-    /// @dev Sums `peerChainSurplusOf` from each active sucker. Silently skips suckers that revert.
+    /// @dev Dedupes same-peer active suckers by freshest snapshot, then sums peer-chain values. Silently skips suckers
+    /// that revert.
     /// @param projectId The ID of the project.
     /// @param decimals The decimal precision for the returned value.
     /// @param currency The currency to normalize to.

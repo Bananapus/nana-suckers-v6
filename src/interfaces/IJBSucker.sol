@@ -134,6 +134,11 @@ interface IJBSucker is IERC165 {
     /// @return The peer chain's total supply.
     function peerChainTotalSupply() external view returns (uint256);
 
+    /// @notice The freshness key of the latest accepted peer-chain economic snapshot.
+    /// @dev Higher values are fresher. The key is source-chain monotonic, not a value magnitude.
+    /// @return The latest peer-chain snapshot freshness key.
+    function snapshotTimestamp() external view returns (uint256);
+
     /// @notice The aggregate peer chain balance, normalized to a desired currency and decimal precision using JBPrices.
     /// @dev The balance is stored as ETH-denominated (18 decimals) and converted to the requested currency/decimals
     /// using the local JBPrices oracle.
