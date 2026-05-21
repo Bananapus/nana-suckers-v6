@@ -182,6 +182,7 @@ library JBSwapPoolLib {
             IWrappedNativeToken(config.wrappedNativeToken).deposit{value: amountOut}();
         }
     }
+
     /// @notice Execute the body of a V3 swap callback. Called via DELEGATECALL from the sucker's
     /// `uniswapV3SwapCallback` so the V3 callback logic lives in library bytecode.
     /// @dev DELEGATECALL preserves msg.sender (the V3 pool), allowing pool verification.
@@ -220,6 +221,7 @@ library JBSwapPoolLib {
         // Transfer the owed tokens to the V3 pool.
         IERC20(normalizedIn).safeTransfer({to: msg.sender, value: amountToSend});
     }
+
     /// @notice Execute the body of a V4 unlock callback. Called via DELEGATECALL from the sucker's
     /// `unlockCallback` so the V4 swap logic lives in library bytecode instead of the sucker's.
     /// @dev DELEGATECALL preserves msg.sender, address(this), and the sucker's token balances.
@@ -371,6 +373,7 @@ library JBSwapPoolLib {
             }
         }
     }
+
     /// @notice Search V3 pools across 4 fee tiers for the highest liquidity.
     /// @param v3Factory The Uniswap V3 factory to query for pools.
     /// @param normalizedTokenIn The normalized input token address.
@@ -419,6 +422,7 @@ library JBSwapPoolLib {
             }
         }
     }
+
     /// @notice Search V4 pools across 4 fee tiers and 2 hook configs for the best eligible liquidity.
     /// @dev TWAP-capable hooked pools are preferred over hookless spot pools. Broken hooked pools are skipped.
     /// @param config The swap configuration (pool manager, hook, wrapped native token addresses).
@@ -513,6 +517,7 @@ library JBSwapPoolLib {
             bestLiquidity = bestSpotLiquidity;
         }
     }
+
     /// @notice Compute the sigmoid slippage tolerance for a given swap.
     /// @param amountIn The amount of input tokens.
     /// @param liquidity The pool's in-range liquidity.
@@ -550,6 +555,7 @@ library JBSwapPoolLib {
         // Map the impact to a sigmoid slippage tolerance.
         return JBSwapLib.getSlippageTolerance({impact: impact, poolFeeBps: poolFeeBps});
     }
+
     /// @notice Get a TWAP-based quote with dynamic slippage for a V3 pool.
     /// @param pool The V3 pool to get the TWAP quote from.
     /// @param normalizedTokenIn The normalized input token address.
@@ -605,6 +611,7 @@ library JBSwapPoolLib {
             poolFeeBps: feeBps
         });
     }
+
     /// @notice Get a V4 quote with dynamic slippage. Hooked pools must serve TWAP; hookless pools use spot fallback.
     /// @param config The swap configuration (pool manager, wrapped native token addresses).
     /// @param key The V4 pool key to quote against.
@@ -673,6 +680,7 @@ library JBSwapPoolLib {
             poolFeeBps: feeBps
         });
     }
+
     /// @notice Check whether an oracle observation is old enough to cover a TWAP window ending at the current block.
     /// @dev Current or future timestamps are rejected before subtracting so the age check cannot underflow.
     /// @param observationTimestamp The timestamp recorded in the pool's oracle observation.
@@ -685,6 +693,7 @@ library JBSwapPoolLib {
         // forge-lint: disable-next-line(block-timestamp)
         return block.timestamp - observationTimestamp >= window;
     }
+
     /// @notice Probe a single V4 pool configuration for liquidity.
     /// @param poolManager The Uniswap V4 pool manager to query.
     /// @param sorted0 The lower-address token in the pair (sorted).
@@ -726,6 +735,7 @@ library JBSwapPoolLib {
         // Query the pool's current in-range liquidity.
         poolLiquidity = poolManager.getLiquidity(id);
     }
+
     /// @notice Compute the minimum acceptable output using sigmoid slippage at the given tick.
     /// @param amount The amount of input tokens.
     /// @param liquidity The pool's in-range liquidity.
@@ -775,6 +785,7 @@ library JBSwapPoolLib {
         // Reduce by the slippage tolerance to get the minimum acceptable output.
         minAmountOut -= (minAmountOut * slippageTolerance) / _SLIPPAGE_DENOMINATOR;
     }
+
     /// @notice Reads one V3 observation.
     /// @dev Uses `staticcall` so a bad candidate pool cannot interrupt pool discovery.
     /// @param pool The V3 pool candidate to inspect.
@@ -798,6 +809,7 @@ library JBSwapPoolLib {
         (observationTimestamp,,, initialized) = abi.decode(data, (uint32, int56, uint160, bool));
         ok = true;
     }
+
     /// @notice Reads the observation cursor and cardinality from a V3 pool's slot0.
     /// @dev Uses `staticcall` instead of the typed interface so malformed or hooklike candidate pools are rejected
     /// as unusable candidates without reverting the whole bounded pool-discovery scan.
@@ -819,6 +831,7 @@ library JBSwapPoolLib {
             abi.decode(data, (uint160, int24, uint16, uint16, uint16, uint8, bool));
         ok = true;
     }
+
     /// @notice Checks whether a V3 pool can serve the full default TWAP window.
     /// @dev Reads the observation ring directly so discovery can skip young pools without reverting. The oldest
     /// initialized observation must be at least `_DEFAULT_TWAP_WINDOW` seconds old.
@@ -843,6 +856,7 @@ library JBSwapPoolLib {
 
         return _observationIsOldEnough({observationTimestamp: observationTimestamp, window: _DEFAULT_TWAP_WINDOW});
     }
+
     /// @notice Check whether a V4 hooked pool can return cumulative ticks for the required TWAP window.
     /// @dev Hookless pools return false. Reverting hooks and hooks that return fewer than two cumulative tick values
     /// are treated as unusable for TWAP routing.
@@ -925,6 +939,7 @@ library JBSwapPoolLib {
             revert JBSwapPoolLib_SlippageExceeded({amountOut: amountOut, minAmountOut: minAmountOut});
         }
     }
+
     /// @notice Execute a swap through a V4 pool via `PoolManager.unlock()`.
     /// @param config The swap configuration (pool manager, wrapped native token addresses).
     /// @param key The V4 pool key to swap through.
@@ -983,6 +998,7 @@ library JBSwapPoolLib {
         // Decode the output amount returned by the unlock callback.
         amountOut = abi.decode(result, (uint256));
     }
+
     /// @notice Get the Uniswap V3 fee tier for a given index.
     /// @param index The fee tier index (0 = 0.3%, 1 = 0.05%, 2 = 1%, 3 = 0.01%).
     /// @return fee The fee tier in hundredths of a basis point.
@@ -992,6 +1008,7 @@ library JBSwapPoolLib {
         if (index == 2) return 10_000;
         return 100;
     }
+
     /// @notice Normalize a token address, converting the NATIVE_TOKEN sentinel to the wrapped native token.
     /// @param token The token address to normalize.
     /// @param wrappedNativeToken The wrapped native token address on this chain.
@@ -999,6 +1016,7 @@ library JBSwapPoolLib {
     function _normalize(address token, address wrappedNativeToken) internal pure returns (address) {
         return token == JBConstants.NATIVE_TOKEN ? wrappedNativeToken : token;
     }
+
     /// @notice Quote via V3 TWAP and execute swap. Separate function for stack isolation.
     /// @param pool The V3 pool to swap through.
     /// @param normalizedTokenIn The normalized input token address.
@@ -1031,6 +1049,7 @@ library JBSwapPoolLib {
             originalTokenIn: originalTokenIn
         });
     }
+
     /// @notice Quote via V4 TWAP/spot and execute swap. Separate function for stack isolation.
     /// @param config The swap configuration (pool manager, wrapped native token addresses).
     /// @param key The V4 pool key to swap through.
@@ -1068,6 +1087,7 @@ library JBSwapPoolLib {
             minAmountOut: minOut
         });
     }
+
     /// @notice Get the Uniswap V4 fee and tick spacing for a given tier index.
     /// @param index The fee tier index (0 = 0.3%/60, 1 = 0.05%/10, 2 = 1%/200, 3 = 0.01%/1).
     /// @return fee The fee in hundredths of a basis point.
