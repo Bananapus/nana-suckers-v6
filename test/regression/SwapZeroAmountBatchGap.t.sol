@@ -60,8 +60,8 @@ contract RegressionSwapZeroBatchHarness is JBSwapCCIPSucker {
         _addToBalance(token, amount, projectId);
     }
 
-    function exposed_highestReceivedNonce(address token) external view returns (uint64) {
-        return _highestReceivedNonce[token];
+    function exposed_populatedNonceCount(address token) external view returns (uint64) {
+        return _populatedNonceCount[token];
     }
 
     function exposed_batchStartOf(address token, uint64 nonce) external view returns (uint256) {
@@ -165,8 +165,9 @@ contract RegressionSwapZeroAmountBatchGapTest is Test {
         vm.prank(MOCK_ROUTER);
         sucker.ccipReceive(zeroBatchMessage);
 
-        // Nonce progression IS recorded even for zero-amount batch.
-        assertEq(sucker.exposed_highestReceivedNonce(address(usdc)), 1, "zero-amount batch should advance nonce");
+        // The compact nonce index is recorded even for zero-amount batches, so later claims can
+        // still resolve sparse or out-of-order deliveries without depending on highest-nonce state.
+        assertEq(sucker.exposed_populatedNonceCount(address(usdc)), 1, "zero batch should populate nonce index");
         assertEq(sucker.exposed_batchStartOf(address(usdc), 1), 0, "zero batch start should be recorded");
         assertEq(sucker.exposed_batchEndOf(address(usdc), 1), 1, "zero batch end should be recorded");
 
@@ -206,7 +207,7 @@ contract RegressionSwapZeroAmountBatchGapTest is Test {
         vm.prank(MOCK_ROUTER);
         sucker.ccipReceive(fundedBatchMessage);
 
-        assertEq(sucker.exposed_highestReceivedNonce(address(usdc)), 2, "later funded batch is tracked");
+        assertEq(sucker.exposed_populatedNonceCount(address(usdc)), 2, "later funded batch should populate nonce index");
         assertEq(sucker.exposed_batchStartOf(address(usdc), 2), 1, "later batch start should be recorded");
         assertEq(sucker.exposed_batchEndOf(address(usdc), 2), 2, "later batch end should be recorded");
 

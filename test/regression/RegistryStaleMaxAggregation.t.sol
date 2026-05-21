@@ -28,13 +28,15 @@ contract RegistryHarness is JBSuckerRegistry {
 
 contract MockAggregateSucker {
     uint256 public immutable chainId;
+    uint256 public immutable snapshotTimestamp;
     uint256 public peerChainTotalSupply;
     uint256 public surplus;
 
-    constructor(uint256 _chainId, uint256 _supply, uint256 _surplus) {
+    constructor(uint256 _chainId, uint256 _supply, uint256 _surplus, uint256 _snapshotTimestamp) {
         chainId = _chainId;
         peerChainTotalSupply = _supply;
         surplus = _surplus;
+        snapshotTimestamp = _snapshotTimestamp;
     }
 
     function peerChainId() external view returns (uint256) {
@@ -70,8 +72,8 @@ contract RegistryStaleMaxAggregationTest is Test {
     }
 
     function test_sameChainAggregationPrefersActiveValuesOverStaleDeprecatedValues() public {
-        MockAggregateSucker deprecatedSucker = new MockAggregateSucker(CHAIN_ID, 1000e18, 500e18);
-        MockAggregateSucker activeSucker = new MockAggregateSucker(CHAIN_ID, 100e18, 50e18);
+        MockAggregateSucker deprecatedSucker = new MockAggregateSucker(CHAIN_ID, 1000e18, 500e18, 1);
+        MockAggregateSucker activeSucker = new MockAggregateSucker(CHAIN_ID, 100e18, 50e18, 2);
 
         registry.forceSet(PROJECT_ID, address(deprecatedSucker), DEPRECATED);
         registry.forceSet(PROJECT_ID, address(activeSucker), ACTIVE);
@@ -85,6 +87,25 @@ contract RegistryStaleMaxAggregationTest is Test {
             registry.remoteSurplusOf(PROJECT_ID, 18, uint256(uint160(address(0xEEE)))),
             50e18,
             "active surplus should win even when a deprecated sucker reports more"
+        );
+    }
+
+    function test_sameChainActiveAggregationPrefersFreshLowerValuesOverStaleHigherValues() public {
+        MockAggregateSucker staleActive = new MockAggregateSucker(CHAIN_ID, 1000e18, 500e18, 1);
+        MockAggregateSucker freshActive = new MockAggregateSucker(CHAIN_ID, 100e18, 50e18, 2);
+
+        registry.forceSet(PROJECT_ID, address(staleActive), ACTIVE);
+        registry.forceSet(PROJECT_ID, address(freshActive), ACTIVE);
+
+        assertEq(
+            registry.remoteTotalSupplyOf(PROJECT_ID),
+            100e18,
+            "fresh active supply should win even when stale active reports more"
+        );
+        assertEq(
+            registry.remoteSurplusOf(PROJECT_ID, 18, uint256(uint160(address(0xEEE)))),
+            50e18,
+            "fresh active surplus should win even when stale active reports more"
         );
     }
 }

@@ -58,7 +58,10 @@ contract ZeroOutputRetryHarness is JBSwapCCIPSucker {
     {
         _batchStartOf[token][nonce] = batchStart;
         _batchEndOf[token][nonce] = batchEnd;
-        _highestReceivedNonce[token] = nonce;
+        // Mirror real deliveries: append the nonce so claim lookup checks populated batches only.
+        uint64 priorCount = _populatedNonceCount[token];
+        _populatedNonceByIndex[token][priorCount] = nonce;
+        _populatedNonceCount[token] = priorCount + 1;
         _conversionRateOf[token][nonce] = ConversionRate({leafTotal: leafTotal, localTotal: localTotal});
     }
 

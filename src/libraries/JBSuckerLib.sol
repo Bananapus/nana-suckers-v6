@@ -39,6 +39,56 @@ library JBSuckerLib {
     uint8 internal constant _ETH_DECIMALS = 18;
 
     //*********************************************************************//
+    // ---------------------- external transactions ---------------------- //
+    //*********************************************************************//
+
+    /// @notice Build the cross-chain snapshot message (total supply, surplus, balance).
+    /// @dev Extracted from `JBSucker._buildSnapshotAndSend` to reduce child contract bytecode.
+    /// Called via DELEGATECALL. Includes ETH aggregate computation inline (cannot call own external fns).
+    /// @param directory The JB directory to look up controllers and terminals.
+    /// @param prices The price oracle to use for non-ETH terminal-token balances.
+    /// @param projectId The project ID.
+    /// @param remoteToken The remote token bytes32 address.
+    /// @param amount The amount of terminal tokens to bridge.
+    /// @param nonce The outbox nonce for this send.
+    /// @param root The merkle root of the outbox tree.
+    /// @param messageVersion The message format version.
+    /// @param sourceTimestamp The monotonic source freshness key for this snapshot.
+    /// @return message The constructed JBMessageRoot.
+    function buildSnapshotMessage(
+        IJBDirectory directory,
+        IJBPrices prices,
+        uint256 projectId,
+        bytes32 remoteToken,
+        uint256 amount,
+        uint64 nonce,
+        bytes32 root,
+        uint8 messageVersion,
+        uint256 sourceTimestamp
+    )
+        external
+        view
+        returns (JBMessageRoot memory message)
+    {
+        (uint256 localTotalSupply, uint256 ethSurplus, uint256 ethBalance) =
+            _snapshotAccountsOf({directory: directory, prices: prices, projectId: projectId});
+
+        // Construct the cross-chain message with the snapshot data.
+        message = JBMessageRoot({
+            version: messageVersion,
+            token: remoteToken,
+            amount: amount,
+            remoteRoot: JBInboxTreeRoot({nonce: nonce, root: root}),
+            sourceTotalSupply: localTotalSupply,
+            sourceCurrency: JBCurrencyIds.ETH,
+            sourceDecimals: _ETH_DECIMALS,
+            sourceSurplus: ethSurplus,
+            sourceBalance: ethBalance,
+            sourceTimestamp: sourceTimestamp
+        });
+    }
+
+    //*********************************************************************//
     // ------------------------- external views -------------------------- //
     //*********************************************************************//
 
@@ -61,8 +111,114 @@ library JBSuckerLib {
         return _buildETHAggregateInternal({directory: directory, projectId: projectId, prices: prices});
     }
 
+    /// @notice Compute a branch root from a leaf, branch, and index. Wraps MerkleLib.branchRoot so its
+    /// ~170 lines of unrolled assembly live in the library's bytecode instead of each sucker's.
+    /// @param item The leaf hash.
+    /// @param branch The 32-element merkle proof branch.
+    /// @param index The leaf index.
+    /// @return The computed merkle root.
+    function computeBranchRoot(bytes32 item, bytes32[32] memory branch, uint256 index) external pure returns (bytes32) {
+        // Delegate to MerkleLib's unrolled assembly implementation.
+        return MerkleLib.branchRoot({item: item, branch: branch, index: index});
+    }
+
+    /// @notice Compute the merkle tree root from branch and count. Loop-based replacement for the unrolled
+    /// MerkleLib.root() — saves ~3KB per sucker when called via DELEGATECALL instead of inlining.
+    /// @param branch The 32-element branch array (caller copies from storage to memory).
+    /// @param count The number of leaves inserted into the tree.
+    /// @return current The merkle root.
+    function computeTreeRoot(bytes32[32] memory branch, uint256 count) external pure returns (bytes32 current) {
+        // An empty tree has a well-known root.
+        if (count == 0) return MerkleLib.Z_32;
+
+        // solhint-disable-next-line no-inline-assembly
+        assembly ("memory-safe") {
+            // Build zero hashes on-the-fly: Z[0] = 0, Z[i+1] = keccak256(Z[i], Z[i]).
+            let zPtr := mload(0x40)
+            mstore(0x40, add(zPtr, 0x420)) // 33 slots × 32 bytes
+            mstore(zPtr, 0) // Z[0] = bytes32(0)
+            for { let j := 0 } lt(j, 32) { j := add(j, 1) } {
+                let prev := mload(add(zPtr, mul(j, 0x20)))
+                mstore(0x00, prev)
+                mstore(0x20, prev)
+                mstore(add(zPtr, mul(add(j, 1), 0x20)), keccak256(0x00, 0x40))
+            }
+
+            // Walk bits of `count` from LSB to MSB.
+            // First set bit → initialize current = keccak256(branch[i], Z[i]).
+            // Each subsequent level → merge branch[i] or Z[i] with current.
+            let started := 0
+            for { let i := 0 } lt(i, 32) { i := add(i, 1) } {
+                switch started
+                case 0 {
+                    if and(count, shl(i, 1)) {
+                        mstore(0x00, mload(add(branch, mul(i, 0x20))))
+                        mstore(0x20, mload(add(zPtr, mul(i, 0x20))))
+                        current := keccak256(0x00, 0x40)
+                        started := 1
+                    }
+                }
+                default {
+                    switch and(count, shl(i, 1))
+                    case 0 {
+                        mstore(0x00, current)
+                        mstore(0x20, mload(add(zPtr, mul(i, 0x20))))
+                    }
+                    default {
+                        mstore(0x00, mload(add(branch, mul(i, 0x20))))
+                        mstore(0x20, current)
+                    }
+                    current := keccak256(0x00, 0x40)
+                }
+            }
+        }
+    }
+
+    /// @notice Convert a peer chain snapshot value to the requested currency and decimal precision.
+    /// @param prices The price oracle to use when currency conversion is needed.
+    /// @param projectId The project ID.
+    /// @param source The peer chain snapshot containing value, currency, and decimals.
+    /// @param decimals The target decimal precision.
+    /// @param currency The target currency.
+    /// @return converted The converted value.
+    function convertPeerValue(
+        IJBPrices prices,
+        uint256 projectId,
+        JBDenominatedAmount memory source,
+        uint256 decimals,
+        uint256 currency
+    )
+        external
+        view
+        returns (uint256 converted)
+    {
+        // Nothing to convert if the source value is zero.
+        if (source.value == 0) return 0;
+
+        // If the source currency matches the target, just adjust decimals.
+        // forge-lint: disable-next-line(unsafe-typecast)
+        if (source.currency == uint32(currency)) {
+            converted = JBFixedPointNumber.adjustDecimals({
+                value: source.value, decimals: source.decimals, targetDecimals: decimals
+            });
+        } else {
+            // Convert using the price oracle.
+            try prices.pricePerUnitOf({
+                projectId: projectId,
+                pricingCurrency: source.currency,
+                // forge-lint: disable-next-line(unsafe-typecast)
+                unitCurrency: uint32(currency),
+                decimals: source.decimals
+            }) returns (
+                uint256 price
+            ) {
+                converted = mulDiv({x: source.value, y: 10 ** decimals, denominator: price});
+            } catch {}
+        }
+    }
+
     //*********************************************************************//
-    // ----------------------- internal helpers -------------------------- //
+    // ------------------------- internal views -------------------------- //
     //*********************************************************************//
 
     /// @dev Shared implementation for ETH aggregate. Internal so it can be called from other
@@ -151,49 +307,6 @@ library JBSuckerLib {
         }
     }
 
-    /// @notice Convert a peer chain snapshot value to the requested currency and decimal precision.
-    /// @param prices The price oracle to use when currency conversion is needed.
-    /// @param projectId The project ID.
-    /// @param source The peer chain snapshot containing value, currency, and decimals.
-    /// @param decimals The target decimal precision.
-    /// @param currency The target currency.
-    /// @return converted The converted value.
-    function convertPeerValue(
-        IJBPrices prices,
-        uint256 projectId,
-        JBDenominatedAmount memory source,
-        uint256 decimals,
-        uint256 currency
-    )
-        external
-        view
-        returns (uint256 converted)
-    {
-        // Nothing to convert if the source value is zero.
-        if (source.value == 0) return 0;
-
-        // If the source currency matches the target, just adjust decimals.
-        // forge-lint: disable-next-line(unsafe-typecast)
-        if (source.currency == uint32(currency)) {
-            converted = JBFixedPointNumber.adjustDecimals({
-                value: source.value, decimals: source.decimals, targetDecimals: decimals
-            });
-        } else {
-            // Convert using the price oracle.
-            try prices.pricePerUnitOf({
-                projectId: projectId,
-                pricingCurrency: source.currency,
-                // forge-lint: disable-next-line(unsafe-typecast)
-                unitCurrency: uint32(currency),
-                decimals: source.decimals
-            }) returns (
-                uint256 price
-            ) {
-                converted = mulDiv({x: source.value, y: 10 ** decimals, denominator: price});
-            } catch {}
-        }
-    }
-
     /// @notice Return the project's controller if it exists and advertises the controller interface.
     /// @param directory The JB directory to look up the controller.
     /// @param projectId The project ID.
@@ -206,56 +319,6 @@ library JBSuckerLib {
                 if (supported) controller = IJBController(address(controllerIERC165));
             } catch {}
         } catch {}
-    }
-
-    //*********************************************************************//
-    // -------------------- external state-changing ---------------------- //
-    //*********************************************************************//
-
-    /// @notice Build the cross-chain snapshot message (total supply, surplus, balance).
-    /// @dev Extracted from `JBSucker._buildSnapshotAndSend` to reduce child contract bytecode.
-    /// Called via DELEGATECALL. Includes ETH aggregate computation inline (cannot call own external fns).
-    /// @param directory The JB directory to look up controllers and terminals.
-    /// @param prices The price oracle to use for non-ETH terminal-token balances.
-    /// @param projectId The project ID.
-    /// @param remoteToken The remote token bytes32 address.
-    /// @param amount The amount of terminal tokens to bridge.
-    /// @param nonce The outbox nonce for this send.
-    /// @param root The merkle root of the outbox tree.
-    /// @param messageVersion The message format version.
-    /// @param sourceTimestamp The monotonic source freshness key for this snapshot.
-    /// @return message The constructed JBMessageRoot.
-    function buildSnapshotMessage(
-        IJBDirectory directory,
-        IJBPrices prices,
-        uint256 projectId,
-        bytes32 remoteToken,
-        uint256 amount,
-        uint64 nonce,
-        bytes32 root,
-        uint8 messageVersion,
-        uint256 sourceTimestamp
-    )
-        external
-        view
-        returns (JBMessageRoot memory message)
-    {
-        (uint256 localTotalSupply, uint256 ethSurplus, uint256 ethBalance) =
-            _snapshotAccountsOf({directory: directory, prices: prices, projectId: projectId});
-
-        // Construct the cross-chain message with the snapshot data.
-        message = JBMessageRoot({
-            version: messageVersion,
-            token: remoteToken,
-            amount: amount,
-            remoteRoot: JBInboxTreeRoot({nonce: nonce, root: root}),
-            sourceTotalSupply: localTotalSupply,
-            sourceCurrency: JBCurrencyIds.ETH,
-            sourceDecimals: _ETH_DECIMALS,
-            sourceSurplus: ethSurplus,
-            sourceBalance: ethBalance,
-            sourceTimestamp: sourceTimestamp
-        });
     }
 
     /// @notice Optional project-specific adjusted accounts to add to peer-chain snapshots.
@@ -336,72 +399,5 @@ library JBSuckerLib {
             ethSurplus += additionalSurplus;
             ethBalance += additionalBalance;
         }
-    }
-
-    //*********************************************************************//
-    // -------------------- merkle tree helpers -------------------------- //
-    //*********************************************************************//
-
-    /// @notice Compute the merkle tree root from branch and count. Loop-based replacement for the unrolled
-    /// MerkleLib.root() — saves ~3KB per sucker when called via DELEGATECALL instead of inlining.
-    /// @param branch The 32-element branch array (caller copies from storage to memory).
-    /// @param count The number of leaves inserted into the tree.
-    /// @return current The merkle root.
-    function computeTreeRoot(bytes32[32] memory branch, uint256 count) external pure returns (bytes32 current) {
-        // An empty tree has a well-known root.
-        if (count == 0) return MerkleLib.Z_32;
-
-        // solhint-disable-next-line no-inline-assembly
-        assembly ("memory-safe") {
-            // Build zero hashes on-the-fly: Z[0] = 0, Z[i+1] = keccak256(Z[i], Z[i]).
-            let zPtr := mload(0x40)
-            mstore(0x40, add(zPtr, 0x420)) // 33 slots × 32 bytes
-            mstore(zPtr, 0) // Z[0] = bytes32(0)
-            for { let j := 0 } lt(j, 32) { j := add(j, 1) } {
-                let prev := mload(add(zPtr, mul(j, 0x20)))
-                mstore(0x00, prev)
-                mstore(0x20, prev)
-                mstore(add(zPtr, mul(add(j, 1), 0x20)), keccak256(0x00, 0x40))
-            }
-
-            // Walk bits of `count` from LSB to MSB.
-            // First set bit → initialize current = keccak256(branch[i], Z[i]).
-            // Each subsequent level → merge branch[i] or Z[i] with current.
-            let started := 0
-            for { let i := 0 } lt(i, 32) { i := add(i, 1) } {
-                switch started
-                case 0 {
-                    if and(count, shl(i, 1)) {
-                        mstore(0x00, mload(add(branch, mul(i, 0x20))))
-                        mstore(0x20, mload(add(zPtr, mul(i, 0x20))))
-                        current := keccak256(0x00, 0x40)
-                        started := 1
-                    }
-                }
-                default {
-                    switch and(count, shl(i, 1))
-                    case 0 {
-                        mstore(0x00, current)
-                        mstore(0x20, mload(add(zPtr, mul(i, 0x20))))
-                    }
-                    default {
-                        mstore(0x00, mload(add(branch, mul(i, 0x20))))
-                        mstore(0x20, current)
-                    }
-                    current := keccak256(0x00, 0x40)
-                }
-            }
-        }
-    }
-
-    /// @notice Compute a branch root from a leaf, branch, and index. Wraps MerkleLib.branchRoot so its
-    /// ~170 lines of unrolled assembly live in the library's bytecode instead of each sucker's.
-    /// @param item The leaf hash.
-    /// @param branch The 32-element merkle proof branch.
-    /// @param index The leaf index.
-    /// @return The computed merkle root.
-    function computeBranchRoot(bytes32 item, bytes32[32] memory branch, uint256 index) external pure returns (bytes32) {
-        // Delegate to MerkleLib's unrolled assembly implementation.
-        return MerkleLib.branchRoot({item: item, branch: branch, index: index});
     }
 }

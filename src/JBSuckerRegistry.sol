@@ -18,6 +18,7 @@ import {IJBSuckerDeployer} from "./interfaces/IJBSuckerDeployer.sol";
 import {IJBSuckerRegistry} from "./interfaces/IJBSuckerRegistry.sol";
 import {JBSuckerDeployerConfig} from "./structs/JBSuckerDeployerConfig.sol";
 import {JBSuckersPair} from "./structs/JBSuckersPair.sol";
+import {PeerValueScratch} from "./structs/PeerValueScratch.sol";
 
 /// @notice The canonical registry that deploys, tracks, and governs cross-chain suckers for Juicebox projects. It
 /// maintains an allowlist of approved deployer contracts, allows multiple active suckers per peer chain for bridge
@@ -210,10 +211,7 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
 
         // Per-chain dedup arrays. The number of suckers per project is small (typically 1-5),
         // so a linear scan is cheaper than a mapping.
-        uint256[] memory chainIds = new uint256[](len);
-        uint256[] memory maxBalances = new uint256[](len);
-        bool[] memory hasActiveValue = new bool[](len);
-        uint256 chainCount;
+        PeerValueScratch memory scratch = _peerValueScratch(len);
 
         for (uint256 i; i < len;) {
             (, uint256 val) = _suckersOf[projectId].tryGet(allSuckers[i]);
@@ -223,13 +221,11 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
                     JBDenominatedAmount memory amt
                 ) {
                     uint256 chainId = IJBSucker(allSuckers[i]).peerChainId();
-                    chainCount = _recordPeerValue({
-                        chainIds: chainIds,
-                        values: maxBalances,
-                        hasActiveValue: hasActiveValue,
-                        chainCount: chainCount,
+                    scratch.chainCount = _recordPeerValue({
+                        scratch: scratch,
                         chainId: chainId,
                         value: amt.value,
+                        snapshotTimestamp: _snapshotTimestampOf(allSuckers[i]),
                         isActive: val == _SUCKER_EXISTS
                     });
                 } catch {}
@@ -239,9 +235,9 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
             }
         }
 
-        // Sum the per-chain max values.
-        for (uint256 k; k < chainCount;) {
-            balance += maxBalances[k];
+        // Sum the per-chain selected values.
+        for (uint256 k; k < scratch.chainCount;) {
+            balance += scratch.values[k];
             unchecked {
                 ++k;
             }
@@ -271,10 +267,7 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
 
         // Per-chain dedup arrays. The number of suckers per project is small (typically 1-5),
         // so a linear scan is cheaper than a mapping.
-        uint256[] memory chainIds = new uint256[](len);
-        uint256[] memory maxSurplus = new uint256[](len);
-        bool[] memory hasActiveValue = new bool[](len);
-        uint256 chainCount;
+        PeerValueScratch memory scratch = _peerValueScratch(len);
 
         for (uint256 i; i < len;) {
             (, uint256 val) = _suckersOf[projectId].tryGet(allSuckers[i]);
@@ -284,13 +277,11 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
                     JBDenominatedAmount memory amt
                 ) {
                     uint256 chainId = IJBSucker(allSuckers[i]).peerChainId();
-                    chainCount = _recordPeerValue({
-                        chainIds: chainIds,
-                        values: maxSurplus,
-                        hasActiveValue: hasActiveValue,
-                        chainCount: chainCount,
+                    scratch.chainCount = _recordPeerValue({
+                        scratch: scratch,
                         chainId: chainId,
                         value: amt.value,
+                        snapshotTimestamp: _snapshotTimestampOf(allSuckers[i]),
                         isActive: val == _SUCKER_EXISTS
                     });
                 } catch {}
@@ -300,9 +291,9 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
             }
         }
 
-        // Sum the per-chain max values.
-        for (uint256 k; k < chainCount;) {
-            surplus += maxSurplus[k];
+        // Sum the per-chain selected values.
+        for (uint256 k; k < scratch.chainCount;) {
+            surplus += scratch.values[k];
             unchecked {
                 ++k;
             }
@@ -321,10 +312,7 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
 
         // Per-chain dedup arrays. The number of suckers per project is small (typically 1-5),
         // so a linear scan is cheaper than a mapping.
-        uint256[] memory chainIds = new uint256[](len);
-        uint256[] memory maxSupply = new uint256[](len);
-        bool[] memory hasActiveValue = new bool[](len);
-        uint256 chainCount;
+        PeerValueScratch memory scratch = _peerValueScratch(len);
 
         for (uint256 i; i < len;) {
             (, uint256 val) = _suckersOf[projectId].tryGet(allSuckers[i]);
@@ -332,13 +320,11 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
             if (val == _SUCKER_EXISTS || val == _SUCKER_DEPRECATED) {
                 try IJBSucker(allSuckers[i]).peerChainTotalSupply() returns (uint256 supply) {
                     uint256 chainId = IJBSucker(allSuckers[i]).peerChainId();
-                    chainCount = _recordPeerValue({
-                        chainIds: chainIds,
-                        values: maxSupply,
-                        hasActiveValue: hasActiveValue,
-                        chainCount: chainCount,
+                    scratch.chainCount = _recordPeerValue({
+                        scratch: scratch,
                         chainId: chainId,
                         value: supply,
+                        snapshotTimestamp: _snapshotTimestampOf(allSuckers[i]),
                         isActive: val == _SUCKER_EXISTS
                     });
                 } catch {}
@@ -348,9 +334,9 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
             }
         }
 
-        // Sum the per-chain max values.
-        for (uint256 k; k < chainCount;) {
-            totalSupply += maxSupply[k];
+        // Sum the per-chain selected values.
+        for (uint256 k; k < scratch.chainCount;) {
+            totalSupply += scratch.values[k];
             unchecked {
                 ++k;
             }
@@ -378,56 +364,89 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
         return ERC2771Context._msgSender();
     }
 
+    /// @notice Allocates scratch arrays used to collapse many suckers into one aggregate value per peer chain.
+    /// @dev `len` is the number of suckers being scanned, which is the maximum possible number of distinct peer
+    /// chains. `chainCount` starts at zero and is incremented as new peer chains are discovered.
+    /// @param len The maximum number of peer-chain entries the aggregation can need.
+    /// @return scratch Empty scratch space sized for the current aggregation pass.
+    function _peerValueScratch(uint256 len) internal pure returns (PeerValueScratch memory scratch) {
+        // Allocate each parallel array up front so `_recordPeerValue` can update by index without resizing memory.
+        scratch.chainIds = new uint256[](len);
+        scratch.values = new uint256[](len);
+        scratch.snapshotTimestamps = new uint256[](len);
+        scratch.hasActiveValue = new bool[](len);
+    }
+
     /// @notice Records a project-scoped peer-chain aggregate value.
     /// @dev Callers pass scratch arrays sized from `_suckersOf[projectId].keys()`, so entries are already scoped to
     /// the project being aggregated. For each peer chain, active suckers replace deprecated suckers; deprecated
     /// values are only used as a migration fallback when no active sucker has reported for that chain.
-    /// @param chainIds The peer-chain ids recorded so far.
-    /// @param values The aggregate values recorded so far.
-    /// @param hasActiveValue Whether the recorded value for each index came from an active sucker.
-    /// @param chainCount The number of populated chain entries.
+    /// @param scratch The per-chain aggregate values and freshness keys recorded so far.
     /// @param chainId The peer-chain id to record.
     /// @param value The value to record.
+    /// @param snapshotTimestamp The snapshot freshness key to record.
     /// @param isActive Whether the value came from an active sucker.
     /// @return The updated number of populated chain entries.
     function _recordPeerValue(
-        uint256[] memory chainIds,
-        uint256[] memory values,
-        bool[] memory hasActiveValue,
-        uint256 chainCount,
+        PeerValueScratch memory scratch,
         uint256 chainId,
         uint256 value,
+        uint256 snapshotTimestamp,
         bool isActive
     )
         internal
         pure
         returns (uint256)
     {
-        for (uint256 j; j < chainCount;) {
-            if (chainIds[j] == chainId) {
+        for (uint256 j; j < scratch.chainCount;) {
+            if (scratch.chainIds[j] == chainId) {
                 // Each sucker caches the entire remote chain's state (not a per-sucker share), so multiple
-                // suckers targeting the same chain report redundant snapshots. MAX picks the freshest value
-                // without double-counting — SUM would inflate bonding curve denominators.
+                // suckers targeting the same chain report redundant snapshots. Prefer the freshest source-chain
+                // snapshot; use MAX only as a same-freshness tie-breaker or deprecated fallback.
                 if (isActive) {
-                    if (!hasActiveValue[j] || value > values[j]) values[j] = value;
-                    hasActiveValue[j] = true;
-                } else if (!hasActiveValue[j] && value > values[j]) {
+                    if (
+                        !scratch.hasActiveValue[j] || snapshotTimestamp > scratch.snapshotTimestamps[j]
+                            || (snapshotTimestamp == scratch.snapshotTimestamps[j] && value > scratch.values[j])
+                    ) {
+                        scratch.values[j] = value;
+                        scratch.snapshotTimestamps[j] = snapshotTimestamp;
+                    }
+                    scratch.hasActiveValue[j] = true;
+                } else if (
+                    !scratch.hasActiveValue[j]
+                        && (snapshotTimestamp > scratch.snapshotTimestamps[j]
+                            || (snapshotTimestamp == scratch.snapshotTimestamps[j] && value > scratch.values[j]))
+                ) {
                     // Deprecated suckers only fill the gap until an active value for this chain has been observed.
-                    values[j] = value;
+                    scratch.values[j] = value;
+                    scratch.snapshotTimestamps[j] = snapshotTimestamp;
                 }
-                return chainCount;
+                return scratch.chainCount;
             }
             unchecked {
                 ++j;
             }
         }
 
-        chainIds[chainCount] = chainId;
-        values[chainCount] = value;
-        hasActiveValue[chainCount] = isActive;
+        scratch.chainIds[scratch.chainCount] = chainId;
+        scratch.values[scratch.chainCount] = value;
+        scratch.snapshotTimestamps[scratch.chainCount] = snapshotTimestamp;
+        scratch.hasActiveValue[scratch.chainCount] = isActive;
         unchecked {
-            return chainCount + 1;
+            return scratch.chainCount + 1;
         }
+    }
+
+    /// @notice Reads a sucker's snapshot timestamp, returning zero if the sucker does not expose it.
+    /// @dev Older or malformed suckers should not brick aggregate registry views. A zero timestamp makes their value
+    /// lose to any successful fresh read for the same peer chain.
+    /// @param sucker The sucker to query.
+    /// @return timestamp The reported snapshot timestamp, or zero if the call fails.
+    function _snapshotTimestampOf(address sucker) internal view returns (uint256 timestamp) {
+        // Keep aggregate views available even if one registered sucker has a stale ABI or reverts unexpectedly.
+        try IJBSucker(sucker).snapshotTimestamp() returns (uint256 result) {
+            timestamp = result;
+        } catch {}
     }
 
     //*********************************************************************//

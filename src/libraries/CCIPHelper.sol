@@ -133,6 +133,70 @@ library CCIPHelper {
     /// @notice The wrapped native token address for Tempo mod chain.
     address public constant TEMPO_MOD_WETH = 0xbb2D3310E4232085d432A2e04b2Ac09c46F634E4;
 
+    /// @notice Returns the LINK token address for a given chain ID.
+    /// @param chainId The EVM chain ID to look up.
+    /// @return link The LINK token address.
+    function linkOfChain(uint256 chainId) public pure returns (address link) {
+        if (chainId == ETH_ID) {
+            return ETH_LINK;
+        } else if (chainId == OP_ID) {
+            return OP_LINK;
+        } else if (chainId == ARB_ID) {
+            return ARB_LINK;
+        } else if (chainId == BASE_ID) {
+            return BASE_LINK;
+        } else if (chainId == ETH_SEP_ID) {
+            return ETH_SEP_LINK;
+        } else if (chainId == OP_SEP_ID) {
+            return OP_SEP_LINK;
+        } else if (chainId == ARB_SEP_ID) {
+            return ARB_SEP_LINK;
+        } else if (chainId == BASE_SEP_ID) {
+            return BASE_SEP_LINK;
+        } else if (chainId == TEMPO_ID) {
+            return TEMPO_LINK;
+        } else if (chainId == TEMPO_MOD_ID) {
+            return TEMPO_MOD_LINK;
+        } else {
+            revert CCIPHelper_UnsupportedChain({chainId: chainId});
+        }
+    }
+
+    /// @notice Returns the wrapped native token address for a given chain ID.
+    /// @param chainId The EVM chain ID to look up.
+    /// @return weth The wrapped native token address.
+    function wethOfChain(uint256 chainId) public pure returns (address weth) {
+        if (chainId == ETH_ID) {
+            return ETH_WETH;
+        } else if (chainId == OP_ID) {
+            return OP_WETH;
+        } else if (chainId == ARB_ID) {
+            return ARB_WETH;
+        } else if (chainId == POLY_ID) {
+            return POLY_WETH;
+        } else if (chainId == AVA_ID) {
+            return AVA_WETH;
+        } else if (chainId == BNB_ID) {
+            return BNB_WETH;
+        } else if (chainId == BASE_ID) {
+            return BASE_WETH;
+        } else if (chainId == ETH_SEP_ID) {
+            return ETH_SEP_WETH;
+        } else if (chainId == ARB_SEP_ID) {
+            return ARB_SEP_WETH;
+        } else if (chainId == OP_SEP_ID) {
+            return OP_SEP_WETH;
+        } else if (chainId == BASE_SEP_ID) {
+            return BASE_SEP_WETH;
+        } else if (chainId == TEMPO_ID) {
+            return TEMPO_WETH;
+        } else if (chainId == TEMPO_MOD_ID) {
+            return TEMPO_MOD_WETH;
+        } else {
+            revert CCIPHelper_UnsupportedChain({chainId: chainId});
+        }
+    }
+
     /// @notice Returns the CCIP router address for a given chain ID.
     /// @param chainId The EVM chain ID to look up.
     /// @return router The CCIP router address.
@@ -198,70 +262,6 @@ library CCIPHelper {
             return TEMPO_SEL;
         } else if (chainId == TEMPO_MOD_ID) {
             return TEMPO_MOD_SEL;
-        } else {
-            revert CCIPHelper_UnsupportedChain({chainId: chainId});
-        }
-    }
-
-    /// @notice Returns the wrapped native token address for a given chain ID.
-    /// @param chainId The EVM chain ID to look up.
-    /// @return weth The wrapped native token address.
-    function wethOfChain(uint256 chainId) public pure returns (address weth) {
-        if (chainId == ETH_ID) {
-            return ETH_WETH;
-        } else if (chainId == OP_ID) {
-            return OP_WETH;
-        } else if (chainId == ARB_ID) {
-            return ARB_WETH;
-        } else if (chainId == POLY_ID) {
-            return POLY_WETH;
-        } else if (chainId == AVA_ID) {
-            return AVA_WETH;
-        } else if (chainId == BNB_ID) {
-            return BNB_WETH;
-        } else if (chainId == BASE_ID) {
-            return BASE_WETH;
-        } else if (chainId == ETH_SEP_ID) {
-            return ETH_SEP_WETH;
-        } else if (chainId == ARB_SEP_ID) {
-            return ARB_SEP_WETH;
-        } else if (chainId == OP_SEP_ID) {
-            return OP_SEP_WETH;
-        } else if (chainId == BASE_SEP_ID) {
-            return BASE_SEP_WETH;
-        } else if (chainId == TEMPO_ID) {
-            return TEMPO_WETH;
-        } else if (chainId == TEMPO_MOD_ID) {
-            return TEMPO_MOD_WETH;
-        } else {
-            revert CCIPHelper_UnsupportedChain({chainId: chainId});
-        }
-    }
-
-    /// @notice Returns the LINK token address for a given chain ID.
-    /// @param chainId The EVM chain ID to look up.
-    /// @return link The LINK token address.
-    function linkOfChain(uint256 chainId) public pure returns (address link) {
-        if (chainId == ETH_ID) {
-            return ETH_LINK;
-        } else if (chainId == OP_ID) {
-            return OP_LINK;
-        } else if (chainId == ARB_ID) {
-            return ARB_LINK;
-        } else if (chainId == BASE_ID) {
-            return BASE_LINK;
-        } else if (chainId == ETH_SEP_ID) {
-            return ETH_SEP_LINK;
-        } else if (chainId == OP_SEP_ID) {
-            return OP_SEP_LINK;
-        } else if (chainId == ARB_SEP_ID) {
-            return ARB_SEP_LINK;
-        } else if (chainId == BASE_SEP_ID) {
-            return BASE_SEP_LINK;
-        } else if (chainId == TEMPO_ID) {
-            return TEMPO_LINK;
-        } else if (chainId == TEMPO_MOD_ID) {
-            return TEMPO_MOD_LINK;
         } else {
             revert CCIPHelper_UnsupportedChain({chainId: chainId});
         }

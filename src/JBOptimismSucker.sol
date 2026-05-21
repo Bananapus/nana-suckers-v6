@@ -126,6 +126,8 @@ contract JBOptimismSucker is JBSucker, IJBOptimismSucker {
                 minGasLimit: remoteToken.minGas,
                 extraData: bytes("")
             });
+
+            SafeERC20.forceApprove({token: IERC20(token), spender: address(OPBRIDGE), value: 0});
         } else {
             // Otherwise, the token is the native token, and the amount will be sent as `msg.value`.
             nativeValue = amount;

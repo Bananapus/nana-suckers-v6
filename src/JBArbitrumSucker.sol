@@ -255,12 +255,13 @@ contract JBArbitrumSucker is JBSucker, IJBArbitrumSucker {
         // If the token is an ERC-20, bridge it to the peer.
         // If the amount is `0` then we do not need to bridge any ERC20.
         if (token != JBConstants.NATIVE_TOKEN && amount != 0) {
+            address gateway;
             uint256 tokenTransportCost;
             uint256 maxSubmissionCostERC20;
             {
                 // Get the exact calldata length the gateway will create for the retryable ticket.
                 // The Arbitrum Inbox validates maxSubmissionCost against this actual payload, not the user data.
-                address gateway = GATEWAYROUTER.getGateway(token);
+                gateway = GATEWAYROUTER.getGateway(token);
                 uint256 outboundCalldataLength =
                     IL1ArbitrumGateway(gateway)
                 .getOutboundCalldata({
@@ -299,6 +300,8 @@ contract JBArbitrumSucker is JBSucker, IJBArbitrumSucker {
                 gasPriceBid: maxFeePerGas,
                 data: bytes(abi.encode(maxSubmissionCostERC20, bytes("")))
             });
+
+            SafeERC20.forceApprove({token: IERC20(token), spender: gateway, value: 0});
         } else {
             // Ensure we bridge enough for gas costs on L2 side
             if (transportPayment < callTransportCost) {

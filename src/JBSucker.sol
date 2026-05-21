@@ -83,6 +83,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     error JBSucker_NoRetainedToRemoteFee(address account);
     error JBSucker_NoRetainedTransportPaymentRefund(address account);
     error JBSucker_RefundFailed(address beneficiary, uint256 amount);
+    error JBSucker_RemoteTokenAlreadyMapped(bytes32 remoteToken, address localToken);
     error JBSucker_TokenAlreadyMapped(address localToken, bytes32 mappedTo);
     error JBSucker_TokenHasInvalidEmergencyHatchState(address token);
     error JBSucker_TokenNotMapped(address token);
@@ -174,6 +175,14 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     /// @notice The inbox merkle tree root for a given token.
     /// @custom:param token The local terminal token to get the inbox for.
     mapping(address token => JBInboxTreeRoot root) internal _inboxOf;
+
+    /// @notice The local token that has reserved each remote token address in this sucker.
+    /// @dev Inbound roots are keyed by `root.token` on the destination chain. Within a single sucker, allowing two
+    /// local tokens to send roots to the same remote token would give them independent source nonces but one shared
+    /// destination inbox, causing stale rejections or root overwrites. Each sucker keeps its own reservation map, so
+    /// separate bridge lanes for the same asset pair can coexist.
+    /// @custom:param remoteToken The remote terminal token address encoded as bytes32.
+    mapping(bytes32 remoteToken => address localToken) internal _localTokenForRemoteToken;
 
     /// @notice The outbox merkle tree for a given token.
     /// @custom:param token The local terminal token to get the outbox for.
@@ -1031,6 +1040,10 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     /// after outbox activity, the same local funds could be claimed against two different remote tokens. A
     /// misconfigured mapping therefore requires deploying a new sucker. Re-enabling a previously disabled mapping
     /// (back to the same remote token) is supported.
+    /// @dev Remote tokens are also unique per local token within this sucker. The source side keeps separate
+    /// outboxes/nonces per local token, but the destination side stores roots under the remote token address. Sharing
+    /// one remote token across multiple local tokens in the same sucker would merge those inboxes on the destination
+    /// chain. Separate suckers can still map the same local/remote token pair, letting users choose a bridge lane.
     /// @param map The local and remote terminal token addresses to map, and minimum amount/gas limits for bridging
     /// them.
     /// @param transportPaymentValue The amount of `msg.value` to send for the token mapping.
@@ -1068,6 +1081,16 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
             revert JBSucker_TokenAlreadyMapped({localToken: token, mappedTo: currentMapping.addr});
         }
 
+        // A remote token can back only one local token's outbox in this sucker. Otherwise two independent source
+        // nonces would race into the same destination inbox key (`root.token`), making one token's root stale or
+        // overwriting the other. Other suckers have separate inbox/outbox storage and are unaffected.
+        if (map.remoteToken != bytes32(0)) {
+            address mappedLocalToken = _localTokenForRemoteToken[map.remoteToken];
+            if (mappedLocalToken != address(0) && mappedLocalToken != token) {
+                revert JBSucker_RemoteTokenAlreadyMapped({remoteToken: map.remoteToken, localToken: mappedLocalToken});
+            }
+        }
+
         // No inbox guard needed here. Token remapping only affects the outbound (sending) path —
         // it changes where tokens get bridged TO. Existing inbox claims are resolved against the inbox merkle
         // tree keyed by the local token address. Changing the remote token doesn't invalidate those claims
@@ -1085,6 +1108,17 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
             _sendRoot({transportPayment: transportPaymentValue, token: token, remoteToken: currentMapping});
         }
 
+        // Update the reverse reservation if an unused local token is being remapped to a new remote token.
+        if (
+            map.remoteToken != bytes32(0) && currentMapping.addr != bytes32(0) && currentMapping.addr != map.remoteToken
+                && _localTokenForRemoteToken[currentMapping.addr] == token
+        ) {
+            delete _localTokenForRemoteToken[currentMapping.addr];
+        }
+
+        bytes32 remoteToken = map.remoteToken == bytes32(0) ? currentMapping.addr : map.remoteToken;
+        if (remoteToken != bytes32(0)) _localTokenForRemoteToken[remoteToken] = token;
+
         // Update the token mapping.
         _remoteTokenFor[token] = JBRemoteToken({
             enabled: map.remoteToken != bytes32(0),
@@ -1092,7 +1126,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
             minGas: map.minGas,
             // This is done so that a token can be disabled and then enabled again
             // while ensuring the remoteToken never changes (unless it hasn't been used yet)
-            addr: map.remoteToken == bytes32(0) ? currentMapping.addr : map.remoteToken
+            addr: remoteToken
         });
     }
 

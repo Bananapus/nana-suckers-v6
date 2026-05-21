@@ -107,8 +107,8 @@ contract ForkSwapHarness is JBSwapCCIPSucker {
     }
 
     /// @notice Read highest received nonce for a token.
-    function exposed_highestReceivedNonce(address token) external view returns (uint64) {
-        return _highestReceivedNonce[token];
+    function exposed_populatedNonceCount(address token) external view returns (uint64) {
+        return _populatedNonceCount[token];
     }
 }
 
@@ -386,8 +386,9 @@ contract ForkSwapTest is Test {
         // Verify: USDC was consumed by the swap.
         assertEq(IERC20(USDC).balanceOf(address(sucker)), 0, "All USDC should be swapped");
 
-        // Verify: conversion rate stored for nonce 1 with correct values.
-        assertEq(sucker.exposed_highestReceivedNonce(JBConstants.NATIVE_TOKEN), 1, "highest nonce should be 1");
+        // Verify: conversion rate stored for nonce 1 with correct values, and the compact nonce
+        // index has one populated entry for claim lookup.
+        assertEq(sucker.exposed_populatedNonceCount(JBConstants.NATIVE_TOKEN), 1, "nonce index should have one entry");
         (uint256 leafEntry, uint256 localEntry) = sucker.exposed_conversionRateOf(JBConstants.NATIVE_TOKEN, 1);
         assertEq(leafEntry, usdcAmount, "leafTotal should equal root.amount (source denomination)");
         assertEq(localEntry, ethReceived, "localTotal should equal ETH received from swap");
@@ -429,8 +430,8 @@ contract ForkSwapTest is Test {
         vm.prank(MAINNET_CCIP_ROUTER);
         sucker.ccipReceive(ccipMsg);
 
-        // No swap — conversion rate stored for nonce 1 with 1:1 ratio.
-        assertEq(sucker.exposed_highestReceivedNonce(USDC), 1, "highest nonce should be 1");
+        // No swap — conversion rate stored for nonce 1 with 1:1 ratio, and indexed for claims.
+        assertEq(sucker.exposed_populatedNonceCount(USDC), 1, "nonce index should have one entry");
         (uint256 leafEntry, uint256 localEntry) = sucker.exposed_conversionRateOf(USDC, 1);
         assertEq(leafEntry, usdcAmount, "leafTotal should equal root.amount");
         assertEq(localEntry, usdcAmount, "localTotal should equal delivered amount (no swap, 1:1)");

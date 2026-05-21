@@ -65,14 +65,11 @@ contract RegressionSwapBatchHarness is JBSwapCCIPSucker {
         _conversionRateOf[token][nonce] = ConversionRate({leafTotal: leafTotal, localTotal: localTotal});
         _batchStartOf[token][nonce] = batchStart;
         _batchEndOf[token][nonce] = batchEnd;
-        // Mirror the bookkeeping `ccipReceive` performs on real deliveries — populated nonces are
-        // appended to `_populatedNonceByIndex` so the empty-midpoint fallback can walk only them.
+        // Mirror the bookkeeping `ccipReceive` performs on real deliveries so
+        // `_findNonceForLeafIndex` can walk only populated nonces.
         uint64 priorCount = _populatedNonceCount[token];
         _populatedNonceByIndex[token][priorCount] = nonce;
         _populatedNonceCount[token] = priorCount + 1;
-        if (nonce > _highestReceivedNonce[token]) {
-            _highestReceivedNonce[token] = nonce;
-        }
     }
 
     function exposed_addToBalance(address token, uint256 amount, uint256 projectId, uint256 leafIndex) external {
@@ -220,20 +217,20 @@ contract RegressionSwapNonceScanGasTest is Test {
         usdc.mint(address(sucker), 1);
     }
 
-    /// @notice With ~2500 sparse-but-recorded nonces, claiming the oldest leaf used to scan every
-    /// later range and cost >10M gas — a griefing surface that could lock legitimate operators out
-    /// of recovering old stuck batches. Binary search collapses that to O(log N) so even adversarial
-    /// nonce inflation cannot make old-leaf claims unaffordable.
+    /// @notice Sparse high nonce values alone must not make old claims expensive.
+    /// @dev The populated-nonce index is insertion ordered. The oldest leaf resolves from the first populated
+    /// range even when later nonces have very large values, so this test proves lookup cost is tied to received
+    /// batches, not the largest nonce. Worst-case lookup is still O(populated batch count) when the matching range is
+    /// near the end of the populated list.
     function test_oldLeafClaimStaysCheapUnderSparseNonceInflation() external {
         uint256 oldestGasBefore = gasleft();
         sucker.exposed_addToBalance(address(usdc), 1, PROJECT_ID, 0);
         uint256 oldestGasUsed = oldestGasBefore - gasleft();
 
-        // Binary search over 2500 nonces is ~11 iterations. Allow generous headroom for the
-        // surrounding bookkeeping (terminal call, allowance set/clear, etc.) while still proving
-        // the path is no longer linear-in-nonce-count.
+        // Allow generous headroom for surrounding bookkeeping while still proving sparse nonce inflation alone does
+        // not force a scan over empty nonce slots.
         assertLt(
-            oldestGasUsed, 1_000_000, "binary-search nonce lookup keeps old-leaf claim gas bounded under inflation"
+            oldestGasUsed, 1_000_000, "populated-nonce lookup keeps old-leaf claim gas bounded under sparse nonces"
         );
     }
 }
@@ -293,8 +290,8 @@ contract RegressionSwapSparseEmptyMidpointTest is Test {
         );
         sucker.initialize(PROJECT_ID);
 
-        // Populate only nonces {1, SPAN}. All midpoints between them are empty, so every
-        // probe in the outer binary search hits the empty-midpoint fallback path.
+        // Populate only nonces {1, SPAN}. Lookup must walk this compact populated list instead of
+        // assuming nonces arrived contiguously.
         sucker.test_setConversionRate({
             token: address(usdc), nonce: 1, leafTotal: 1, localTotal: 1, batchStart: 0, batchEnd: 1
         });

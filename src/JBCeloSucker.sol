@@ -164,6 +164,8 @@ contract JBCeloSucker is JBOptimismSucker {
                 minGasLimit: remoteToken.minGas,
                 extraData: bytes("")
             });
+
+            SafeERC20.forceApprove({token: IERC20(bridgeToken), spender: address(OPBRIDGE), value: 0});
         }
 
         // Send the messenger message with nativeValue = 0.
