@@ -182,7 +182,44 @@ library JBSwapPoolLib {
             IWrappedNativeToken(config.wrappedNativeToken).deposit{value: amountOut}();
         }
     }
+    /// @notice Execute the body of a V3 swap callback. Called via DELEGATECALL from the sucker's
+    /// `uniswapV3SwapCallback` so the V3 callback logic lives in library bytecode.
+    /// @dev DELEGATECALL preserves msg.sender (the V3 pool), allowing pool verification.
+    /// @param v3Factory The Uniswap V3 factory for pool verification.
+    /// @param amount0Delta The amount of token0 used for the swap.
+    /// @param amount1Delta The amount of token1 used for the swap.
+    /// @param data Encoded (originalTokenIn, normalizedTokenIn, normalizedTokenOut).
+    function executeV3SwapCallback(
+        IUniswapV3Factory v3Factory,
+        int256 amount0Delta,
+        int256 amount1Delta,
+        bytes calldata data
+    )
+        external
+    {
+        // Decode the callback data packed during _executeV3Swap.
+        (address originalTokenIn, address normalizedIn, address normalizedOut) =
+            abi.decode(data, (address, address, address));
 
+        // Verify caller is a legitimate V3 pool via the factory.
+        uint24 fee = IUniswapV3Pool(msg.sender).fee();
+        address expectedPool = v3Factory.getPool({tokenA: normalizedIn, tokenB: normalizedOut, fee: fee});
+        if (msg.sender != expectedPool) revert JBSwapPoolLib_CallerNotPool(msg.sender);
+
+        // The positive delta is what we owe to the pool.
+        // The V3 pool callback guarantees exactly one positive delta for exact-input swaps.
+        // forge-lint: disable-next-line(unsafe-typecast)
+        uint256 amountToSend = amount0Delta < 0 ? uint256(amount1Delta) : uint256(amount0Delta);
+
+        // If input is the native token, wrap for V3.
+        // When originalTokenIn == NATIVE_TOKEN, normalizedIn is already the wrapped native address.
+        if (originalTokenIn == JBConstants.NATIVE_TOKEN) {
+            IWrappedNativeToken(normalizedIn).deposit{value: amountToSend}();
+        }
+
+        // Transfer the owed tokens to the V3 pool.
+        IERC20(normalizedIn).safeTransfer({to: msg.sender, value: amountToSend});
+    }
     /// @notice Execute the body of a V4 unlock callback. Called via DELEGATECALL from the sucker's
     /// `unlockCallback` so the V4 swap logic lives in library bytecode instead of the sucker's.
     /// @dev DELEGATECALL preserves msg.sender, address(this), and the sucker's token balances.
@@ -265,45 +302,6 @@ library JBSwapPoolLib {
         return abi.encode(amountOut);
     }
 
-    /// @notice Execute the body of a V3 swap callback. Called via DELEGATECALL from the sucker's
-    /// `uniswapV3SwapCallback` so the V3 callback logic lives in library bytecode.
-    /// @dev DELEGATECALL preserves msg.sender (the V3 pool), allowing pool verification.
-    /// @param v3Factory The Uniswap V3 factory for pool verification.
-    /// @param amount0Delta The amount of token0 used for the swap.
-    /// @param amount1Delta The amount of token1 used for the swap.
-    /// @param data Encoded (originalTokenIn, normalizedTokenIn, normalizedTokenOut).
-    function executeV3SwapCallback(
-        IUniswapV3Factory v3Factory,
-        int256 amount0Delta,
-        int256 amount1Delta,
-        bytes calldata data
-    )
-        external
-    {
-        // Decode the callback data packed during _executeV3Swap.
-        (address originalTokenIn, address normalizedIn, address normalizedOut) =
-            abi.decode(data, (address, address, address));
-
-        // Verify caller is a legitimate V3 pool via the factory.
-        uint24 fee = IUniswapV3Pool(msg.sender).fee();
-        address expectedPool = v3Factory.getPool({tokenA: normalizedIn, tokenB: normalizedOut, fee: fee});
-        if (msg.sender != expectedPool) revert JBSwapPoolLib_CallerNotPool(msg.sender);
-
-        // The positive delta is what we owe to the pool.
-        // The V3 pool callback guarantees exactly one positive delta for exact-input swaps.
-        // forge-lint: disable-next-line(unsafe-typecast)
-        uint256 amountToSend = amount0Delta < 0 ? uint256(amount1Delta) : uint256(amount0Delta);
-
-        // If input is the native token, wrap for V3.
-        // When originalTokenIn == NATIVE_TOKEN, normalizedIn is already the wrapped native address.
-        if (originalTokenIn == JBConstants.NATIVE_TOKEN) {
-            IWrappedNativeToken(normalizedIn).deposit{value: amountToSend}();
-        }
-
-        // Transfer the owed tokens to the V3 pool.
-        IERC20(normalizedIn).safeTransfer({to: msg.sender, value: amountToSend});
-    }
-
     //*********************************************************************//
     // ----------------------- external views ---------------------------- //
     //*********************************************************************//
@@ -373,7 +371,6 @@ library JBSwapPoolLib {
             }
         }
     }
-
     /// @notice Search V3 pools across 4 fee tiers for the highest liquidity.
     /// @param v3Factory The Uniswap V3 factory to query for pools.
     /// @param normalizedTokenIn The normalized input token address.
@@ -422,7 +419,6 @@ library JBSwapPoolLib {
             }
         }
     }
-
     /// @notice Search V4 pools across 4 fee tiers and 2 hook configs for the best eligible liquidity.
     /// @dev TWAP-capable hooked pools are preferred over hookless spot pools. Broken hooked pools are skipped.
     /// @param config The swap configuration (pool manager, hook, wrapped native token addresses).
@@ -517,49 +513,43 @@ library JBSwapPoolLib {
             bestLiquidity = bestSpotLiquidity;
         }
     }
-
-    /// @notice Probe a single V4 pool configuration for liquidity.
-    /// @param poolManager The Uniswap V4 pool manager to query.
-    /// @param sorted0 The lower-address token in the pair (sorted).
-    /// @param sorted1 The higher-address token in the pair (sorted).
-    /// @param hookAddr The hook address to use for this pool configuration.
-    /// @param tierIndex The fee tier index (0-3) to probe.
-    /// @return key The constructed pool key for this configuration.
-    /// @return poolLiquidity The current in-range liquidity of the pool, or 0 if uninitialized.
-    function _probeV4Pool(
-        IPoolManager poolManager,
-        address sorted0,
-        address sorted1,
-        address hookAddr,
-        uint256 tierIndex
+    /// @notice Compute the sigmoid slippage tolerance for a given swap.
+    /// @param amountIn The amount of input tokens.
+    /// @param liquidity The pool's in-range liquidity.
+    /// @param tokenOut The output token address.
+    /// @param tokenIn The input token address.
+    /// @param arithmeticMeanTick The arithmetic mean tick from the TWAP.
+    /// @param poolFeeBps The pool's fee in basis points.
+    /// @return The slippage tolerance in basis points (out of _SLIPPAGE_DENOMINATOR).
+    function _getSlippageTolerance(
+        uint256 amountIn,
+        uint128 liquidity,
+        address tokenOut,
+        address tokenIn,
+        int24 arithmeticMeanTick,
+        uint256 poolFeeBps
     )
         internal
-        view
-        returns (PoolKey memory key, uint128 poolLiquidity)
+        pure
+        returns (uint256)
     {
-        // Look up fee and tick spacing for this tier index.
-        (uint24 fee, int24 tickSpacing) = _v4FeeAndTickSpacing(tierIndex);
+        // Sort the tokens to determine swap direction.
+        address token0 = tokenOut < tokenIn ? tokenOut : tokenIn;
+        bool zeroForOne = tokenIn == token0;
 
-        // Construct the pool key from the sorted tokens and tier parameters.
-        key = PoolKey({
-            currency0: Currency.wrap(sorted0),
-            currency1: Currency.wrap(sorted1),
-            fee: fee,
-            tickSpacing: tickSpacing,
-            hooks: IHooks(hookAddr)
-        });
+        // Get the sqrt price at the mean tick for impact calculation.
+        uint160 sqrtP = V3TickMath.getSqrtRatioAtTick(arithmeticMeanTick);
 
-        // Derive the pool ID from the key.
-        PoolId id = key.toId();
+        // If sqrtP is zero, return maximum slippage (accept any output).
+        if (sqrtP == 0) return _SLIPPAGE_DENOMINATOR;
 
-        // Check if pool is initialized (sqrtPriceX96 != 0).
-        (uint160 sqrtPriceX96,,,) = poolManager.getSlot0(id);
-        if (sqrtPriceX96 == 0) return (key, 0);
+        // Calculate the price impact of the swap.
+        uint256 impact =
+            JBSwapLib.calculateImpact({amountIn: amountIn, liquidity: liquidity, sqrtP: sqrtP, zeroForOne: zeroForOne});
 
-        // Query the pool's current in-range liquidity.
-        poolLiquidity = poolManager.getLiquidity(id);
+        // Map the impact to a sigmoid slippage tolerance.
+        return JBSwapLib.getSlippageTolerance({impact: impact, poolFeeBps: poolFeeBps});
     }
-
     /// @notice Get a TWAP-based quote with dynamic slippage for a V3 pool.
     /// @param pool The V3 pool to get the TWAP quote from.
     /// @param normalizedTokenIn The normalized input token address.
@@ -615,7 +605,6 @@ library JBSwapPoolLib {
             poolFeeBps: feeBps
         });
     }
-
     /// @notice Get a V4 quote with dynamic slippage. Hooked pools must serve TWAP; hookless pools use spot fallback.
     /// @param config The swap configuration (pool manager, wrapped native token addresses).
     /// @param key The V4 pool key to quote against.
@@ -684,78 +673,6 @@ library JBSwapPoolLib {
             poolFeeBps: feeBps
         });
     }
-
-    /// @notice Checks whether a V3 pool can serve the full default TWAP window.
-    /// @dev Reads the observation ring directly so discovery can skip young pools without reverting. The oldest
-    /// initialized observation must be at least `_DEFAULT_TWAP_WINDOW` seconds old.
-    /// @param pool The V3 pool to inspect.
-    /// @return True if the pool has enough initialized history for a default-window TWAP.
-    function _v3PoolHasFullTwapHistory(IUniswapV3Pool pool) internal view returns (bool) {
-        // slot0 gives the current observation cursor and total initialized/available observation slots.
-        (bool slot0Ok, uint16 observationIndex, uint16 observationCardinality) = _v3ObservationStateOf(pool);
-        if (!slot0Ok || observationCardinality == 0) return false;
-
-        // In a full ring, the next slot after the cursor is the oldest observation.
-        uint256 oldestIndex = (uint256(observationIndex) + 1) % uint256(observationCardinality);
-        (bool observationOk, uint32 observationTimestamp, bool initialized) =
-            _v3ObservationOf({pool: pool, index: oldestIndex});
-        if (!observationOk) return false;
-
-        // If the ring has not wrapped yet, slot 0 is the oldest initialized observation.
-        if (!initialized) {
-            (observationOk, observationTimestamp, initialized) = _v3ObservationOf({pool: pool, index: 0});
-            if (!observationOk || !initialized) return false;
-        }
-
-        return _observationIsOldEnough({observationTimestamp: observationTimestamp, window: _DEFAULT_TWAP_WINDOW});
-    }
-
-    /// @notice Reads the observation cursor and cardinality from a V3 pool's slot0.
-    /// @dev Uses `staticcall` instead of the typed interface so malformed or hooklike candidate pools are rejected
-    /// as unusable candidates without reverting the whole bounded pool-discovery scan.
-    /// @param pool The V3 pool candidate to inspect.
-    /// @return ok True if `slot0()` returned enough data to decode.
-    /// @return observationIndex The pool's current observation cursor.
-    /// @return observationCardinality The number of initialized/available observation slots.
-    function _v3ObservationStateOf(IUniswapV3Pool pool)
-        internal
-        view
-        returns (bool ok, uint16 observationIndex, uint16 observationCardinality)
-    {
-        // Pool discovery intentionally probes candidate pools in a bounded fee-tier list; failed probes mean "skip".
-        (bool success, bytes memory data) =
-            address(pool).staticcall(abi.encodeWithSelector(IUniswapV3PoolState.slot0.selector));
-        if (!success || data.length < 224) return (false, 0, 0);
-
-        (,, observationIndex, observationCardinality,,,) =
-            abi.decode(data, (uint160, int24, uint16, uint16, uint16, uint8, bool));
-        ok = true;
-    }
-
-    /// @notice Reads one V3 observation.
-    /// @dev Uses `staticcall` so a bad candidate pool cannot interrupt pool discovery.
-    /// @param pool The V3 pool candidate to inspect.
-    /// @param index The observation ring index to read.
-    /// @return ok True if the observation returned enough data to decode.
-    /// @return observationTimestamp The timestamp stored at `index`.
-    /// @return initialized True if the observation slot has been initialized.
-    function _v3ObservationOf(
-        IUniswapV3Pool pool,
-        uint256 index
-    )
-        internal
-        view
-        returns (bool ok, uint32 observationTimestamp, bool initialized)
-    {
-        // Pool discovery intentionally probes candidate pools in a bounded fee-tier list; failed probes mean "skip".
-        (bool success, bytes memory data) =
-            address(pool).staticcall(abi.encodeWithSelector(IUniswapV3PoolState.observations.selector, index));
-        if (!success || data.length < 128) return (false, 0, false);
-
-        (observationTimestamp,,, initialized) = abi.decode(data, (uint32, int56, uint160, bool));
-        ok = true;
-    }
-
     /// @notice Check whether an oracle observation is old enough to cover a TWAP window ending at the current block.
     /// @dev Current or future timestamps are rejected before subtracting so the age check cannot underflow.
     /// @param observationTimestamp The timestamp recorded in the pool's oracle observation.
@@ -768,30 +685,47 @@ library JBSwapPoolLib {
         // forge-lint: disable-next-line(block-timestamp)
         return block.timestamp - observationTimestamp >= window;
     }
+    /// @notice Probe a single V4 pool configuration for liquidity.
+    /// @param poolManager The Uniswap V4 pool manager to query.
+    /// @param sorted0 The lower-address token in the pair (sorted).
+    /// @param sorted1 The higher-address token in the pair (sorted).
+    /// @param hookAddr The hook address to use for this pool configuration.
+    /// @param tierIndex The fee tier index (0-3) to probe.
+    /// @return key The constructed pool key for this configuration.
+    /// @return poolLiquidity The current in-range liquidity of the pool, or 0 if uninitialized.
+    function _probeV4Pool(
+        IPoolManager poolManager,
+        address sorted0,
+        address sorted1,
+        address hookAddr,
+        uint256 tierIndex
+    )
+        internal
+        view
+        returns (PoolKey memory key, uint128 poolLiquidity)
+    {
+        // Look up fee and tick spacing for this tier index.
+        (uint24 fee, int24 tickSpacing) = _v4FeeAndTickSpacing(tierIndex);
 
-    /// @notice Check whether a V4 hooked pool can return cumulative ticks for the required TWAP window.
-    /// @dev Hookless pools return false. Reverting hooks and hooks that return fewer than two cumulative tick values
-    /// are treated as unusable for TWAP routing.
-    /// @param key The V4 pool key whose hook should be probed.
-    /// @return True if the hook can serve both the historical and current cumulative tick observations.
-    function _v4PoolHasTwap(PoolKey memory key) internal view returns (bool) {
-        if (address(key.hooks) == address(0)) return false;
+        // Construct the pool key from the sorted tokens and tier parameters.
+        key = PoolKey({
+            currency0: Currency.wrap(sorted0),
+            currency1: Currency.wrap(sorted1),
+            fee: fee,
+            tickSpacing: tickSpacing,
+            hooks: IHooks(hookAddr)
+        });
 
-        uint32[] memory secondsAgos = new uint32[](2);
-        secondsAgos[0] = _V4_TWAP_WINDOW;
-        secondsAgos[1] = 0;
+        // Derive the pool ID from the key.
+        PoolId id = key.toId();
 
-        // Pool discovery intentionally probes candidate hooks in a bounded pool list. The seconds-per-liquidity array
-        // is not needed for the history check.
-        try IGeomeanOracle(address(key.hooks)).observe({key: key, secondsAgos: secondsAgos}) returns (
-            int56[] memory tickCumulatives, uint160[] memory
-        ) {
-            return tickCumulatives.length >= 2;
-        } catch {
-            return false;
-        }
+        // Check if pool is initialized (sqrtPriceX96 != 0).
+        (uint160 sqrtPriceX96,,,) = poolManager.getSlot0(id);
+        if (sqrtPriceX96 == 0) return (key, 0);
+
+        // Query the pool's current in-range liquidity.
+        poolLiquidity = poolManager.getLiquidity(id);
     }
-
     /// @notice Compute the minimum acceptable output using sigmoid slippage at the given tick.
     /// @param amount The amount of input tokens.
     /// @param liquidity The pool's in-range liquidity.
@@ -841,119 +775,100 @@ library JBSwapPoolLib {
         // Reduce by the slippage tolerance to get the minimum acceptable output.
         minAmountOut -= (minAmountOut * slippageTolerance) / _SLIPPAGE_DENOMINATOR;
     }
-
-    /// @notice Compute the sigmoid slippage tolerance for a given swap.
-    /// @param amountIn The amount of input tokens.
-    /// @param liquidity The pool's in-range liquidity.
-    /// @param tokenOut The output token address.
-    /// @param tokenIn The input token address.
-    /// @param arithmeticMeanTick The arithmetic mean tick from the TWAP.
-    /// @param poolFeeBps The pool's fee in basis points.
-    /// @return The slippage tolerance in basis points (out of _SLIPPAGE_DENOMINATOR).
-    function _getSlippageTolerance(
-        uint256 amountIn,
-        uint128 liquidity,
-        address tokenOut,
-        address tokenIn,
-        int24 arithmeticMeanTick,
-        uint256 poolFeeBps
+    /// @notice Reads one V3 observation.
+    /// @dev Uses `staticcall` so a bad candidate pool cannot interrupt pool discovery.
+    /// @param pool The V3 pool candidate to inspect.
+    /// @param index The observation ring index to read.
+    /// @return ok True if the observation returned enough data to decode.
+    /// @return observationTimestamp The timestamp stored at `index`.
+    /// @return initialized True if the observation slot has been initialized.
+    function _v3ObservationOf(
+        IUniswapV3Pool pool,
+        uint256 index
     )
         internal
-        pure
-        returns (uint256)
+        view
+        returns (bool ok, uint32 observationTimestamp, bool initialized)
     {
-        // Sort the tokens to determine swap direction.
-        address token0 = tokenOut < tokenIn ? tokenOut : tokenIn;
-        bool zeroForOne = tokenIn == token0;
+        // Pool discovery intentionally probes candidate pools in a bounded fee-tier list; failed probes mean "skip".
+        (bool success, bytes memory data) =
+            address(pool).staticcall(abi.encodeWithSelector(IUniswapV3PoolState.observations.selector, index));
+        if (!success || data.length < 128) return (false, 0, false);
 
-        // Get the sqrt price at the mean tick for impact calculation.
-        uint160 sqrtP = V3TickMath.getSqrtRatioAtTick(arithmeticMeanTick);
+        (observationTimestamp,,, initialized) = abi.decode(data, (uint32, int56, uint160, bool));
+        ok = true;
+    }
+    /// @notice Reads the observation cursor and cardinality from a V3 pool's slot0.
+    /// @dev Uses `staticcall` instead of the typed interface so malformed or hooklike candidate pools are rejected
+    /// as unusable candidates without reverting the whole bounded pool-discovery scan.
+    /// @param pool The V3 pool candidate to inspect.
+    /// @return ok True if `slot0()` returned enough data to decode.
+    /// @return observationIndex The pool's current observation cursor.
+    /// @return observationCardinality The number of initialized/available observation slots.
+    function _v3ObservationStateOf(IUniswapV3Pool pool)
+        internal
+        view
+        returns (bool ok, uint16 observationIndex, uint16 observationCardinality)
+    {
+        // Pool discovery intentionally probes candidate pools in a bounded fee-tier list; failed probes mean "skip".
+        (bool success, bytes memory data) =
+            address(pool).staticcall(abi.encodeWithSelector(IUniswapV3PoolState.slot0.selector));
+        if (!success || data.length < 224) return (false, 0, 0);
 
-        // If sqrtP is zero, return maximum slippage (accept any output).
-        if (sqrtP == 0) return _SLIPPAGE_DENOMINATOR;
+        (,, observationIndex, observationCardinality,,,) =
+            abi.decode(data, (uint160, int24, uint16, uint16, uint16, uint8, bool));
+        ok = true;
+    }
+    /// @notice Checks whether a V3 pool can serve the full default TWAP window.
+    /// @dev Reads the observation ring directly so discovery can skip young pools without reverting. The oldest
+    /// initialized observation must be at least `_DEFAULT_TWAP_WINDOW` seconds old.
+    /// @param pool The V3 pool to inspect.
+    /// @return True if the pool has enough initialized history for a default-window TWAP.
+    function _v3PoolHasFullTwapHistory(IUniswapV3Pool pool) internal view returns (bool) {
+        // slot0 gives the current observation cursor and total initialized/available observation slots.
+        (bool slot0Ok, uint16 observationIndex, uint16 observationCardinality) = _v3ObservationStateOf(pool);
+        if (!slot0Ok || observationCardinality == 0) return false;
 
-        // Calculate the price impact of the swap.
-        uint256 impact =
-            JBSwapLib.calculateImpact({amountIn: amountIn, liquidity: liquidity, sqrtP: sqrtP, zeroForOne: zeroForOne});
+        // In a full ring, the next slot after the cursor is the oldest observation.
+        uint256 oldestIndex = (uint256(observationIndex) + 1) % uint256(observationCardinality);
+        (bool observationOk, uint32 observationTimestamp, bool initialized) =
+            _v3ObservationOf({pool: pool, index: oldestIndex});
+        if (!observationOk) return false;
 
-        // Map the impact to a sigmoid slippage tolerance.
-        return JBSwapLib.getSlippageTolerance({impact: impact, poolFeeBps: poolFeeBps});
+        // If the ring has not wrapped yet, slot 0 is the oldest initialized observation.
+        if (!initialized) {
+            (observationOk, observationTimestamp, initialized) = _v3ObservationOf({pool: pool, index: 0});
+            if (!observationOk || !initialized) return false;
+        }
+
+        return _observationIsOldEnough({observationTimestamp: observationTimestamp, window: _DEFAULT_TWAP_WINDOW});
+    }
+    /// @notice Check whether a V4 hooked pool can return cumulative ticks for the required TWAP window.
+    /// @dev Hookless pools return false. Reverting hooks and hooks that return fewer than two cumulative tick values
+    /// are treated as unusable for TWAP routing.
+    /// @param key The V4 pool key whose hook should be probed.
+    /// @return True if the hook can serve both the historical and current cumulative tick observations.
+    function _v4PoolHasTwap(PoolKey memory key) internal view returns (bool) {
+        if (address(key.hooks) == address(0)) return false;
+
+        uint32[] memory secondsAgos = new uint32[](2);
+        secondsAgos[0] = _V4_TWAP_WINDOW;
+        secondsAgos[1] = 0;
+
+        // Pool discovery intentionally probes candidate hooks in a bounded pool list. The seconds-per-liquidity array
+        // is not needed for the history check.
+        try IGeomeanOracle(address(key.hooks)).observe({key: key, secondsAgos: secondsAgos}) returns (
+            int56[] memory tickCumulatives, uint160[] memory
+        ) {
+            return tickCumulatives.length >= 2;
+        } catch {
+            return false;
+        }
     }
 
     //*********************************************************************//
     // ----------------------- internal helpers -------------------------- //
     //*********************************************************************//
-
-    /// @notice Quote via V4 TWAP/spot and execute swap. Separate function for stack isolation.
-    /// @param config The swap configuration (pool manager, wrapped native token addresses).
-    /// @param key The V4 pool key to swap through.
-    /// @param normalizedTokenIn The normalized input token address.
-    /// @param normalizedTokenOut The normalized output token address.
-    /// @param amount The amount of input tokens to swap.
-    /// @return amountOut The amount of output tokens received.
-    function _quoteAndSwapV4(
-        SwapConfig memory config,
-        PoolKey memory key,
-        address normalizedTokenIn,
-        address normalizedTokenOut,
-        address originalTokenIn,
-        uint256 amount
-    )
-        internal
-        returns (uint256 amountOut)
-    {
-        // Get the TWAP-based minimum output for slippage protection.
-        uint256 minOut = _getV4Quote({
-            config: config,
-            key: key,
-            normalizedTokenIn: normalizedTokenIn,
-            normalizedTokenOut: normalizedTokenOut,
-            amount: amount
-        });
-
-        // Execute the swap through the V4 PoolManager.
-        amountOut = _executeV4Swap({
-            config: config,
-            key: key,
-            normalizedTokenIn: normalizedTokenIn,
-            originalTokenIn: originalTokenIn,
-            amount: amount,
-            minAmountOut: minOut
-        });
-    }
-
-    /// @notice Quote via V3 TWAP and execute swap. Separate function for stack isolation.
-    /// @param pool The V3 pool to swap through.
-    /// @param normalizedTokenIn The normalized input token address.
-    /// @param normalizedTokenOut The normalized output token address.
-    /// @param amount The amount of input tokens to swap.
-    /// @param originalTokenIn The original (pre-normalization) input token address.
-    /// @return amountOut The amount of output tokens received.
-    function _quoteAndSwapV3(
-        IUniswapV3Pool pool,
-        address normalizedTokenIn,
-        address normalizedTokenOut,
-        uint256 amount,
-        address originalTokenIn
-    )
-        internal
-        returns (uint256 amountOut)
-    {
-        // Get the TWAP-based minimum output for slippage protection.
-        uint256 minOut = _getV3TwapQuote({
-            pool: pool, normalizedTokenIn: normalizedTokenIn, normalizedTokenOut: normalizedTokenOut, amount: amount
-        });
-
-        // Execute the swap through the V3 pool.
-        amountOut = _executeV3Swap({
-            pool: pool,
-            normalizedTokenIn: normalizedTokenIn,
-            normalizedTokenOut: normalizedTokenOut,
-            amount: amount,
-            minAmountOut: minOut,
-            originalTokenIn: originalTokenIn
-        });
-    }
 
     /// @notice Execute a swap through a V3 pool.
     /// @param pool The V3 pool to execute the swap on.
@@ -1010,7 +925,6 @@ library JBSwapPoolLib {
             revert JBSwapPoolLib_SlippageExceeded({amountOut: amountOut, minAmountOut: minAmountOut});
         }
     }
-
     /// @notice Execute a swap through a V4 pool via `PoolManager.unlock()`.
     /// @param config The swap configuration (pool manager, wrapped native token addresses).
     /// @param key The V4 pool key to swap through.
@@ -1069,15 +983,6 @@ library JBSwapPoolLib {
         // Decode the output amount returned by the unlock callback.
         amountOut = abi.decode(result, (uint256));
     }
-
-    /// @notice Normalize a token address, converting the NATIVE_TOKEN sentinel to the wrapped native token.
-    /// @param token The token address to normalize.
-    /// @param wrappedNativeToken The wrapped native token address on this chain.
-    /// @return The normalized token address.
-    function _normalize(address token, address wrappedNativeToken) internal pure returns (address) {
-        return token == JBConstants.NATIVE_TOKEN ? wrappedNativeToken : token;
-    }
-
     /// @notice Get the Uniswap V3 fee tier for a given index.
     /// @param index The fee tier index (0 = 0.3%, 1 = 0.05%, 2 = 1%, 3 = 0.01%).
     /// @return fee The fee tier in hundredths of a basis point.
@@ -1087,7 +992,82 @@ library JBSwapPoolLib {
         if (index == 2) return 10_000;
         return 100;
     }
+    /// @notice Normalize a token address, converting the NATIVE_TOKEN sentinel to the wrapped native token.
+    /// @param token The token address to normalize.
+    /// @param wrappedNativeToken The wrapped native token address on this chain.
+    /// @return The normalized token address.
+    function _normalize(address token, address wrappedNativeToken) internal pure returns (address) {
+        return token == JBConstants.NATIVE_TOKEN ? wrappedNativeToken : token;
+    }
+    /// @notice Quote via V3 TWAP and execute swap. Separate function for stack isolation.
+    /// @param pool The V3 pool to swap through.
+    /// @param normalizedTokenIn The normalized input token address.
+    /// @param normalizedTokenOut The normalized output token address.
+    /// @param amount The amount of input tokens to swap.
+    /// @param originalTokenIn The original (pre-normalization) input token address.
+    /// @return amountOut The amount of output tokens received.
+    function _quoteAndSwapV3(
+        IUniswapV3Pool pool,
+        address normalizedTokenIn,
+        address normalizedTokenOut,
+        uint256 amount,
+        address originalTokenIn
+    )
+        internal
+        returns (uint256 amountOut)
+    {
+        // Get the TWAP-based minimum output for slippage protection.
+        uint256 minOut = _getV3TwapQuote({
+            pool: pool, normalizedTokenIn: normalizedTokenIn, normalizedTokenOut: normalizedTokenOut, amount: amount
+        });
 
+        // Execute the swap through the V3 pool.
+        amountOut = _executeV3Swap({
+            pool: pool,
+            normalizedTokenIn: normalizedTokenIn,
+            normalizedTokenOut: normalizedTokenOut,
+            amount: amount,
+            minAmountOut: minOut,
+            originalTokenIn: originalTokenIn
+        });
+    }
+    /// @notice Quote via V4 TWAP/spot and execute swap. Separate function for stack isolation.
+    /// @param config The swap configuration (pool manager, wrapped native token addresses).
+    /// @param key The V4 pool key to swap through.
+    /// @param normalizedTokenIn The normalized input token address.
+    /// @param normalizedTokenOut The normalized output token address.
+    /// @param amount The amount of input tokens to swap.
+    /// @return amountOut The amount of output tokens received.
+    function _quoteAndSwapV4(
+        SwapConfig memory config,
+        PoolKey memory key,
+        address normalizedTokenIn,
+        address normalizedTokenOut,
+        address originalTokenIn,
+        uint256 amount
+    )
+        internal
+        returns (uint256 amountOut)
+    {
+        // Get the TWAP-based minimum output for slippage protection.
+        uint256 minOut = _getV4Quote({
+            config: config,
+            key: key,
+            normalizedTokenIn: normalizedTokenIn,
+            normalizedTokenOut: normalizedTokenOut,
+            amount: amount
+        });
+
+        // Execute the swap through the V4 PoolManager.
+        amountOut = _executeV4Swap({
+            config: config,
+            key: key,
+            normalizedTokenIn: normalizedTokenIn,
+            originalTokenIn: originalTokenIn,
+            amount: amount,
+            minAmountOut: minOut
+        });
+    }
     /// @notice Get the Uniswap V4 fee and tick spacing for a given tier index.
     /// @param index The fee tier index (0 = 0.3%/60, 1 = 0.05%/10, 2 = 1%/200, 3 = 0.01%/1).
     /// @return fee The fee in hundredths of a basis point.
