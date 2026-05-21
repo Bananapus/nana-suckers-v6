@@ -100,6 +100,14 @@ contract RecordPeerValueAggregationTest is Test {
         r[2] = c;
     }
 
+    function _arr4(uint256 a, uint256 b, uint256 c, uint256 d) internal pure returns (uint256[] memory r) {
+        r = new uint256[](4);
+        r[0] = a;
+        r[1] = b;
+        r[2] = c;
+        r[3] = d;
+    }
+
     function _b1(bool a) internal pure returns (bool[] memory r) {
         r = new bool[](1);
         r[0] = a;
@@ -116,6 +124,14 @@ contract RecordPeerValueAggregationTest is Test {
         r[0] = a;
         r[1] = b;
         r[2] = c;
+    }
+
+    function _b4(bool a, bool b, bool c, bool d) internal pure returns (bool[] memory r) {
+        r = new bool[](4);
+        r[0] = a;
+        r[1] = b;
+        r[2] = c;
+        r[3] = d;
     }
 
     // -- Fresh wins --
@@ -250,5 +266,46 @@ contract RecordPeerValueAggregationTest is Test {
         assertEq(s.chainCount, 1);
         assertEq(s.values[0], expectedVal);
         assertEq(s.snapshotTimestamps[0], expectedTs);
+    }
+
+    /// @notice For two peer chains with active and deprecated lanes, each chain selects the freshest active lane;
+    ///         if no active lane exists, it falls back to the freshest deprecated lane.
+    function testFuzz_twoChains_mixedActiveDeprecated_matchReferenceModel(
+        uint256[4] memory vals,
+        uint256[4] memory tss
+    )
+        public
+        view
+    {
+        // Chain 1 has active and deprecated lanes. The active lane should win even if deprecated is fresher or larger.
+        // Chain 2 has only deprecated lanes, so it should use the freshest deprecated snapshot with MAX as tie-break.
+        PeerValueScratch memory s = _exec({
+            len: 4,
+            ids: _arr4(1, 1, 2, 2),
+            vals: _arr4(vals[0], vals[1], vals[2], vals[3]),
+            ts: _arr4(tss[0], tss[1], tss[2], tss[3]),
+            act: _b4(true, false, false, false)
+        });
+
+        assertEq(s.chainCount, 2);
+
+        uint256 slot1 = s.chainIds[0] == 1 ? 0 : 1;
+        uint256 slot2 = 1 - slot1;
+
+        // Chain 1: one active lane and one deprecated lane. The active lane owns the peer-chain value.
+        assertEq(s.values[slot1], vals[0]);
+        assertEq(s.snapshotTimestamps[slot1], tss[0]);
+        assertTrue(s.hasActiveValue[slot1]);
+
+        // Chain 2: no active lane. Deprecated lanes use the same freshness/MAX selection rule as migration fallback.
+        uint256 expectedChain2Value = vals[3];
+        uint256 expectedChain2Timestamp = tss[3];
+        if (tss[2] > tss[3] || (tss[2] == tss[3] && vals[2] > vals[3])) {
+            expectedChain2Value = vals[2];
+            expectedChain2Timestamp = tss[2];
+        }
+        assertEq(s.values[slot2], expectedChain2Value);
+        assertEq(s.snapshotTimestamps[slot2], expectedChain2Timestamp);
+        assertFalse(s.hasActiveValue[slot2]);
     }
 }

@@ -113,7 +113,7 @@ contract MultiSuckerMockDeployer is IJBSuckerDeployer {
 ///  4. Deprecated sucker with higher state — active replacement still wins
 ///  5. Multi-chain suckers sum across different chains (no spurious dedup)
 ///  6. Stale snapshot nonce on same sucker does NOT roll back state
-///  10. Dual active suckers for same chain use MAX aggregation (not SUM)
+///  10. Dual active suckers for same chain use the freshest snapshot, with MAX only as same-freshness tie-break
 ///
 /// Run with: FOUNDRY_PROFILE=fork forge test --match-contract MultiSuckerForkTest -vvv
 contract MultiSuckerForkTest is Test {
@@ -251,7 +251,7 @@ contract MultiSuckerForkTest is Test {
 
     /// @notice Deploy sucker1, deliver state, deprecate it, deploy sucker2, deliver state.
     /// Verify aggregate views use per-chain MAX (not sum) during the migration window.
-    function test_deprecateAndReplace_aggregateViewsUseMax() external {
+    function test_deprecateAndReplace_aggregateViewsUseMaxTieBreakForSameFreshness() external {
         MultiSuckerMock sucker1 = _createMockSucker("replace-a", ARBITRUM);
         _deployViaRegistry(sucker1);
 
@@ -276,8 +276,7 @@ contract MultiSuckerForkTest is Test {
         // Deliver HIGHER state to sucker2.
         _deliverState(sucker2, 1, 1200e18, 600e18, 2500e18);
 
-        // Registry should return MAX(sucker1, sucker2) per value.
-        // sucker2 has higher values, so MAX = sucker2's values.
+        // Both snapshots have the same freshness key, so the registry uses MAX as the same-freshness tie-break.
         assertEq(
             registry.remoteTotalSupplyOf(PROJECT_ID), 1200e18, "registry total supply should be MAX(1000, 1200) = 1200"
         );
@@ -485,8 +484,8 @@ contract MultiSuckerForkTest is Test {
         assertTrue(registry.isSuckerOf(PROJECT_ID, address(sucker1)), "deprecated sucker1 still recognized");
         assertTrue(registry.isSuckerOf(PROJECT_ID, address(sucker2)), "active sucker2 recognized");
 
-        // Aggregate views: MAX(1000, 1500) = 1500 (active wins over deprecated).
-        assertEq(registry.remoteTotalSupplyOf(PROJECT_ID), 1500e18, "total supply should be MAX of both suckers");
+        // Aggregate views: the active lane wins over deprecated state for the same chain.
+        assertEq(registry.remoteTotalSupplyOf(PROJECT_ID), 1500e18, "active same-chain value should win");
     }
 
     // ═══════════════════════════════════════════════════════════════════
@@ -494,29 +493,25 @@ contract MultiSuckerForkTest is Test {
     // ═══════════════════════════════════════════════════════════════════
 
     // ═══════════════════════════════════════════════════════════════════
-    // Test 10: Dual active suckers for same chain use MAX aggregation
+    // Test 10: Dual active suckers for same chain prefer the freshest snapshot
     // ═══════════════════════════════════════════════════════════════════
 
-    /// @notice Two active suckers targeting the same chain — aggregate views should use MAX, not SUM.
-    function test_dualActiveSuckersAggregateMax() external {
+    /// @notice Two active suckers targeting the same chain — aggregate views prefer the freshest snapshot, not SUM.
+    function test_dualActiveSuckersAggregateFreshestSnapshot() external {
         MultiSuckerMock sucker1 = _createMockSucker("dual-a", ARBITRUM);
         MultiSuckerMock sucker2 = _createMockSucker("dual-b", ARBITRUM);
 
         _deployViaRegistry(sucker1);
         _deployViaRegistry(sucker2);
 
-        // Deliver different state to each: sucker1=900e18, sucker2=1000e18.
-        _deliverState(sucker1, 1, 900e18, 400e18, 1800e18);
+        // Deliver a higher but stale state to sucker1, then a lower fresh state to sucker2.
+        _deliverState(sucker1, 1, 1200e18, 900e18, 3000e18);
         _deliverState(sucker2, 2, 1000e18, 500e18, 2000e18);
 
-        // Aggregate should use MAX per chain, not SUM.
-        assertEq(registry.remoteTotalSupplyOf(PROJECT_ID), 1000e18, "totalSupply should be MAX(900, 1000) = 1000");
-        assertEq(
-            registry.remoteBalanceOf(PROJECT_ID, 18, ETH_CURRENCY), 2000e18, "balance should be MAX(1800, 2000) = 2000"
-        );
-        assertEq(
-            registry.remoteSurplusOf(PROJECT_ID, 18, ETH_CURRENCY), 500e18, "surplus should be MAX(400, 500) = 500"
-        );
+        // Aggregate should use the fresher same-chain snapshot, not MAX and not SUM.
+        assertEq(registry.remoteTotalSupplyOf(PROJECT_ID), 1000e18, "fresh supply should win");
+        assertEq(registry.remoteBalanceOf(PROJECT_ID, 18, ETH_CURRENCY), 2000e18, "fresh balance should win");
+        assertEq(registry.remoteSurplusOf(PROJECT_ID, 18, ETH_CURRENCY), 500e18, "fresh surplus should win");
     }
 
     // ═══════════════════════════════════════════════════════════════════
