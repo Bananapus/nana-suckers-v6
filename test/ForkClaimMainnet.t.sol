@@ -226,16 +226,18 @@ abstract contract CCIPSuckerClaimForkTestBase is SuckerForkHelpers {
     }
 
     /// @notice Extract leaf data from InsertToOutboxTree events in a log array.
+    /// @dev Event signature includes the trailing `bytes32 data` field added so cross-chain consumers can carry
+    /// attribution context inside the leaf hash. We ignore the value here — the test harness doesn't tag leaves.
     function _extractLeaf(Vm.Log[] memory logs, uint256 leafIndex) internal pure returns (LeafData memory leaf) {
         bytes32 eventSig =
-            keccak256("InsertToOutboxTree(bytes32,address,bytes32,uint256,bytes32,uint256,uint256,address)");
+            keccak256("InsertToOutboxTree(bytes32,address,bytes32,uint256,bytes32,uint256,uint256,bytes32,address)");
 
         for (uint256 i; i < logs.length; i++) {
             if (logs[i].topics[0] != eventSig) continue;
 
             uint256 decodedIndex;
-            (leaf.hashed, decodedIndex, leaf.root, leaf.projectTokenCount, leaf.terminalTokenAmount,) =
-                abi.decode(logs[i].data, (bytes32, uint256, bytes32, uint256, uint256, address));
+            (leaf.hashed, decodedIndex, leaf.root, leaf.projectTokenCount, leaf.terminalTokenAmount,,) =
+                abi.decode(logs[i].data, (bytes32, uint256, bytes32, uint256, uint256, bytes32, address));
 
             if (decodedIndex == leafIndex) {
                 leaf.beneficiary = logs[i].topics[1];
@@ -283,7 +285,7 @@ abstract contract CCIPSuckerClaimForkTestBase is SuckerForkHelpers {
         // Prepare: burns project tokens, cashes out terminal token, inserts leaf into outbox tree.
         IERC20(address(projectToken)).approve(address(suckerL1), projectTokenAmount);
         vm.recordLogs();
-        suckerL1.prepare(projectTokenAmount, bytes32(uint256(uint160(user))), 0, token);
+        suckerL1.prepare(projectTokenAmount, bytes32(uint256(uint160(user))), 0, token, bytes32(0));
         vm.stopPrank();
 
         // Capture leaf from InsertToOutboxTree event.
@@ -410,7 +412,8 @@ abstract contract CCIPSuckerClaimForkTestBase is SuckerForkHelpers {
                 index: leaf.index,
                 beneficiary: leaf.beneficiary,
                 projectTokenCount: leaf.projectTokenCount,
-                terminalTokenAmount: leaf.terminalTokenAmount
+                terminalTokenAmount: leaf.terminalTokenAmount,
+                data: bytes32(0)
             }),
             proof: _zeroProof()
         });
@@ -470,12 +473,12 @@ abstract contract CCIPSuckerClaimForkTestBase is SuckerForkHelpers {
 
         vm.startPrank(userA);
         IERC20(address(projectToken)).approve(address(suckerL1), ptAmountA);
-        suckerL1.prepare(ptAmountA, bytes32(uint256(uint160(userA))), 0, token);
+        suckerL1.prepare(ptAmountA, bytes32(uint256(uint160(userA))), 0, token, bytes32(0));
         vm.stopPrank();
 
         vm.startPrank(userB);
         IERC20(address(projectToken)).approve(address(suckerL1), ptAmountB);
-        suckerL1.prepare(ptAmountB, bytes32(uint256(uint160(userB))), 0, token);
+        suckerL1.prepare(ptAmountB, bytes32(uint256(uint160(userB))), 0, token, bytes32(0));
         vm.stopPrank();
 
         Vm.Log[] memory prepareLogs = vm.getRecordedLogs();
@@ -504,7 +507,8 @@ abstract contract CCIPSuckerClaimForkTestBase is SuckerForkHelpers {
                         index: leafA.index,
                         beneficiary: leafA.beneficiary,
                         projectTokenCount: leafA.projectTokenCount,
-                        terminalTokenAmount: leafA.terminalTokenAmount
+                        terminalTokenAmount: leafA.terminalTokenAmount,
+                        data: bytes32(0)
                     }),
                     proof: proofA
                 })
@@ -524,7 +528,8 @@ abstract contract CCIPSuckerClaimForkTestBase is SuckerForkHelpers {
                         index: leafB.index,
                         beneficiary: leafB.beneficiary,
                         projectTokenCount: leafB.projectTokenCount,
-                        terminalTokenAmount: leafB.terminalTokenAmount
+                        terminalTokenAmount: leafB.terminalTokenAmount,
+                        data: bytes32(0)
                     }),
                     proof: proofB
                 })
@@ -545,7 +550,8 @@ abstract contract CCIPSuckerClaimForkTestBase is SuckerForkHelpers {
                         index: leafA.index,
                         beneficiary: leafA.beneficiary,
                         projectTokenCount: leafA.projectTokenCount,
-                        terminalTokenAmount: leafA.terminalTokenAmount
+                        terminalTokenAmount: leafA.terminalTokenAmount,
+                        data: bytes32(0)
                     }),
                     proof: proofA
                 })
@@ -573,7 +579,8 @@ abstract contract CCIPSuckerClaimForkTestBase is SuckerForkHelpers {
                     index: leaf.index,
                     beneficiary: leaf.beneficiary,
                     projectTokenCount: leaf.projectTokenCount,
-                    terminalTokenAmount: leaf.terminalTokenAmount
+                    terminalTokenAmount: leaf.terminalTokenAmount,
+                    data: bytes32(0)
                 }),
                 proof: badProof
             })
@@ -594,7 +601,8 @@ abstract contract CCIPSuckerClaimForkTestBase is SuckerForkHelpers {
                     index: leaf.index,
                     beneficiary: leaf.beneficiary,
                     projectTokenCount: leaf.projectTokenCount + 1, // Tampered.
-                    terminalTokenAmount: leaf.terminalTokenAmount
+                    terminalTokenAmount: leaf.terminalTokenAmount,
+                    data: bytes32(0)
                 }),
                 proof: _zeroProof()
             })
@@ -615,7 +623,8 @@ abstract contract CCIPSuckerClaimForkTestBase is SuckerForkHelpers {
                     index: leaf.index,
                     beneficiary: bytes32(uint256(uint160(makeAddr("attacker")))), // Wrong beneficiary.
                     projectTokenCount: leaf.projectTokenCount,
-                    terminalTokenAmount: leaf.terminalTokenAmount
+                    terminalTokenAmount: leaf.terminalTokenAmount,
+                    data: bytes32(0)
                 }),
                 proof: _zeroProof()
             })
@@ -636,7 +645,8 @@ abstract contract CCIPSuckerClaimForkTestBase is SuckerForkHelpers {
                     index: 1, // Wrong index — leaf was at index 0.
                     beneficiary: leaf.beneficiary,
                     projectTokenCount: leaf.projectTokenCount,
-                    terminalTokenAmount: leaf.terminalTokenAmount
+                    terminalTokenAmount: leaf.terminalTokenAmount,
+                    data: bytes32(0)
                 }),
                 proof: _zeroProof()
             })
@@ -666,7 +676,8 @@ abstract contract CCIPSuckerClaimForkTestBase is SuckerForkHelpers {
                     index: leaf.index,
                     beneficiary: leaf.beneficiary,
                     projectTokenCount: leaf.projectTokenCount,
-                    terminalTokenAmount: leaf.terminalTokenAmount
+                    terminalTokenAmount: leaf.terminalTokenAmount,
+                    data: bytes32(0)
                 }),
                 proof: _zeroProof()
             })
@@ -713,12 +724,12 @@ abstract contract CCIPSuckerClaimForkTestBase is SuckerForkHelpers {
 
         vm.startPrank(userA);
         IERC20(address(projectToken)).approve(address(suckerL1), ptA);
-        suckerL1.prepare(ptA, bytes32(uint256(uint160(userA))), 0, token);
+        suckerL1.prepare(ptA, bytes32(uint256(uint160(userA))), 0, token, bytes32(0));
         vm.stopPrank();
 
         vm.startPrank(userB);
         IERC20(address(projectToken)).approve(address(suckerL1), ptB);
-        suckerL1.prepare(ptB, bytes32(uint256(uint160(userB))), 0, token);
+        suckerL1.prepare(ptB, bytes32(uint256(uint160(userB))), 0, token, bytes32(0));
         vm.stopPrank();
 
         Vm.Log[] memory prepareLogs = vm.getRecordedLogs();
@@ -744,7 +755,8 @@ abstract contract CCIPSuckerClaimForkTestBase is SuckerForkHelpers {
                     index: leafA.index,
                     beneficiary: leafA.beneficiary,
                     projectTokenCount: leafA.projectTokenCount,
-                    terminalTokenAmount: leafA.terminalTokenAmount
+                    terminalTokenAmount: leafA.terminalTokenAmount,
+                    data: bytes32(0)
                 }),
                 proof: wrongProof
             })
@@ -790,7 +802,8 @@ abstract contract CCIPSuckerClaimForkTestBase is SuckerForkHelpers {
                     index: leaf.index,
                     beneficiary: leaf.beneficiary,
                     projectTokenCount: leaf.projectTokenCount,
-                    terminalTokenAmount: leaf.terminalTokenAmount
+                    terminalTokenAmount: leaf.terminalTokenAmount,
+                    data: bytes32(0)
                 }),
                 proof: _zeroProof()
             })

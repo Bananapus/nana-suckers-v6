@@ -294,12 +294,15 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     /// project tokens for the beneficiary, and deposits the terminal tokens into the project's local balance.
     /// @param claimData The terminal token, merkle tree leaf, and proof for the claim.
     function claim(JBClaim calldata claimData) public virtual override {
-        // Attempt to validate the proof against the inbox tree for the terminal token.
+        // Attempt to validate the proof against the inbox tree for the terminal token. The leaf hash includes
+        // `claimData.leaf.data` so the proof is only valid for the exact (amount, beneficiary, data) tuple the
+        // origin committed to.
         _validate({
             projectTokenCount: claimData.leaf.projectTokenCount,
             terminalToken: claimData.token,
             terminalTokenAmount: claimData.leaf.terminalTokenAmount,
             beneficiary: claimData.leaf.beneficiary,
+            data: claimData.leaf.data,
             index: claimData.leaf.index,
             leaves: claimData.proof
         });
@@ -310,6 +313,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
             projectTokenCount: claimData.leaf.projectTokenCount,
             terminalTokenAmount: claimData.leaf.terminalTokenAmount,
             index: claimData.leaf.index,
+            data: claimData.leaf.data,
             caller: _msgSender()
         });
 
@@ -352,12 +356,14 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     /// @param claimData The terminal token, merkle tree leaf, and proof for the claim.
     function exitThroughEmergencyHatch(JBClaim calldata claimData) external override {
         // Does all the needed validation to ensure that the claim is valid *and* that claiming through the emergency
-        // hatch is allowed.
+        // hatch is allowed. The leaf hash covers `data` so a remote-attribution leaf is only exitable if the
+        // emergency exiter knows the exact `data` value the origin committed to.
         _validateForEmergencyExit({
             projectTokenCount: claimData.leaf.projectTokenCount,
             terminalToken: claimData.token,
             terminalTokenAmount: claimData.leaf.terminalTokenAmount,
             beneficiary: claimData.leaf.beneficiary,
+            data: claimData.leaf.data,
             index: claimData.leaf.index,
             leaves: claimData.proof
         });
@@ -532,7 +538,8 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         uint256 projectTokenCount,
         bytes32 beneficiary,
         uint256 minTokensReclaimed,
-        address token
+        address token,
+        bytes32 data
     )
         external
         override
@@ -564,12 +571,15 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
             projectToken: projectToken, count: projectTokenCount, token: token, minTokensReclaimed: minTokensReclaimed
         });
 
-        // Insert the item into the outbox tree for the terminal `token`.
+        // Insert the item into the outbox tree for the terminal `token`. The `data` field travels inside the leaf
+        // hash so receivers can read attribution context from a proven claim — the sucker protocol itself never
+        // inspects it.
         _insertIntoTree({
             projectTokenCount: projectTokenCount,
             token: token,
             terminalTokenAmount: terminalTokenAmount,
-            beneficiary: beneficiary
+            beneficiary: beneficiary,
+            data: data
         });
     }
 
@@ -996,16 +1006,20 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         uint256 projectTokenCount,
         address token,
         uint256 terminalTokenAmount,
-        bytes32 beneficiary
+        bytes32 beneficiary,
+        bytes32 data
     )
         internal
     {
         // Guard against amounts that would overflow uint128 on SVM (INTEROP-5).
         if (terminalTokenAmount > type(uint128).max) revert JBSucker_AmountExceedsUint128(terminalTokenAmount);
         if (projectTokenCount > type(uint128).max) revert JBSucker_AmountExceedsUint128(projectTokenCount);
-        // Build a hash based on the token amounts and the beneficiary.
+        // Build a hash based on the token amounts, the beneficiary, and the attribution data.
         bytes32 hashed = _buildTreeHash({
-            projectTokenCount: projectTokenCount, terminalTokenAmount: terminalTokenAmount, beneficiary: beneficiary
+            projectTokenCount: projectTokenCount,
+            terminalTokenAmount: terminalTokenAmount,
+            beneficiary: beneficiary,
+            data: data
         });
 
         // Get the outbox in storage.
@@ -1023,6 +1037,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
             root: _computeOutboxRoot(outbox.tree),
             projectTokenCount: projectTokenCount,
             terminalTokenAmount: terminalTokenAmount,
+            data: data,
             caller: _msgSender()
         });
     }
@@ -1289,6 +1304,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         address terminalToken,
         uint256 terminalTokenAmount,
         bytes32 beneficiary,
+        bytes32 data,
         uint256 index,
         bytes32[_TREE_DEPTH] calldata leaves
     )
@@ -1312,6 +1328,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
             projectTokenCount: projectTokenCount,
             terminalTokenAmount: terminalTokenAmount,
             beneficiary: beneficiary,
+            data: data,
             index: index,
             leaves: leaves
         });
@@ -1331,6 +1348,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         uint256 projectTokenCount,
         uint256 terminalTokenAmount,
         bytes32 beneficiary,
+        bytes32 data,
         uint256 index,
         bytes32[_TREE_DEPTH] calldata leaves
     )
@@ -1341,7 +1359,10 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         // Delegates to JBSuckerLib (via DELEGATECALL) to keep MerkleLib.branchRoot bytecode out of each sucker.
         bytes32 root = JBSuckerLib.computeBranchRoot({
             item: _buildTreeHash({
-                projectTokenCount: projectTokenCount, terminalTokenAmount: terminalTokenAmount, beneficiary: beneficiary
+                projectTokenCount: projectTokenCount,
+                terminalTokenAmount: terminalTokenAmount,
+                beneficiary: beneficiary,
+                data: data
             }),
             branch: leaves,
             index: index
@@ -1385,6 +1406,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         address terminalToken,
         uint256 terminalTokenAmount,
         bytes32 beneficiary,
+        bytes32 data,
         uint256 index,
         bytes32[_TREE_DEPTH] calldata leaves
     )
@@ -1435,6 +1457,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
             projectTokenCount: projectTokenCount,
             terminalTokenAmount: terminalTokenAmount,
             beneficiary: beneficiary,
+            data: data,
             index: index,
             leaves: leaves
         });
@@ -1482,24 +1505,27 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     /// @param projectTokenCount The number of project tokens to cash out.
     /// @param terminalTokenAmount The amount of terminal tokens to reclaim from the cash out.
     /// @param beneficiary The beneficiary which will receive the project tokens (bytes32 for cross-VM compatibility).
+    /// @param data Opaque caller-defined attribution payload travelling inside the leaf hash.
     /// @return hash The keccak256 hash of the leaf data.
     function _buildTreeHash(
         uint256 projectTokenCount,
         uint256 terminalTokenAmount,
-        bytes32 beneficiary
+        bytes32 beneficiary,
+        bytes32 data
     )
         internal
         pure
         returns (bytes32 hash)
     {
-        // All three arguments are 32 bytes — hash from free memory to avoid abi.encode allocation overhead.
+        // All four arguments are 32 bytes — hash from free memory to avoid abi.encode allocation overhead.
         // forge-lint: disable-next-line(asm-keccak256)
         assembly {
             let ptr := mload(0x40)
             mstore(ptr, projectTokenCount)
             mstore(add(ptr, 0x20), terminalTokenAmount)
             mstore(add(ptr, 0x40), beneficiary)
-            hash := keccak256(ptr, 0x60)
+            mstore(add(ptr, 0x60), data)
+            hash := keccak256(ptr, 0x80)
         }
     }
 

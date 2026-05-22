@@ -210,7 +210,7 @@ abstract contract SwapCCIPSuckerForkTestBase is SuckerForkHelpers {
 
         // Prepare: burns project tokens, cashes out terminal token, inserts leaf into outbox tree.
         IERC20(address(projectToken)).approve(address(suckerL1), projectTokenAmount);
-        suckerL1.prepare(projectTokenAmount, bytes32(uint256(uint160(user))), maxCashedOut, token);
+        suckerL1.prepare(projectTokenAmount, bytes32(uint256(uint160(user))), maxCashedOut, token, bytes32(0));
         vm.stopPrank();
 
         // Record logs to capture CCIP router events.

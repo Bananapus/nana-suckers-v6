@@ -64,6 +64,7 @@ contract RegressionFeeIrrecoverableHarness is JBSucker {
         uint256 projectTokenCount,
         uint256 terminalTokenAmount,
         bytes32 beneficiary,
+        bytes32 data,
         uint256 index,
         bytes32[_TREE_DEPTH] calldata leaves
     )
@@ -75,7 +76,9 @@ contract RegressionFeeIrrecoverableHarness is JBSucker {
             return;
         }
 
-        super._validateBranchRoot(expectedRoot, projectTokenCount, terminalTokenAmount, beneficiary, index, leaves);
+        super._validateBranchRoot(
+            expectedRoot, projectTokenCount, terminalTokenAmount, beneficiary, data, index, leaves
+        );
     }
 
     function test_setRemoteToken(address token, JBRemoteToken memory remoteToken) external {
@@ -90,7 +93,7 @@ contract RegressionFeeIrrecoverableHarness is JBSucker {
     )
         external
     {
-        _insertIntoTree(projectTokenCount, token, terminalTokenAmount, beneficiary);
+        _insertIntoTree(projectTokenCount, token, terminalTokenAmount, beneficiary, bytes32(0));
     }
 
     function test_setInboxRoot(address token, uint64 nonce, bytes32 root) external {
@@ -216,7 +219,8 @@ contract RegressionToRemoteFeeIrrecoverableTest is Test {
                     index: 0,
                     beneficiary: bytes32(uint256(uint160(address(0xBEEF)))),
                     projectTokenCount: 1,
-                    terminalTokenAmount: 1
+                    terminalTokenAmount: 1,
+                    data: bytes32(0)
                 }),
                 proof: [
                     bytes32(0),

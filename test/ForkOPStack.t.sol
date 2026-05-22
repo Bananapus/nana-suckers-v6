@@ -177,7 +177,9 @@ abstract contract OPStackNativeBridgeForkTestBase is SuckerForkHelpers {
 
         // Prepare cash out via sucker.
         IERC20(address(projectToken)).approve(address(suckerL1), projectTokenAmount);
-        suckerL1.prepare(projectTokenAmount, bytes32(uint256(uint160(user))), maxCashedOut, JBConstants.NATIVE_TOKEN);
+        suckerL1.prepare(
+            projectTokenAmount, bytes32(uint256(uint160(user))), maxCashedOut, JBConstants.NATIVE_TOKEN, bytes32(0)
+        );
         vm.stopPrank();
 
         // Record logs to verify bridging behavior.
@@ -231,7 +233,9 @@ abstract contract OPStackNativeBridgeForkTestBase is SuckerForkHelpers {
 
         // Prepare cash out via sucker.
         IERC20(address(l2ProjectToken)).approve(address(suckerL2), projectTokenAmount);
-        suckerL2.prepare(projectTokenAmount, bytes32(uint256(uint160(user))), maxCashedOut, JBConstants.NATIVE_TOKEN);
+        suckerL2.prepare(
+            projectTokenAmount, bytes32(uint256(uint160(user))), maxCashedOut, JBConstants.NATIVE_TOKEN, bytes32(0)
+        );
         vm.stopPrank();
 
         vm.recordLogs();

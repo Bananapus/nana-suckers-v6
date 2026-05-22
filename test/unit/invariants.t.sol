@@ -73,6 +73,7 @@ contract InvariantSucker is JBSucker {
         uint256 projectTokenCount,
         uint256 terminalTokenAmount,
         bytes32 beneficiary,
+        bytes32 data,
         uint256 index,
         bytes32[_TREE_DEPTH] calldata leaves
     )
@@ -81,7 +82,9 @@ contract InvariantSucker is JBSucker {
         override
     {
         if (!nextCheckShouldPass) {
-            super._validateBranchRoot(expectedRoot, projectTokenCount, terminalTokenAmount, beneficiary, index, leaves);
+            super._validateBranchRoot(
+                expectedRoot, projectTokenCount, terminalTokenAmount, beneficiary, data, index, leaves
+            );
         }
         nextCheckShouldPass = false;
     }
@@ -102,7 +105,7 @@ contract InvariantSucker is JBSucker {
     )
         external
     {
-        _insertIntoTree(projectTokenCount, token, terminalTokenAmount, beneficiary);
+        _insertIntoTree(projectTokenCount, token, terminalTokenAmount, beneficiary, bytes32(0));
     }
 
     function test_getOutboxBalance(address token) external view returns (uint256) {
@@ -251,7 +254,8 @@ contract SuckerHandler is Test {
                 index: index,
                 beneficiary: leaf.beneficiary,
                 projectTokenCount: leaf.projectTokenCount,
-                terminalTokenAmount: leaf.terminalTokenAmount
+                terminalTokenAmount: leaf.terminalTokenAmount,
+                data: bytes32(0)
             }),
             proof: proof
         });
@@ -293,7 +297,8 @@ contract SuckerHandler is Test {
                 index: index,
                 beneficiary: leaf.beneficiary,
                 projectTokenCount: leaf.projectTokenCount,
-                terminalTokenAmount: leaf.terminalTokenAmount
+                terminalTokenAmount: leaf.terminalTokenAmount,
+                data: bytes32(0)
             }),
             proof: proof
         });

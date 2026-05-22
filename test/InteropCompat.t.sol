@@ -61,13 +61,14 @@ contract InteropTestSucker is JBSucker {
     function exposed_buildTreeHash(
         uint256 projectTokenCount,
         uint256 terminalTokenAmount,
-        bytes32 beneficiary
+        bytes32 beneficiary,
+        bytes32 data
     )
         external
         pure
         returns (bytes32)
     {
-        return _buildTreeHash(projectTokenCount, terminalTokenAmount, beneficiary);
+        return _buildTreeHash(projectTokenCount, terminalTokenAmount, beneficiary, data);
     }
 
     // forge-lint: disable-next-line(mixed-case-function)
@@ -85,11 +86,12 @@ contract InteropTestSucker is JBSucker {
         uint256 projectTokenCount,
         address token,
         uint256 terminalTokenAmount,
-        bytes32 beneficiary
+        bytes32 beneficiary,
+        bytes32 data
     )
         external
     {
-        _insertIntoTree(projectTokenCount, token, terminalTokenAmount, beneficiary);
+        _insertIntoTree(projectTokenCount, token, terminalTokenAmount, beneficiary, data);
     }
 
     // forge-lint: disable-next-line(mixed-case-function)
@@ -122,12 +124,13 @@ contract InteropTestSucker is JBSucker {
         uint256 projectTokenCount,
         uint256 terminalTokenAmount,
         bytes32 beneficiary,
+        bytes32 data,
         uint256 index,
         bytes32[32] calldata leaves
     )
         external
     {
-        _validateBranchRoot(expectedRoot, projectTokenCount, terminalTokenAmount, beneficiary, index, leaves);
+        _validateBranchRoot(expectedRoot, projectTokenCount, terminalTokenAmount, beneficiary, data, index, leaves);
     }
 }
 
@@ -162,34 +165,38 @@ contract InteropCompat is Test {
     // =========================================================================
 
     /// @notice Replicate SVM build_tree_hash in Solidity and verify it matches _buildTreeHash.
-    /// @dev SVM constructs a 96-byte buffer:
-    ///      [0..32]  = projectTokenCount as uint256 big-endian (u128 zero-padded to 32 bytes)
-    ///      [32..64] = terminalTokenAmount as uint256 big-endian (u128 zero-padded to 32 bytes)
-    ///      [64..96] = beneficiary as bytes32
+    /// @dev SVM constructs a 128-byte buffer:
+    ///      [0..32]   = projectTokenCount as uint256 big-endian (u128 zero-padded to 32 bytes)
+    ///      [32..64]  = terminalTokenAmount as uint256 big-endian (u128 zero-padded to 32 bytes)
+    ///      [64..96]  = beneficiary as bytes32
+    ///      [96..128] = data as bytes32 (opaque attribution payload)
     ///      Then keccak256(buffer).
-    ///      EVM's abi.encode(uint256, uint256, bytes32) produces the exact same layout.
+    ///      EVM's abi.encode(uint256, uint256, bytes32, bytes32) produces the exact same layout.
     function _svmBuildTreeHash(
         uint256 projectTokenCount,
         uint256 terminalTokenAmount,
-        bytes32 beneficiary
+        bytes32 beneficiary,
+        bytes32 data
     )
         internal
         pure
         returns (bytes32)
     {
-        // Manual 96-byte buffer matching SVM's build_tree_hash exactly
-        bytes memory data = new bytes(96);
+        // Manual 128-byte buffer matching SVM's build_tree_hash exactly
+        bytes memory buf = new bytes(128);
         assembly {
-            // data starts at data+32 (skip length prefix)
-            let ptr := add(data, 32)
+            // buf starts at buf+32 (skip length prefix)
+            let ptr := add(buf, 32)
             // [0..32] = projectTokenCount as big-endian uint256
             mstore(ptr, projectTokenCount)
             // [32..64] = terminalTokenAmount as big-endian uint256
             mstore(add(ptr, 32), terminalTokenAmount)
             // [64..96] = beneficiary as bytes32
             mstore(add(ptr, 64), beneficiary)
+            // [96..128] = attribution data as bytes32
+            mstore(add(ptr, 96), data)
         }
-        return keccak256(data);
+        return keccak256(buf);
     }
 
     function test_leafHash_evmAddress() public view {
@@ -198,8 +205,8 @@ contract InteropCompat is Test {
         uint256 projectTokens = 1000e18;
         uint256 terminalTokens = 500e6;
 
-        bytes32 evmHash = sucker.exposed_buildTreeHash(projectTokens, terminalTokens, beneficiary);
-        bytes32 svmHash = _svmBuildTreeHash(projectTokens, terminalTokens, beneficiary);
+        bytes32 evmHash = sucker.exposed_buildTreeHash(projectTokens, terminalTokens, beneficiary, bytes32(0));
+        bytes32 svmHash = _svmBuildTreeHash(projectTokens, terminalTokens, beneficiary, bytes32(0));
         assertEq(evmHash, svmHash, "EVM address leaf hash mismatch");
     }
 
@@ -209,8 +216,8 @@ contract InteropCompat is Test {
         uint256 projectTokens = 42e18;
         uint256 terminalTokens = 7e6;
 
-        bytes32 evmHash = sucker.exposed_buildTreeHash(projectTokens, terminalTokens, svmPubkey);
-        bytes32 svmHash = _svmBuildTreeHash(projectTokens, terminalTokens, svmPubkey);
+        bytes32 evmHash = sucker.exposed_buildTreeHash(projectTokens, terminalTokens, svmPubkey, bytes32(0));
+        bytes32 svmHash = _svmBuildTreeHash(projectTokens, terminalTokens, svmPubkey, bytes32(0));
         assertEq(evmHash, svmHash, "SVM pubkey leaf hash mismatch");
     }
 
@@ -218,31 +225,66 @@ contract InteropCompat is Test {
         uint256 maxU128 = type(uint128).max;
         bytes32 beneficiary = bytes32(uint256(1));
 
-        bytes32 evmHash = sucker.exposed_buildTreeHash(maxU128, maxU128, beneficiary);
-        bytes32 svmHash = _svmBuildTreeHash(maxU128, maxU128, beneficiary);
+        bytes32 evmHash = sucker.exposed_buildTreeHash(maxU128, maxU128, beneficiary, bytes32(0));
+        bytes32 svmHash = _svmBuildTreeHash(maxU128, maxU128, beneficiary, bytes32(0));
         assertEq(evmHash, svmHash, "u128 max leaf hash mismatch");
     }
 
     function test_leafHash_smallValues() public view {
         bytes32 beneficiary = bytes32(uint256(uint160(address(1))));
 
-        bytes32 evmHash = sucker.exposed_buildTreeHash(1, 1, beneficiary);
-        bytes32 svmHash = _svmBuildTreeHash(1, 1, beneficiary);
+        bytes32 evmHash = sucker.exposed_buildTreeHash(1, 1, beneficiary, bytes32(0));
+        bytes32 svmHash = _svmBuildTreeHash(1, 1, beneficiary, bytes32(0));
         assertEq(evmHash, svmHash, "Small value leaf hash mismatch");
     }
 
     function test_leafHash_zeroAmounts() public view {
         bytes32 beneficiary = bytes32(uint256(uint160(address(0xBEEF))));
 
-        bytes32 evmHash = sucker.exposed_buildTreeHash(0, 0, beneficiary);
-        bytes32 svmHash = _svmBuildTreeHash(0, 0, beneficiary);
+        bytes32 evmHash = sucker.exposed_buildTreeHash(0, 0, beneficiary, bytes32(0));
+        bytes32 svmHash = _svmBuildTreeHash(0, 0, beneficiary, bytes32(0));
         assertEq(evmHash, svmHash, "Zero amount leaf hash mismatch");
     }
 
     function testFuzz_leafHash_anyU128(uint128 projectTokens, uint128 terminalTokens, bytes32 beneficiary) public view {
-        bytes32 evmHash = sucker.exposed_buildTreeHash(uint256(projectTokens), uint256(terminalTokens), beneficiary);
-        bytes32 svmHash = _svmBuildTreeHash(uint256(projectTokens), uint256(terminalTokens), beneficiary);
+        bytes32 evmHash =
+            sucker.exposed_buildTreeHash(uint256(projectTokens), uint256(terminalTokens), beneficiary, bytes32(0));
+        bytes32 svmHash = _svmBuildTreeHash(uint256(projectTokens), uint256(terminalTokens), beneficiary, bytes32(0));
         assertEq(evmHash, svmHash, "Fuzz leaf hash mismatch");
+    }
+
+    /// @notice The `data` field changes the leaf hash. Two leaves with identical
+    /// (count, amount, beneficiary) but different `data` produce different hashes
+    /// — so a proof valid for one is not valid for the other.
+    function test_leafHash_dataChangesHash() public view {
+        bytes32 beneficiary = bytes32(uint256(uint160(address(0xBEEF))));
+        uint256 projectTokens = 1000e18;
+        uint256 terminalTokens = 500e6;
+        bytes32 dataA = bytes32(uint256(1));
+        bytes32 dataB = bytes32(uint256(2));
+
+        bytes32 hashZero = sucker.exposed_buildTreeHash(projectTokens, terminalTokens, beneficiary, bytes32(0));
+        bytes32 hashA = sucker.exposed_buildTreeHash(projectTokens, terminalTokens, beneficiary, dataA);
+        bytes32 hashB = sucker.exposed_buildTreeHash(projectTokens, terminalTokens, beneficiary, dataB);
+
+        assertTrue(hashZero != hashA, "data=0 vs data=1 should differ");
+        assertTrue(hashA != hashB, "data=1 vs data=2 should differ");
+    }
+
+    /// @notice EVM and SVM leaf hashes match for arbitrary `data` values.
+    function testFuzz_leafHash_dataMatchesSVM(
+        uint128 projectTokens,
+        uint128 terminalTokens,
+        bytes32 beneficiary,
+        bytes32 data
+    )
+        public
+        view
+    {
+        bytes32 evmHash =
+            sucker.exposed_buildTreeHash(uint256(projectTokens), uint256(terminalTokens), beneficiary, data);
+        bytes32 svmHash = _svmBuildTreeHash(uint256(projectTokens), uint256(terminalTokens), beneficiary, data);
+        assertEq(evmHash, svmHash, "data-bearing leaf hash mismatch");
     }
 
     // =========================================================================
@@ -303,7 +345,7 @@ contract InteropCompat is Test {
         bytes32 beneficiary = bytes32(uint256(uint160(makeAddr("claimer"))));
 
         // Insert a single leaf (simulates SVM prepare)
-        sucker.exposed_insertIntoTree(projectTokens, token, terminalTokens, beneficiary);
+        sucker.exposed_insertIntoTree(projectTokens, token, terminalTokens, beneficiary, bytes32(0));
 
         // Get the resulting root
         bytes32 treeRoot = sucker.exposed_getOutboxRoot(token);
@@ -314,7 +356,7 @@ contract InteropCompat is Test {
         bytes32[32] memory proof = _zeroProof();
 
         // Compute the expected leaf hash
-        bytes32 leafHash = _svmBuildTreeHash(projectTokens, terminalTokens, beneficiary);
+        bytes32 leafHash = _svmBuildTreeHash(projectTokens, terminalTokens, beneficiary, bytes32(0));
 
         // Verify using MerkleLib.branchRoot
         bytes32 computedRoot = MerkleLib.branchRoot(leafHash, proof, 0);
@@ -322,7 +364,7 @@ contract InteropCompat is Test {
 
         // Also verify via the sucker's _validateBranchRoot (should not revert)
         sucker.exposed_setInboxRoot(token, 1, treeRoot);
-        sucker.exposed_validateBranchRoot(treeRoot, projectTokens, terminalTokens, beneficiary, 0, proof);
+        sucker.exposed_validateBranchRoot(treeRoot, projectTokens, terminalTokens, beneficiary, bytes32(0), 0, proof);
     }
 
     /// @notice Build a tree with 4 leaves, verify proof for each leaf.
@@ -342,8 +384,8 @@ contract InteropCompat is Test {
         ];
 
         for (uint256 i; i < 4; i++) {
-            sucker.exposed_insertIntoTree(projectTokens[i], token, terminalTokens[i], beneficiaries[i]);
-            leafHashes[i] = _svmBuildTreeHash(projectTokens[i], terminalTokens[i], beneficiaries[i]);
+            sucker.exposed_insertIntoTree(projectTokens[i], token, terminalTokens[i], beneficiaries[i], bytes32(0));
+            leafHashes[i] = _svmBuildTreeHash(projectTokens[i], terminalTokens[i], beneficiaries[i], bytes32(0));
         }
 
         bytes32 treeRoot = sucker.exposed_getOutboxRoot(token);
@@ -402,13 +444,13 @@ contract InteropCompat is Test {
         uint256 terminalTokens = 250e6;
 
         // SVM inserts with full 32-byte pubkey beneficiary
-        sucker.exposed_insertIntoTree(projectTokens, token, terminalTokens, svmPubkey);
+        sucker.exposed_insertIntoTree(projectTokens, token, terminalTokens, svmPubkey, bytes32(0));
 
         bytes32 treeRoot = sucker.exposed_getOutboxRoot(token);
 
         // Build proof and verify using SVM-style hash
         bytes32[32] memory proof = _zeroProof();
-        bytes32 leafHash = _svmBuildTreeHash(projectTokens, terminalTokens, svmPubkey);
+        bytes32 leafHash = _svmBuildTreeHash(projectTokens, terminalTokens, svmPubkey, bytes32(0));
         bytes32 computedRoot = MerkleLib.branchRoot(leafHash, proof, 0);
         assertEq(computedRoot, treeRoot, "Cross-chain SVM beneficiary proof failed");
     }
@@ -525,7 +567,7 @@ contract InteropCompat is Test {
         bytes32 beneficiary = bytes32(uint256(1));
 
         // Should not revert
-        sucker.exposed_insertIntoTree(maxU128, token, maxU128, beneficiary);
+        sucker.exposed_insertIntoTree(maxU128, token, maxU128, beneficiary, bytes32(0));
         assertEq(sucker.exposed_getOutboxCount(token), 1, "Insert at u128 max should succeed");
     }
 
@@ -535,7 +577,7 @@ contract InteropCompat is Test {
         bytes32 beneficiary = bytes32(uint256(1));
 
         vm.expectRevert(abi.encodeWithSelector(JBSucker.JBSucker_AmountExceedsUint128.selector, overflow));
-        sucker.exposed_insertIntoTree(overflow, token, 100, beneficiary);
+        sucker.exposed_insertIntoTree(overflow, token, 100, beneficiary, bytes32(0));
     }
 
     function test_uint128_overflow_terminalTokens_reverts() public {
@@ -544,13 +586,14 @@ contract InteropCompat is Test {
         bytes32 beneficiary = bytes32(uint256(1));
 
         vm.expectRevert(abi.encodeWithSelector(JBSucker.JBSucker_AmountExceedsUint128.selector, overflow));
-        sucker.exposed_insertIntoTree(100, token, overflow, beneficiary);
+        sucker.exposed_insertIntoTree(100, token, overflow, beneficiary, bytes32(0));
     }
 
     function testFuzz_uint128_validHashMatch(uint128 projectTokens, uint128 terminalTokens) public view {
         bytes32 beneficiary = bytes32(uint256(uint160(address(0xBEEF))));
-        bytes32 evmHash = sucker.exposed_buildTreeHash(uint256(projectTokens), uint256(terminalTokens), beneficiary);
-        bytes32 svmHash = _svmBuildTreeHash(uint256(projectTokens), uint256(terminalTokens), beneficiary);
+        bytes32 evmHash =
+            sucker.exposed_buildTreeHash(uint256(projectTokens), uint256(terminalTokens), beneficiary, bytes32(0));
+        bytes32 svmHash = _svmBuildTreeHash(uint256(projectTokens), uint256(terminalTokens), beneficiary, bytes32(0));
         assertEq(evmHash, svmHash, "Fuzz u128 hash mismatch");
     }
 

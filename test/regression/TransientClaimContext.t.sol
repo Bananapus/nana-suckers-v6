@@ -92,6 +92,7 @@ contract TransientContextSwapHarness is JBSwapCCIPSucker {
         uint256,
         uint256,
         bytes32,
+        bytes32,
         uint256,
         bytes32[32] calldata
     )
@@ -183,7 +184,8 @@ contract TransientClaimContextRegression is Test {
                 index: 0,
                 beneficiary: bytes32(uint256(uint160(address(this)))),
                 projectTokenCount: 1,
-                terminalTokenAmount: 10
+                terminalTokenAmount: 10,
+                data: bytes32(0)
             }),
             proof: [
                 bytes32(0),
@@ -226,7 +228,8 @@ contract TransientClaimContextRegression is Test {
                 index: 1,
                 beneficiary: bytes32(uint256(uint160(address(this)))),
                 projectTokenCount: 1,
-                terminalTokenAmount: 100
+                terminalTokenAmount: 100,
+                data: bytes32(0)
             }),
             proof: [
                 bytes32(0),

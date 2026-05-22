@@ -60,7 +60,7 @@ contract DeprecatedDestinationSucker is JBSucker {
     )
         external
     {
-        _insertIntoTree(projectTokenCount, token, terminalTokenAmount, beneficiary);
+        _insertIntoTree(projectTokenCount, token, terminalTokenAmount, beneficiary, bytes32(0));
     }
 
     function test_setRemoteToken(address localToken, JBRemoteToken memory remoteToken) external {

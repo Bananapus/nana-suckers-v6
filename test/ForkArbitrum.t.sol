@@ -382,7 +382,9 @@ contract ForkArbitrumNativeTransferTest is TestBaseWorkflow {
 
         // Prepare cash out via sucker.
         IERC20(address(projectToken)).approve(address(suckerL1), projectTokenAmount);
-        suckerL1.prepare(projectTokenAmount, bytes32(uint256(uint160(user))), maxCashedOut, JBConstants.NATIVE_TOKEN);
+        suckerL1.prepare(
+            projectTokenAmount, bytes32(uint256(uint160(user))), maxCashedOut, JBConstants.NATIVE_TOKEN, bytes32(0)
+        );
 
         // Record logs to verify inbox interaction.
         vm.recordLogs();

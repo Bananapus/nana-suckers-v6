@@ -30,6 +30,7 @@ interface IJBSucker is IERC165 {
         uint256 projectTokenCount,
         uint256 terminalTokenAmount,
         uint256 index,
+        bytes32 data,
         address caller
     );
 
@@ -50,6 +51,7 @@ interface IJBSucker is IERC165 {
         bytes32 root,
         uint256 projectTokenCount,
         uint256 terminalTokenAmount,
+        bytes32 data,
         address caller
     );
 
@@ -191,11 +193,15 @@ interface IJBSucker is IERC165 {
     /// @param beneficiary The beneficiary on the remote chain (bytes32 for cross-VM compatibility).
     /// @param minTokensReclaimed The minimum terminal tokens to receive from the cash out.
     /// @param token The terminal token to cash out into.
+    /// @param data Opaque caller-defined attribution payload included in the leaf hash. The sucker protocol does not
+    /// inspect this value — it's covered by the merkle root, so the destination contract that consumes the claim can
+    /// trust it once the proof verifies. Pass `bytes32(0)` for an ordinary bridge with no attribution context.
     function prepare(
         uint256 projectTokenCount,
         bytes32 beneficiary,
         uint256 minTokensReclaimed,
-        address token
+        address token,
+        bytes32 data
     )
         external;
 
