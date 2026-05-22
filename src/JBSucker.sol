@@ -294,12 +294,15 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     /// project tokens for the beneficiary, and deposits the terminal tokens into the project's local balance.
     /// @param claimData The terminal token, merkle tree leaf, and proof for the claim.
     function claim(JBClaim calldata claimData) public virtual override {
-        // Attempt to validate the proof against the inbox tree for the terminal token.
+        // Attempt to validate the proof against the inbox tree for the terminal token. The leaf hash includes
+        // `claimData.leaf.metadata` so the proof is only valid for the exact (amount, beneficiary, metadata) tuple the
+        // origin committed to.
         _validate({
             projectTokenCount: claimData.leaf.projectTokenCount,
             terminalToken: claimData.token,
             terminalTokenAmount: claimData.leaf.terminalTokenAmount,
             beneficiary: claimData.leaf.beneficiary,
+            metadata: claimData.leaf.metadata,
             index: claimData.leaf.index,
             leaves: claimData.proof
         });
@@ -310,6 +313,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
             projectTokenCount: claimData.leaf.projectTokenCount,
             terminalTokenAmount: claimData.leaf.terminalTokenAmount,
             index: claimData.leaf.index,
+            metadata: claimData.leaf.metadata,
             caller: _msgSender()
         });
 
@@ -330,7 +334,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         uint256 _projectId = projectId();
 
         _requirePermissionFrom({
-            account: PROJECTS.ownerOf(_projectId), projectId: _projectId, permissionId: JBPermissionIds.SUCKER_SAFETY
+            account: _ownerOf(_projectId), projectId: _projectId, permissionId: JBPermissionIds.SUCKER_SAFETY
         });
 
         // Enable the emergency hatch for each token.
@@ -352,12 +356,14 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     /// @param claimData The terminal token, merkle tree leaf, and proof for the claim.
     function exitThroughEmergencyHatch(JBClaim calldata claimData) external override {
         // Does all the needed validation to ensure that the claim is valid *and* that claiming through the emergency
-        // hatch is allowed.
+        // hatch is allowed. The leaf hash covers `metadata` so a remote-attribution leaf is only exitable if the
+        // emergency exiter knows the exact `metadata` value the origin committed to.
         _validateForEmergencyExit({
             projectTokenCount: claimData.leaf.projectTokenCount,
             terminalToken: claimData.token,
             terminalTokenAmount: claimData.leaf.terminalTokenAmount,
             beneficiary: claimData.leaf.beneficiary,
+            metadata: claimData.leaf.metadata,
             index: claimData.leaf.index,
             leaves: claimData.proof
         });
@@ -532,7 +538,8 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         uint256 projectTokenCount,
         bytes32 beneficiary,
         uint256 minTokensReclaimed,
-        address token
+        address token,
+        bytes32 metadata
     )
         external
         override
@@ -564,12 +571,15 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
             projectToken: projectToken, count: projectTokenCount, token: token, minTokensReclaimed: minTokensReclaimed
         });
 
-        // Insert the item into the outbox tree for the terminal `token`.
+        // Insert the item into the outbox tree for the terminal `token`. The `metadata` field travels inside the leaf
+        // hash so receivers can read attribution context from a proven claim — the sucker protocol itself never
+        // inspects it.
         _insertIntoTree({
             projectTokenCount: projectTokenCount,
             token: token,
             terminalTokenAmount: terminalTokenAmount,
-            beneficiary: beneficiary
+            beneficiary: beneficiary,
+            metadata: metadata
         });
     }
 
@@ -586,9 +596,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
 
         // The caller must be the project owner or have the `SET_SUCKER_DEPRECATION` permission from them.
         _requirePermissionFrom({
-            account: PROJECTS.ownerOf(_projectId),
-            projectId: _projectId,
-            permissionId: JBPermissionIds.SET_SUCKER_DEPRECATION
+            account: _ownerOf(_projectId), projectId: _projectId, permissionId: JBPermissionIds.SET_SUCKER_DEPRECATION
         });
 
         // This is the earliest time for when the sucker can be considered deprecated.
@@ -996,16 +1004,20 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         uint256 projectTokenCount,
         address token,
         uint256 terminalTokenAmount,
-        bytes32 beneficiary
+        bytes32 beneficiary,
+        bytes32 metadata
     )
         internal
     {
         // Guard against amounts that would overflow uint128 on SVM (INTEROP-5).
         if (terminalTokenAmount > type(uint128).max) revert JBSucker_AmountExceedsUint128(terminalTokenAmount);
         if (projectTokenCount > type(uint128).max) revert JBSucker_AmountExceedsUint128(projectTokenCount);
-        // Build a hash based on the token amounts and the beneficiary.
+        // Build a hash based on the token amounts, the beneficiary, and the attribution metadata.
         bytes32 hashed = _buildTreeHash({
-            projectTokenCount: projectTokenCount, terminalTokenAmount: terminalTokenAmount, beneficiary: beneficiary
+            projectTokenCount: projectTokenCount,
+            terminalTokenAmount: terminalTokenAmount,
+            beneficiary: beneficiary,
+            metadata: metadata
         });
 
         // Get the outbox in storage.
@@ -1023,6 +1035,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
             root: _computeOutboxRoot(outbox.tree),
             projectTokenCount: projectTokenCount,
             terminalTokenAmount: terminalTokenAmount,
+            metadata: metadata,
             caller: _msgSender()
         });
     }
@@ -1064,7 +1077,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
 
         // The registry can map during authorized deployment. Otherwise, require the project's mapping permission.
         _requirePermissionAllowingOverrideFrom({
-            account: PROJECTS.ownerOf(_projectId),
+            account: _ownerOf(_projectId),
             projectId: _projectId,
             permissionId: JBPermissionIds.MAP_SUCKER_TOKEN,
             alsoGrantAccessIf: _msgSender() == address(REGISTRY)
@@ -1170,7 +1183,9 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         // Record the balance before the cash out for the sanity check.
         uint256 balanceBefore = _balanceOf({token: token, addr: address(this)});
 
-        // Cash out the project tokens for terminal tokens.
+        // Cash out the project tokens for terminal tokens. Suckers are a transparent value-mover (the bridge
+        // accounting is the entirety of their function) — they're not a fee-paying entry point for any referrer,
+        // so `referralProjectId: 0` is correct.
         reclaimedAmount = terminal.cashOutTokensOf({
             holder: address(this),
             projectId: cachedProjectId,
@@ -1290,6 +1305,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         address terminalToken,
         uint256 terminalTokenAmount,
         bytes32 beneficiary,
+        bytes32 metadata,
         uint256 index,
         bytes32[_TREE_DEPTH] calldata leaves
     )
@@ -1313,6 +1329,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
             projectTokenCount: projectTokenCount,
             terminalTokenAmount: terminalTokenAmount,
             beneficiary: beneficiary,
+            metadata: metadata,
             index: index,
             leaves: leaves
         });
@@ -1332,6 +1349,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         uint256 projectTokenCount,
         uint256 terminalTokenAmount,
         bytes32 beneficiary,
+        bytes32 metadata,
         uint256 index,
         bytes32[_TREE_DEPTH] calldata leaves
     )
@@ -1342,7 +1360,10 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         // Delegates to JBSuckerLib (via DELEGATECALL) to keep MerkleLib.branchRoot bytecode out of each sucker.
         bytes32 root = JBSuckerLib.computeBranchRoot({
             item: _buildTreeHash({
-                projectTokenCount: projectTokenCount, terminalTokenAmount: terminalTokenAmount, beneficiary: beneficiary
+                projectTokenCount: projectTokenCount,
+                terminalTokenAmount: terminalTokenAmount,
+                beneficiary: beneficiary,
+                metadata: metadata
             }),
             branch: leaves,
             index: index
@@ -1386,6 +1407,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         address terminalToken,
         uint256 terminalTokenAmount,
         bytes32 beneficiary,
+        bytes32 metadata,
         uint256 index,
         bytes32[_TREE_DEPTH] calldata leaves
     )
@@ -1436,6 +1458,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
             projectTokenCount: projectTokenCount,
             terminalTokenAmount: terminalTokenAmount,
             beneficiary: beneficiary,
+            metadata: metadata,
             index: index,
             leaves: leaves
         });
@@ -1483,24 +1506,27 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     /// @param projectTokenCount The number of project tokens to cash out.
     /// @param terminalTokenAmount The amount of terminal tokens to reclaim from the cash out.
     /// @param beneficiary The beneficiary which will receive the project tokens (bytes32 for cross-VM compatibility).
+    /// @param metadata Opaque caller-defined attribution payload travelling inside the leaf hash.
     /// @return hash The keccak256 hash of the leaf data.
     function _buildTreeHash(
         uint256 projectTokenCount,
         uint256 terminalTokenAmount,
-        bytes32 beneficiary
+        bytes32 beneficiary,
+        bytes32 metadata
     )
         internal
         pure
         returns (bytes32 hash)
     {
-        // All three arguments are 32 bytes — hash from free memory to avoid abi.encode allocation overhead.
+        // All four arguments are 32 bytes — hash from free memory to avoid abi.encode allocation overhead.
         // forge-lint: disable-next-line(asm-keccak256)
         assembly {
             let ptr := mload(0x40)
             mstore(ptr, projectTokenCount)
             mstore(add(ptr, 0x20), terminalTokenAmount)
             mstore(add(ptr, 0x40), beneficiary)
-            hash := keccak256(ptr, 0x60)
+            mstore(add(ptr, 0x60), metadata)
+            hash := keccak256(ptr, 0x80)
         }
     }
 
@@ -1542,6 +1568,20 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     /// @return sender The address which sent this call.
     function _msgSender() internal view override(ERC2771Context, Context) returns (address sender) {
         return ERC2771Context._msgSender();
+    }
+
+    /// @notice Resolve the current owner of the project this sucker belongs to.
+    /// @dev `PROJECTS.ownerOf(...)` is the source of truth for "project owner" permission checks; we hit it from
+    /// every permission-gated entrypoint (`enableEmergencyHatchFor`, `setDeprecation`, `_mapToken`). Routing all
+    /// three through this internal helper emits the abi-encode + STATICCALL + return-decode sequence once in the
+    /// child contract's bytecode instead of inlining it at each call site, which is what keeps `JBSwapCCIPSucker`
+    /// under the EIP-170 limit after the leaf-`metadata` thread-through landed.
+    /// @param forProjectId The project ID to look up — always the sucker's own `projectId()`, but accepted as a
+    /// parameter so callers can pass the cached local they already computed (avoiding a redundant `projectId()`
+    /// call against the read-only registry).
+    /// @return owner The address currently registered as the project's ERC-721 holder.
+    function _ownerOf(uint256 forProjectId) internal view returns (address owner) {
+        return PROJECTS.ownerOf(forProjectId);
     }
 
     /// @notice Retain a failed `toRemoteFee` payment for later caller refund.

@@ -86,6 +86,7 @@ contract DeepAttackSucker is JBSucker {
         uint256 projectTokenCount,
         uint256 terminalTokenAmount,
         bytes32 beneficiary,
+        bytes32 metadata,
         uint256 index,
         bytes32[_TREE_DEPTH] calldata leaves
     )
@@ -94,7 +95,9 @@ contract DeepAttackSucker is JBSucker {
         override
     {
         if (!nextCheckShouldPass) {
-            super._validateBranchRoot(expectedRoot, projectTokenCount, terminalTokenAmount, beneficiary, index, leaves);
+            super._validateBranchRoot(
+                expectedRoot, projectTokenCount, terminalTokenAmount, beneficiary, metadata, index, leaves
+            );
         }
         nextCheckShouldPass = false;
     }
@@ -125,7 +128,7 @@ contract DeepAttackSucker is JBSucker {
     )
         external
     {
-        _insertIntoTree(projectTokenCount, token, terminalTokenAmount, beneficiary);
+        _insertIntoTree(projectTokenCount, token, terminalTokenAmount, beneficiary, bytes32(0));
     }
 
     function test_getOutboxRoot(address token) external view returns (bytes32) {
@@ -451,7 +454,8 @@ contract SuckerDeepAttacks is Test {
                 index: 0,
                 beneficiary: bytes32(uint256(uint160(fakeBeneficiary))), // WRONG
                 projectTokenCount: 10 ether,
-                terminalTokenAmount: 5 ether
+                terminalTokenAmount: 5 ether,
+                metadata: bytes32(0)
             }),
             proof: proof
         });
@@ -478,7 +482,8 @@ contract SuckerDeepAttacks is Test {
                 index: 0,
                 beneficiary: bytes32(uint256(uint160(beneficiary))),
                 projectTokenCount: 10 ether,
-                terminalTokenAmount: 100 ether // WRONG — real is 5 ether
+                terminalTokenAmount: 100 ether, // WRONG — real is 5 ether
+                metadata: bytes32(0)
             }),
             proof: proof
         });
@@ -506,7 +511,8 @@ contract SuckerDeepAttacks is Test {
                 index: 0,
                 beneficiary: bytes32(uint256(uint160(address(0xAAA)))),
                 projectTokenCount: 10 ether,
-                terminalTokenAmount: 5 ether
+                terminalTokenAmount: 5 ether,
+                metadata: bytes32(0)
             }),
             proof: proof
         });
@@ -545,7 +551,8 @@ contract SuckerDeepAttacks is Test {
                 index: 0,
                 beneficiary: bytes32(uint256(uint160(address(this)))),
                 projectTokenCount: 10 ether,
-                terminalTokenAmount: 5 ether
+                terminalTokenAmount: 5 ether,
+                metadata: bytes32(0)
             }),
             proof: proof
         });
@@ -589,7 +596,8 @@ contract SuckerDeepAttacks is Test {
                 index: 0,
                 beneficiary: bytes32(uint256(uint160(address(this)))),
                 projectTokenCount: 1 ether,
-                terminalTokenAmount: 1 ether
+                terminalTokenAmount: 1 ether,
+                metadata: bytes32(0)
             }),
             proof: proof
         });
@@ -638,7 +646,8 @@ contract SuckerDeepAttacks is Test {
                 index: 2,
                 beneficiary: bytes32(uint256(uint160(address(this)))),
                 projectTokenCount: 3 ether,
-                terminalTokenAmount: 3 ether
+                terminalTokenAmount: 3 ether,
+                metadata: bytes32(0)
             }),
             proof: proof
         });
@@ -672,7 +681,8 @@ contract SuckerDeepAttacks is Test {
                 index: 0,
                 beneficiary: bytes32(uint256(uint160(address(this)))),
                 projectTokenCount: 5 ether,
-                terminalTokenAmount: 5 ether
+                terminalTokenAmount: 5 ether,
+                metadata: bytes32(0)
             }),
             proof: proof
         });
@@ -702,7 +712,8 @@ contract SuckerDeepAttacks is Test {
                 index: 0,
                 beneficiary: bytes32(uint256(uint160(address(this)))),
                 projectTokenCount: 5 ether,
-                terminalTokenAmount: 5 ether
+                terminalTokenAmount: 5 ether,
+                metadata: bytes32(0)
             }),
             proof: proof
         });
@@ -734,7 +745,8 @@ contract SuckerDeepAttacks is Test {
                 index: 0,
                 beneficiary: bytes32(uint256(uint160(address(this)))),
                 projectTokenCount: 10 ether,
-                terminalTokenAmount: 10 ether
+                terminalTokenAmount: 10 ether,
+                metadata: bytes32(0)
             }),
             proof: proof
         });
@@ -936,7 +948,7 @@ contract SuckerDeepAttacks is Test {
         _enableTokenMapping(TOKEN);
 
         vm.expectPartialRevert(JBSucker.JBSucker_ZeroBeneficiary.selector);
-        sucker.prepare(10 ether, bytes32(0), 0, TOKEN);
+        sucker.prepare(10 ether, bytes32(0), 0, TOKEN, bytes32(0));
     }
 
     /// @notice prepare when SENDING_DISABLED → should revert.
@@ -953,7 +965,7 @@ contract SuckerDeepAttacks is Test {
         assertEq(uint256(sucker.state()), uint256(JBSuckerState.SENDING_DISABLED));
 
         vm.expectRevert(abi.encodeWithSelector(JBSucker.JBSucker_Deprecated.selector, JBSuckerState.SENDING_DISABLED));
-        sucker.prepare(10 ether, bytes32(uint256(uint160(address(this)))), 0, TOKEN);
+        sucker.prepare(10 ether, bytes32(uint256(uint160(address(this)))), 0, TOKEN, bytes32(0));
     }
 
     /// @notice prepare when DEPRECATED → should revert.
@@ -967,7 +979,7 @@ contract SuckerDeepAttacks is Test {
         assertEq(uint256(sucker.state()), uint256(JBSuckerState.DEPRECATED));
 
         vm.expectRevert(abi.encodeWithSelector(JBSucker.JBSucker_Deprecated.selector, JBSuckerState.DEPRECATED));
-        sucker.prepare(10 ether, bytes32(uint256(uint160(address(this)))), 0, TOKEN);
+        sucker.prepare(10 ether, bytes32(uint256(uint160(address(this)))), 0, TOKEN, bytes32(0));
     }
 
     /// @notice prepare with unmapped token → should revert.
@@ -978,7 +990,7 @@ contract SuckerDeepAttacks is Test {
         vm.mockCall(TOKENS, abi.encodeCall(IJBTokens.tokenOf, (PROJECT_ID)), abi.encode(makeAddr("projectToken")));
 
         vm.expectRevert(abi.encodeWithSelector(JBSucker.JBSucker_TokenNotMapped.selector, unmapped));
-        sucker.prepare(10 ether, bytes32(uint256(uint160(address(this)))), 0, unmapped);
+        sucker.prepare(10 ether, bytes32(uint256(uint160(address(this)))), 0, unmapped, bytes32(0));
     }
 
     // =========================================================================
@@ -1292,7 +1304,8 @@ contract SuckerDeepAttacks is Test {
                 index: 0,
                 beneficiary: bytes32(uint256(uint160(address(this)))),
                 projectTokenCount: 10 ether,
-                terminalTokenAmount: 5 ether
+                terminalTokenAmount: 5 ether,
+                metadata: bytes32(0)
             }),
             proof: proof
         });
@@ -1358,7 +1371,8 @@ contract SuckerDeepAttacks is Test {
                 index: 0,
                 beneficiary: bytes32(uint256(uint160(address(this)))),
                 projectTokenCount: 5 ether,
-                terminalTokenAmount: 5 ether
+                terminalTokenAmount: 5 ether,
+                metadata: bytes32(0)
             }),
             proof: proof
         });
@@ -1392,7 +1406,8 @@ contract SuckerDeepAttacks is Test {
                 index: 0,
                 beneficiary: bytes32(uint256(uint160(address(this)))),
                 projectTokenCount: 5 ether,
-                terminalTokenAmount: 5 ether
+                terminalTokenAmount: 5 ether,
+                metadata: bytes32(0)
             }),
             proof: proof
         });
@@ -1431,7 +1446,8 @@ contract SuckerDeepAttacks is Test {
                     index: i,
                     beneficiary: bytes32(uint256(100 + i)),
                     projectTokenCount: (i + 1) * 1 ether,
-                    terminalTokenAmount: (i + 1) * 0.5 ether
+                    terminalTokenAmount: (i + 1) * 0.5 ether,
+                    metadata: bytes32(0)
                 }),
                 proof: proof
             });
@@ -1446,7 +1462,11 @@ contract SuckerDeepAttacks is Test {
         JBClaim memory dupClaim = JBClaim({
             token: TOKEN,
             leaf: JBLeaf({
-                index: 2, beneficiary: bytes32(uint256(102)), projectTokenCount: 3 ether, terminalTokenAmount: 1.5 ether
+                index: 2,
+                beneficiary: bytes32(uint256(102)),
+                projectTokenCount: 3 ether,
+                terminalTokenAmount: 1.5 ether,
+                metadata: bytes32(0)
             }),
             proof: dupProof
         });
@@ -1660,7 +1680,7 @@ contract SuckerDeepAttacks is Test {
         _enableTokenMapping(TOKEN);
 
         vm.expectPartialRevert(JBSucker.JBSucker_ZeroBeneficiary.selector);
-        sucker.prepare(10 ether, bytes32(0), 0, TOKEN);
+        sucker.prepare(10 ether, bytes32(0), 0, TOKEN, bytes32(0));
     }
 
     /// @notice prepare with a valid 32-byte SVM beneficiary (non-EVM format) → should succeed past beneficiary check.
@@ -1677,7 +1697,7 @@ contract SuckerDeepAttacks is Test {
         vm.mockCall(makeAddr("projectToken"), abi.encodeWithSelector(IERC20.transferFrom.selector), abi.encode(true));
 
         // May revert for other reasons (token handling), but NOT ZeroBeneficiary.
-        try sucker.prepare(10 ether, svmBeneficiary, 0, TOKEN) {}
+        try sucker.prepare(10 ether, svmBeneficiary, 0, TOKEN, bytes32(0)) {}
         catch (bytes memory reason) {
             // forge-lint: disable-next-line(unsafe-typecast)
             bytes4 selector = bytes4(reason);

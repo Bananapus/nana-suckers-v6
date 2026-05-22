@@ -75,6 +75,7 @@ contract CrossChainTestSucker is JBSucker {
         uint256 projectTokenCount,
         uint256 terminalTokenAmount,
         bytes32 beneficiary,
+        bytes32 metadata,
         uint256 index,
         bytes32[_TREE_DEPTH] calldata leaves
     )
@@ -83,7 +84,9 @@ contract CrossChainTestSucker is JBSucker {
         override
     {
         if (!_nextMerkleCheckPasses) {
-            super._validateBranchRoot(expectedRoot, projectTokenCount, terminalTokenAmount, beneficiary, index, leaves);
+            super._validateBranchRoot(
+                expectedRoot, projectTokenCount, terminalTokenAmount, beneficiary, metadata, index, leaves
+            );
         }
         _nextMerkleCheckPasses = false;
     }
@@ -113,7 +116,7 @@ contract CrossChainTestSucker is JBSucker {
     )
         external
     {
-        _insertIntoTree(projectTokenCount, token, terminalTokenAmount, beneficiary);
+        _insertIntoTree(projectTokenCount, token, terminalTokenAmount, beneficiary, bytes32(0));
     }
 
     function test_setRemoteToken(address localToken, JBRemoteToken memory remoteToken) external {

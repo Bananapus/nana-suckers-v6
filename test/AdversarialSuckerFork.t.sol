@@ -123,7 +123,8 @@ contract AdversarialSuckerForkTest is CCIPSuckerClaimForkTestBase {
                     index: leafA.index,
                     beneficiary: leafA.beneficiary,
                     projectTokenCount: leafA.projectTokenCount,
-                    terminalTokenAmount: leafA.terminalTokenAmount
+                    terminalTokenAmount: leafA.terminalTokenAmount,
+                    metadata: bytes32(0)
                 }),
                 proof: _zeroProof() // Stale proof: valid for root1 but NOT root2.
             })
@@ -141,7 +142,8 @@ contract AdversarialSuckerForkTest is CCIPSuckerClaimForkTestBase {
                     index: leafA.index,
                     beneficiary: leafA.beneficiary,
                     projectTokenCount: leafA.projectTokenCount,
-                    terminalTokenAmount: leafA.terminalTokenAmount
+                    terminalTokenAmount: leafA.terminalTokenAmount,
+                    metadata: bytes32(0)
                 }),
                 proof: correctProofA
             })
@@ -163,7 +165,8 @@ contract AdversarialSuckerForkTest is CCIPSuckerClaimForkTestBase {
                     index: leafB.index,
                     beneficiary: leafB.beneficiary,
                     projectTokenCount: leafB.projectTokenCount,
-                    terminalTokenAmount: leafB.terminalTokenAmount
+                    terminalTokenAmount: leafB.terminalTokenAmount,
+                    metadata: bytes32(0)
                 }),
                 proof: correctProofB
             })
@@ -239,7 +242,8 @@ contract AdversarialSuckerForkTest is CCIPSuckerClaimForkTestBase {
                     index: leafA.index,
                     beneficiary: leafA.beneficiary,
                     projectTokenCount: leafA.projectTokenCount,
-                    terminalTokenAmount: leafA.terminalTokenAmount
+                    terminalTokenAmount: leafA.terminalTokenAmount,
+                    metadata: bytes32(0)
                 }),
                 proof: _zeroProof()
             })
@@ -256,7 +260,8 @@ contract AdversarialSuckerForkTest is CCIPSuckerClaimForkTestBase {
                     index: leafA.index,
                     beneficiary: leafA.beneficiary,
                     projectTokenCount: leafA.projectTokenCount,
-                    terminalTokenAmount: leafA.terminalTokenAmount
+                    terminalTokenAmount: leafA.terminalTokenAmount,
+                    metadata: bytes32(0)
                 }),
                 proof: proofA
             })
@@ -278,7 +283,8 @@ contract AdversarialSuckerForkTest is CCIPSuckerClaimForkTestBase {
                     index: leafB.index,
                     beneficiary: leafB.beneficiary,
                     projectTokenCount: leafB.projectTokenCount,
-                    terminalTokenAmount: leafB.terminalTokenAmount
+                    terminalTokenAmount: leafB.terminalTokenAmount,
+                    metadata: bytes32(0)
                 }),
                 proof: proofB
             })
@@ -391,7 +397,8 @@ contract AdversarialSuckerForkTest is CCIPSuckerClaimForkTestBase {
                     index: leafA.index,
                     beneficiary: leafA.beneficiary,
                     projectTokenCount: leafA.projectTokenCount,
-                    terminalTokenAmount: leafA.terminalTokenAmount
+                    terminalTokenAmount: leafA.terminalTokenAmount,
+                    metadata: bytes32(0)
                 }),
                 proof: _zeroProof()
             })
@@ -417,7 +424,8 @@ contract AdversarialSuckerForkTest is CCIPSuckerClaimForkTestBase {
                     index: leafB.index,
                     beneficiary: leafB.beneficiary,
                     projectTokenCount: leafB.projectTokenCount,
-                    terminalTokenAmount: leafB.terminalTokenAmount
+                    terminalTokenAmount: leafB.terminalTokenAmount,
+                    metadata: bytes32(0)
                 }),
                 proof: proofB
             })
@@ -440,7 +448,8 @@ contract AdversarialSuckerForkTest is CCIPSuckerClaimForkTestBase {
                     index: leafA.index,
                     beneficiary: leafA.beneficiary,
                     projectTokenCount: leafA.projectTokenCount,
-                    terminalTokenAmount: leafA.terminalTokenAmount
+                    terminalTokenAmount: leafA.terminalTokenAmount,
+                    metadata: bytes32(0)
                 }),
                 proof: proofA2
             })

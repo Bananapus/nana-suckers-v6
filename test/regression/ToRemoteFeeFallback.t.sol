@@ -45,7 +45,8 @@ contract OptimismFeeHarness is JBOptimismSucker {
             projectTokenCount: 0,
             token: token,
             terminalTokenAmount: 0,
-            beneficiary: bytes32(uint256(uint160(address(0xBEEF))))
+            beneficiary: bytes32(uint256(uint160(address(0xBEEF)))),
+            metadata: bytes32(0)
         });
     }
 }

@@ -44,15 +44,36 @@ contract MerkleUnitTest is JBSucker, Test {
     function setUp() public {
         // Insert some items into the queue
         // Index 0
-        _insertIntoTree(8 ether, JBConstants.NATIVE_TOKEN, 15 ether, bytes32(uint256(uint160(address(1000)))));
+        _insertIntoTree(
+            8 ether, JBConstants.NATIVE_TOKEN, 15 ether, bytes32(uint256(uint160(address(1000)))), bytes32(0)
+        );
         // Index 1
-        _insertIntoTree(0.1 ether, JBConstants.NATIVE_TOKEN, 200 ether, bytes32(uint256(uint160(address(999)))));
+        _insertIntoTree(
+            0.1 ether, JBConstants.NATIVE_TOKEN, 200 ether, bytes32(uint256(uint160(address(999)))), bytes32(0)
+        );
         // Index 2
-        _insertIntoTree(5 ether, JBConstants.NATIVE_TOKEN, 5 ether, bytes32(uint256(uint160(address(120)))));
+        _insertIntoTree(5 ether, JBConstants.NATIVE_TOKEN, 5 ether, bytes32(uint256(uint160(address(120)))), bytes32(0));
 
-        // Pre-computed proof thats valid for the above data.
+        // Pre-computed proof that's valid for the above data.
+        // `_proof[0]` is the sibling of index 2 at level 0 — index 3 has no leaf yet, so it's the empty-leaf
+        // sentinel `bytes32(0)`.
+        // `_proof[1]` is the sibling of (index 2's parent) at level 1 — i.e. the parent hash of leaves at
+        // indexes 0 and 1, computed at runtime so the proof tracks any change to `_buildTreeHash`'s leaf encoding.
+        // `_proof[2..31]` are the precomputed empty-subtree hashes (zHashes), independent of leaf content.
         _proof[0] = 0x0000000000000000000000000000000000000000000000000000000000000000;
-        _proof[1] = 0x15d682413b76d69d3a9f37321d80938e54900b74e3f119c027ed87dcec1a935b;
+        bytes32 leaf0 = _buildTreeHash({
+            projectTokenCount: 8 ether,
+            terminalTokenAmount: 15 ether,
+            beneficiary: bytes32(uint256(uint160(address(1000)))),
+            metadata: bytes32(0)
+        });
+        bytes32 leaf1 = _buildTreeHash({
+            projectTokenCount: 0.1 ether,
+            terminalTokenAmount: 200 ether,
+            beneficiary: bytes32(uint256(uint160(address(999)))),
+            metadata: bytes32(0)
+        });
+        _proof[1] = keccak256(abi.encodePacked(leaf0, leaf1));
         _proof[2] = 0xb4c11951957c6f8f642c4af61cd6b24640fec6dc7fc607ee8206a99e92410d30;
         _proof[3] = 0x21ddb9a356815c3fac1026b6dec5df3124afbadb485c9ba5a3e3398a04b7ba85;
         _proof[4] = 0xe58769b32a1beaf1ea27375a44095a0d1fb664ce2dd358e7fcbfb78c26a19344;
@@ -87,7 +108,9 @@ contract MerkleUnitTest is JBSucker, Test {
 
     function test_insertIntoTree() public {
         // Queue the item.
-        _insertIntoTree(10 ether, JBConstants.NATIVE_TOKEN, 10 ether, bytes32(uint256(uint160(address(1337)))));
+        _insertIntoTree(
+            10 ether, JBConstants.NATIVE_TOKEN, 10 ether, bytes32(uint256(uint160(address(1337)))), bytes32(0)
+        );
     }
 
     function test_validate() public {
@@ -118,7 +141,8 @@ contract MerkleUnitTest is JBSucker, Test {
                 index: 2,
                 beneficiary: bytes32(uint256(uint160(address(120)))),
                 projectTokenCount: 5 ether,
-                terminalTokenAmount: 5 ether
+                terminalTokenAmount: 5 ether,
+                metadata: bytes32(0)
             }),
                 proof: __proof
             })
@@ -153,7 +177,8 @@ contract MerkleUnitTest is JBSucker, Test {
                 index: 2,
                 beneficiary: bytes32(uint256(uint160(address(120)))),
                 projectTokenCount: 5 ether,
-                terminalTokenAmount: 5 ether
+                terminalTokenAmount: 5 ether,
+                metadata: bytes32(0)
             }),
                 proof: __proof
             })
@@ -169,7 +194,8 @@ contract MerkleUnitTest is JBSucker, Test {
                 index: 2,
                 beneficiary: bytes32(uint256(uint160(address(120)))),
                 projectTokenCount: 5 ether,
-                terminalTokenAmount: 5 ether
+                terminalTokenAmount: 5 ether,
+                metadata: bytes32(0)
             }),
                 proof: __proof
             })

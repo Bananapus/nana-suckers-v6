@@ -208,7 +208,7 @@ abstract contract CCIPSuckerMainnetForkTestBase is SuckerForkHelpers {
 
         // Prepare cash out via sucker.
         IERC20(address(projectToken)).approve(address(suckerL1), projectTokenAmount);
-        suckerL1.prepare(projectTokenAmount, bytes32(uint256(uint160(user))), maxCashedOut, token);
+        suckerL1.prepare(projectTokenAmount, bytes32(uint256(uint160(user))), maxCashedOut, token, bytes32(0));
         vm.stopPrank();
 
         // Record logs to capture the CCIPSendRequested event.

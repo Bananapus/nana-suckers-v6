@@ -54,7 +54,7 @@ contract CCIPSuckerHarness is JBCCIPSucker {
     )
         external
     {
-        _insertIntoTree(projectTokenCount, token, terminalTokenAmount, beneficiary);
+        _insertIntoTree(projectTokenCount, token, terminalTokenAmount, beneficiary, bytes32(0));
     }
 
     /// @notice Set the remote token mapping for testing.

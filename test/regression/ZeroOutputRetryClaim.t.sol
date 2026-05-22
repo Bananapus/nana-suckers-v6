@@ -76,6 +76,7 @@ contract ZeroOutputRetryHarness is JBSwapCCIPSucker {
         uint256 projectTokenCount,
         uint256 terminalTokenAmount,
         bytes32 beneficiary,
+        bytes32 metadata,
         uint256 index,
         bytes32[32] memory proof
     )
@@ -84,7 +85,7 @@ contract ZeroOutputRetryHarness is JBSwapCCIPSucker {
         returns (bytes32)
     {
         return MerkleLib.branchRoot(
-            keccak256(abi.encodePacked(projectTokenCount, terminalTokenAmount, beneficiary)), proof, index
+            keccak256(abi.encodePacked(projectTokenCount, terminalTokenAmount, beneficiary, metadata)), proof, index
         );
     }
 }
@@ -151,7 +152,12 @@ contract ZeroOutputRetryClaimTest is Test {
         bytes32[32] memory proof = sucker.testProofForSingleLeaf();
         bytes32 beneficiary = bytes32(uint256(uint160(BENEFICIARY)));
         bytes32 root = sucker.testRootForLeaf({
-            projectTokenCount: 10e18, terminalTokenAmount: 100e6, beneficiary: beneficiary, index: 0, proof: proof
+            projectTokenCount: 10e18,
+            terminalTokenAmount: 100e6,
+            beneficiary: beneficiary,
+            metadata: bytes32(0),
+            index: 0,
+            proof: proof
         });
 
         sucker.testSetInbox({token: LOCAL_TOKEN, root: root, nonce: 1});
@@ -170,7 +176,11 @@ contract ZeroOutputRetryClaimTest is Test {
             JBClaim({
                 token: LOCAL_TOKEN,
                 leaf: JBLeaf({
-                    index: 0, beneficiary: beneficiary, projectTokenCount: 10e18, terminalTokenAmount: 100e6
+                    index: 0,
+                    beneficiary: beneficiary,
+                    projectTokenCount: 10e18,
+                    terminalTokenAmount: 100e6,
+                    metadata: bytes32(0)
                 }),
                 proof: proof
             })

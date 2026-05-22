@@ -284,6 +284,7 @@ contract InitialSwapReentrantHarness is JBSwapCCIPSucker {
         uint256,
         uint256,
         bytes32,
+        bytes32,
         uint256,
         bytes32[32] calldata
     )
@@ -360,7 +361,8 @@ contract InitialSwapReentrantClaimTest is Test {
                 index: 0,
                 beneficiary: bytes32(uint256(uint160(address(this)))),
                 projectTokenCount: 1,
-                terminalTokenAmount: 100
+                terminalTokenAmount: 100,
+                metadata: bytes32(0)
             }),
             proof: _emptyProof()
         });

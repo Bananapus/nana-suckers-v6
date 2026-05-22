@@ -381,7 +381,8 @@ contract OptimismSuckerForkTest is TestBaseWorkflow {
             projectTokenAmount, // All project tokens.
             bytes32(uint256(uint160(user))), // Remote beneficiary (same user).
             maxCashedOut, // Maximum ETH to receive on remote.
-            JBConstants.NATIVE_TOKEN // Cash out in native ETH.
+            JBConstants.NATIVE_TOKEN, // Cash out in native ETH.
+            bytes32(0)
         );
         vm.stopPrank();
 
