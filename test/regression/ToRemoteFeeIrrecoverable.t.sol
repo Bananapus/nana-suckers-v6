@@ -64,7 +64,7 @@ contract RegressionFeeIrrecoverableHarness is JBSucker {
         uint256 projectTokenCount,
         uint256 terminalTokenAmount,
         bytes32 beneficiary,
-        bytes32 data,
+        bytes32 metadata,
         uint256 index,
         bytes32[_TREE_DEPTH] calldata leaves
     )
@@ -77,7 +77,7 @@ contract RegressionFeeIrrecoverableHarness is JBSucker {
         }
 
         super._validateBranchRoot(
-            expectedRoot, projectTokenCount, terminalTokenAmount, beneficiary, data, index, leaves
+            expectedRoot, projectTokenCount, terminalTokenAmount, beneficiary, metadata, index, leaves
         );
     }
 
@@ -220,7 +220,7 @@ contract RegressionToRemoteFeeIrrecoverableTest is Test {
                     beneficiary: bytes32(uint256(uint160(address(0xBEEF)))),
                     projectTokenCount: 1,
                     terminalTokenAmount: 1,
-                    data: bytes32(0)
+                    metadata: bytes32(0)
                 }),
                 proof: [
                     bytes32(0),

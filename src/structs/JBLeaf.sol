@@ -6,8 +6,8 @@ pragma solidity ^0.8.0;
 /// @custom:member beneficiary The beneficiary of the leaf.
 /// @custom:member projectTokenCount The number of project tokens to claim.
 /// @custom:member terminalTokenAmount The amount of terminal tokens to claim.
-/// @custom:member data Opaque, caller-defined attribution payload that travels with the leaf inside the merkle root.
-/// Use cases include cross-chain referral split hooks tagging a leaf with `(originChainId, referralProjectId)`
+/// @custom:member metadata Opaque, caller-defined attribution payload that travels with the leaf inside the merkle
+/// root. Use cases include cross-chain referral split hooks tagging a leaf with `(originChainId, referralProjectId)`
 /// so the destination contract can settle the bridged value atomically. The sucker protocol itself never inspects
 /// this field — it's covered by the leaf hash, so receivers can trust the value once the merkle proof verifies.
 /// Pass `bytes32(0)` when no attribution context is needed.
@@ -16,5 +16,5 @@ struct JBLeaf {
     bytes32 beneficiary;
     uint256 projectTokenCount;
     uint256 terminalTokenAmount;
-    bytes32 data;
+    bytes32 metadata;
 }

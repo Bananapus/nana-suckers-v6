@@ -62,13 +62,13 @@ contract InteropTestSucker is JBSucker {
         uint256 projectTokenCount,
         uint256 terminalTokenAmount,
         bytes32 beneficiary,
-        bytes32 data
+        bytes32 metadata
     )
         external
         pure
         returns (bytes32)
     {
-        return _buildTreeHash(projectTokenCount, terminalTokenAmount, beneficiary, data);
+        return _buildTreeHash(projectTokenCount, terminalTokenAmount, beneficiary, metadata);
     }
 
     // forge-lint: disable-next-line(mixed-case-function)
@@ -87,11 +87,11 @@ contract InteropTestSucker is JBSucker {
         address token,
         uint256 terminalTokenAmount,
         bytes32 beneficiary,
-        bytes32 data
+        bytes32 metadata
     )
         external
     {
-        _insertIntoTree(projectTokenCount, token, terminalTokenAmount, beneficiary, data);
+        _insertIntoTree(projectTokenCount, token, terminalTokenAmount, beneficiary, metadata);
     }
 
     // forge-lint: disable-next-line(mixed-case-function)
@@ -124,13 +124,13 @@ contract InteropTestSucker is JBSucker {
         uint256 projectTokenCount,
         uint256 terminalTokenAmount,
         bytes32 beneficiary,
-        bytes32 data,
+        bytes32 metadata,
         uint256 index,
         bytes32[32] calldata leaves
     )
         external
     {
-        _validateBranchRoot(expectedRoot, projectTokenCount, terminalTokenAmount, beneficiary, data, index, leaves);
+        _validateBranchRoot(expectedRoot, projectTokenCount, terminalTokenAmount, beneficiary, metadata, index, leaves);
     }
 }
 
@@ -169,14 +169,14 @@ contract InteropCompat is Test {
     ///      [0..32]   = projectTokenCount as uint256 big-endian (u128 zero-padded to 32 bytes)
     ///      [32..64]  = terminalTokenAmount as uint256 big-endian (u128 zero-padded to 32 bytes)
     ///      [64..96]  = beneficiary as bytes32
-    ///      [96..128] = data as bytes32 (opaque attribution payload)
+    ///      [96..128] = metadata as bytes32 (opaque attribution payload)
     ///      Then keccak256(buffer).
     ///      EVM's abi.encode(uint256, uint256, bytes32, bytes32) produces the exact same layout.
     function _svmBuildTreeHash(
         uint256 projectTokenCount,
         uint256 terminalTokenAmount,
         bytes32 beneficiary,
-        bytes32 data
+        bytes32 metadata
     )
         internal
         pure
@@ -193,8 +193,8 @@ contract InteropCompat is Test {
             mstore(add(ptr, 32), terminalTokenAmount)
             // [64..96] = beneficiary as bytes32
             mstore(add(ptr, 64), beneficiary)
-            // [96..128] = attribution data as bytes32
-            mstore(add(ptr, 96), data)
+            // [96..128] = attribution metadata as bytes32
+            mstore(add(ptr, 96), metadata)
         }
         return keccak256(buf);
     }
@@ -256,7 +256,7 @@ contract InteropCompat is Test {
     /// @notice The `data` field changes the leaf hash. Two leaves with identical
     /// (count, amount, beneficiary) but different `data` produce different hashes
     /// — so a proof valid for one is not valid for the other.
-    function test_leafHash_dataChangesHash() public view {
+    function test_leafHash_metadataChangesHash() public view {
         bytes32 beneficiary = bytes32(uint256(uint160(address(0xBEEF))));
         uint256 projectTokens = 1000e18;
         uint256 terminalTokens = 500e6;
@@ -267,24 +267,24 @@ contract InteropCompat is Test {
         bytes32 hashA = sucker.exposed_buildTreeHash(projectTokens, terminalTokens, beneficiary, dataA);
         bytes32 hashB = sucker.exposed_buildTreeHash(projectTokens, terminalTokens, beneficiary, dataB);
 
-        assertTrue(hashZero != hashA, "data=0 vs data=1 should differ");
-        assertTrue(hashA != hashB, "data=1 vs data=2 should differ");
+        assertTrue(hashZero != hashA, "metadata=0 vs metadata=1 should differ");
+        assertTrue(hashA != hashB, "metadata=1 vs metadata=2 should differ");
     }
 
     /// @notice EVM and SVM leaf hashes match for arbitrary `data` values.
-    function testFuzz_leafHash_dataMatchesSVM(
+    function testFuzz_leafHash_metadataMatchesSVM(
         uint128 projectTokens,
         uint128 terminalTokens,
         bytes32 beneficiary,
-        bytes32 data
+        bytes32 metadata
     )
         public
         view
     {
         bytes32 evmHash =
-            sucker.exposed_buildTreeHash(uint256(projectTokens), uint256(terminalTokens), beneficiary, data);
-        bytes32 svmHash = _svmBuildTreeHash(uint256(projectTokens), uint256(terminalTokens), beneficiary, data);
-        assertEq(evmHash, svmHash, "data-bearing leaf hash mismatch");
+            sucker.exposed_buildTreeHash(uint256(projectTokens), uint256(terminalTokens), beneficiary, metadata);
+        bytes32 svmHash = _svmBuildTreeHash(uint256(projectTokens), uint256(terminalTokens), beneficiary, metadata);
+        assertEq(evmHash, svmHash, "metadata-bearing leaf hash mismatch");
     }
 
     // =========================================================================

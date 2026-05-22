@@ -74,7 +74,7 @@ contract RegressionGapSucker is JBSucker {
         uint256 projectTokenCount,
         uint256 terminalTokenAmount,
         bytes32 beneficiary,
-        bytes32 data,
+        bytes32 metadata,
         uint256 index,
         bytes32[_TREE_DEPTH] calldata leaves
     )
@@ -84,7 +84,7 @@ contract RegressionGapSucker is JBSucker {
     {
         if (!nextCheckShouldPass) {
             super._validateBranchRoot(
-                expectedRoot, projectTokenCount, terminalTokenAmount, beneficiary, data, index, leaves
+                expectedRoot, projectTokenCount, terminalTokenAmount, beneficiary, metadata, index, leaves
             );
         }
         nextCheckShouldPass = false;
@@ -349,7 +349,7 @@ contract TestRegressionGaps is Test {
                     beneficiary: bytes32(uint256(uint160(beneficiaries[i]))),
                     projectTokenCount: amounts[i],
                     terminalTokenAmount: amounts[i],
-                    data: bytes32(0)
+                    metadata: bytes32(0)
                 }),
                 proof: proof
             });
@@ -370,7 +370,7 @@ contract TestRegressionGaps is Test {
                     beneficiary: bytes32(uint256(uint160(beneficiaries[i]))),
                     projectTokenCount: amounts[i],
                     terminalTokenAmount: amounts[i],
-                    data: bytes32(0)
+                    metadata: bytes32(0)
                 }),
                 proof: proof
             });
@@ -413,7 +413,7 @@ contract TestRegressionGaps is Test {
                     beneficiary: bytes32(uint256(uint160(address(0xD1)))),
                     projectTokenCount: 5 ether,
                     terminalTokenAmount: 2 ether,
-                    data: bytes32(0)
+                    metadata: bytes32(0)
                 }),
                 proof: proofA
             })
@@ -437,7 +437,7 @@ contract TestRegressionGaps is Test {
                     beneficiary: bytes32(uint256(uint160(address(0xD2)))),
                     projectTokenCount: 7 ether,
                     terminalTokenAmount: 0,
-                    data: bytes32(0)
+                    metadata: bytes32(0)
                 }),
                 proof: proofB
             })
@@ -597,7 +597,7 @@ contract TestRegressionGaps is Test {
                         beneficiary: bytes32(uint256(uint160(ben))),
                         projectTokenCount: projTok,
                         terminalTokenAmount: termTok,
-                        data: bytes32(0)
+                        metadata: bytes32(0)
                     }),
                     proof: proof
                 })
@@ -663,7 +663,7 @@ contract TestRegressionGaps is Test {
                 beneficiary: bytes32(uint256(uint160(address(0x111)))),
                 projectTokenCount: 5 ether,
                 terminalTokenAmount: 5 ether,
-                data: bytes32(0)
+                metadata: bytes32(0)
             }),
             proof: proof
         });
@@ -909,7 +909,7 @@ contract TestRegressionGaps is Test {
                     beneficiary: bytes32(uint256(uint160(address(this)))),
                     projectTokenCount: 5 ether,
                     terminalTokenAmount: 5 ether,
-                    data: bytes32(0)
+                    metadata: bytes32(0)
                 }),
                 proof: proof
             })
@@ -929,7 +929,7 @@ contract TestRegressionGaps is Test {
                     beneficiary: bytes32(uint256(uint160(address(this)))),
                     projectTokenCount: 5 ether,
                     terminalTokenAmount: 5 ether,
-                    data: bytes32(0)
+                    metadata: bytes32(0)
                 }),
                 proof: proof
             })
@@ -946,7 +946,7 @@ contract TestRegressionGaps is Test {
                     beneficiary: bytes32(uint256(uint160(address(this)))),
                     projectTokenCount: 7 ether,
                     terminalTokenAmount: 7 ether,
-                    data: bytes32(0)
+                    metadata: bytes32(0)
                 }),
                 proof: proof
             })
@@ -1034,7 +1034,7 @@ contract TestRegressionGaps is Test {
                     beneficiary: bytes32(uint256(uint160(address(this)))),
                     projectTokenCount: 10 ether,
                     terminalTokenAmount: 10 ether,
-                    data: bytes32(0)
+                    metadata: bytes32(0)
                 }),
                 proof: proof
             })

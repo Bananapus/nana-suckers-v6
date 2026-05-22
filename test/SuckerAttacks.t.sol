@@ -67,7 +67,7 @@ contract AttackTestSucker is JBSucker {
         uint256 projectTokenCount,
         uint256 terminalTokenAmount,
         bytes32 beneficiary,
-        bytes32 data,
+        bytes32 metadata,
         uint256 index,
         bytes32[_TREE_DEPTH] calldata leaves
     )
@@ -77,7 +77,7 @@ contract AttackTestSucker is JBSucker {
     {
         if (!nextCheckShouldPass) {
             super._validateBranchRoot(
-                expectedRoot, projectTokenCount, terminalTokenAmount, beneficiary, data, index, leaves
+                expectedRoot, projectTokenCount, terminalTokenAmount, beneficiary, metadata, index, leaves
             );
         }
         nextCheckShouldPass = false;
@@ -370,7 +370,7 @@ contract SuckerAttacks is Test {
                 beneficiary: bytes32(uint256(uint160(address(120)))),
                 projectTokenCount: 5 ether,
                 terminalTokenAmount: 5 ether,
-                data: bytes32(0)
+                metadata: bytes32(0)
             }),
             proof: proof
         });
@@ -501,7 +501,7 @@ contract SuckerAttacks is Test {
                 beneficiary: bytes32(uint256(uint160(address(this)))),
                 projectTokenCount: 1 ether,
                 terminalTokenAmount: 1 ether,
-                data: bytes32(0)
+                metadata: bytes32(0)
             }),
             proof: proof
         });

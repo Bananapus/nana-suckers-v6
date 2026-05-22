@@ -15,28 +15,28 @@ This file describes the verified change from `nana-suckers-v5` to the current `n
 - `JBCeloSucker`
 - the deployers, structs, and interfaces under `src/`
 
-## Unreleased — `JBLeaf.data` attribution field
+## Unreleased — `JBLeaf.metadata` attribution field
 
-The merkle leaf now carries a fifth field: a `bytes32 data` payload that travels inside the leaf hash but is
+The merkle leaf now carries a fifth field: a `bytes32 metadata` payload that travels inside the leaf hash but is
 opaque to the sucker protocol itself.
 
 **What changed**
 
-- `JBLeaf` struct: new trailing `bytes32 data` field.
-- `IJBSucker.prepare`: new trailing `bytes32 data` parameter. The data is included in the leaf hash, so it's
+- `JBLeaf` struct: new trailing `bytes32 metadata` field.
+- `IJBSucker.prepare`: new trailing `bytes32 metadata` parameter. The metadata is included in the leaf hash, so it's
   covered by the merkle root — receivers can trust it once the claim's merkle proof verifies.
-- `_buildTreeHash` hashes 128 bytes (was 96): `keccak256(projectTokenCount || terminalTokenAmount || beneficiary || data)`.
-- `_insertIntoTree`, `_validate`, `_validateBranchRoot`, `_validateForEmergencyExit` all thread `data` through.
+- `_buildTreeHash` hashes 128 bytes (was 96): `keccak256(projectTokenCount || terminalTokenAmount || beneficiary || metadata)`.
+- `_insertIntoTree`, `_validate`, `_validateBranchRoot`, `_validateForEmergencyExit` all thread `metadata` through.
 - Events `InsertToOutboxTree` and `Claimed` carry the field so off-chain indexers can read it directly without
   cracking the leaf.
-- SVM leaf encoding widens from 96 bytes to 128 bytes; the new 32-byte suffix is the `data` field. The
+- SVM leaf encoding widens from 96 bytes to 128 bytes; the new 32-byte suffix is the `metadata` field. The
   `_svmBuildTreeHash` interop test mirrors the layout exactly so EVM↔SVM hash equality is preserved.
 
 **Intended use**
 
 The original motivator is the cross-chain referral split hook (`nana-referral-split-hook-v6`): when a referrer
 on chain Y earns credit for fee-paying activity on chain X, the hook on X uses the fee project's sucker to
-bridge the entitled fee-project tokens. The leaf's `data` carries `(originChainId, referralProjectId)` so the
+bridge the entitled fee-project tokens. The leaf's `metadata` carries `(originChainId, referralProjectId)` so the
 sibling hook on chain Y can atomically claim, re-pay the fee project locally, and push to the local distributor
 for the right referrer — all under the merkle proof's authentication, no off-chain coordination needed.
 
@@ -46,7 +46,7 @@ attribution scheme without further sucker changes. Pass `bytes32(0)` for ordinar
 **Risk surface**
 
 Zero new trust paths. The bridge protocol stays leaf-in-leaf-out; we just put one more 32-byte field under the
-same root. Existing claim, emergency-exit, and root-relay flows behave identically when `data == bytes32(0)`.
+same root. Existing claim, emergency-exit, and root-relay flows behave identically when `metadata == bytes32(0)`.
 The leaf-hash domain changes (96 → 128 bytes), but since nothing is deployed yet there's no on-chain
 compatibility concern.
 

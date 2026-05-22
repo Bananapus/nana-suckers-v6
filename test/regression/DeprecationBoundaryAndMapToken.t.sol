@@ -326,7 +326,7 @@ contract ReentrancySucker is JBSucker {
                 beneficiary: bytes32(uint256(uint160(address(this)))),
                 minTokensReclaimed: 0,
                 token: _reentrancyToken,
-                data: bytes32(0)
+                metadata: bytes32(0)
             });
         }
     }

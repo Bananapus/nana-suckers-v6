@@ -294,7 +294,7 @@ contract TestSucker is JBSucker {
         uint256 projectTokenCount,
         uint256 terminalTokenAmount,
         bytes32 beneficiary,
-        bytes32 data,
+        bytes32 metadata,
         uint256 index,
         bytes32[_TREE_DEPTH] calldata leaves
     )
@@ -305,7 +305,7 @@ contract TestSucker is JBSucker {
         // If the next check should fail, then we forward the call.
         if (!nextCheckShouldPass) {
             super._validateBranchRoot(
-                expectedRoot, projectTokenCount, terminalTokenAmount, beneficiary, data, index, leaves
+                expectedRoot, projectTokenCount, terminalTokenAmount, beneficiary, metadata, index, leaves
             );
         }
 

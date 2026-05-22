@@ -45,7 +45,7 @@ contract ArbitrumL2FeeHarness is JBArbitrumSucker {
             token: token,
             terminalTokenAmount: 0,
             beneficiary: bytes32(uint256(uint160(address(0xBEEF)))),
-            data: bytes32(0)
+            metadata: bytes32(0)
         });
     }
 }

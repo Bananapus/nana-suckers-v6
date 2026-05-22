@@ -86,7 +86,7 @@ contract DeepAttackSucker is JBSucker {
         uint256 projectTokenCount,
         uint256 terminalTokenAmount,
         bytes32 beneficiary,
-        bytes32 data,
+        bytes32 metadata,
         uint256 index,
         bytes32[_TREE_DEPTH] calldata leaves
     )
@@ -96,7 +96,7 @@ contract DeepAttackSucker is JBSucker {
     {
         if (!nextCheckShouldPass) {
             super._validateBranchRoot(
-                expectedRoot, projectTokenCount, terminalTokenAmount, beneficiary, data, index, leaves
+                expectedRoot, projectTokenCount, terminalTokenAmount, beneficiary, metadata, index, leaves
             );
         }
         nextCheckShouldPass = false;
@@ -455,7 +455,7 @@ contract SuckerDeepAttacks is Test {
                 beneficiary: bytes32(uint256(uint160(fakeBeneficiary))), // WRONG
                 projectTokenCount: 10 ether,
                 terminalTokenAmount: 5 ether,
-                data: bytes32(0)
+                metadata: bytes32(0)
             }),
             proof: proof
         });
@@ -483,7 +483,7 @@ contract SuckerDeepAttacks is Test {
                 beneficiary: bytes32(uint256(uint160(beneficiary))),
                 projectTokenCount: 10 ether,
                 terminalTokenAmount: 100 ether, // WRONG — real is 5 ether
-                data: bytes32(0)
+                metadata: bytes32(0)
             }),
             proof: proof
         });
@@ -512,7 +512,7 @@ contract SuckerDeepAttacks is Test {
                 beneficiary: bytes32(uint256(uint160(address(0xAAA)))),
                 projectTokenCount: 10 ether,
                 terminalTokenAmount: 5 ether,
-                data: bytes32(0)
+                metadata: bytes32(0)
             }),
             proof: proof
         });
@@ -552,7 +552,7 @@ contract SuckerDeepAttacks is Test {
                 beneficiary: bytes32(uint256(uint160(address(this)))),
                 projectTokenCount: 10 ether,
                 terminalTokenAmount: 5 ether,
-                data: bytes32(0)
+                metadata: bytes32(0)
             }),
             proof: proof
         });
@@ -597,7 +597,7 @@ contract SuckerDeepAttacks is Test {
                 beneficiary: bytes32(uint256(uint160(address(this)))),
                 projectTokenCount: 1 ether,
                 terminalTokenAmount: 1 ether,
-                data: bytes32(0)
+                metadata: bytes32(0)
             }),
             proof: proof
         });
@@ -647,7 +647,7 @@ contract SuckerDeepAttacks is Test {
                 beneficiary: bytes32(uint256(uint160(address(this)))),
                 projectTokenCount: 3 ether,
                 terminalTokenAmount: 3 ether,
-                data: bytes32(0)
+                metadata: bytes32(0)
             }),
             proof: proof
         });
@@ -682,7 +682,7 @@ contract SuckerDeepAttacks is Test {
                 beneficiary: bytes32(uint256(uint160(address(this)))),
                 projectTokenCount: 5 ether,
                 terminalTokenAmount: 5 ether,
-                data: bytes32(0)
+                metadata: bytes32(0)
             }),
             proof: proof
         });
@@ -713,7 +713,7 @@ contract SuckerDeepAttacks is Test {
                 beneficiary: bytes32(uint256(uint160(address(this)))),
                 projectTokenCount: 5 ether,
                 terminalTokenAmount: 5 ether,
-                data: bytes32(0)
+                metadata: bytes32(0)
             }),
             proof: proof
         });
@@ -746,7 +746,7 @@ contract SuckerDeepAttacks is Test {
                 beneficiary: bytes32(uint256(uint160(address(this)))),
                 projectTokenCount: 10 ether,
                 terminalTokenAmount: 10 ether,
-                data: bytes32(0)
+                metadata: bytes32(0)
             }),
             proof: proof
         });
@@ -1305,7 +1305,7 @@ contract SuckerDeepAttacks is Test {
                 beneficiary: bytes32(uint256(uint160(address(this)))),
                 projectTokenCount: 10 ether,
                 terminalTokenAmount: 5 ether,
-                data: bytes32(0)
+                metadata: bytes32(0)
             }),
             proof: proof
         });
@@ -1372,7 +1372,7 @@ contract SuckerDeepAttacks is Test {
                 beneficiary: bytes32(uint256(uint160(address(this)))),
                 projectTokenCount: 5 ether,
                 terminalTokenAmount: 5 ether,
-                data: bytes32(0)
+                metadata: bytes32(0)
             }),
             proof: proof
         });
@@ -1407,7 +1407,7 @@ contract SuckerDeepAttacks is Test {
                 beneficiary: bytes32(uint256(uint160(address(this)))),
                 projectTokenCount: 5 ether,
                 terminalTokenAmount: 5 ether,
-                data: bytes32(0)
+                metadata: bytes32(0)
             }),
             proof: proof
         });
@@ -1447,7 +1447,7 @@ contract SuckerDeepAttacks is Test {
                     beneficiary: bytes32(uint256(100 + i)),
                     projectTokenCount: (i + 1) * 1 ether,
                     terminalTokenAmount: (i + 1) * 0.5 ether,
-                    data: bytes32(0)
+                    metadata: bytes32(0)
                 }),
                 proof: proof
             });
@@ -1466,7 +1466,7 @@ contract SuckerDeepAttacks is Test {
                 beneficiary: bytes32(uint256(102)),
                 projectTokenCount: 3 ether,
                 terminalTokenAmount: 1.5 ether,
-                data: bytes32(0)
+                metadata: bytes32(0)
             }),
             proof: dupProof
         });

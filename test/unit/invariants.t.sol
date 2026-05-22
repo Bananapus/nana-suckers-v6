@@ -73,7 +73,7 @@ contract InvariantSucker is JBSucker {
         uint256 projectTokenCount,
         uint256 terminalTokenAmount,
         bytes32 beneficiary,
-        bytes32 data,
+        bytes32 metadata,
         uint256 index,
         bytes32[_TREE_DEPTH] calldata leaves
     )
@@ -83,7 +83,7 @@ contract InvariantSucker is JBSucker {
     {
         if (!nextCheckShouldPass) {
             super._validateBranchRoot(
-                expectedRoot, projectTokenCount, terminalTokenAmount, beneficiary, data, index, leaves
+                expectedRoot, projectTokenCount, terminalTokenAmount, beneficiary, metadata, index, leaves
             );
         }
         nextCheckShouldPass = false;
@@ -255,7 +255,7 @@ contract SuckerHandler is Test {
                 beneficiary: leaf.beneficiary,
                 projectTokenCount: leaf.projectTokenCount,
                 terminalTokenAmount: leaf.terminalTokenAmount,
-                data: bytes32(0)
+                metadata: bytes32(0)
             }),
             proof: proof
         });
@@ -298,7 +298,7 @@ contract SuckerHandler is Test {
                 beneficiary: leaf.beneficiary,
                 projectTokenCount: leaf.projectTokenCount,
                 terminalTokenAmount: leaf.terminalTokenAmount,
-                data: bytes32(0)
+                metadata: bytes32(0)
             }),
             proof: proof
         });

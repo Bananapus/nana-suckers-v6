@@ -65,13 +65,13 @@ contract MerkleUnitTest is JBSucker, Test {
             projectTokenCount: 8 ether,
             terminalTokenAmount: 15 ether,
             beneficiary: bytes32(uint256(uint160(address(1000)))),
-            data: bytes32(0)
+            metadata: bytes32(0)
         });
         bytes32 leaf1 = _buildTreeHash({
             projectTokenCount: 0.1 ether,
             terminalTokenAmount: 200 ether,
             beneficiary: bytes32(uint256(uint160(address(999)))),
-            data: bytes32(0)
+            metadata: bytes32(0)
         });
         _proof[1] = keccak256(abi.encodePacked(leaf0, leaf1));
         _proof[2] = 0xb4c11951957c6f8f642c4af61cd6b24640fec6dc7fc607ee8206a99e92410d30;
@@ -142,7 +142,7 @@ contract MerkleUnitTest is JBSucker, Test {
                 beneficiary: bytes32(uint256(uint160(address(120)))),
                 projectTokenCount: 5 ether,
                 terminalTokenAmount: 5 ether,
-                data: bytes32(0)
+                metadata: bytes32(0)
             }),
                 proof: __proof
             })
@@ -178,7 +178,7 @@ contract MerkleUnitTest is JBSucker, Test {
                 beneficiary: bytes32(uint256(uint160(address(120)))),
                 projectTokenCount: 5 ether,
                 terminalTokenAmount: 5 ether,
-                data: bytes32(0)
+                metadata: bytes32(0)
             }),
                 proof: __proof
             })
@@ -195,7 +195,7 @@ contract MerkleUnitTest is JBSucker, Test {
                 beneficiary: bytes32(uint256(uint160(address(120)))),
                 projectTokenCount: 5 ether,
                 terminalTokenAmount: 5 ether,
-                data: bytes32(0)
+                metadata: bytes32(0)
             }),
                 proof: __proof
             })
