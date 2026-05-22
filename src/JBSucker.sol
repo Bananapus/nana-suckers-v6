@@ -1178,7 +1178,8 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
             tokenToReclaim: token,
             minTokensReclaimed: minTokensReclaimed,
             beneficiary: payable(address(this)),
-            metadata: bytes("")
+            metadata: bytes(""),
+            referralProjectId: 0
         });
 
         // Sanity check to make sure we received the expected amount.
