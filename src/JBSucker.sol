@@ -334,7 +334,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         uint256 _projectId = projectId();
 
         _requirePermissionFrom({
-            account: PROJECTS.ownerOf(_projectId), projectId: _projectId, permissionId: JBPermissionIds.SUCKER_SAFETY
+            account: _ownerOf(_projectId), projectId: _projectId, permissionId: JBPermissionIds.SUCKER_SAFETY
         });
 
         // Enable the emergency hatch for each token.
@@ -596,9 +596,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
 
         // The caller must be the project owner or have the `SET_SUCKER_DEPRECATION` permission from them.
         _requirePermissionFrom({
-            account: PROJECTS.ownerOf(_projectId),
-            projectId: _projectId,
-            permissionId: JBPermissionIds.SET_SUCKER_DEPRECATION
+            account: _ownerOf(_projectId), projectId: _projectId, permissionId: JBPermissionIds.SET_SUCKER_DEPRECATION
         });
 
         // This is the earliest time for when the sucker can be considered deprecated.
@@ -1079,7 +1077,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
 
         // The registry can map during authorized deployment. Otherwise, require the project's mapping permission.
         _requirePermissionAllowingOverrideFrom({
-            account: PROJECTS.ownerOf(_projectId),
+            account: _ownerOf(_projectId),
             projectId: _projectId,
             permissionId: JBPermissionIds.MAP_SUCKER_TOKEN,
             alsoGrantAccessIf: _msgSender() == address(REGISTRY)
@@ -1570,6 +1568,20 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     /// @return sender The address which sent this call.
     function _msgSender() internal view override(ERC2771Context, Context) returns (address sender) {
         return ERC2771Context._msgSender();
+    }
+
+    /// @notice Resolve the current owner of the project this sucker belongs to.
+    /// @dev `PROJECTS.ownerOf(...)` is the source of truth for "project owner" permission checks; we hit it from
+    /// every permission-gated entrypoint (`enableEmergencyHatchFor`, `setDeprecation`, `_mapToken`). Routing all
+    /// three through this internal helper emits the abi-encode + STATICCALL + return-decode sequence once in the
+    /// child contract's bytecode instead of inlining it at each call site, which is what keeps `JBSwapCCIPSucker`
+    /// under the EIP-170 limit after the leaf-`metadata` thread-through landed.
+    /// @param forProjectId The project ID to look up — always the sucker's own `projectId()`, but accepted as a
+    /// parameter so callers can pass the cached local they already computed (avoiding a redundant `projectId()`
+    /// call against the read-only registry).
+    /// @return owner The address currently registered as the project's ERC-721 holder.
+    function _ownerOf(uint256 forProjectId) internal view returns (address owner) {
+        return PROJECTS.ownerOf(forProjectId);
     }
 
     /// @notice Retain a failed `toRemoteFee` payment for later caller refund.
