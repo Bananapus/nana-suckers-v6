@@ -1185,7 +1185,9 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         // Record the balance before the cash out for the sanity check.
         uint256 balanceBefore = _balanceOf({token: token, addr: address(this)});
 
-        // Cash out the project tokens for terminal tokens.
+        // Cash out the project tokens for terminal tokens. Suckers are a transparent value-mover (the bridge
+        // accounting is the entirety of their function) — they're not a fee-paying entry point for any referrer,
+        // so `referralProjectId: 0` is correct.
         reclaimedAmount = terminal.cashOutTokensOf({
             holder: address(this),
             projectId: cachedProjectId,
@@ -1193,7 +1195,8 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
             tokenToReclaim: token,
             minTokensReclaimed: minTokensReclaimed,
             beneficiary: payable(address(this)),
-            metadata: bytes("")
+            metadata: bytes(""),
+            referralProjectId: 0
         });
 
         // Sanity check to make sure we received the expected amount.

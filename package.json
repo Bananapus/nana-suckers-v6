@@ -30,7 +30,7 @@
   },
   "dependencies": {
     "@arbitrum/nitro-contracts": "3.2.0",
-    "@bananapus/core-v6": "^0.0.57",
+    "@bananapus/core-v6": "^0.0.59",
     "@bananapus/permission-ids-v6": "^0.0.26",
     "@chainlink/contracts-ccip": "1.6.4",
     "@chainlink/local": "0.2.7",
