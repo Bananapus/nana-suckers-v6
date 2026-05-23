@@ -500,8 +500,13 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
         override
         returns (address[] memory suckers)
     {
+        // Cache the project owner so deployment and explicit-peer authorization are both checked against the same
+        // project authority, not a delegated operator.
+        address projectOwner = PROJECTS.ownerOf(projectId);
+
+        // `DEPLOY_SUCKERS` authorizes creating suckers and applying their launch-time token mappings.
         _requirePermissionFrom({
-            account: PROJECTS.ownerOf(projectId), projectId: projectId, permissionId: JBPermissionIds.DEPLOY_SUCKERS
+            account: projectOwner, projectId: projectId, permissionId: JBPermissionIds.DEPLOY_SUCKERS
         });
 
         // Create an array to store the suckers as they are deployed.
@@ -516,16 +521,9 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
         // default peer symmetry assumption will not hold.
         salt = keccak256(abi.encode(sender, salt));
 
-        // Cache the project owner so the explicit-peer gate can check against the original authority, not a
-        // delegated operator. The default same-address peering invariant (peer == 0 or peer == address(this))
-        // does not need this stronger gate, but a non-symmetric explicit peer authorizes that arbitrary address
-        // to deliver outbox roots and mint project tokens — so it must require a permission strictly broader
-        // than ops automation's `DEPLOY_SUCKERS`.
-        address projectOwner = PROJECTS.ownerOf(projectId);
-
         // Iterate through the configurations and deploy the suckers.
         for (uint256 i; i < configurations.length;) {
-            // Get the configuration being iterated over.
+            // Copy the configuration once because its deployer, peer, mappings, and event payload are all reused below.
             JBSuckerDeployerConfig memory configuration = configurations[i];
 
             // Make sure the deployer is allowed.
@@ -533,13 +531,11 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
                 revert JBSuckerRegistry_InvalidDeployer({deployer: configuration.deployer});
             }
 
-            // If the configuration specifies a non-symmetric explicit peer, require the additional
-            // `SET_SUCKER_PEER` permission. Default peering (peer == 0 or peer == bytes32 of address(this)) is
-            // unaffected. Without this gate, a delegated operator with only `DEPLOY_SUCKERS` could register an
-            // attacker peer and use the resulting sucker's mint authority to deliver fabricated outbox roots.
-            // forge-lint: disable-next-line(unsafe-typecast)
-            bytes32 selfPeer = bytes32(uint256(uint160(address(this))));
-            if (configuration.peer != bytes32(0) && configuration.peer != selfPeer) {
+            // `peer == 0` tells the sucker to use its own clone address as the deterministic same-address peer, so the
+            // deploy permission is enough for that default path.
+            // Every nonzero value is an explicit remote authority, including this registry's address.
+            if (configuration.peer != bytes32(0)) {
+                // Only a caller with `SET_SUCKER_PEER` may choose that explicit remote authority.
                 _requirePermissionFrom({
                     account: projectOwner, projectId: projectId, permissionId: JBPermissionIds.SET_SUCKER_PEER
                 });

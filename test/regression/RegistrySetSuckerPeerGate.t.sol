@@ -32,8 +32,8 @@ import {IOPStandardBridge} from "../../src/interfaces/IOPStandardBridge.sol";
 /// @dev Before the fix, any caller with `DEPLOY_SUCKERS` could pass an arbitrary `configuration.peer`. That peer
 /// gets to deliver outbox roots and mint project tokens via the new sucker, so an ops automation operator with
 /// the narrower deploy permission could quietly register an attacker-controlled peer. The fix requires the
-/// stricter `SET_SUCKER_PEER` permission when `peer` is set to anything other than the symmetric defaults
-/// (`bytes32(0)` or `bytes32(uint160(address(this)))`).
+/// stricter `SET_SUCKER_PEER` permission whenever `peer` is nonzero; only `bytes32(0)` keeps the sucker's
+/// deterministic same-address peer behavior.
 contract RegistrySetSuckerPeerGateTest is Test, TestBaseWorkflow, IERC721Receiver {
     address internal constant MESSENGER = address(0x1001);
 
@@ -148,15 +148,39 @@ contract RegistrySetSuckerPeerGateTest is Test, TestBaseWorkflow, IERC721Receive
         assertTrue(IJBSucker(suckers[0]).peer() != bytes32(0), "default peer should resolve to a real address");
     }
 
-    /// @notice Symmetric explicit peer (peer == bytes32(uint160(address(registry)))) — same address as the
-    /// registry — is also treated as a default and does not require the stronger permission. Pins the second
-    /// boundary case in the gate.
-    function test_explicitPeerEqualToRegistry_doesNotRequireSetSuckerPeer() external {
-        bytes32 selfPeer = bytes32(uint256(uint160(address(registry))));
-        JBSuckerDeployerConfig[] memory configs = _configsWithPeer(selfPeer);
+    /// @notice The registry address is still an explicit peer override; only `bytes32(0)` means default.
+    function test_explicitPeerEqualToRegistry_revertsWhenOperatorLacksSetSuckerPeer() external {
+        // The registry is not the sucker clone. If this nonzero value were exempt, an ops operator could install it
+        // as the remote message authority without the permission intended for peer selection.
+        bytes32 registryPeer = bytes32(uint256(uint160(address(registry))));
+        JBSuckerDeployerConfig[] memory configs = _configsWithPeer(registryPeer);
 
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                JBPermissioned.JBPermissioned_Unauthorized.selector,
+                projectOwner,
+                opsOperator,
+                projectId,
+                JBPermissionIds.SET_SUCKER_PEER
+            )
+        );
         vm.prank(opsOperator);
-        registry.deploySuckersFor({projectId: projectId, salt: keccak256("ops-self"), configurations: configs});
+        registry.deploySuckersFor({projectId: projectId, salt: keccak256("ops-registry"), configurations: configs});
+    }
+
+    /// @notice A peer manager can still intentionally set the registry address if that is truly desired.
+    function test_explicitPeerEqualToRegistry_succeedsWhenOperatorHasSetSuckerPeer() external {
+        // This confirms the change is authorization-only: nonzero peers are still supported once explicitly approved.
+        bytes32 registryPeer = bytes32(uint256(uint160(address(registry))));
+        JBSuckerDeployerConfig[] memory configs = _configsWithPeer(registryPeer);
+
+        vm.prank(peerManagerOperator);
+        address[] memory suckers = registry.deploySuckersFor({
+            projectId: projectId, salt: keccak256("peer-mgr-registry"), configurations: configs
+        });
+
+        assertEq(suckers.length, 1);
+        assertEq(IJBSucker(suckers[0]).peer(), registryPeer, "approved explicit peer should be stored");
     }
 
     function _configsWithPeer(bytes32 peer) internal view returns (JBSuckerDeployerConfig[] memory configs) {
