@@ -446,7 +446,9 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         } else {
             // Emit an event when a root is rejected due to a stale (non-increasing) nonce.
             // This aids off-chain monitoring in detecting out-of-order or duplicate deliveries.
-            emit StaleRootRejected({token: localToken, receivedNonce: root.remoteRoot.nonce, currentNonce: inbox.nonce});
+            emit StaleRootRejected({
+                token: localToken, receivedNonce: root.remoteRoot.nonce, currentNonce: inbox.nonce, caller: _msgSender()
+            });
         }
 
         // --- Project-wide shared state update (gated by source freshness key) ---
@@ -1590,7 +1592,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     function _retainToRemoteFee(address account, uint256 amount) internal {
         retainedToRemoteFeeOf[account] += amount;
         retainedToRemoteFeeBalance += amount;
-        emit RetainedToRemoteFee({account: account, amount: amount});
+        emit RetainedToRemoteFee({account: account, amount: amount, caller: _msgSender()});
     }
 
     /// @notice Retains a failed transport-payment refund as account-scoped native credit.
@@ -1599,7 +1601,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     function _retainTransportPaymentRefund(address account, uint256 amount) internal {
         retainedTransportPaymentRefundOf[account] += amount;
         retainedTransportPaymentRefundBalance += amount;
-        emit RetainedTransportPaymentRefund({account: account, amount: amount});
+        emit RetainedTransportPaymentRefund({account: account, amount: amount, caller: _msgSender()});
     }
 
     /// @notice Returns the peer address as an EVM address.

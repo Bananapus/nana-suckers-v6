@@ -106,7 +106,10 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
     /// @param nonce The nonce of the batch whose swap was retried.
     /// @param bridgeAmount The amount of bridge tokens that were swapped.
     /// @param localAmount The amount of local tokens received from the retry swap.
-    event SwapRetried(address indexed localToken, uint64 indexed nonce, uint256 bridgeAmount, uint256 localAmount);
+    /// @param caller The address that retried the swap.
+    event SwapRetried(
+        address indexed localToken, uint64 indexed nonce, uint256 bridgeAmount, uint256 localAmount, address caller
+    );
 
     //*********************************************************************//
     // --------------- public immutable stored properties ---------------- //
@@ -510,7 +513,11 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
 
         _retrySwapLocked = false;
         emit SwapRetried({
-            localToken: localToken, nonce: nonce, bridgeAmount: pending.bridgeAmount, localAmount: localAmount
+            localToken: localToken,
+            nonce: nonce,
+            bridgeAmount: pending.bridgeAmount,
+            localAmount: localAmount,
+            caller: _msgSender()
         });
     }
 
@@ -643,7 +650,7 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
 
             if (refundFailed) {
                 _retainTransportPaymentRefund({account: _msgSender(), amount: refundAmount});
-                emit TransportPaymentRefundFailed({recipient: _msgSender(), amount: refundAmount});
+                emit TransportPaymentRefundFailed({recipient: _msgSender(), amount: refundAmount, caller: _msgSender()});
             }
         }
     }

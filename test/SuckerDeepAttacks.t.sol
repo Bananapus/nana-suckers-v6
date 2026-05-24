@@ -1613,7 +1613,7 @@ contract SuckerDeepAttacks is Test {
         });
 
         vm.expectEmit(true, false, false, true, address(sucker));
-        emit IJBSucker.StaleRootRejected({token: TOKEN, receivedNonce: 3, currentNonce: 5});
+        emit IJBSucker.StaleRootRejected({token: TOKEN, receivedNonce: 3, currentNonce: 5, caller: address(sucker)});
 
         vm.prank(address(sucker));
         sucker.fromRemote(root);
@@ -1749,7 +1749,7 @@ contract SuckerDeepAttacks is Test {
         });
 
         vm.expectEmit(true, false, false, true, address(sucker));
-        emit IJBSucker.StaleRootRejected({token: TOKEN, receivedNonce: 5, currentNonce: 5});
+        emit IJBSucker.StaleRootRejected({token: TOKEN, receivedNonce: 5, currentNonce: 5, caller: address(sucker)});
 
         vm.prank(address(sucker));
         sucker.fromRemote(root);
