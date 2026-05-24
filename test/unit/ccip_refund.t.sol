@@ -204,7 +204,7 @@ contract CCIPRefundTest is Test {
         // The non-payable caller can't receive the refund.
         // This should emit TransportPaymentRefundFailed instead of reverting.
         vm.expectEmit(true, false, false, true, address(sucker));
-        emit JBCCIPSucker.TransportPaymentRefundFailed(address(caller), expectedRefund);
+        emit JBCCIPSucker.TransportPaymentRefundFailed(address(caller), expectedRefund, address(caller));
 
         caller.callToRemote{value: transportPayment}(address(sucker), erc20);
 

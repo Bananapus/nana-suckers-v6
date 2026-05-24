@@ -74,7 +74,8 @@ interface IJBSucker is IERC165 {
     /// @param token The terminal token address.
     /// @param receivedNonce The nonce of the rejected root.
     /// @param currentNonce The current nonce that was expected.
-    event StaleRootRejected(address indexed token, uint64 receivedNonce, uint64 currentNonce);
+    /// @param caller The address that relayed the stale root.
+    event StaleRootRejected(address indexed token, uint64 receivedNonce, uint64 currentNonce, address caller);
 
     // View functions
 

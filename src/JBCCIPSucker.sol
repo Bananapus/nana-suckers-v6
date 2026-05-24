@@ -49,7 +49,8 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
     /// committing the bridge message.
     /// @param recipient The address that was supposed to receive the refund.
     /// @param amount The amount of the failed refund.
-    event TransportPaymentRefundFailed(address indexed recipient, uint256 amount);
+    /// @param caller The address that triggered the CCIP send.
+    event TransportPaymentRefundFailed(address indexed recipient, uint256 amount, address caller);
 
     //*********************************************************************//
     // ----------------------- internal constants ------------------------ //
@@ -255,7 +256,7 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
         if (refundFailed) {
             // Refund accounting is isolated per caller; reentry cannot increase the retained credit.
             _retainTransportPaymentRefund({account: _msgSender(), amount: refundAmount});
-            emit TransportPaymentRefundFailed({recipient: _msgSender(), amount: refundAmount});
+            emit TransportPaymentRefundFailed({recipient: _msgSender(), amount: refundAmount, caller: _msgSender()});
         }
     }
 

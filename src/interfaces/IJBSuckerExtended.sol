@@ -34,12 +34,14 @@ interface IJBSuckerExtended is IJBSucker {
     /// @notice Emitted when a failed `toRemoteFee` payment is retained for later refund.
     /// @param account The account that can reclaim the retained fee.
     /// @param amount The retained fee amount.
-    event RetainedToRemoteFee(address indexed account, uint256 amount);
+    /// @param caller The address that caused the fee to be retained.
+    event RetainedToRemoteFee(address indexed account, uint256 amount, address caller);
 
     /// @notice Emitted when a failed transport-payment refund is retained for later refund.
     /// @param account The account that can reclaim the retained refund.
     /// @param amount The retained refund amount.
-    event RetainedTransportPaymentRefund(address indexed account, uint256 amount);
+    /// @param caller The address that caused the refund to be retained.
+    event RetainedTransportPaymentRefund(address indexed account, uint256 amount, address caller);
 
     /// @notice Emitted when an account claims retained `toRemoteFee` ETH.
     /// @param account The account whose retained fee balance was claimed.

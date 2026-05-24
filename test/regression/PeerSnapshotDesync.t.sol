@@ -130,7 +130,7 @@ contract RegressionPeerSnapshotDesyncTest is Test {
         // But token B's inbox was still updated (per-token nonce 1 > 0).
         // We verify by trying to send the same nonce again — it should emit StaleRootRejected.
         vm.expectEmit(true, false, false, true);
-        emit IJBSucker.StaleRootRejected(TOKEN_B, 1, 1);
+        emit IJBSucker.StaleRootRejected(TOKEN_B, 1, 1, address(sucker));
         vm.prank(address(sucker));
         sucker.fromRemote(_messageRoot(TOKEN_B, 1, 1, 100 ether, 10 ether, 20 ether));
     }
