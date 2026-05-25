@@ -231,8 +231,9 @@ contract StaleNonceMetadataOverwriteTest is Test {
         assertEq(localTotal2, 500e6, "nonce 2 localTotal should be 500e6");
 
         // Now replay nonce 1 with DIFFERENT values.
-        // This simulates a stale CCIP message being re-delivered or replayed.
-        _deliverMessage({
+        // This simulates a stale funded CCIP message being re-delivered or replayed.
+        usdc.mint(address(sucker), 9999e6);
+        Client.Any2EVMMessage memory replayMessage = _buildCCIPMessage({
             nonce: 1,
             amount: 9999e6, // Different leaf amount — would corrupt rate if written
             bridgeAmount: 9999e6, // Different bridge amount
@@ -240,6 +241,9 @@ contract StaleNonceMetadataOverwriteTest is Test {
             batchEnd: 200, // Different batch end
             sourceTimestamp: 50 // Older timestamp
         });
+        vm.expectRevert(abi.encodeWithSelector(JBSwapCCIPSucker.JBSwapCCIPSucker_DuplicateBatch.selector, uint64(1)));
+        vm.prank(MOCK_ROUTER);
+        sucker.ccipReceive(replayMessage);
 
         // Verify nonce 1's conversion rate was NOT overwritten by the replay.
         (uint256 leafAfterReplay, uint256 localAfterReplay) = sucker.exposed_conversionRateOf(token, 1);
@@ -275,8 +279,9 @@ contract StaleNonceMetadataOverwriteTest is Test {
         assertEq(localTotal, 1000e6);
 
         // Replay nonce 1 again (same nonce, inbox is at nonce 1).
-        // fromRemote requires nonce > inbox.nonce, so nonce 1 == inbox.nonce is rejected.
-        _deliverMessage({
+        // The funded duplicate is rejected before it can overwrite metadata or touch swap accounting.
+        usdc.mint(address(sucker), 7777e6);
+        Client.Any2EVMMessage memory replayMessage = _buildCCIPMessage({
             nonce: 1,
             amount: 7777e6, // Different values
             bridgeAmount: 7777e6,
@@ -284,6 +289,9 @@ contract StaleNonceMetadataOverwriteTest is Test {
             batchEnd: 100,
             sourceTimestamp: 50
         });
+        vm.expectRevert(abi.encodeWithSelector(JBSwapCCIPSucker.JBSwapCCIPSucker_DuplicateBatch.selector, uint64(1)));
+        vm.prank(MOCK_ROUTER);
+        sucker.ccipReceive(replayMessage);
 
         // Verify conversion rate was NOT overwritten.
         (uint256 leafAfter, uint256 localAfter) = sucker.exposed_conversionRateOf(token, 1);

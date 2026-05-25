@@ -34,6 +34,7 @@ contract RegressionPeerDeterminismTest is Test, TestBaseWorkflow, IERC721Receive
     uint256 internal projectId;
 
     function setUp() public override {
+        vm.chainId(10);
         super.setUp();
 
         registryA = new JBSuckerRegistry(jbDirectory(), jbPermissions(), address(this), address(0));

@@ -54,6 +54,7 @@ contract CodexNemesisDeployMappingBypassTest is DeployerTests {
         JBSuckerDeployerConfig[] memory configurations = new JBSuckerDeployerConfig[](1);
         configurations[0] = JBSuckerDeployerConfig({deployer: deployer, peer: bytes32(0), mappings: mappings});
 
+        vm.chainId(10);
         vm.prank(operator);
         address[] memory suckers = registry.deploySuckersFor({
             projectId: projectId, salt: bytes32("codex-nemesis"), configurations: configurations

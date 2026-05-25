@@ -36,6 +36,7 @@ contract RegistryPeerMismatchTest is Test {
     JBSuckerRegistry internal registryB;
 
     function setUp() public {
+        vm.chainId(10);
         vm.mockCall(DIRECTORY, abi.encodeCall(IJBDirectory.PROJECTS, ()), abi.encode(IJBProjects(PROJECTS)));
         vm.mockCall(
             PROJECTS, abi.encodeWithSelector(bytes4(keccak256("ownerOf(uint256)")), PROJECT_ID), abi.encode(OWNER)

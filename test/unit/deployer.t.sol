@@ -264,6 +264,7 @@ contract DeployerTests is Test, TestBaseWorkflow, IERC721Receiver {
     function testOPDeployerThroughRegistry(IOPMessenger _opMessenger, IOPStandardBridge _opBridge) public {
         IJBSuckerDeployer deployer = _addToRegistry(_setupOptimismDeployer(_opMessenger, _opBridge));
         _allowMapping(projectId, address(registry));
+        vm.chainId(10);
         IJBSucker sucker = _deployThroughRegistry(deployer, projectId, bytes32(0));
         _assertRegistered(_assertValidSucker(sucker, projectId));
         _assertOptimismSucker(deployer, sucker);
@@ -336,6 +337,7 @@ contract DeployerTests is Test, TestBaseWorkflow, IERC721Receiver {
         _allowMapping(projectId, address(registry));
         IJBSuckerDeployer deployer =
             _addToRegistry(_setupArbitrumDeployer(_layer ? JBLayer.L1 : JBLayer.L2, _inbox, _gatewayRouter));
+        vm.chainId(_layer ? 1 : 42_161);
         IJBSucker sucker = _deployThroughRegistry(deployer, projectId, bytes32(0));
         _assertRegistered(_assertValidSucker(sucker, projectId));
         _assertArbSucker(deployer, sucker);

@@ -35,6 +35,7 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
     error JBSuckerRegistry_InvalidDeployer(IJBSuckerDeployer deployer);
     error JBSuckerRegistry_SuckerDoesNotBelongToProject(uint256 projectId, address sucker);
     error JBSuckerRegistry_SuckerIsNotDeprecated(address sucker, JBSuckerState suckerState);
+    error JBSuckerRegistry_ZeroPeerChainId(address sucker);
 
     //*********************************************************************//
     // ------------------------- public constants ------------------------ //
@@ -142,8 +143,9 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
             (, uint256 val) = _suckersOf[projectId].tryGet(allSuckers[i]);
             if (val == _SUCKER_EXISTS) {
                 IJBSucker sucker = IJBSucker(allSuckers[i]);
-                pairs[j] =
-                    JBSuckersPair({local: address(sucker), remote: sucker.peer(), remoteChainId: sucker.peerChainId()});
+                pairs[j] = JBSuckersPair({
+                    local: address(sucker), remote: sucker.peer(), remoteChainId: _peerChainIdOf(sucker)
+                });
                 unchecked {
                     ++j;
                 }
@@ -220,7 +222,7 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
                 try IJBSucker(allSuckers[i]).peerChainBalanceOf({decimals: decimals, currency: currency}) returns (
                     JBDenominatedAmount memory amt
                 ) {
-                    uint256 chainId = IJBSucker(allSuckers[i]).peerChainId();
+                    uint256 chainId = _peerChainIdOf(IJBSucker(allSuckers[i]));
                     scratch.chainCount = _recordPeerValue({
                         scratch: scratch,
                         chainId: chainId,
@@ -276,7 +278,7 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
                 try IJBSucker(allSuckers[i]).peerChainSurplusOf({decimals: decimals, currency: currency}) returns (
                     JBDenominatedAmount memory amt
                 ) {
-                    uint256 chainId = IJBSucker(allSuckers[i]).peerChainId();
+                    uint256 chainId = _peerChainIdOf(IJBSucker(allSuckers[i]));
                     scratch.chainCount = _recordPeerValue({
                         scratch: scratch,
                         chainId: chainId,
@@ -319,7 +321,7 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
             // Include both active and deprecated suckers in aggregate economic views.
             if (val == _SUCKER_EXISTS || val == _SUCKER_DEPRECATED) {
                 try IJBSucker(allSuckers[i]).peerChainTotalSupply() returns (uint256 supply) {
-                    uint256 chainId = IJBSucker(allSuckers[i]).peerChainId();
+                    uint256 chainId = _peerChainIdOf(IJBSucker(allSuckers[i]));
                     scratch.chainCount = _recordPeerValue({
                         scratch: scratch,
                         chainId: chainId,
@@ -375,6 +377,14 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
         scratch.values = new uint256[](len);
         scratch.snapshotTimestamps = new uint256[](len);
         scratch.hasActiveValue = new bool[](len);
+    }
+
+    /// @notice Reads a sucker's peer chain ID, reverting if the sucker cannot identify a real peer chain.
+    /// @param sucker The sucker to query.
+    /// @return chainId The non-zero peer chain ID.
+    function _peerChainIdOf(IJBSucker sucker) internal view returns (uint256 chainId) {
+        chainId = sucker.peerChainId();
+        if (chainId == 0) revert JBSuckerRegistry_ZeroPeerChainId({sucker: address(sucker)});
     }
 
     /// @notice Records a project-scoped peer-chain aggregate value.
@@ -544,6 +554,7 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
             // Create the sucker.
             IJBSucker sucker = configuration.deployer
             .createForSender({localProjectId: projectId, salt: salt, peer: configuration.peer});
+            _peerChainIdOf(sucker);
             suckers[i] = address(sucker);
 
             // Store the sucker as being deployed for this project.
