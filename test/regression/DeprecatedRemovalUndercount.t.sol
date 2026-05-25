@@ -135,7 +135,7 @@ contract RegressionDeprecatedRemovalUndercountTest is Test {
 
         registry.removeDeprecatedSucker({projectId: PROJECT_ID, sucker: address(sucker)});
 
-        // After the fix, the deprecated sucker's supply is still visible.
+        // Deprecated sucker supply remains visible after removal from active listings.
         uint256 supplyAfterRemoval = registry.remoteTotalSupplyOf(PROJECT_ID);
         assertEq(supplyAfterRemoval, 1000e18, "deprecated sucker supply remains visible after removal");
 

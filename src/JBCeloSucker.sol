@@ -35,7 +35,7 @@ contract JBCeloSucker is JBOptimismSucker {
     // ---------------------------- constructor -------------------------- //
     //*********************************************************************//
 
-    /// @param deployer A contract that deploys the clones for this contracts.
+    /// @param deployer A contract that deploys clones of this contract.
     /// @param directory A contract storing directories of terminals and controllers for each project.
     /// @param permissions A contract storing permissions.
     /// @param prices The price oracle used to convert peer-chain balances and surplus.
@@ -135,7 +135,7 @@ contract JBCeloSucker is JBOptimismSucker {
     {
         index; // Silence unused parameter warning (not needed for Celo bridge).
 
-        // Revert if there's a `msg.value`. The OP bridge does not expect to be paid.
+        // Revert if there's a `msg.value`. The Celo bridge does not expect to be paid.
         if (transportPayment != 0) {
             revert JBSucker_UnexpectedMsgValue({value: transportPayment});
         }

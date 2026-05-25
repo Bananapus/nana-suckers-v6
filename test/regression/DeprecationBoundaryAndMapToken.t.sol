@@ -12,12 +12,12 @@ import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import {IJBTerminal} from "@bananapus/core-v6/src/interfaces/IJBTerminal.sol";
 import {IJBSuckerRegistry} from "../../src/interfaces/IJBSuckerRegistry.sol";
 
-/// @title CertikAIScan — Tests for CertiK AI scan fixes
-/// @notice Covers fixes 1-5 from the CertiK AI scan remediation:
-///   Fix 1: Arbitrum ERC-20 dataLength underestimate (placeholder — requires fork test)
-///   Fix 2: CCIP LINK-fee caller-provided (placeholder — requires CCIP router setup)
-///   Fix 3: setDeprecation boundary check (< changed to <=)
-///   Fix 4: Reentrancy-safe token disable in _mapToken (enabled = false before _sendRoot)
+/// @title CertikAIScan
+/// @notice Regression coverage for CertiK AI scan remediation items:
+///   1. Arbitrum ERC-20 retryable data length is covered by fork/integration tests.
+///   2. CCIP LINK-fee mode requires caller-provided LINK and is covered by integration tests.
+///   3. `setDeprecation` rejects the exact unsafe boundary timestamp.
+///   4. `_mapToken` disables a token before sending its final root.
 contract CertikAIScanTest is Test {
     address constant DIRECTORY = address(600);
     address constant PERMISSIONS = address(800);
@@ -49,53 +49,38 @@ contract CertikAIScanTest is Test {
     }
 
     // -----------------------------------------------------------------------
-    //  Fix 1: Arbitrum ERC-20 dataLength underestimate
+    //  Arbitrum ERC-20 retryable data length
     // -----------------------------------------------------------------------
 
-    /// @notice Fix 1: The Arbitrum sucker now queries IL1ArbitrumGateway.getOutboundCalldata()
-    ///         for the actual payload length instead of hardcoding dataLength: 96.
-    /// @dev This fix requires a fork test with real Arbitrum gateway contracts to verify
-    ///      that the submission cost covers the actual gateway calldata. The fix was verified
-    ///      via code review: JBArbitrumSucker._toL2() now calls
-    ///      `IL1ArbitrumGateway(gateway).getOutboundCalldata(...)` and passes the result's
-    ///      `.length` to `calculateRetryableSubmissionFee`, ensuring the submission cost
-    ///      accounts for the full gateway-wrapped calldata (which is significantly larger
-    ///      than the user data alone).
+    /// @notice Arbitrum sends use `IL1ArbitrumGateway.getOutboundCalldata()` to price the full retryable payload.
+    /// @dev Requires a fork test with real Arbitrum gateway contracts to verify submission-cost coverage.
     function test_fix1_arbitrumDataLength_documentedAsForked() external pure {
-        // Intentionally empty — this fix is verified via fork test and code review.
-        // See: JBArbitrumSucker._toL2(), lines calling getOutboundCalldata().
+        // Intentionally empty. See JBArbitrumSucker._toL2() and the Arbitrum fork tests.
     }
 
     // -----------------------------------------------------------------------
-    //  Fix 2: CCIP LINK-fee caller-provided LINK
+    //  CCIP LINK-fee caller-provided LINK
     // -----------------------------------------------------------------------
 
-    /// @notice Fix 2: LINK-fee mode now pulls LINK from the caller via transferFrom instead
-    ///         of using the sucker's pre-funded balance. This keeps toRemote permissionless
-    ///         while preventing anyone from draining the sucker's LINK.
-    /// @dev This fix requires a full CCIP router mock (ICCIPRouter, LINK token, chain selector)
-    ///      to test end-to-end. The fix was verified via fork tests (ForkMainnet, ForkClaimMainnet,
-    ///      ForkSwapMainnet) which confirm LINK is pulled from the caller's balance.
-    ///      See: JBCCIPLib.sendCCIPMessage() feeTokenPayer parameter.
+    /// @notice LINK-fee mode pulls LINK from the caller instead of the sucker's prefunded balance.
+    /// @dev Requires a full CCIP router/LINK setup for end-to-end verification.
     function test_fix2_ccipLinkFeeCallerProvided_documentedAsIntegration() external pure {
-        // Intentionally empty — this fix requires CCIP router + LINK token mocks.
+        // Intentionally empty. This path requires CCIP router and LINK token mocks.
         // See: JBCCIPLib.sendCCIPMessage() and JBCCIPSucker._sendRootOverAMB().
     }
 
     // -----------------------------------------------------------------------
-    //  Fix 3: setDeprecation boundary check (< changed to <=)
+    //  setDeprecation boundary check
     // -----------------------------------------------------------------------
 
-    /// @notice Fix 3: setDeprecation now rejects timestamps exactly at the boundary.
-    ///         Before the fix, `timestamp == block.timestamp + _maxMessagingDelay()` was accepted.
-    ///         After the fix, the `<` was changed to `<=`, so this boundary value is rejected.
+    /// @notice `setDeprecation` rejects timestamps exactly at the minimum-delay boundary.
     function test_setDeprecation_rejectsTimestampAtExactBoundary() external {
         CertikTestSucker sucker = _createTestSucker(PROJECT_ID, "fix3-boundary");
 
         // _maxMessagingDelay() returns 14 days.
         uint256 exactBoundary = block.timestamp + 14 days;
 
-        // The exact boundary should now be rejected (the fix changed < to <=).
+        // The exact boundary is rejected because users need a full messaging-delay window.
         vm.expectRevert(
             abi.encodeWithSelector(
                 // forge-lint: disable-next-line(unsafe-typecast)
@@ -109,7 +94,7 @@ contract CertikAIScanTest is Test {
         sucker.setDeprecation(uint40(exactBoundary));
     }
 
-    /// @notice Fix 3: A timestamp one second past the boundary should be accepted.
+    /// @notice A timestamp one second past the boundary is accepted.
     function test_setDeprecation_acceptsTimestampPastBoundary() external {
         CertikTestSucker sucker = _createTestSucker(PROJECT_ID, "fix3-accept");
 
@@ -123,7 +108,7 @@ contract CertikAIScanTest is Test {
         assertEq(uint8(sucker.state()), uint8(JBSuckerState.DEPRECATION_PENDING));
     }
 
-    /// @notice Fix 3: Timestamps well past the boundary should still be accepted.
+    /// @notice Timestamps well past the boundary are accepted.
     function test_setDeprecation_acceptsTimestampWellPastBoundary() external {
         CertikTestSucker sucker = _createTestSucker(PROJECT_ID, "fix3-well-past");
 
@@ -135,7 +120,7 @@ contract CertikAIScanTest is Test {
         assertEq(uint8(sucker.state()), uint8(JBSuckerState.DEPRECATION_PENDING));
     }
 
-    /// @notice Fix 3: Cancelling deprecation (timestamp == 0) should always be allowed.
+    /// @notice Cancelling deprecation (`timestamp == 0`) is always allowed.
     function test_setDeprecation_cancellingAlwaysAllowed() external {
         CertikTestSucker sucker = _createTestSucker(PROJECT_ID, "fix3-cancel");
 
@@ -151,14 +136,10 @@ contract CertikAIScanTest is Test {
     }
 
     // -----------------------------------------------------------------------
-    //  Fix 4: Reentrancy-safe token disable in _mapToken
+    //  Reentrancy-safe token disable in _mapToken
     // -----------------------------------------------------------------------
 
-    /// @notice Fix 4: _mapToken now sets `_remoteTokenFor[token].enabled = false` before
-    ///         calling `_sendRoot()` in the disable path. This prevents reentrancy via
-    ///         `prepare()` during the `_sendRoot` call. If someone tries to call `prepare()`
-    ///         during `_sendRootOverAMB`, it should revert with JBSucker_TokenNotMapped
-    ///         because the token is already disabled.
+    /// @notice `_mapToken` disables the token before sending its final root, blocking reentrant `prepare()`.
     function test_mapToken_disableSetsEnabledFalseBeforeSendRoot() external {
         // Allow any caller to pass permission checks.
         vm.mockCall(PERMISSIONS, abi.encodeWithSelector(IJBPermissions.hasPermission.selector), abi.encode(true));
@@ -171,8 +152,7 @@ contract CertikAIScanTest is Test {
         );
         sucker.test_setOutboxTreeCount(tokenA, 1);
 
-        // Mock TOKENS.tokenOf so the reentrant prepare() gets past the ERC-20 check
-        // and reaches the _remoteTokenFor[token].enabled check (which is the fix under test).
+        // Mock TOKENS.tokenOf so the reentrant prepare() reaches the disabled-token check.
         address fakeProjectToken = makeAddr("fakeProjectToken");
         vm.mockCall(TOKENS, abi.encodeCall(IJBTokens.tokenOf, (PROJECT_ID)), abi.encode(fakeProjectToken));
 
@@ -180,15 +160,13 @@ contract CertikAIScanTest is Test {
         sucker.test_setReentrancyToken(tokenA);
 
         // Disable the token by mapping to address(0).
-        // The ReentrancySucker's _sendRootOverAMB will try to call prepare(), which should
-        // revert with JBSucker_TokenNotMapped because `enabled` was set to false BEFORE _sendRoot.
+        // ReentrancySucker._sendRootOverAMB calls prepare(), which should revert because `enabled` is already false.
         // The revert inside _sendRootOverAMB bubbles up to mapToken.
         vm.expectRevert(abi.encodeWithSelector(JBSucker.JBSucker_TokenNotMapped.selector, tokenA));
         sucker.mapToken(JBTokenMapping({localToken: tokenA, minGas: 200_000, remoteToken: bytes32(0)}));
     }
 
-    /// @notice Fix 4: Verify that after a successful disable (no reentrancy), the token
-    ///         mapping shows enabled == false.
+    /// @notice A successful disable leaves the token mapping disabled when no reentrancy is attempted.
     function test_mapToken_disablePathSetsEnabledFalse() external {
         // Allow any caller to pass permission checks.
         vm.mockCall(PERMISSIONS, abi.encodeWithSelector(IJBPermissions.hasPermission.selector), abi.encode(true));
@@ -242,7 +220,7 @@ contract CertikAIScanTest is Test {
     }
 }
 
-/// @notice A minimal test sucker for CertiK AI scan fix tests.
+/// @notice A minimal test sucker for CertiK regression tests.
 /// @dev Extends JBSucker with no-op AMB and helpers for setting internal state.
 contract CertikTestSucker is JBSucker {
     constructor(
@@ -289,8 +267,7 @@ contract CertikTestSucker is JBSucker {
 }
 
 /// @notice A test sucker variant that attempts reentrancy during _sendRootOverAMB.
-/// @dev Used to verify Fix 4: _mapToken sets enabled=false before calling _sendRoot,
-///      so a reentrant prepare() call reverts with JBSucker_TokenNotMapped.
+/// @dev Verifies that `_mapToken` sets `enabled = false` before `_sendRoot`, so reentrant `prepare()` reverts.
 contract ReentrancySucker is JBSucker {
     /// @notice The token to attempt reentrancy with during _sendRootOverAMB.
     address internal _reentrancyToken;
@@ -304,8 +281,7 @@ contract ReentrancySucker is JBSucker {
         JBSucker(directory, permissions, IJBPrices(address(1)), tokens, 1, IJBSuckerRegistry(address(1)), forwarder)
     {}
 
-    /// @notice During _sendRootOverAMB, attempt to call prepare() on this contract.
-    ///         If Fix 4 is correct, prepare() will revert because the token is already disabled.
+    /// @notice During `_sendRootOverAMB`, attempt to call `prepare()` on this contract.
     // forge-lint: disable-next-line(mixed-case-function)
     function _sendRootOverAMB(
         uint256,
@@ -319,8 +295,7 @@ contract ReentrancySucker is JBSucker {
         override
     {
         if (_reentrancyToken != address(0)) {
-            // Attempt reentrant prepare() — this should revert with JBSucker_TokenNotMapped
-            // because _mapToken already set enabled = false before calling _sendRoot.
+            // This reentrant prepare() should revert because _mapToken already disabled the token.
             this.prepare({
                 projectTokenCount: 1,
                 beneficiary: bytes32(uint256(uint160(address(this)))),

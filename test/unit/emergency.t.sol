@@ -56,7 +56,7 @@ contract SuckerEmergencyTest is Test {
             // forge-lint: disable-next-line(unsafe-typecast)
             sucker.setDeprecation(uint40(deprecationTimestamp));
 
-            // Foward until its deprecated.
+            // Forward until it is deprecated.
             vm.warp(deprecationTimestamp);
         }
 
@@ -108,7 +108,7 @@ contract SuckerEmergencyTest is Test {
             // forge-lint: disable-next-line(unsafe-typecast)
             sucker.setDeprecation(uint40(deprecationTimestamp));
 
-            // Foward until sending is disabled, which is the next block.
+            // Forward until sending is disabled, which is the next block.
             vm.warp(block.timestamp + 1);
         }
 
@@ -224,7 +224,7 @@ contract SuckerEmergencyTest is Test {
         // Set the deprecation to be at a future time.
         sucker.setDeprecation(uint40(deprecateAt));
 
-        // Foward to a time before its fully deprecated..
+        // Forward to a time before it is fully deprecated.
         vm.warp(currentTime + bufferTime - 1);
         // The state should be `DEPRECATION_PENDING`.
         assertEq(uint8(sucker.state()), 1);

@@ -133,7 +133,7 @@ contract AttackTestSucker is JBSucker {
 }
 
 /// @title SuckerAttacks
-/// @notice Attack tests for nana-suckers-v5 covering CCIP spoofing, double claims,
+/// @notice Attack tests for nana-suckers-v6 covering CCIP spoofing, double claims,
 ///         stale roots, token remapping, and merkle tree edge cases.
 contract SuckerAttacks is Test {
     using MerkleLib for MerkleLib.Tree;

@@ -36,7 +36,7 @@ contract JBOptimismSucker is JBSucker, IJBOptimismSucker {
     // ---------------------------- constructor -------------------------- //
     //*********************************************************************//
 
-    /// @param deployer A contract that deploys the clones for this contracts.
+    /// @param deployer A contract that deploys clones of this contract.
     /// @param directory A contract storing directories of terminals and controllers for each project.
     /// @param permissions A contract storing permissions.
     /// @param prices The price oracle used to convert peer-chain balances and surplus.
