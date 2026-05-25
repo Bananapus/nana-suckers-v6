@@ -7,8 +7,12 @@ import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {IUniswapV3Factory} from "@uniswap/v3-core/contracts/interfaces/IUniswapV3Factory.sol";
 import {IUniswapV3Pool} from "@uniswap/v3-core/contracts/interfaces/IUniswapV3Pool.sol";
 import {IUniswapV3SwapCallback} from "@uniswap/v3-core/contracts/interfaces/callback/IUniswapV3SwapCallback.sol";
+import {BalanceDelta, toBalanceDelta} from "@uniswap/v4-core/src/types/BalanceDelta.sol";
+import {Currency} from "@uniswap/v4-core/src/types/Currency.sol";
+import {IHooks} from "@uniswap/v4-core/src/interfaces/IHooks.sol";
 import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
 import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
+import {SwapParams} from "@uniswap/v4-core/src/types/PoolOperation.sol";
 
 import {JBSwapPoolLib} from "../../src/libraries/JBSwapPoolLib.sol";
 
@@ -109,6 +113,25 @@ contract PartialFillPool {
     }
 }
 
+contract V4PartialFillPoolManager {
+    int128 internal constant CONSUMED_AMOUNT = 500 ether;
+    int128 internal constant OUTPUT_AMOUNT = 990 ether;
+
+    function swap(PoolKey calldata, SwapParams calldata params, bytes calldata) external pure returns (BalanceDelta) {
+        return params.zeroForOne
+            ? toBalanceDelta(-CONSUMED_AMOUNT, OUTPUT_AMOUNT)
+            : toBalanceDelta(OUTPUT_AMOUNT, -CONSUMED_AMOUNT);
+    }
+
+    function sync(Currency) external {}
+
+    function settle() external payable returns (uint256 paid) {
+        return msg.value;
+    }
+
+    function take(Currency, address, uint256) external {}
+}
+
 contract PartialFillHarness is IUniswapV3SwapCallback {
     IUniswapV3Factory internal immutable _factory;
 
@@ -134,6 +157,10 @@ contract PartialFillHarness is IUniswapV3SwapCallback {
         JBSwapPoolLib.executeV3SwapCallback({
             v3Factory: _factory, amount0Delta: amount0Delta, amount1Delta: amount1Delta, data: data
         });
+    }
+
+    function executeV4UnlockCallback(IPoolManager poolManager, bytes calldata data) external returns (bytes memory) {
+        return JBSwapPoolLib.executeV4UnlockCallback({poolManager: poolManager, data: data});
     }
 
     receive() external payable {}
@@ -180,5 +207,29 @@ contract SwapPartialFillRemainderTest is Test {
 
         vm.expectRevert(abi.encodeWithSelector(JBSwapPoolLib.JBSwapPoolLib_PartialFill.selector, CONSUMED, AMOUNT_IN));
         harness.executeSwap({config: config, tokenIn: address(tokenIn), tokenOut: address(tokenOut), amount: AMOUNT_IN});
+    }
+
+    function test_v4PartialFillReverts() external {
+        PartialFillToken tokenA = new PartialFillToken("Input", "IN");
+        PartialFillToken tokenB = new PartialFillToken("Output", "OUT");
+        PartialFillToken token0 = address(tokenA) < address(tokenB) ? tokenA : tokenB;
+        PartialFillToken token1 = address(tokenA) < address(tokenB) ? tokenB : tokenA;
+        PartialFillHarness harness = new PartialFillHarness(IUniswapV3Factory(address(0)));
+        V4PartialFillPoolManager poolManager = new V4PartialFillPoolManager();
+
+        token0.mint(address(harness), AMOUNT_IN);
+
+        PoolKey memory key = PoolKey({
+            currency0: Currency.wrap(address(token0)),
+            currency1: Currency.wrap(address(token1)),
+            fee: FEE,
+            tickSpacing: 60,
+            hooks: IHooks(address(0))
+        });
+        // forge-lint: disable-next-line(unsafe-typecast)
+        bytes memory data = abi.encode(key, true, -int256(AMOUNT_IN), uint160(1 << 96), AMOUNT_OUT - 1, address(0));
+
+        vm.expectRevert(abi.encodeWithSelector(JBSwapPoolLib.JBSwapPoolLib_PartialFill.selector, CONSUMED, AMOUNT_IN));
+        harness.executeV4UnlockCallback({poolManager: IPoolManager(address(poolManager)), data: data});
     }
 }
