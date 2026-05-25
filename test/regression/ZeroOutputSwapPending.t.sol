@@ -174,6 +174,68 @@ contract ZeroOutputSwapPendingTest is Test {
         assertEq(convLocalTotal, 0, "conversion rate localTotal must be zero (not claimable)");
     }
 
+    /// @notice A duplicate funded batch must fail before the inbound swap path can consume pool liquidity.
+    function test_duplicateFundedBatchRevertsBeforeSwap() external {
+        uint256 bridgeAmount = 100e6;
+        uint256 leafTotal = 100e6;
+        uint64 nonce = 1;
+
+        vm.mockCall(
+            address(sucker),
+            abi.encodeWithSelector(JBSwapCCIPSucker.executeSwapExternal.selector),
+            abi.encode(uint256(90e6))
+        );
+
+        JBMessageRoot memory msgRoot = JBMessageRoot({
+            version: 1,
+            token: bytes32(uint256(uint160(address(localToken)))),
+            amount: leafTotal,
+            remoteRoot: JBInboxTreeRoot({nonce: nonce, root: bytes32(uint256(0xfeed))}),
+            sourceTotalSupply: 0,
+            sourceCurrency: 0,
+            sourceDecimals: 0,
+            sourceSurplus: 0,
+            sourceBalance: 0,
+            sourceTimestamp: 1
+        });
+
+        Client.EVMTokenAmount[] memory tokenAmounts = new Client.EVMTokenAmount[](1);
+        tokenAmounts[0] = Client.EVMTokenAmount({token: address(usdc), amount: bridgeAmount});
+
+        Client.Any2EVMMessage memory message = Client.Any2EVMMessage({
+            messageId: bytes32(uint256(3)),
+            sourceChainSelector: REMOTE_CHAIN_SELECTOR,
+            sender: abi.encode(address(sucker)),
+            data: abi.encode(uint8(0), abi.encode(msgRoot, uint256(0), uint256(1))),
+            destTokenAmounts: tokenAmounts
+        });
+
+        vm.mockCall(
+            address(sucker),
+            abi.encodeWithSignature(
+                "fromRemote((uint8,bytes32,uint256,(uint64,bytes32),uint256,uint256,uint256,uint256,uint256,uint64))"
+            ),
+            abi.encode()
+        );
+
+        vm.prank(MOCK_ROUTER);
+        sucker.ccipReceive(message);
+
+        (uint256 convLeafTotal, uint256 convLocalTotal) = sucker.exposed_conversionRateOf(address(localToken), nonce);
+        assertEq(convLeafTotal, leafTotal, "first delivery records conversion leaf total");
+        assertEq(convLocalTotal, 90e6, "first delivery records local swap output");
+
+        vm.mockCallRevert(
+            address(sucker),
+            abi.encodeWithSelector(JBSwapCCIPSucker.executeSwapExternal.selector),
+            "duplicate reached swap"
+        );
+
+        vm.expectRevert(abi.encodeWithSelector(JBSwapCCIPSucker.JBSwapCCIPSucker_DuplicateBatch.selector, nonce));
+        vm.prank(MOCK_ROUTER);
+        sucker.ccipReceive(message);
+    }
+
     /// @notice When a non-swap path sets localAmount > 0 (bridge token IS the local token),
     /// the conversion rate should be set normally and pendingSwapOf should NOT be populated.
     function test_nonSwapPathSetsConversionRateNormally() external {

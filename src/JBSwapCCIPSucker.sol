@@ -88,6 +88,7 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
 
     error JBSwapCCIPSucker_BatchNotReceived(uint64 nonce);
     error JBSwapCCIPSucker_CallerNotPoolManager(address caller);
+    error JBSwapCCIPSucker_DuplicateBatch(uint64 nonce);
     error JBSwapCCIPSucker_InvalidBridgeToken(address bridgeToken, address wrappedNativeToken);
     error JBSwapCCIPSucker_NoPendingSwap(address localToken, uint64 nonce, bool retrySwapLocked);
     error JBSwapCCIPSucker_OnlySelf(address caller, address expected);
@@ -336,6 +337,19 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
                 }
             }
 
+            // Detect an already-processed batch before the swap path. The inbox nonce alone cannot be used here:
+            // CCIP can deliver nonce 2 before nonce 1, and nonce 1 still needs its self-described batch metadata.
+            if (
+                _batchEndOf[localToken][nonce] != 0 || _conversionRateOf[localToken][nonce].leafTotal != 0
+                    || pendingSwapOf[localToken][nonce].bridgeAmount != 0
+            ) {
+                if (deliveredAmount != 0) {
+                    revert JBSwapCCIPSucker_DuplicateBatch({nonce: nonce});
+                }
+
+                return;
+            }
+
             // After the validation block above, `deliveredToken != address(0)` iff a delivery was present,
             // because the invariants ensure it equals `BRIDGE_TOKEN` (a non-zero ERC-20) whenever there is one.
             if (deliveredToken != address(0)) {
@@ -378,61 +392,54 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
             //
             // Detect "already seen" without extra storage: a nonce has been processed if it has
             // either a batch range (batchEnd > 0) or a conversion rate / pending swap recorded.
-            if (
-                _batchEndOf[localToken][nonce] == 0 && _conversionRateOf[localToken][nonce].leafTotal == 0
-                    && pendingSwapOf[localToken][nonce].leafTotal == 0
-            ) {
-                // Record the batch range so _findNonceForLeafIndex can resolve leaf ownership
-                // independently of nonce ordering. Each nonce is self-describing: [start, end).
-                if (batchEnd > 0) {
-                    // Record this batch's half-open leaf range `[batchStart, batchEnd)`. Self-
-                    // describing per-nonce — no implicit chain across nonces — so out-of-order
-                    // delivery can still resolve a leaf to its batch.
-                    _batchStartOf[localToken][nonce] = batchStart;
-                    _batchEndOf[localToken][nonce] = batchEnd;
+            // Record the batch range so _findNonceForLeafIndex can resolve leaf ownership
+            // independently of nonce ordering. Each nonce is self-describing: [start, end).
+            if (batchEnd > 0) {
+                // Record this batch's half-open leaf range `[batchStart, batchEnd)`. Self-
+                // describing per-nonce — no implicit chain across nonces — so out-of-order
+                // delivery can still resolve a leaf to its batch.
+                _batchStartOf[localToken][nonce] = batchStart;
+                _batchEndOf[localToken][nonce] = batchEnd;
 
-                    // Append `nonce` to the populated-nonce list for this token. The outer
-                    // `_batchEndOf == 0 && _conversionRateOf == 0 && pendingSwapOf == 0` guard
-                    // fires at most once per (token, nonce), so each populated nonce is appended
-                    // exactly once — the array stays duplicate-free without extra checks.
-                    //
-                    // Reading `_populatedNonceCount[localToken]` first into a local lets us write
-                    // the new slot and the new count in a single read-modify-write pair (one
-                    // SLOAD, two SSTOREs to distinct slots). The `unchecked` increment is safe:
-                    // `priorCount` is bounded by the total number of populated nonces, which is
-                    // upper-bounded by the CCIP nonce space (`uint64`) — overflow requires more
-                    // batches than `uint64.max`, which the inbox can never produce.
-                    uint64 priorCount = _populatedNonceCount[localToken];
-                    _populatedNonceByIndex[localToken][priorCount] = nonce;
-                    unchecked {
-                        _populatedNonceCount[localToken] = priorCount + 1;
-                    }
+                // Append `nonce` to the populated-nonce list for this token. The duplicate guard
+                // above fires at most once per (token, nonce), so each populated nonce is appended
+                // exactly once — the array stays duplicate-free without extra checks.
+                //
+                // Reading `_populatedNonceCount[localToken]` first into a local lets us write
+                // the new slot and the new count in a single read-modify-write pair (one
+                // SLOAD, two SSTOREs to distinct slots). The `unchecked` increment is safe:
+                // `priorCount` is bounded by the total number of populated nonces, which is
+                // upper-bounded by the CCIP nonce space (`uint64`) — overflow requires more
+                // batches than `uint64.max`, which the inbox can never produce.
+                uint64 priorCount = _populatedNonceCount[localToken];
+                _populatedNonceByIndex[localToken][priorCount] = nonce;
+                unchecked {
+                    _populatedNonceCount[localToken] = priorCount + 1;
                 }
+            }
 
-                // Store pendingSwapOf for failed swaps now that nonce is validated.
-                if (swapFailed) {
+            // Store pendingSwapOf for failed swaps now that nonce is validated.
+            if (swapFailed) {
+                pendingSwapOf[localToken][nonce] =
+                    PendingSwap({bridgeToken: deliveredToken, bridgeAmount: deliveredAmount, leafTotal: leafTotal});
+            }
+
+            // Zero-output swap guard: When a swap succeeds but returns zero local tokens, the
+            // batch must NOT be marked claimable. Without this guard, `_addToBalance` would see
+            // `pendingSwapOf.bridgeAmount == 0` (no pending swap stored) and allow claims to
+            // proceed — minting the full bridged project-token amount while adding zero terminal
+            // backing, breaking cross-chain solvency.
+            //
+            // Route zero-output swaps into `pendingSwapOf` so the swap can be retried via
+            // `retrySwap` once pool conditions improve. Only store the conversion rate when
+            // the swap produced a positive local amount.
+            if (leafTotal > 0 && !swapFailed) {
+                if (localAmount == 0 && deliveredAmount > 0) {
                     pendingSwapOf[localToken][nonce] =
                         PendingSwap({bridgeToken: deliveredToken, bridgeAmount: deliveredAmount, leafTotal: leafTotal});
-                }
-
-                // Zero-output swap guard: When a swap succeeds but returns zero local tokens, the
-                // batch must NOT be marked claimable. Without this guard, `_addToBalance` would see
-                // `pendingSwapOf.bridgeAmount == 0` (no pending swap stored) and allow claims to
-                // proceed — minting the full bridged project-token amount while adding zero terminal
-                // backing, breaking cross-chain solvency.
-                //
-                // Route zero-output swaps into `pendingSwapOf` so the swap can be retried via
-                // `retrySwap` once pool conditions improve. Only store the conversion rate when
-                // the swap produced a positive local amount.
-                if (leafTotal > 0 && !swapFailed) {
-                    if (localAmount == 0 && deliveredAmount > 0) {
-                        pendingSwapOf[localToken][nonce] = PendingSwap({
-                            bridgeToken: deliveredToken, bridgeAmount: deliveredAmount, leafTotal: leafTotal
-                        });
-                    } else {
-                        _conversionRateOf[localToken][nonce] =
-                            ConversionRate({leafTotal: leafTotal, localTotal: localAmount});
-                    }
+                } else {
+                    _conversionRateOf[localToken][nonce] =
+                        ConversionRate({leafTotal: leafTotal, localTotal: localAmount});
                 }
             }
         } else {

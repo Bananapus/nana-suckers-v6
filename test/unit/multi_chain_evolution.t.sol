@@ -72,6 +72,8 @@ contract MultiChainEvolutionTest is Test, TestBaseWorkflow, IERC721Receiver {
     function setUp() public override {
         super.setUp();
 
+        vm.chainId(10);
+
         vm.label(address(MOCK_OP_MESSENGER), "OP_MESSENGER");
         vm.label(address(MOCK_OP_BRIDGE), "OP_BRIDGE");
         vm.label(MOCK_CCIP_ROUTER_ADDR, "CCIP_ROUTER");

@@ -175,6 +175,32 @@ contract DeprecatedSuckerAggregateViewsTest is Test {
         assertEq(supplyAfter, 800e18, "deprecated sucker supply must still be included in aggregate views");
     }
 
+    /// @notice A sucker must identify a real peer chain before the registry accepts it.
+    function test_deploySuckersFor_revertsOnZeroPeerChainId() external {
+        DeprecatedViewMockSucker zeroPeerSingleton =
+            new DeprecatedViewMockSucker(IJBDirectory(DIRECTORY), IJBPermissions(PERMISSIONS), IJBTokens(TOKENS));
+        DeprecatedViewMockSucker zeroPeerSucker = DeprecatedViewMockSucker(
+            // forge-lint: disable-next-line(unsafe-typecast)
+            payable(address(
+                    LibClone.cloneDeterministic(address(zeroPeerSingleton), keccak256(bytes("zero-peer-sucker")))
+                ))
+        );
+        zeroPeerSucker.initialize(PROJECT_ID);
+
+        DeprecatedViewMockDeployer zeroPeerDeployer = new DeprecatedViewMockDeployer();
+        zeroPeerDeployer.addSucker(IJBSucker(address(zeroPeerSucker)));
+        registry.allowSuckerDeployer(address(zeroPeerDeployer));
+
+        JBSuckerDeployerConfig[] memory configs = new JBSuckerDeployerConfig[](1);
+        configs[0] =
+            JBSuckerDeployerConfig({deployer: zeroPeerDeployer, peer: bytes32(0), mappings: new JBTokenMapping[](0)});
+
+        vm.expectRevert(
+            abi.encodeWithSelector(JBSuckerRegistry.JBSuckerRegistry_ZeroPeerChainId.selector, address(zeroPeerSucker))
+        );
+        registry.deploySuckersFor({projectId: PROJECT_ID, salt: keccak256(bytes("zero-peer")), configurations: configs});
+    }
+
     /// @notice When both a deprecated and an active sucker target the same chain, the active sucker wins.
     function test_sameChainDeprecatedAndActiveDoesNotDoubleCount() external {
         // Make both suckers target the same chain.

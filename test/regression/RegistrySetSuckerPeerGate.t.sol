@@ -46,6 +46,7 @@ contract RegistrySetSuckerPeerGateTest is Test, TestBaseWorkflow, IERC721Receive
     uint256 internal projectId;
 
     function setUp() public override {
+        vm.chainId(10);
         super.setUp();
 
         projectOwner = address(this);
