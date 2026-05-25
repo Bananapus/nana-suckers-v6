@@ -142,8 +142,10 @@ contract JBArbitrumSucker is JBSucker, IJBArbitrumSucker {
     /// @notice Approves the Arbitrum gateway to spend `amount` of `token`.
     /// @param token The ERC-20 token to approve.
     /// @param amount The amount to approve.
-    function _approveGateway(address token, uint256 amount) internal {
-        SafeERC20.forceApprove({token: IERC20(token), spender: GATEWAYROUTER.getGateway(token), value: amount});
+    /// @return gateway The gateway that was approved.
+    function _approveGateway(address token, uint256 amount) internal returns (address gateway) {
+        gateway = GATEWAYROUTER.getGateway(token);
+        SafeERC20.forceApprove({token: IERC20(token), spender: gateway, value: amount});
     }
 
     /// @notice Uses the L1/L2 gateway to send the root and assets over the bridge to the peer.
@@ -201,13 +203,15 @@ contract JBArbitrumSucker is JBSucker, IJBArbitrumSucker {
         // If the token is an ERC-20, bridge it to the peer.
         // If the amount is `0` then we do not need to bridge any ERC20.
         if (token != JBConstants.NATIVE_TOKEN && amount != 0) {
-            _approveGateway({token: token, amount: amount});
+            address gateway = _approveGateway({token: token, amount: amount});
 
             // Convert bytes32 types to address at the Arbitrum bridge API boundary.
             IArbL2GatewayRouter(address(GATEWAYROUTER))
                 .outboundTransfer({
                 l1Token: _toAddress(remoteToken.addr), to: peerAddress, amount: amount, data: bytes("")
             });
+
+            SafeERC20.forceApprove({token: IERC20(token), spender: gateway, value: 0});
         } else {
             // Otherwise, the token is the native token, and the amount will be sent as `msg.value`.
             nativeValue = amount;
