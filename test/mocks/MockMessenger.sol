@@ -31,7 +31,7 @@ contract MockMessenger is IOPMessenger {
     )
         external
     {
-        // TODO: implement mock.
+        // The tests only need mapping validation and destination minting.
         assert(tokens[localToken] == remoteToken);
         // Mint the 'L1' tokens to the recipient.
         ERC20Mock(remoteToken).mint(to, amount);

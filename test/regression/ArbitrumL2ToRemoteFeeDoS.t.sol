@@ -117,11 +117,10 @@ contract ArbitrumL2ToRemoteFeeDoSTest is Test {
         vm.mockCall(address(100), abi.encodeWithSignature("sendTxToL1(address,bytes)"), abi.encode(uint256(0)));
     }
 
-    /// @notice L2→L1 bridging succeeds when msg.value exactly covers the registry fee.
-    /// Before the fix, this reverted because _toL1 checked `msg.value != 0`.
-    /// After the fix, transportPayment = msg.value - fee = 0, so _toL1 passes.
+    /// @notice L2->L1 bridging succeeds when `msg.value` exactly covers the registry fee.
+    /// @dev `_toL1` receives `transportPayment = msg.value - fee`, so the zero-cost bridge path sees `0`.
     function test_toRemoteSucceedsWhenMsgValueCoversFeeExactly() external {
-        // msg.value = 1, fee = 1 → transportPayment = 0 → _toL1 accepts
+        // msg.value = 1 and fee = 1, so _toL1 accepts zero transport payment.
         sucker.toRemote{value: 1}(JBConstants.NATIVE_TOKEN);
     }
 

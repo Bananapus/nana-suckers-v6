@@ -151,9 +151,7 @@ contract FeeFallbackTest is Test {
         vm.mockCall(DIRECTORY, abi.encodeCall(IJBDirectory.terminalsOf, (PROJECT_ID)), abi.encode(new IJBTerminal[](0)));
     }
 
-    /// @notice toRemote() with msg.value == fee, no fee terminal, zero-cost bridge.
-    ///         Before the fix: transportPayment was set to msg.value (non-zero), causing bridge revert.
-    ///         After the fix: transportPayment stays at msg.value - fee == 0, bridge succeeds.
+    /// @notice `toRemote()` succeeds when `msg.value` equals the fee and the zero-cost bridge receives no extra value.
     function test_toRemote_noFeeTerminal_zeroCostBridge_succeeds() public {
         // Map a token so toRemote has something to send.
         sucker.test_setRemoteToken(
@@ -186,9 +184,7 @@ contract FeeFallbackTest is Test {
         assertEq(sucker.lastTransportPayment(), 0, "transportPayment should be 0 for zero-cost bridge");
     }
 
-    /// @notice toRemote() with msg.value == fee, fee terminal reverts, zero-cost bridge.
-    ///         Before the fix: transportPayment was set to msg.value (non-zero), causing bridge revert.
-    ///         After the fix: transportPayment stays at msg.value - fee == 0, bridge succeeds.
+    /// @notice `toRemote()` still succeeds if fee payment reverts but the zero-cost bridge receives no extra value.
     function test_toRemote_feeTerminalReverts_zeroCostBridge_succeeds() public {
         // Map a token so toRemote has something to send.
         sucker.test_setRemoteToken(

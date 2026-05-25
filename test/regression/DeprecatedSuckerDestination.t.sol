@@ -159,7 +159,7 @@ contract DeprecatedSuckerDestinationTest is Test {
         vm.prank(address(destination));
         destination.fromRemote(root);
 
-        // After the fix, the root IS accepted even in DEPRECATED state.
+        // Deprecated destinations still accept roots so in-flight claims are not stranded.
         assertEq(
             destination.test_getInboxRoot(TOKEN),
             source.test_getOutboxRoot(TOKEN),

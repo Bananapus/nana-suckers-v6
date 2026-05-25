@@ -22,10 +22,7 @@ import {JBSucker} from "../../src/JBSucker.sol";
 import {MerkleLib} from "../../src/utils/MerkleLib.sol";
 
 /// @notice Regression test: a trusted forwarder must NOT be able to spoof `ccipReceive()`.
-/// @dev Before the fix, `ccipReceive()` used `_msgSender()`, which let a trusted forwarder
-/// append the CCIP router address via the ERC-2771 calldata suffix.
-/// After the fix, `ccipReceive()` uses `msg.sender` directly, so the forwarder's own address
-/// is checked against `CCIP_ROUTER` and the call reverts with `JBSucker_NotPeer`.
+/// @dev `ccipReceive()` uses `msg.sender` directly, so ERC-2771 calldata suffixes cannot spoof the CCIP router.
 contract TrustedForwarderSpoofCCIPTest is Test {
     address internal constant DIRECTORY = address(0x1000);
     address internal constant PERMISSIONS = address(0x2000);

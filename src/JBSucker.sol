@@ -95,12 +95,10 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     // ------------------------- public constants ------------------------ //
     //*********************************************************************//
 
-    /// @notice A reasonable minimum gas limit for a basic cross-chain call. The minimum amount of gas required to call
-    /// the `fromRemote` (successfully/safely) on the remote chain.
+    /// @notice A reasonable minimum gas limit for a basic cross-chain call to `fromRemote` on the remote chain.
     uint32 public constant override MESSENGER_BASE_GAS_LIMIT = 300_000;
 
-    /// @notice A reasonable minimum gas limit used when bridging ERC-20s. The minimum amount of gas required to
-    /// (successfully/safely) perform a transfer on the remote chain.
+    /// @notice A reasonable minimum gas limit for performing an ERC-20 transfer on the remote chain.
     uint32 public constant override MESSENGER_ERC20_MIN_GAS_LIMIT = 200_000;
 
     /// @notice The message format version. Used to reject incompatible messages from remote chains.
@@ -601,7 +599,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
             account: _ownerOf(_projectId), projectId: _projectId, permissionId: JBPermissionIds.SET_SUCKER_DEPRECATION
         });
 
-        // This is the earliest time for when the sucker can be considered deprecated.
+        // This is the earliest time the sucker can be considered deprecated.
         // There is a mandatory delay to allow for remaining messages to be received.
         // This should be called on both sides of the suckers, preferably with a matching timestamp.
         uint256 nextEarliestDeprecationTime = block.timestamp + _maxMessagingDelay();
@@ -804,7 +802,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
             return JBSuckerState.ENABLED;
         }
 
-        // The sucker will soon be considered deprecated, this functions only as a warning to users.
+        // The sucker is close to deprecation; this state only warns users.
         // Deprecation state is intentionally time-based.
         // forge-lint: disable-next-line(block-timestamp)
         if (block.timestamp < _deprecatedAfter - _maxMessagingDelay()) {
@@ -960,7 +958,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         }
     }
 
-    /// @notice The action(s) to perform after a user has succesfully proven their claim.
+    /// @notice Actions to perform after a user has successfully proven their claim.
     /// @param terminalToken The terminal token to suck.
     /// @param terminalTokenAmount The amount of terminal tokens.
     /// @param projectTokenAmount The amount of project tokens.
@@ -1204,10 +1202,8 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     }
 
     /// @notice Send the outbox root for the specified token to the remote peer.
-    /// @dev The call may have a `transportPayment` for bridging native tokens. Require it to be `0` if it is not
-    /// needed. Make sure if a value being paid to the bridge is expected to revert if the given value is `0`.
-    /// @param transportPayment the amount of `msg.value` that is going to get paid for sending this message. (usually
-    /// derived from `msg.value`)
+    /// @dev Some bridges require a nonzero `transportPayment`; zero-cost bridges must reject nonzero values.
+    /// @param transportPayment The amount of `msg.value` paid to the transport for this message.
     /// @param token The terminal token to bridge the merkle tree of.
     /// @param remoteToken The remote token which the `token` is mapped to.
     function _sendRoot(uint256 transportPayment, address token, JBRemoteToken memory remoteToken) internal virtual {
@@ -1324,8 +1320,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         // Register the leaf as executed to prevent double-spending.
         _executedFor[terminalToken].set(index);
 
-        // Calculate the root based on the leaf, the branch, and the index.
-        // Compare to the current root, Revert if they do not match.
+        // Calculate the root and compare it to the current inbox root.
         _validateBranchRoot({
             expectedRoot: _inboxOf[terminalToken].root,
             projectTokenCount: projectTokenCount,
@@ -1371,7 +1366,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
             index: index
         });
 
-        // Compare to the current root, Revert if they do not match.
+        // Revert if the computed root does not match the expected inbox root.
         if (root != expectedRoot) {
             revert JBSucker_InvalidProof({root: root, inboxRoot: expectedRoot});
         }
@@ -1453,8 +1448,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
             _executedFor[emergencyExitAddress].set(index);
         }
 
-        // Calculate the root based on the leaf, the branch, and the index.
-        // Compare to the current root, Revert if they do not match.
+        // Calculate the root and compare it to the current outbox root.
         _validateBranchRoot({
             expectedRoot: _computeOutboxRoot(_outboxOf[terminalToken].tree),
             projectTokenCount: projectTokenCount,
