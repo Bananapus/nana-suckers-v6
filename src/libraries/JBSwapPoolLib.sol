@@ -271,6 +271,13 @@ library JBSwapPoolLib {
                 amountOut = uint256(uint128(delta0));
             }
 
+            // Exact-input V4 swaps are encoded with a negative amount.
+            // forge-lint: disable-next-line(unsafe-typecast)
+            uint256 requestedAmount = uint256(-amountSpecified);
+            if (amountIn < requestedAmount) {
+                revert JBSwapPoolLib_PartialFill({consumed: amountIn, requested: requestedAmount});
+            }
+
             // Enforce the minimum output from the TWAP quote.
             if (amountOut < minAmountOut) {
                 revert JBSwapPoolLib_SlippageExceeded({amountOut: amountOut, minAmountOut: minAmountOut});
