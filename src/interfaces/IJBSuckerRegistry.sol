@@ -54,6 +54,14 @@ interface IJBSuckerRegistry {
     /// @return The projects contract.
     function PROJECTS() external view returns (IJBProjects);
 
+    /// @notice All suckers for a project, INCLUDING deprecated entries that are no longer listed in `suckersOf`.
+    /// @dev Used by consumers that need to detect "has any sucker ever peered to chain X?" — e.g. to prevent
+    /// premature burn of bridgeable credit by `JBReferralSplitHook.burnUnbridgeableCreditFor`. Returns every key
+    /// from `_suckersOf[projectId]` regardless of active/deprecated state.
+    /// @param projectId The ID of the project.
+    /// @return The addresses of every sucker ever registered for `projectId`.
+    function allSuckersOf(uint256 projectId) external view returns (address[] memory);
+
     /// @notice Returns true if the specified sucker belongs to the specified project and was deployed through this
     /// registry.
     /// @param projectId The ID of the project to check for.

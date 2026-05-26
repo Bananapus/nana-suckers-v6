@@ -70,10 +70,7 @@ contract RegressionSucker is JBSucker {
 
     function _validateBranchRoot(
         bytes32 expectedRoot,
-        uint256 projectTokenCount,
-        uint256 terminalTokenAmount,
-        bytes32 beneficiary,
-        bytes32 metadata,
+        bytes32 leafHash,
         uint256 index,
         bytes32[_TREE_DEPTH] calldata leaves
     )
@@ -82,9 +79,7 @@ contract RegressionSucker is JBSucker {
         override
     {
         if (!nextCheckShouldPass) {
-            super._validateBranchRoot(
-                expectedRoot, projectTokenCount, terminalTokenAmount, beneficiary, metadata, index, leaves
-            );
+            super._validateBranchRoot(expectedRoot, leafHash, index, leaves);
         }
         nextCheckShouldPass = false;
     }
@@ -354,6 +349,67 @@ contract SuckerRegressionsTest is Test {
         // amountToAddToBalance = 0, which is less than terminalTokenAmount (1 ether).
         vm.expectRevert();
         sucker.claim(claimData);
+    }
+
+    // =========================================================================
+    // Front-run defense: executedLeafHashOf is populated on claim
+    // =========================================================================
+
+    /// @notice Verifies that `_validate` (invoked from `claim`) stores
+    /// `keccak256(projectTokenCount, terminalTokenAmount, beneficiary, metadata)` in
+    /// `executedLeafHashOf[token][index]`. Beneficiary contracts (e.g.
+    /// `JBReferralSplitHook`) use this slot to authenticate post-hoc settlement when
+    /// their own `sucker.claim` call was front-run by a direct external caller — the
+    /// bare `_executedFor` bitmap only proves "some leaf at index I was executed", not
+    /// "which leaf", so storing the hash is what binds the index to the actual leaf
+    /// content.
+    function test_executedLeafHashOf_isPopulatedOnClaim() public {
+        address beneficiaryAddr = address(0xBEEF);
+        bytes32 beneficiary = bytes32(uint256(uint160(beneficiaryAddr)));
+        uint256 terminalTokenAmount = 1 ether;
+        uint256 projectTokenCount = 5 ether;
+        bytes32 leafMetadata = bytes32(uint256(0xdeadbeef));
+        uint256 leafIndex = 7;
+
+        // Slot is zero before any claim has executed at this index.
+        assertEq(sucker.executedLeafHashOf(TOKEN, leafIndex), bytes32(0));
+
+        // Bypass merkle proof + back the inbox with enough terminal-token balance for
+        // `_handleClaim`'s `_addToBalance` to succeed.
+        sucker.test_setNextMerkleCheckToBe(true);
+        vm.deal(address(sucker), terminalTokenAmount);
+        vm.mockCall(
+            CONTROLLER,
+            abi.encodeCall(IJBController.mintTokensOf, (PROJECT_ID, projectTokenCount, beneficiaryAddr, "", false)),
+            abi.encode(projectTokenCount)
+        );
+
+        bytes32[32] memory proof;
+        JBClaim memory claimData = JBClaim({
+            token: TOKEN,
+            leaf: JBLeaf({
+                index: leafIndex,
+                beneficiary: beneficiary,
+                projectTokenCount: projectTokenCount,
+                terminalTokenAmount: terminalTokenAmount,
+                metadata: leafMetadata
+            }),
+            proof: proof
+        });
+
+        sucker.claim(claimData);
+
+        // The stored hash must match the byte-identical encoding consumers re-derive
+        // off-chain or in their own contract logic. `_buildTreeHash` packs four 32-byte
+        // words contiguously and keccak's them — which equals
+        // `abi.encodePacked(uint256, uint256, bytes32, bytes32)` exactly because all
+        // four operands are word-sized (no `abi.encodePacked` padding ambiguity).
+        bytes32 expected =
+            keccak256(abi.encodePacked(projectTokenCount, terminalTokenAmount, beneficiary, leafMetadata));
+        assertEq(sucker.executedLeafHashOf(TOKEN, leafIndex), expected, "leaf hash committed on claim");
+
+        // Unrelated indices stay zero — the slot is per-leaf, not per-token.
+        assertEq(sucker.executedLeafHashOf(TOKEN, leafIndex + 1), bytes32(0), "neighbor index unaffected");
     }
 
     // =========================================================================

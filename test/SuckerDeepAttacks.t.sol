@@ -83,10 +83,7 @@ contract DeepAttackSucker is JBSucker {
 
     function _validateBranchRoot(
         bytes32 expectedRoot,
-        uint256 projectTokenCount,
-        uint256 terminalTokenAmount,
-        bytes32 beneficiary,
-        bytes32 metadata,
+        bytes32 leafHash,
         uint256 index,
         bytes32[_TREE_DEPTH] calldata leaves
     )
@@ -95,9 +92,7 @@ contract DeepAttackSucker is JBSucker {
         override
     {
         if (!nextCheckShouldPass) {
-            super._validateBranchRoot(
-                expectedRoot, projectTokenCount, terminalTokenAmount, beneficiary, metadata, index, leaves
-            );
+            super._validateBranchRoot(expectedRoot, leafHash, index, leaves);
         }
         nextCheckShouldPass = false;
     }

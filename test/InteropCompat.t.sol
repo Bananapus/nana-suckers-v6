@@ -130,7 +130,9 @@ contract InteropTestSucker is JBSucker {
     )
         external
     {
-        _validateBranchRoot(expectedRoot, projectTokenCount, terminalTokenAmount, beneficiary, metadata, index, leaves);
+        _validateBranchRoot(
+            expectedRoot, _buildTreeHash(projectTokenCount, terminalTokenAmount, beneficiary, metadata), index, leaves
+        );
     }
 }
 

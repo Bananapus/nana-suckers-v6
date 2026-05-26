@@ -39,7 +39,9 @@ import {JBSwapPoolLib} from "./libraries/JBSwapPoolLib.sol";
 
 // Local: structs (alphabetized).
 import {JBClaim} from "./structs/JBClaim.sol";
+import {JBConversionRate} from "./structs/JBConversionRate.sol";
 import {JBMessageRoot} from "./structs/JBMessageRoot.sol";
+import {JBPendingSwap} from "./structs/JBPendingSwap.sol";
 import {JBRemoteToken} from "./structs/JBRemoteToken.sol";
 
 /// @notice A `JBCCIPSucker` extension that swaps between local and bridge tokens using the best
@@ -71,7 +73,7 @@ import {JBRemoteToken} from "./structs/JBRemoteToken.sol";
 ///
 /// **Inbound swap resilience**: If a swap reverts during `ccipReceive` (due to insufficient
 /// liquidity, stale TWAP observations, or extreme price impact), the CCIP message still succeeds.
-/// The unswapped bridge tokens are stored in a `PendingSwap` and the merkle root is recorded
+/// The unswapped bridge tokens are stored in a `JBPendingSwap` and the merkle root is recorded
 /// normally. Claims for the affected batch are gated until `retrySwap` is called successfully.
 /// Anyone can call `retrySwap` once swap conditions improve.
 ///
@@ -136,31 +138,11 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
     // ------------------- internal stored properties -------------------- //
     //*********************************************************************//
 
-    /// @notice Bridge tokens from a failed inbound swap, stored for later retry via `retrySwap`.
-    /// @custom:member bridgeToken The bridge token received from CCIP.
-    /// @custom:member bridgeAmount Amount of bridge tokens to swap.
-    /// @custom:member leafTotal Original leaf-denomination total (for conversion rate).
-    struct PendingSwap {
-        address bridgeToken;
-        uint256 bridgeAmount;
-        uint256 leafTotal;
-    }
-
     /// @notice Pending (failed) inbound swaps, keyed by local token and batch nonce.
     /// @dev Populated when `ccipReceive` swap fails; cleared when `retrySwap` succeeds.
     /// @custom:param localToken The local token the swap targets.
     /// @custom:param nonce The CCIP nonce identifying the batch.
-    mapping(address localToken => mapping(uint64 nonce => PendingSwap)) public pendingSwapOf;
-
-    /// @notice Immutable conversion rate for one received root batch, keyed by nonce.
-    /// @dev Each batch stores its total leaf and local amounts. Individual claims compute their
-    /// scaled amount as `claimLeafAmount * localTotal / leafTotal` — no mutable state changes.
-    /// @custom:member leafTotal Total leaf-denomination (source chain) amount for this batch.
-    /// @custom:member localTotal Total local-denomination (after swap) amount for this batch.
-    struct ConversionRate {
-        uint256 leafTotal;
-        uint256 localTotal;
-    }
+    mapping(address localToken => mapping(uint64 nonce => JBPendingSwap)) public pendingSwapOf;
 
     /// @notice End leaf index (exclusive) for each received root batch, keyed by token and nonce.
     /// @custom:param token The local token address.
@@ -177,7 +159,7 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
     /// @notice Conversion rate for each received root batch, keyed by token and nonce.
     /// @custom:param token The local token address.
     /// @custom:param nonce The CCIP nonce identifying the batch.
-    mapping(address token => mapping(uint64 nonce => ConversionRate)) internal _conversionRateOf;
+    mapping(address token => mapping(uint64 nonce => JBConversionRate)) internal _conversionRateOf;
 
     /// @notice Count of populated batch nonces per token. Appended exactly once per batch in
     /// `ccipReceive`, so it equals the number of received batches independent of CCIP ordering.
@@ -421,7 +403,7 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
             // Store pendingSwapOf for failed swaps now that nonce is validated.
             if (swapFailed) {
                 pendingSwapOf[localToken][nonce] =
-                    PendingSwap({bridgeToken: deliveredToken, bridgeAmount: deliveredAmount, leafTotal: leafTotal});
+                    JBPendingSwap({bridgeToken: deliveredToken, bridgeAmount: deliveredAmount, leafTotal: leafTotal});
             }
 
             // Zero-output swap guard: When a swap succeeds but returns zero local tokens, the
@@ -435,11 +417,12 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
             // the swap produced a positive local amount.
             if (leafTotal > 0 && !swapFailed) {
                 if (localAmount == 0 && deliveredAmount > 0) {
-                    pendingSwapOf[localToken][nonce] =
-                        PendingSwap({bridgeToken: deliveredToken, bridgeAmount: deliveredAmount, leafTotal: leafTotal});
+                    pendingSwapOf[localToken][nonce] = JBPendingSwap({
+                        bridgeToken: deliveredToken, bridgeAmount: deliveredAmount, leafTotal: leafTotal
+                    });
                 } else {
                     _conversionRateOf[localToken][nonce] =
-                        ConversionRate({leafTotal: leafTotal, localTotal: localAmount});
+                        JBConversionRate({leafTotal: leafTotal, localTotal: localAmount});
                 }
             }
         } else {
@@ -504,7 +487,7 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
         }
         _retrySwapLocked = true;
 
-        PendingSwap memory pending = pendingSwapOf[localToken][nonce];
+        JBPendingSwap memory pending = pendingSwapOf[localToken][nonce];
         if (pending.bridgeAmount == 0) {
             revert JBSwapCCIPSucker_NoPendingSwap({
                 localToken: localToken, nonce: nonce, retrySwapLocked: _retrySwapLocked
@@ -515,7 +498,7 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
             _executeSwapOrRevert({tokenIn: pending.bridgeToken, tokenOut: localToken, amount: pending.bridgeAmount});
 
         // Update the conversion rate so claims can proceed, then clear the pending swap.
-        _conversionRateOf[localToken][nonce] = ConversionRate({leafTotal: pending.leafTotal, localTotal: localAmount});
+        _conversionRateOf[localToken][nonce] = JBConversionRate({leafTotal: pending.leafTotal, localTotal: localAmount});
         delete pendingSwapOf[localToken][nonce];
 
         _retrySwapLocked = false;
@@ -571,7 +554,7 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
                 if (pendingSwapOf[token][nonce].bridgeAmount > 0) {
                     revert JBSwapCCIPSucker_SwapPending({nonce: nonce});
                 }
-                ConversionRate storage rate = _conversionRateOf[token][nonce];
+                JBConversionRate storage rate = _conversionRateOf[token][nonce];
                 if (rate.leafTotal > 0) {
                     amount = amount * rate.localTotal / rate.leafTotal;
                 }

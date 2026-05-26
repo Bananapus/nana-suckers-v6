@@ -140,6 +140,15 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     /// @notice The address of this contract's deployer.
     address public override deployer;
 
+    /// @notice The keccak256 hash of the leaf data committed at execution time, keyed by `(terminalToken,
+    /// leafIndex)`. Beneficiary contracts (e.g. `JBReferralSplitHook`) use this to authenticate post-hoc
+    /// settlement when their `claim()` call was front-run by a direct external caller — they re-derive the
+    /// hash from the claim data they hold and compare. Returns `bytes32(0)` for unexecuted indices —
+    /// `_buildTreeHash` is pre-image-resistant so zero unambiguously means "not executed".
+    /// @custom:param token The token whose inbox tree contains the leaf.
+    /// @custom:param index The leaf's index in the inbox tree.
+    mapping(address token => mapping(uint256 index => bytes32)) public override executedLeafHashOf;
+
     /// @notice The last known total token supply on the peer chain, updated each time a bridge message is received.
     /// @dev Used by data hooks to compute `effectiveTotalSupply = localSupply + sum(peerChainTotalSupply)` across all
     /// suckers, preventing cash out tax bypass on chains where a holder dominates the local supply.
@@ -925,36 +934,31 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
             revert JBSucker_NoTerminalForToken({projectId: cachedProjectId, token: token});
         }
 
-        // Perform the `addToBalance` for ERC-20 tokens.
-        if (token != JBConstants.NATIVE_TOKEN) {
-            // Record the balance before the transfer for the sanity check.
-            uint256 balanceBefore = IERC20(token).balanceOf(address(this));
-
-            // Approve the terminal to spend the ERC-20 tokens.
+        // Native and ERC-20 differ only in (a) value attachment to the call, and (b) ERC-20 requires an
+        // allowance grant + post-transfer balance assertion to catch fee-on-transfer / non-conforming tokens.
+        // The terminal call itself is identical for both, so it lives outside the branch.
+        uint256 nativeValue;
+        uint256 balanceBefore;
+        bool isErc20 = token != JBConstants.NATIVE_TOKEN;
+        if (isErc20) {
+            balanceBefore = IERC20(token).balanceOf(address(this));
             SafeERC20.forceApprove({token: IERC20(token), spender: address(terminal), value: amount});
-
-            // Add the tokens to the project's balance.
-            terminal.addToBalanceOf({
-                projectId: cachedProjectId,
-                token: token,
-                amount: amount,
-                shouldReturnHeldFees: false,
-                memo: "",
-                metadata: ""
-            });
-
-            // Sanity check: make sure we transferred the full amount.
-            assert(IERC20(token).balanceOf(address(this)) == balanceBefore - amount);
         } else {
-            // If the token is the native token, send ETH with the call.
-            terminal.addToBalanceOf{value: amount}({
-                projectId: cachedProjectId,
-                token: token,
-                amount: amount,
-                shouldReturnHeldFees: false,
-                memo: "",
-                metadata: ""
-            });
+            nativeValue = amount;
+        }
+
+        terminal.addToBalanceOf{value: nativeValue}({
+            projectId: cachedProjectId,
+            token: token,
+            amount: amount,
+            shouldReturnHeldFees: false,
+            memo: "",
+            metadata: ""
+        });
+
+        if (isErc20) {
+            // Sanity check: catches fee-on-transfer / non-conforming ERC-20s that move less than `amount`.
+            assert(IERC20(token).balanceOf(address(this)) == balanceBefore - amount);
         }
     }
 
@@ -1320,15 +1324,21 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         // Register the leaf as executed to prevent double-spending.
         _executedFor[terminalToken].set(index);
 
-        // Calculate the root and compare it to the current inbox root.
-        _validateBranchRoot({
-            expectedRoot: _inboxOf[terminalToken].root,
+        // Compute the leaf hash once. It's used twice: stored in `executedLeafHashOf` (so beneficiary contracts
+        // can authenticate post-hoc settlement when their `claim()` was front-run) and passed to
+        // `_validateBranchRoot` for merkle verification. The bare executed bitmap proves "some leaf at index I
+        // was executed" but not "which leaf"; storing the hash binds the index to the actual leaf content.
+        bytes32 leafHash = _buildTreeHash({
             projectTokenCount: projectTokenCount,
             terminalTokenAmount: terminalTokenAmount,
             beneficiary: beneficiary,
-            metadata: metadata,
-            index: index,
-            leaves: leaves
+            metadata: metadata
+        });
+        executedLeafHashOf[terminalToken][index] = leafHash;
+
+        // Calculate the root and compare it to the current inbox root.
+        _validateBranchRoot({
+            expectedRoot: _inboxOf[terminalToken].root, leafHash: leafHash, index: index, leaves: leaves
         });
     }
 
@@ -1336,17 +1346,12 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     /// @dev This is a virtual function to allow a tests to override the behavior, it should never be overwritten
     /// otherwise.
     /// @param expectedRoot The expected merkle root to validate against.
-    /// @param projectTokenCount The number of project tokens in the leaf.
-    /// @param terminalTokenAmount The amount of terminal tokens in the leaf.
-    /// @param beneficiary The beneficiary address in the leaf (bytes32 for cross-VM compatibility).
+    /// @param leafHash The precomputed leaf hash (`_buildTreeHash` output) for the leaf being validated.
     /// @param index The index of the leaf in the merkle tree.
     /// @param leaves The merkle branch proving the leaf's inclusion.
     function _validateBranchRoot(
         bytes32 expectedRoot,
-        uint256 projectTokenCount,
-        uint256 terminalTokenAmount,
-        bytes32 beneficiary,
-        bytes32 metadata,
+        bytes32 leafHash,
         uint256 index,
         bytes32[_TREE_DEPTH] calldata leaves
     )
@@ -1355,16 +1360,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     {
         // Calculate the root based on the leaf, the branch, and the index.
         // Delegates to JBSuckerLib (via DELEGATECALL) to keep MerkleLib.branchRoot bytecode out of each sucker.
-        bytes32 root = JBSuckerLib.computeBranchRoot({
-            item: _buildTreeHash({
-                projectTokenCount: projectTokenCount,
-                terminalTokenAmount: terminalTokenAmount,
-                beneficiary: beneficiary,
-                metadata: metadata
-            }),
-            branch: leaves,
-            index: index
-        });
+        bytes32 root = JBSuckerLib.computeBranchRoot({item: leafHash, branch: leaves, index: index});
 
         // Revert if the computed root does not match the expected inbox root.
         if (root != expectedRoot) {
@@ -1451,10 +1447,12 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         // Calculate the root and compare it to the current outbox root.
         _validateBranchRoot({
             expectedRoot: _computeOutboxRoot(_outboxOf[terminalToken].tree),
-            projectTokenCount: projectTokenCount,
-            terminalTokenAmount: terminalTokenAmount,
-            beneficiary: beneficiary,
-            metadata: metadata,
+            leafHash: _buildTreeHash({
+                projectTokenCount: projectTokenCount,
+                terminalTokenAmount: terminalTokenAmount,
+                beneficiary: beneficiary,
+                metadata: metadata
+            }),
             index: index,
             leaves: leaves
         });

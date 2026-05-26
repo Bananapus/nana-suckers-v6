@@ -15,6 +15,58 @@ This file describes the verified change from `nana-suckers-v5` to the current `n
 - `JBCeloSucker`
 - the deployers, structs, and interfaces under `src/`
 
+## Unreleased — `executedLeafHashOf` + `allSuckersOf` for hook hardening
+
+Two surgical additions to support `JBReferralSplitHook`'s hardening pass against the front-run and
+deprecated-sucker findings in `AUDIT_REPORT_4`. Both extend the read surface without changing any
+existing behavior on the write side.
+
+**What changed**
+
+- `JBSucker`: new public `mapping(address token => mapping(uint256 index => bytes32)) executedLeafHashOf`.
+  Written inside `_validate` immediately after the executed bitmap bit set. Stores
+  `_buildTreeHash(projectTokenCount, terminalTokenAmount, beneficiary, metadata)` so a beneficiary
+  contract can authenticate post-hoc settlement when its own `sucker.claim` call was front-run by a
+  direct external caller. The bare `_executedFor` bitmap proves "some leaf at index I was executed"
+  but not "which leaf"; the hash binds the index to the actual leaf content. Pre-image-resistant, so
+  a zero return unambiguously means "not executed".
+- `JBSuckerRegistry`: new `allSuckersOf(uint256 projectId) external view returns (address[])` —
+  returns every key in `_suckersOf[projectId]`, including deprecated entries. `suckersOf` filters
+  out deprecated; `isSuckerOf` is single-address. Neither was sufficient for consumers that need
+  "has any sucker ever peered to chain X?" — e.g. `JBReferralSplitHook.burnUnbridgeableCreditFor`
+  needs this check to refuse to permaburn credit that's still bridgeable via a deprecated sucker.
+
+**Risk surface**
+
+Zero new trust paths and zero new write paths. The existing `claim` / `_validate` flow now writes
+one additional storage slot per execution (~20k gas first time). Beneficiary contracts that don't
+care about front-run defense ignore the new field; their behavior is byte-identical to before.
+
+**Bytecode side-effects (incidental cleanup)**
+
+The hash storage write tipped `JBSwapCCIPSucker` (the largest sucker variant) over EIP-170. Two
+small refactors made room:
+
+1. `_addToBalance` collapsed the duplicated `terminal.addToBalanceOf(...)` ERC-20 / native-token
+   branches into a single call with `{value: nativeValue}` conditionally non-zero. Pre-call
+   approve + post-call balance assertion stay ERC-20-only. Saves ~119 bytes propagated through
+   every sucker variant via inheritance.
+2. `_validate` precomputes the leaf hash once and passes it to `_validateBranchRoot`, removing a
+   duplicate `_buildTreeHash` call. Saves a small amount per claim path.
+3. `JBPendingSwap` and `JBConversionRate` extracted from `JBSwapCCIPSucker` to dedicated files in
+   `src/structs/` (bytecode-neutral, code-organization only).
+
+After these changes, `JBSwapCCIPSucker` has ~70 bytes of EIP-170 headroom (was ~22 bytes pre-PR).
+
+**Test coverage**
+
+- `test/SuckerRegressions.t.sol::test_executedLeafHashOf_isPopulatedOnClaim` — verifies the slot is
+  zero before claim and equals `keccak256(abi.encodePacked(projectTokenCount, terminalTokenAmount,
+  beneficiary, metadata))` after claim. Neighboring indices stay zero.
+- `test/regression/DeprecatedRemovalUndercount.t.sol::test_allSuckersOf_includesDeprecatedAfterRemoval`
+  — verifies `suckersOf` filters out removed-deprecated entries while `allSuckersOf` still reports
+  them, so downstream "is this chain bridgeable?" checks don't return a false negative.
+
 ## Unreleased — `JBLeaf.metadata` attribution field
 
 The merkle leaf now carries a fifth field: a `bytes32 metadata` payload that travels inside the leaf hash but is

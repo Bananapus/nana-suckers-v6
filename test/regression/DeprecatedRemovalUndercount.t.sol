@@ -142,4 +142,31 @@ contract RegressionDeprecatedRemovalUndercountTest is Test {
         uint256 localSupply = 100e18;
         assertEq(localSupply + supplyAfterRemoval, 1100e18, "cross-chain consumer sees full supply even after removal");
     }
+
+    /// @notice `allSuckersOf` must return every sucker ever registered for a project — including
+    /// deprecated entries that `suckersOf` filters out. Consumers like
+    /// `JBReferralSplitHook.burnUnbridgeableCreditFor` rely on this to detect "has any sucker
+    /// ever peered to chain X?" so they don't permaburn credit that's still bridgeable through
+    /// a deprecated-but-not-yet-replaced sucker.
+    function test_allSuckersOf_includesDeprecatedAfterRemoval() external {
+        // Before deprecation, both views see the sucker.
+        address[] memory activeBefore = registry.suckersOf(PROJECT_ID);
+        address[] memory allBefore = registry.allSuckersOf(PROJECT_ID);
+        assertEq(activeBefore.length, 1, "active set sees the sucker pre-deprecation");
+        assertEq(allBefore.length, 1, "full set sees the sucker pre-deprecation");
+        assertEq(activeBefore[0], address(sucker));
+        assertEq(allBefore[0], address(sucker));
+
+        // Deprecate and remove from active listings.
+        sucker.test_setDeprecatedAfter(block.timestamp - 1);
+        registry.removeDeprecatedSucker({projectId: PROJECT_ID, sucker: address(sucker)});
+
+        // After removal, `suckersOf` filters it out — but `allSuckersOf` MUST still report it,
+        // otherwise downstream "is this chain bridgeable?" checks return a false negative.
+        address[] memory activeAfter = registry.suckersOf(PROJECT_ID);
+        address[] memory allAfter = registry.allSuckersOf(PROJECT_ID);
+        assertEq(activeAfter.length, 0, "suckersOf filters out the removed entry");
+        assertEq(allAfter.length, 1, "allSuckersOf still includes the removed entry");
+        assertEq(allAfter[0], address(sucker), "removed sucker still reachable via allSuckersOf");
+    }
 }

@@ -108,6 +108,18 @@ interface IJBSucker is IERC165 {
     /// @return The deployer address.
     function deployer() external view returns (address);
 
+    /// @notice The keccak256 hash of the leaf data committed at execution time, for the leaf at the given
+    /// `(terminalToken, index)`. Returns `bytes32(0)` for unexecuted indices.
+    /// @dev Beneficiary contracts (e.g. `JBReferralSplitHook`) use this to authenticate post-hoc settlement when
+    /// their `claim()` call was front-run by a direct external caller — they re-derive the hash from the claim
+    /// data they hold and compare. The hash is computed via `_buildTreeHash(projectTokenCount,
+    /// terminalTokenAmount, beneficiary, metadata)` and is pre-image-resistant, so zero unambiguously means
+    /// "not executed".
+    /// @param token The terminal token whose tree contains the leaf.
+    /// @param index The index of the leaf in the inbox tree.
+    /// @return hash The committed leaf hash (or `bytes32(0)` if unexecuted).
+    function executedLeafHashOf(address token, uint256 index) external view returns (bytes32 hash);
+
     /// @notice The inbox merkle tree root for a given token.
     /// @param token The local terminal token.
     /// @return The inbox tree root.
