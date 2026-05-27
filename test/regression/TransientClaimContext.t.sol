@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.28;
+pragma solidity 0.8.28;
 
 import "forge-std/Test.sol";
 
@@ -17,12 +17,12 @@ import {JBSwapCCIPSucker} from "../../src/JBSwapCCIPSucker.sol";
 import {JBSwapCCIPSuckerDeployer} from "../../src/deployers/JBSwapCCIPSuckerDeployer.sol";
 import {IJBSuckerRegistry} from "../../src/interfaces/IJBSuckerRegistry.sol";
 import {JBClaim} from "../../src/structs/JBClaim.sol";
+import {JBConversionRate} from "../../src/structs/JBConversionRate.sol";
 import {JBLeaf} from "../../src/structs/JBLeaf.sol";
 import {JBMessageRoot} from "../../src/structs/JBMessageRoot.sol";
 import {JBRemoteToken} from "../../src/structs/JBRemoteToken.sol";
 import {MerkleLib} from "../../src/utils/MerkleLib.sol";
 import {ERC20Mock} from "../mocks/ERC20Mock.sol";
-import {JBConversionRate} from "../../src/structs/JBConversionRate.sol";
 
 contract TransientContextTerminal {
     function addToBalanceOf(

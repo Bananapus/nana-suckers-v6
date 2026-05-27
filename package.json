@@ -4,7 +4,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Bananapus/nana-suckers-v6"
+    "url": "git+https://github.com/Bananapus/nana-suckers-v6.git"
   },
   "files": [
     "foundry.toml",
@@ -26,7 +26,7 @@
   },
   "dependencies": {
     "@arbitrum/nitro-contracts": "3.2.0",
-    "@bananapus/core-v6": "^0.0.66",
+    "@bananapus/core-v6": "^0.0.72",
     "@bananapus/permission-ids-v6": "^0.0.27",
     "@chainlink/contracts-ccip": "1.6.4",
     "@chainlink/local": "0.2.7",

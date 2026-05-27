@@ -322,7 +322,7 @@ contract SuckerAttacks is Test {
 
         // Root 1 proof should no longer match the inbox root
         // Any attempt to claim with root1's proof against root2 should fail
-        assertTrue(root1 != root2, "Roots should be different after new insertion");
+        assertNotEq(root1, root2, "Roots should be different after new insertion");
 
         // Verify inbox root is root2
         bytes32 currentInbox = sucker.test_getInboxRoot(token);
@@ -445,7 +445,7 @@ contract SuckerAttacks is Test {
         // The outbox tree is independent of terminal configuration.
         // Even if the terminal changes, the merkle root of committed items remains valid.
         bytes32 rootBefore = sucker.test_getOutboxRoot(token);
-        assertTrue(rootBefore != bytes32(0), "Root should be non-zero after insertions");
+        assertNotEq(rootBefore, bytes32(0), "Root should be non-zero after insertions");
     }
 
     // =========================================================================
@@ -524,7 +524,7 @@ contract SuckerAttacks is Test {
             sucker.test_insertIntoTree((i + 1) * 1 ether, token, (i + 1) * 0.5 ether, bytes32(uint256(1000 + i)));
 
             bytes32 newRoot = sucker.test_getOutboxRoot(token);
-            assertTrue(newRoot != prevRoot, "Root should change after each insertion");
+            assertNotEq(newRoot, prevRoot, "Root should change after each insertion");
             prevRoot = newRoot;
         }
 

@@ -491,7 +491,7 @@ contract CCIPNativeInteropTest is Test {
         });
 
         bytes32 outboxRoot = ccipSucker.test_getOutboxRoot(JBConstants.NATIVE_TOKEN);
-        assertTrue(outboxRoot != bytes32(0), "Outbox root should be non-zero");
+        assertNotEq(outboxRoot, bytes32(0), "Outbox root should be non-zero");
 
         // Step 4: Simulate receiving on the "Celo side" — the message arrives with
         // root.token = celoETH (the ERC20 representation of ETH on Celo).

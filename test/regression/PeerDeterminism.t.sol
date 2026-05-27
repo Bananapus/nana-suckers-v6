@@ -78,8 +78,8 @@ contract RegressionPeerDeterminismTest is Test, TestBaseWorkflow, IERC721Receive
         assertNotEq(address(suckerA), address(suckerB), "registry-dependent deployment should not match");
         assertEq(suckerA.peer(), bytes32(uint256(uint160(address(suckerA)))));
         assertEq(suckerB.peer(), bytes32(uint256(uint160(address(suckerB)))));
-        assertTrue(suckerA.peer() != bytes32(uint256(uint160(address(suckerB)))));
-        assertTrue(suckerB.peer() != bytes32(uint256(uint160(address(suckerA)))));
+        assertNotEq(suckerA.peer(), bytes32(uint256(uint160(address(suckerB)))));
+        assertNotEq(suckerB.peer(), bytes32(uint256(uint160(address(suckerA)))));
     }
 
     function _deployViaRegistry(JBSuckerRegistry registry, bytes32 salt) internal returns (IJBSucker sucker) {

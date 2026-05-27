@@ -594,7 +594,7 @@ contract MultiChainEvolutionTest is Test, TestBaseWorkflow, IERC721Receiver {
 
         assertEq(registry.suckersOf(projectId).length, 1, "New sucker deployed");
         assertTrue(registry.isSuckerOf(projectId, newSucker), "New sucker registered");
-        assertTrue(newSucker != oldSucker, "New sucker has different address");
+        assertNotEq(newSucker, oldSucker, "New sucker has different address");
     }
 
     // =========================================================================

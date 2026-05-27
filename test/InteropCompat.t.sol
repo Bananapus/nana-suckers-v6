@@ -269,8 +269,8 @@ contract InteropCompat is Test {
         bytes32 hashA = sucker.exposed_buildTreeHash(projectTokens, terminalTokens, beneficiary, dataA);
         bytes32 hashB = sucker.exposed_buildTreeHash(projectTokens, terminalTokens, beneficiary, dataB);
 
-        assertTrue(hashZero != hashA, "metadata=0 vs metadata=1 should differ");
-        assertTrue(hashA != hashB, "metadata=1 vs metadata=2 should differ");
+        assertNotEq(hashZero, hashA, "metadata=0 vs metadata=1 should differ");
+        assertNotEq(hashA, hashB, "metadata=1 vs metadata=2 should differ");
     }
 
     /// @notice EVM and SVM leaf hashes match for arbitrary `data` values.
