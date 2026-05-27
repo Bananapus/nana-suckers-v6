@@ -668,10 +668,15 @@ library JBSwapPoolLib {
                     });
                 }
 
-                // Compute the arithmetic mean tick from the cumulative tick difference.
-                // The geomean oracle returns the same int24 tick domain used by Uniswap pools.
+                // Compute the arithmetic mean tick from the cumulative tick difference, rounding negative values
+                // toward negative infinity to match Uniswap's oracle pattern and the buyback hook.
+                int56 tickCumulativesDelta = tickCumulatives[1] - tickCumulatives[0];
                 // forge-lint: disable-next-line(unsafe-typecast)
-                tick = int24((tickCumulatives[1] - tickCumulatives[0]) / int56(int32(_V4_TWAP_WINDOW)));
+                tick = int24(tickCumulativesDelta / int56(int32(_V4_TWAP_WINDOW)));
+                // forge-lint: disable-next-line(unsafe-typecast)
+                if (tickCumulativesDelta < 0 && tickCumulativesDelta % int56(int32(_V4_TWAP_WINDOW)) != 0) {
+                    tick--;
+                }
 
                 // Derive harmonic-mean liquidity from the seconds-per-liquidity delta. This is the same shape the
                 // buyback hook uses (`JBSwapLib.getQuoteFromOracle`) and resists JIT-LP liquidity removal in the
@@ -884,8 +889,8 @@ library JBSwapPoolLib {
         return _observationIsOldEnough({observationTimestamp: observationTimestamp, window: _DEFAULT_TWAP_WINDOW});
     }
 
-    /// @notice Check whether a V4 hooked pool can return cumulative ticks for the required TWAP window.
-    /// @dev Hookless pools return false. Reverting hooks and hooks that return fewer than two cumulative tick values
+    /// @notice Check whether a V4 hooked pool can return TWAP price and liquidity for the required window.
+    /// @dev Hookless pools return false. Reverting hooks and hooks that return incomplete or degenerate oracle data
     /// are treated as unusable for TWAP routing.
     /// @param key The V4 pool key whose hook should be probed.
     /// @return True if the hook can serve both the historical and current cumulative tick observations.
@@ -896,12 +901,12 @@ library JBSwapPoolLib {
         secondsAgos[0] = _V4_TWAP_WINDOW;
         secondsAgos[1] = 0;
 
-        // Pool discovery intentionally probes candidate hooks in a bounded pool list. The seconds-per-liquidity array
-        // is not needed for the history check.
+        // Pool discovery intentionally probes candidate hooks in a bounded pool list.
         try IGeomeanOracle(address(key.hooks)).observe({key: key, secondsAgos: secondsAgos}) returns (
-            int56[] memory tickCumulatives, uint160[] memory
+            int56[] memory tickCumulatives, uint160[] memory secondsPerLiquidityCumulativeX128s
         ) {
-            return tickCumulatives.length >= 2;
+            if (tickCumulatives.length < 2 || secondsPerLiquidityCumulativeX128s.length < 2) return false;
+            return secondsPerLiquidityCumulativeX128s[1] > secondsPerLiquidityCumulativeX128s[0];
         } catch {
             return false;
         }

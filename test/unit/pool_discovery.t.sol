@@ -190,6 +190,7 @@ contract JBSwapPoolLib_PoolDiscoveryTest is Test {
         uint160[] memory secondsPerLiquidityCumulativeX128s = new uint160[](2);
         uint32[] memory secondsAgos = new uint32[](2);
         secondsAgos[0] = 120;
+        secondsPerLiquidityCumulativeX128s[1] = uint160((uint256(120) << 128) / uint256(liquidity));
         vm.mockCall(
             hook,
             abi.encodeWithSelector(IGeomeanOracle.observe.selector, key, secondsAgos),
@@ -314,6 +315,37 @@ contract JBSwapPoolLib_PoolDiscoveryTest is Test {
         (bool isV4,,) = harness.discoverPool(_config(), TOKEN_A, TOKEN_B);
 
         assertTrue(isV4, "Hooked V4 with more liquidity should beat V3");
+    }
+
+    /// @notice A hooked V4 pool must expose liquidity history before it can beat a V3 TWAP route.
+    function test_poolDiscovery_hookedV4WithoutLiquidityOracleDoesNotBeatV3() public {
+        _setupV3Pool(v3Pool3000, 3000, 50_000e18);
+
+        (address sorted0, address sorted1) = TOKEN_A < TOKEN_B ? (TOKEN_A, TOKEN_B) : (TOKEN_B, TOKEN_A);
+        PoolKey memory key = PoolKey({
+            currency0: Currency.wrap(sorted0),
+            currency1: Currency.wrap(sorted1),
+            fee: 3000,
+            tickSpacing: 60,
+            hooks: IHooks(HOOK_ADDR)
+        });
+
+        poolManager.setPool(key, 1 << 96, 500_000e18);
+
+        int56[] memory tickCumulatives = new int56[](2);
+        uint160[] memory secondsPerLiquidityCumulativeX128s = new uint160[](0);
+        uint32[] memory secondsAgos = new uint32[](2);
+        secondsAgos[0] = 120;
+        vm.mockCall(
+            HOOK_ADDR,
+            abi.encodeWithSelector(IGeomeanOracle.observe.selector, key, secondsAgos),
+            abi.encode(tickCumulatives, secondsPerLiquidityCumulativeX128s)
+        );
+
+        (bool isV4, IUniswapV3Pool v3Pool,) = harness.discoverPool(_config(), TOKEN_A, TOKEN_B);
+
+        assertFalse(isV4, "hooked V4 without liquidity history should not beat V3");
+        assertEq(address(v3Pool), v3Pool3000, "V3 pool should be retained");
     }
 
     // =========================================================================
