@@ -90,6 +90,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     error JBSucker_UnexpectedMsgValue(uint256 value);
     error JBSucker_ZeroBeneficiary(bytes32 beneficiary);
     error JBSucker_ZeroERC20Token(uint256 projectId);
+    error JBSucker_ZeroProjectTokenCount();
 
     //*********************************************************************//
     // ------------------------- public constants ------------------------ //
@@ -553,6 +554,14 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         external
         override
     {
+        // Reject zero-token prepares. A zero-token prepare burns nothing and reclaims nothing, but it still inserts a
+        // leaf into the outbox tree and lets `toRemote` ship a zero-value bridge message — a permissionless way to
+        // inflate the per-token populated-nonce list on swap-CCIP suckers, taxing every legitimate claim with extra
+        // lookup work and eventually exceeding the block gas limit. See H-6 (`SwapCCIP_PopulatedNonceDoS`).
+        if (projectTokenCount == 0) {
+            revert JBSucker_ZeroProjectTokenCount();
+        }
+
         // Make sure the beneficiary is not the zero address, as this would revert when minting on the remote chain.
         if (beneficiary == bytes32(0)) {
             revert JBSucker_ZeroBeneficiary({beneficiary: beneficiary});

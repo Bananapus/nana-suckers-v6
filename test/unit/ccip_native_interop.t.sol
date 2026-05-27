@@ -508,12 +508,16 @@ contract CCIPNativeInteropTest is Test {
             sourceTimestamp: 1
         });
 
+        // Provide a delivery matching the root's positive amount so the L-6 consistency check passes.
+        Client.EVMTokenAmount[] memory tokenAmounts = new Client.EVMTokenAmount[](1);
+        tokenAmounts[0] = Client.EVMTokenAmount({token: celoETH, amount: 1 ether});
+
         Client.Any2EVMMessage memory message = Client.Any2EVMMessage({
             messageId: bytes32(uint256(3)),
             sourceChainSelector: REMOTE_CHAIN_SELECTOR,
             sender: abi.encode(address(ccipSucker)),
             data: abi.encode(uint8(0), abi.encode(msgRoot)),
-            destTokenAmounts: new Client.EVMTokenAmount[](0)
+            destTokenAmounts: tokenAmounts
         });
 
         vm.prank(MOCK_ROUTER);

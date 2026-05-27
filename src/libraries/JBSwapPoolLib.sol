@@ -619,7 +619,15 @@ library JBSwapPoolLib {
         });
     }
 
-    /// @notice Get a V4 quote with dynamic slippage. Hooked pools must serve TWAP; hookless pools use spot fallback.
+    /// @notice Get a V4 quote with dynamic slippage. Hooked pools must serve TWAP for BOTH the price tick and the
+    /// liquidity input into sigmoid slippage; hookless pools fall back to spot for both.
+    /// @dev Matches the buyback hook's TWAP pattern (`JBSwapLib.getQuoteFromOracle`): for hooked routes we derive
+    /// `harmonicMeanLiquidity` from the oracle's `secondsPerLiquidityCumulativeX128s`, not from
+    /// `PoolManager.getLiquidity` (which returns current spot and is JIT-LP-manipulable across a single block).
+    /// Sigmoid slippage tolerance is driven by `amountIn / liquidity`; feeding spot liquidity into a TWAP-derived
+    /// tick lets an LP shrink the denominator in the same block as a CCIP delivery, ballooning the tolerance to
+    /// `MAX_SLIPPAGE` (88%) for a one-shot per-batch immutable conversion rate that all claimers then inherit.
+    /// See M-12 (`NEW-F-SUCK-A11`).
     /// @param config The swap configuration (pool manager, wrapped native token addresses).
     /// @param key The V4 pool key to quote against.
     /// @param normalizedTokenIn The normalized input token address.
@@ -644,18 +652,17 @@ library JBSwapPoolLib {
         PoolId id = key.toId();
 
         {
-            // If the pool has a hook, require a TWAP from the geomean oracle.
+            // If the pool has a hook, require a TWAP from the geomean oracle for both price AND liquidity.
             if (address(key.hooks) != address(0)) {
                 // Build the observation window: [_V4_TWAP_WINDOW seconds ago, now].
                 uint32[] memory secondsAgos = new uint32[](2);
                 secondsAgos[0] = _V4_TWAP_WINDOW;
                 secondsAgos[1] = 0;
 
-                // Read the TWAP from the hook's geomean oracle. The seconds-per-liquidity array is not used for
-                // price checks.
-                (int56[] memory tickCumulatives,) =
+                // Read both the TWAP tick and the seconds-per-liquidity series so liquidity is also time-averaged.
+                (int56[] memory tickCumulatives, uint160[] memory secondsPerLiquidityCumulativeX128s) =
                     IGeomeanOracle(address(key.hooks)).observe({key: key, secondsAgos: secondsAgos});
-                if (tickCumulatives.length < 2) {
+                if (tickCumulatives.length < 2 || secondsPerLiquidityCumulativeX128s.length < 2) {
                     revert JBSwapPoolLib_InsufficientTwapHistory({
                         pool: address(key.hooks), availableWindow: tickCumulatives.length, requiredWindow: 2
                     });
@@ -665,16 +672,29 @@ library JBSwapPoolLib {
                 // The geomean oracle returns the same int24 tick domain used by Uniswap pools.
                 // forge-lint: disable-next-line(unsafe-typecast)
                 tick = int24((tickCumulatives[1] - tickCumulatives[0]) / int56(int32(_V4_TWAP_WINDOW)));
+
+                // Derive harmonic-mean liquidity from the seconds-per-liquidity delta. This is the same shape the
+                // buyback hook uses (`JBSwapLib.getQuoteFromOracle`) and resists JIT-LP liquidity removal in the
+                // delivery block — the manipulation has to persist across the full TWAP window to move the average.
+                uint160 secondsPerLiquidityDelta =
+                    secondsPerLiquidityCumulativeX128s[1] - secondsPerLiquidityCumulativeX128s[0];
+
+                if (secondsPerLiquidityDelta > 0) {
+                    // Safe: `(uint256(_V4_TWAP_WINDOW) << 128) / secondsPerLiquidityDelta` fits in uint128 because
+                    // _V4_TWAP_WINDOW is at most a uint32 (~4.3B) and the divisor is > 0 in this branch.
+                    // forge-lint: disable-next-line(unsafe-typecast)
+                    liquidity = uint128((uint256(_V4_TWAP_WINDOW) << 128) / uint256(secondsPerLiquidityDelta));
+                }
+                // If `secondsPerLiquidityDelta == 0`, liquidity stays 0 and the no-liquidity revert below fires —
+                // refuse to quote a hooked route whose averaged liquidity is degenerate.
             } else {
                 // Hookless V4 spot pools are only selected when no TWAP-capable route exists.
                 (, tick,,) = config.poolManager.getSlot0(id);
+                liquidity = config.poolManager.getLiquidity(id);
             }
-
-            // Query the pool's current in-range liquidity.
-            liquidity = config.poolManager.getLiquidity(id);
         }
 
-        // Revert if the pool has no in-range liquidity.
+        // Revert if the pool has no usable in-range liquidity (spot for hookless, TWAP-derived for hooked).
         if (liquidity == 0) revert JBSwapPoolLib_NoLiquidity({pool: address(0), poolId: id});
 
         // V4 uses address(0) for native ETH — compute quoting addresses inline to save stack slots.

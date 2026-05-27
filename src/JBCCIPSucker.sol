@@ -38,7 +38,11 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
     //*********************************************************************//
 
     error JBCCIPSucker_InvalidRouter(address router);
+    error JBCCIPSucker_PositiveRootWithoutDelivery(uint256 rootAmount);
+    error JBCCIPSucker_UnderDeliveredAmount(uint256 delivered, uint256 rootAmount);
+    error JBCCIPSucker_UnexpectedDeliveredTokens(uint256 count);
     error JBCCIPSucker_UnknownMessageType(uint8 messageType);
+    error JBCCIPSucker_WrongDeliveredToken(address delivered, address expected);
 
     //*********************************************************************//
     // ------------------------------ events ----------------------------- //
@@ -174,6 +178,42 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
         if (messageType == _CCIP_MSG_TYPE_ROOT) {
             // Decode the root message from the payload.
             JBMessageRoot memory root = abi.decode(payload, (JBMessageRoot));
+
+            // Cross-check the delivered tokens against the advertised root before recording anything.
+            //
+            // The send-side guarantees at most one entry in `destTokenAmounts`: length 0 for zero-value batches,
+            // length 1 for value-bearing batches. A compromised peer (or a malformed CCIP delivery) that violates
+            // these invariants would otherwise let `fromRemote` record a root advertising more value than was
+            // bridged, letting later claims mint project tokens against unrelated balance until the inbox runs dry.
+            // `JBSwapCCIPSucker.ccipReceive` already enforces equivalent reverts for the swap variant; mirror
+            // them here so both variants share a single defensive baseline.
+            uint256 deliveryCount = any2EvmMessage.destTokenAmounts.length;
+            if (deliveryCount > 1) {
+                revert JBCCIPSucker_UnexpectedDeliveredTokens(deliveryCount);
+            }
+            if (deliveryCount == 0) {
+                if (root.amount > 0) revert JBCCIPSucker_PositiveRootWithoutDelivery(root.amount);
+            } else {
+                Client.EVMTokenAmount calldata delivered = any2EvmMessage.destTokenAmounts[0];
+
+                // For NATIVE_TOKEN bridges the delivered ERC-20 is the wrapped native token (CCIP cannot transport
+                // raw native), so the token-identity check happens inside `unwrapReceivedTokens` against the
+                // router-reported wrapped native address. For everything else, the delivered token must equal the
+                // local mapped token the root advertises.
+                if (root.token != bytes32(uint256(uint160(JBConstants.NATIVE_TOKEN)))) {
+                    address expectedToken = _toAddress(root.token);
+                    if (delivered.token != expectedToken) {
+                        revert JBCCIPSucker_WrongDeliveredToken({delivered: delivered.token, expected: expectedToken});
+                    }
+                }
+
+                // The bridged amount must back at least the value the root advertises. A short delivery against a
+                // positive root is the structural twin of "no delivery + positive root" — both leave the inbox
+                // recording more claimable value than it actually holds.
+                if (delivered.amount < root.amount) {
+                    revert JBCCIPSucker_UnderDeliveredAmount({delivered: delivered.amount, rootAmount: root.amount});
+                }
+            }
 
             // Only unwrap wrapped native token when the root targets native token (not when claiming it as ERC-20).
             if (root.token == bytes32(uint256(uint160(JBConstants.NATIVE_TOKEN)))) {
