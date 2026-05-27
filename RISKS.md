@@ -153,9 +153,11 @@ When no TWAP-capable route is available for a cross-denomination swap, a hookles
 
 `mapTokens()` only uses `msg.value` when one or more mappings are being disabled and need transport payment for the final root flush. If every mapping in the batch is enable-only (`numberToDisable == 0`), the full `msg.value` is refunded to `_msgSender()`. If the refund transfer fails (e.g., the caller is a non-payable contract), the call reverts with `JBSucker_RefundFailed`. When disables are present, any dust remainder from integer division (`msg.value % numberToDisable`) is also refunded on a best-effort basis.
 
-### 10.9 Zero-value `prepare()` is allowed
+### 10.9 Zero-value `prepare()` is rejected
 
-`prepare()` does not reject `projectTokenCount == 0`. A zero-value check would be trivially bypassed by passing `1` instead, so it provides no real protection against remap-window consumption. The cost to create a leaf with `projectTokenCount = 1` is negligible (1 wei of project tokens). The one-time remap window is protected by the token mapping's `enabled` flag and the outbox tree count, not by minimum deposit requirements.
+`prepare()` reverts with `JBSucker_ZeroProjectTokenCount` when `projectTokenCount == 0`. The guard exists to defeat a permissionless DoS on swap-CCIP suckers: a zero-token prepare + `toRemote(token)` round-trip would insert a leaf, ship a zero-value CCIP message, and bump the remote sucker's per-token `_populatedNonceByIndex` list by 1 — with no project tokens burned and no terminal-token movement. After enough grief nonces the receiving chain's `_findNonceForLeafIndex` walk exceeds the block gas limit and permanently bricks claims on that lane. See `test/unit/SwapCCIP_PopulatedNonceDoS.t.sol` for the quantified attack curve.
+
+Bypassing the guard by passing `projectTokenCount = 1` still costs at least one project-token wei per nonce, raising the attack cost from "CCIP gas + fee" to "project tokens that must actually be acquired and approved." That floor is not absolute, but it removes the free-spam vector that closed-form analysis flagged.
 
 ### 10.10 Cross-chain currency uses standardized `JBCurrencyIds.ETH` (1), not local token addresses
 
