@@ -283,7 +283,7 @@ contract TestRegressionGaps is Test {
         assertEq(sucker.test_getOutboxBalance(tokenA), runningBalance, "Outbox balance should equal sum of all amounts");
 
         // Verify root is non-zero (tree is populated).
-        assertTrue(sucker.test_getOutboxRoot(tokenA) != bytes32(0), "Outbox root should be non-zero");
+        assertNotEq(sucker.test_getOutboxRoot(tokenA), bytes32(0), "Outbox root should be non-zero");
     }
 
     /// @notice Concurrent prepare operations for DIFFERENT tokens produce independent outbox trees.
@@ -628,9 +628,9 @@ contract TestRegressionGaps is Test {
         bytes32 root3 = sucker.test_getOutboxRoot(TOKEN);
 
         // Each root should be different (tree progresses with each insertion).
-        assertTrue(root1 != root2, "root1 != root2");
-        assertTrue(root2 != root3, "root2 != root3");
-        assertTrue(root1 != root3, "root1 != root3");
+        assertNotEq(root1, root2, "root1 != root2");
+        assertNotEq(root2, root3, "root2 != root3");
+        assertNotEq(root1, root3, "root1 != root3");
 
         // All 3 leaves exist in the tree.
         assertEq(sucker.test_getOutboxCount(TOKEN), 3, "Tree count should be 3");
@@ -1054,11 +1054,11 @@ contract TestRegressionGaps is Test {
             sucker.test_insertIntoTree((i + 1) * 1 ether, TOKEN, (i + 1) * 0.5 ether, bytes32(uint256(1000 + i)));
 
             bytes32 newRoot = sucker.test_getOutboxRoot(TOKEN);
-            assertTrue(newRoot != prevRoot, "Root should change with each insertion");
+            assertNotEq(newRoot, prevRoot, "Root should change with each insertion");
 
             // Ensure no duplicate root in previous insertions.
             for (uint256 j; j < i; j++) {
-                assertTrue(newRoot != roots[j], "Each root should be unique");
+                assertNotEq(newRoot, roots[j], "Each root should be unique");
             }
 
             roots[i] = newRoot;

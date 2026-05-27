@@ -146,7 +146,7 @@ contract RegistrySetSuckerPeerGateTest is Test, TestBaseWorkflow, IERC721Receive
 
         assertEq(suckers.length, 1);
         // The deployer fills the default peer with the deterministic self-address; assert it isn't zero.
-        assertTrue(IJBSucker(suckers[0]).peer() != bytes32(0), "default peer should resolve to a real address");
+        assertNotEq(IJBSucker(suckers[0]).peer(), bytes32(0), "default peer should resolve to a real address");
     }
 
     /// @notice The registry address is still an explicit peer override; only `bytes32(0)` means default.

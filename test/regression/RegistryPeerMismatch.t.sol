@@ -59,7 +59,7 @@ contract RegistryPeerMismatchTest is Test {
         vm.prank(OWNER);
         address suckerB = registryB.deploySuckersFor(PROJECT_ID, SALT, configsB)[0];
 
-        assertTrue(suckerA != suckerB, "same sender+salt should diverge because registry address salts the clone");
+        assertNotEq(suckerA, suckerB, "same sender+salt should diverge because registry address salts the clone");
         assertEq(IJBSucker(suckerA).peer(), bytes32(uint256(uint160(suckerA))), "default peer is self address");
         assertEq(IJBSucker(suckerB).peer(), bytes32(uint256(uint160(suckerB))), "default peer is self address");
 

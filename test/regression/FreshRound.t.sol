@@ -371,7 +371,7 @@ contract RegressionFreshRoundTest is Test {
         // forge-lint: disable-next-line(unsafe-typecast)
         JBCCIPSucker(payable(address(deployerB.createForSender(PROJECT_ID, keccak256(bytes("peer")), bytes32(0)))));
 
-        assertTrue(address(suckerA) != address(suckerB), "topology drift produces different sucker addresses");
+        assertNotEq(address(suckerA), address(suckerB), "topology drift produces different sucker addresses");
         assertEq(uint256(suckerA.peer()), uint256(uint160(address(suckerA))), "default peer tracks local address");
 
         Client.Any2EVMMessage memory message = Client.Any2EVMMessage({
