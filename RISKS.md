@@ -153,9 +153,14 @@ When no TWAP-capable route is available for a cross-denomination swap, a hookles
 
 `mapTokens()` only uses `msg.value` when one or more mappings are being disabled and need transport payment for the final root flush. If every mapping in the batch is enable-only (`numberToDisable == 0`), the full `msg.value` is refunded to `_msgSender()`. If the refund transfer fails (e.g., the caller is a non-payable contract), the call reverts with `JBSucker_RefundFailed`. When disables are present, any dust remainder from integer division (`msg.value % numberToDisable`) is also refunded on a best-effort basis.
 
-### 10.9 Zero-value `prepare()` is allowed
+### 10.9 Zero-value `prepare()` is rejected (layered with zero-leaf inbox skip)
 
-`prepare()` does not reject `projectTokenCount == 0`. A zero-value check would be trivially bypassed by passing `1` instead, so it provides no real protection against remap-window consumption. The cost to create a leaf with `projectTokenCount = 1` is negligible (1 wei of project tokens). The one-time remap window is protected by the token mapping's `enabled` flag and the outbox tree count, not by minimum deposit requirements.
+The nonce-inflation DoS on swap-CCIP suckers is defended at two layers:
+
+1. **Source-side**: `prepare()` reverts with `JBSucker_ZeroProjectTokenCount` when `projectTokenCount == 0`. The source-side revert is partial — an attacker who already holds project tokens can still pass `projectTokenCount = 1` and pay roughly the same gas to grief nonces; the floor moves from "any EOA" to "any project-token holder," but a holder with a meaningful supply can still spam at 1-wei-of-project-token-per-nonce.
+2. **Destination-side**: `JBSwapCCIPSucker.ccipReceive` only writes `_batchStartOf`, `_batchEndOf`, and the `_populatedNonceByIndex` append when the incoming root has `leafTotal > 0`. Zero-leaf roots — whether shipped by a compromised peer or by the `projectTokenCount = 1` bypass cashing out to 0 terminal tokens — record nothing and cannot grow the per-token nonce list that `_findNonceForLeafIndex` walks.
+
+Together the layers close the DoS surface: an attacker can still burn gas spamming `prepare(1) -> toRemote()`, but the remote sucker no longer pays a permanent storage cost for it. See `test/unit/SwapCCIP_PopulatedNonceDoS.t.sol` for the quantified gas curve and the destination-side closure proof (`test_Q1_real_ccipReceive_zeroValueBatchesDoNotGrowList`).
 
 ### 10.10 Cross-chain currency uses standardized `JBCurrencyIds.ETH` (1), not local token addresses
 

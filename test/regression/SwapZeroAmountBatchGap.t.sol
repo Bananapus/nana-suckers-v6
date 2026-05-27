@@ -130,9 +130,8 @@ contract RegressionSwapZeroAmountBatchGapTest is Test {
         sucker.initialize(PROJECT_ID);
     }
 
-    /// @notice Zero-amount batch no longer creates a phantom gap.
-    /// Nonce progression and cumulative count are recorded unconditionally,
-    /// so later funded batches remain claimable.
+    /// @notice Zero-amount batches carry no claimable leaves and no longer create
+    /// populated nonce entries, so later funded batches remain claimable.
     function test_zeroAmountBatch_doesNotBlockLaterClaims() external {
         // Send a zero-amount root (nonce 1, batchCount=1).
         Client.Any2EVMMessage memory zeroBatchMessage = Client.Any2EVMMessage({
@@ -165,11 +164,10 @@ contract RegressionSwapZeroAmountBatchGapTest is Test {
         vm.prank(MOCK_ROUTER);
         sucker.ccipReceive(zeroBatchMessage);
 
-        // The compact nonce index is recorded even for zero-amount batches, so later claims can
-        // still resolve sparse or out-of-order deliveries without depending on highest-nonce state.
-        assertEq(sucker.exposed_populatedNonceCount(address(usdc)), 1, "zero batch should populate nonce index");
-        assertEq(sucker.exposed_batchStartOf(address(usdc), 1), 0, "zero batch start should be recorded");
-        assertEq(sucker.exposed_batchEndOf(address(usdc), 1), 1, "zero batch end should be recorded");
+        // The compact nonce index ignores zero-amount batches; they have no claimable leaves to
+        // resolve and must not tax later `_findNonceForLeafIndex` walks.
+        assertEq(sucker.exposed_populatedNonceCount(address(usdc)), 0, "zero batch should not populate nonce index");
+        assertEq(sucker.exposed_batchEndOf(address(usdc), 1), 0, "zero batch range should not be recorded");
 
         // Send a funded batch (nonce 2, batchCount=2).
         usdc.mint(address(sucker), 50);
@@ -207,7 +205,7 @@ contract RegressionSwapZeroAmountBatchGapTest is Test {
         vm.prank(MOCK_ROUTER);
         sucker.ccipReceive(fundedBatchMessage);
 
-        assertEq(sucker.exposed_populatedNonceCount(address(usdc)), 2, "later funded batch should populate nonce index");
+        assertEq(sucker.exposed_populatedNonceCount(address(usdc)), 1, "later funded batch should populate nonce index");
         assertEq(sucker.exposed_batchStartOf(address(usdc), 2), 1, "later batch start should be recorded");
         assertEq(sucker.exposed_batchEndOf(address(usdc), 2), 2, "later batch end should be recorded");
 

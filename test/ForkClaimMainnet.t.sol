@@ -215,13 +215,41 @@ abstract contract CCIPSuckerClaimForkTestBase is SuckerForkHelpers {
     }
 
     /// @notice Builds a `Client.Any2EVMMessage` for manual ccipReceive delivery on L2.
+    /// @dev `destTokenAmounts` must mirror the root's advertised value or `JBCCIPSucker.ccipReceive` rejects the
+    /// message (L-6). For zero-value roots we deliver an empty array; for positive roots we synthesize a single
+    /// delivery whose `amount` matches `messageRoot.amount` and whose `token` is derived from `messageRoot.token`
+    /// (the local mapped token).
+    ///
+    /// We intentionally do NOT call `_terminalToken()` here — that helper can trigger a DELEGATECALL to
+    /// `CCIPHelper`, which would consume any active `vm.prank` (see the note on the L2 router prank above
+    /// `_mapTerminalToken`). Reading directly from `messageRoot.token` keeps the helper prank-neutral.
+    ///
+    /// Test simulation still funds the sucker separately via `vm.deal`/`deal`, so for native-token roots we
+    /// substitute a non-wrapped-native address in `destTokenAmounts[0].token`. This satisfies the consistency
+    /// check (which exempts native roots from the strict token-identity comparison) while keeping
+    /// `unwrapReceivedTokens` short-circuited — no WETH balance is required in the harness.
     function _buildCCIPMessage(JBMessageRoot memory messageRoot) internal view returns (Client.Any2EVMMessage memory) {
+        Client.EVMTokenAmount[] memory destTokenAmounts;
+        if (messageRoot.amount > 0) {
+            address rootLocalToken = address(uint160(uint256(messageRoot.token)));
+            destTokenAmounts = new Client.EVMTokenAmount[](1);
+            destTokenAmounts[0] = Client.EVMTokenAmount({
+                token: rootLocalToken == JBConstants.NATIVE_TOKEN
+                    // For native-token roots the destTokenAmounts entry can't be the NATIVE_TOKEN sentinel (CCIP
+                    // delivers ERC-20). Any non-wrapped-native address works here because the strict token check
+                    // is exempt for native roots and the unwrap path is gated on the wrapped native address.
+                    ? address(uint160(uint256(keccak256("test:NonWrappedSentinel"))))
+                    : rootLocalToken,
+                amount: messageRoot.amount
+            });
+        }
+
         return Client.Any2EVMMessage({
             messageId: bytes32(uint256(1)),
             sourceChainSelector: CCIPHelper.selectorOfChain(_l1ChainId()),
             sender: abi.encode(address(suckerL1)),
             data: abi.encode(uint8(0), abi.encode(messageRoot)),
-            destTokenAmounts: new Client.EVMTokenAmount[](0)
+            destTokenAmounts: destTokenAmounts
         });
     }
 

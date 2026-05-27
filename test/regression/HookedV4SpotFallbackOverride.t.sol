@@ -15,6 +15,7 @@ import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
 import {TickMath} from "@uniswap/v4-core/src/libraries/TickMath.sol";
 
 import {IGeomeanOracle} from "../../src/interfaces/IGeomeanOracle.sol";
+import {JBSwapLib} from "../../src/libraries/JBSwapLib.sol";
 import {JBSwapPoolLib} from "../../src/libraries/JBSwapPoolLib.sol";
 
 contract HookedFallbackHarness {
@@ -114,6 +115,32 @@ contract RevertingGeomeanOracleHook is IGeomeanOracle {
     }
 }
 
+contract FixedGeomeanOracleHook is IGeomeanOracle {
+    int56 internal immutable _tickCumulativesDelta;
+    uint160 internal immutable _secondsPerLiquidityDelta;
+
+    constructor(int56 tickCumulativesDelta, uint128 harmonicMeanLiquidity) {
+        _tickCumulativesDelta = tickCumulativesDelta;
+        _secondsPerLiquidityDelta = uint160((uint256(120) << 128) / uint256(harmonicMeanLiquidity));
+    }
+
+    function observe(
+        PoolKey memory,
+        uint32[] memory
+    )
+        external
+        view
+        override
+        returns (int56[] memory tickCumulatives, uint160[] memory secondsPerLiquidityCumulativeX128s)
+    {
+        tickCumulatives = new int56[](2);
+        secondsPerLiquidityCumulativeX128s = new uint160[](2);
+
+        tickCumulatives[1] = _tickCumulativesDelta;
+        secondsPerLiquidityCumulativeX128s[1] = _secondsPerLiquidityDelta;
+    }
+}
+
 contract HookedV4SpotFallbackOverrideTest is Test {
     using PoolIdLibrary for PoolKey;
 
@@ -123,9 +150,12 @@ contract HookedV4SpotFallbackOverrideTest is Test {
     address internal constant V3_POOL = address(0xC3);
     address internal constant WETH = address(0xE7);
 
-    uint256 internal constant AMOUNT_IN = 1000e18;
+    uint128 internal constant AMOUNT_IN_128 = 1000e18;
+    uint256 internal constant AMOUNT_IN = AMOUNT_IN_128;
     uint128 internal constant V3_LIQUIDITY = 1_000_000e18;
     uint128 internal constant V4_LIQUIDITY = V3_LIQUIDITY + 1;
+    uint128 internal constant SPOT_LIQUIDITY = 1000e18;
+    uint128 internal constant ORACLE_LIQUIDITY = 1_000_000e18;
     int24 internal constant TOXIC_SPOT_TICK = -23_028;
 
     HookedFallbackHarness internal harness;
@@ -215,5 +245,71 @@ contract HookedV4SpotFallbackOverrideTest is Test {
         assertEq(address(v3Pool), V3_POOL, "discovery should keep the V3 TWAP route");
         assertEq(address(chosenKey.hooks), address(0), "no V4 key should be selected");
         assertEq(poolManager.unlockCount(), 0, "discovery must not execute through V4");
+    }
+
+    function test_hookedV4QuoteUsesOracleLiquidityForDynamicSlippage() external {
+        FixedGeomeanOracleHook fixedHook = new FixedGeomeanOracleHook(0, ORACLE_LIQUIDITY);
+        PoolKey memory key = PoolKey({
+            currency0: Currency.wrap(TOKEN_A),
+            currency1: Currency.wrap(TOKEN_B),
+            fee: 3000,
+            tickSpacing: 60,
+            hooks: IHooks(address(fixedHook))
+        });
+
+        poolManager.setPool(key, 0, SPOT_LIQUIDITY);
+        poolManager.setNextAmountOut(AMOUNT_IN);
+
+        JBSwapPoolLib.SwapConfig memory config = JBSwapPoolLib.SwapConfig({
+            v3Factory: IUniswapV3Factory(address(0)),
+            poolManager: IPoolManager(address(poolManager)),
+            univ4Hook: address(fixedHook),
+            wrappedNativeToken: WETH
+        });
+
+        uint256 amountOut = harness.executeSwap(config, TOKEN_A, TOKEN_B, AMOUNT_IN, 0);
+
+        uint256 oracleBasedMinOut = _expectedMinOut(0, ORACLE_LIQUIDITY);
+        uint256 spotBasedMinOut = _expectedMinOut(0, SPOT_LIQUIDITY);
+        assertEq(amountOut, AMOUNT_IN, "swap should execute");
+        assertEq(poolManager.lastMinAmountOut(), oracleBasedMinOut, "quote should use oracle liquidity");
+        assertGt(poolManager.lastMinAmountOut(), spotBasedMinOut, "spot liquidity would allow more slippage");
+    }
+
+    function test_hookedV4TwapTickRoundsTowardNegativeInfinity() external {
+        FixedGeomeanOracleHook fixedHook = new FixedGeomeanOracleHook(-121, ORACLE_LIQUIDITY);
+        PoolKey memory key = PoolKey({
+            currency0: Currency.wrap(TOKEN_A),
+            currency1: Currency.wrap(TOKEN_B),
+            fee: 3000,
+            tickSpacing: 60,
+            hooks: IHooks(address(fixedHook))
+        });
+
+        poolManager.setPool(key, 0, ORACLE_LIQUIDITY);
+        poolManager.setNextAmountOut(AMOUNT_IN);
+
+        JBSwapPoolLib.SwapConfig memory config = JBSwapPoolLib.SwapConfig({
+            v3Factory: IUniswapV3Factory(address(0)),
+            poolManager: IPoolManager(address(poolManager)),
+            univ4Hook: address(fixedHook),
+            wrappedNativeToken: WETH
+        });
+
+        uint256 amountOut = harness.executeSwap(config, TOKEN_A, TOKEN_B, AMOUNT_IN, 0);
+
+        assertEq(amountOut, AMOUNT_IN, "swap should execute");
+        assertEq(poolManager.lastMinAmountOut(), _expectedMinOut(-2, ORACLE_LIQUIDITY), "tick should floor to -2");
+    }
+
+    function _expectedMinOut(int24 tick, uint128 liquidity) internal pure returns (uint256) {
+        uint256 quote = OracleLibrary.getQuoteAtTick({
+            tick: tick, baseAmount: AMOUNT_IN_128, baseToken: TOKEN_A, quoteToken: TOKEN_B
+        });
+        uint256 impact = JBSwapLib.calculateImpact({
+            amountIn: AMOUNT_IN, liquidity: liquidity, sqrtP: TickMath.getSqrtPriceAtTick(tick), zeroForOne: true
+        });
+        uint256 slippageTolerance = JBSwapLib.getSlippageTolerance({impact: impact, poolFeeBps: 30});
+        return quote - (quote * slippageTolerance) / 10_000;
     }
 }
