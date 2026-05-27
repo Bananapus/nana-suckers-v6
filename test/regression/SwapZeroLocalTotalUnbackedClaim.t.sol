@@ -15,6 +15,7 @@ import {JBSwapCCIPSucker} from "../../src/JBSwapCCIPSucker.sol";
 import {JBSwapCCIPSuckerDeployer} from "../../src/deployers/JBSwapCCIPSuckerDeployer.sol";
 import {IJBSuckerRegistry} from "../../src/interfaces/IJBSuckerRegistry.sol";
 import {ERC20Mock} from "../mocks/ERC20Mock.sol";
+import {JBConversionRate} from "../../src/structs/JBConversionRate.sol";
 
 contract RegressionSwapZeroLocalTerminal {
     uint256 public lastAmount;
@@ -85,7 +86,7 @@ contract RegressionSwapZeroLocalHarness is JBSwapCCIPSucker {
     )
         external
     {
-        _conversionRateOf[token][nonce] = ConversionRate({leafTotal: leafTotal, localTotal: localTotal});
+        _conversionRateOf[token][nonce] = JBConversionRate({leafTotal: leafTotal, localTotal: localTotal});
         _batchStartOf[token][nonce] = batchStart;
         _batchEndOf[token][nonce] = batchEnd;
         // Mirror the bookkeeping `ccipReceive` performs on real deliveries so

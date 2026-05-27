@@ -109,6 +109,18 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
     // ------------------------- external views -------------------------- //
     //*********************************************************************//
 
+    /// @notice All suckers for a project, INCLUDING deprecated entries that are no longer listed in `suckersOf`.
+    /// @dev Used by consumers that need to detect "has any sucker ever peered to chain X?" — e.g. to prevent
+    /// premature burn of bridgeable credit by `JBReferralSplitHook.burnUnbridgeableCreditFor`. Returns every key
+    /// from `_suckersOf[projectId]` regardless of active/deprecated state. Order matches the underlying
+    /// `EnumerableMap` iteration order (insertion order, with swap-and-pop semantics on removal — which this
+    /// registry doesn't trigger, since deprecation transitions to `_SUCKER_DEPRECATED` rather than deleting).
+    /// @param projectId The ID of the project to get the suckers of.
+    /// @return suckers The addresses of every sucker ever registered for `projectId`.
+    function allSuckersOf(uint256 projectId) external view override returns (address[] memory suckers) {
+        return _suckersOf[projectId].keys();
+    }
+
     /// @notice Whether the given address is a sucker (active or deprecated) that was deployed through this registry for
     /// the specified project. Used by controllers to authorize mint calls from suckers.
     /// @param projectId The ID of the project to check for.

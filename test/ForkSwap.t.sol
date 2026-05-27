@@ -24,6 +24,7 @@ import {IUniswapV3Factory} from "@uniswap/v3-core/contracts/interfaces/IUniswapV
 import {IUniswapV3Pool} from "@uniswap/v3-core/contracts/interfaces/IUniswapV3Pool.sol";
 import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
 import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
+import {JBConversionRate} from "../src/structs/JBConversionRate.sol";
 
 /// @notice Harness exposing internal swap functions for fork testing against real Uniswap V3 pools.
 contract ForkSwapHarness is JBSwapCCIPSucker {
@@ -92,7 +93,7 @@ contract ForkSwapHarness is JBSwapCCIPSucker {
         view
         returns (uint256 leafTotal, uint256 localTotal)
     {
-        ConversionRate storage rate = _conversionRateOf[token][nonce];
+        JBConversionRate storage rate = _conversionRateOf[token][nonce];
         return (rate.leafTotal, rate.localTotal);
     }
 

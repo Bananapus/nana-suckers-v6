@@ -17,6 +17,7 @@ import {JBInboxTreeRoot} from "../../src/structs/JBInboxTreeRoot.sol";
 import {JBMessageRoot} from "../../src/structs/JBMessageRoot.sol";
 import {JBRemoteToken} from "../../src/structs/JBRemoteToken.sol";
 import {ERC20Mock} from "../mocks/ERC20Mock.sol";
+import {JBConversionRate} from "../../src/structs/JBConversionRate.sol";
 
 /// @notice Harness that exposes internal conversion rate state for zero-output swap testing.
 contract ZeroOutputSwapHarness is JBSwapCCIPSucker {
@@ -47,7 +48,7 @@ contract ZeroOutputSwapHarness is JBSwapCCIPSucker {
         view
         returns (uint256 leafTotal, uint256 localTotal)
     {
-        ConversionRate storage rate = _conversionRateOf[token][nonce];
+        JBConversionRate storage rate = _conversionRateOf[token][nonce];
         return (rate.leafTotal, rate.localTotal);
     }
 }

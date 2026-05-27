@@ -22,6 +22,7 @@ import {JBMessageRoot} from "../../src/structs/JBMessageRoot.sol";
 import {JBRemoteToken} from "../../src/structs/JBRemoteToken.sol";
 import {MerkleLib} from "../../src/utils/MerkleLib.sol";
 import {ERC20Mock} from "../mocks/ERC20Mock.sol";
+import {JBConversionRate} from "../../src/structs/JBConversionRate.sol";
 
 /// @notice Minimal terminal mock that actually transfers ERC-20 tokens from the caller.
 contract MockTerminal {
@@ -76,7 +77,7 @@ contract SwapCCIPTestHarness is JBSwapCCIPSucker {
     )
         external
     {
-        _conversionRateOf[token][nonce] = ConversionRate({leafTotal: leafTotal, localTotal: localTotal});
+        _conversionRateOf[token][nonce] = JBConversionRate({leafTotal: leafTotal, localTotal: localTotal});
         _batchStartOf[token][nonce] = batchStart;
         _batchEndOf[token][nonce] = batchEnd;
         // Mirror the bookkeeping `ccipReceive` performs on real deliveries so
@@ -95,7 +96,7 @@ contract SwapCCIPTestHarness is JBSwapCCIPSucker {
         view
         returns (uint256 leafTotal, uint256 localTotal)
     {
-        ConversionRate storage rate = _conversionRateOf[token][nonce];
+        JBConversionRate storage rate = _conversionRateOf[token][nonce];
         return (rate.leafTotal, rate.localTotal);
     }
 

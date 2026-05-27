@@ -22,6 +22,7 @@ import {JBClaim} from "../../src/structs/JBClaim.sol";
 import {JBInboxTreeRoot} from "../../src/structs/JBInboxTreeRoot.sol";
 import {JBLeaf} from "../../src/structs/JBLeaf.sol";
 import {MerkleLib} from "../../src/utils/MerkleLib.sol";
+import {JBConversionRate} from "../../src/structs/JBConversionRate.sol";
 
 contract ZeroOutputRetryHarness is JBSwapCCIPSucker {
     constructor(
@@ -62,7 +63,7 @@ contract ZeroOutputRetryHarness is JBSwapCCIPSucker {
         uint64 priorCount = _populatedNonceCount[token];
         _populatedNonceByIndex[token][priorCount] = nonce;
         _populatedNonceCount[token] = priorCount + 1;
-        _conversionRateOf[token][nonce] = ConversionRate({leafTotal: leafTotal, localTotal: localTotal});
+        _conversionRateOf[token][nonce] = JBConversionRate({leafTotal: leafTotal, localTotal: localTotal});
     }
 
     function testProofForSingleLeaf() external pure returns (bytes32[32] memory proof) {

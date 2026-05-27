@@ -32,6 +32,7 @@ import {JBClaim} from "../../src/structs/JBClaim.sol";
 import {JBInboxTreeRoot} from "../../src/structs/JBInboxTreeRoot.sol";
 import {JBLeaf} from "../../src/structs/JBLeaf.sol";
 import {JBMessageRoot} from "../../src/structs/JBMessageRoot.sol";
+import {JBConversionRate} from "../../src/structs/JBConversionRate.sol";
 
 contract InitialSwapReentrantTerminal {
     function addToBalanceOf(
@@ -259,7 +260,7 @@ contract InitialSwapReentrantHarness is JBSwapCCIPSucker {
     )
         external
     {
-        _conversionRateOf[token][nonce] = ConversionRate({leafTotal: leafTotal, localTotal: localTotal});
+        _conversionRateOf[token][nonce] = JBConversionRate({leafTotal: leafTotal, localTotal: localTotal});
         _batchStartOf[token][nonce] = batchStart;
         _batchEndOf[token][nonce] = batchEnd;
         uint64 priorCount = _populatedNonceCount[token];
@@ -275,23 +276,11 @@ contract InitialSwapReentrantHarness is JBSwapCCIPSucker {
         view
         returns (uint256 leafTotal, uint256 localTotal)
     {
-        ConversionRate storage rate = _conversionRateOf[token][nonce];
+        JBConversionRate storage rate = _conversionRateOf[token][nonce];
         return (rate.leafTotal, rate.localTotal);
     }
 
-    function _validateBranchRoot(
-        bytes32,
-        uint256,
-        uint256,
-        bytes32,
-        bytes32,
-        uint256,
-        bytes32[32] calldata
-    )
-        internal
-        pure
-        override
-    {}
+    function _validateBranchRoot(bytes32, bytes32, uint256, bytes32[32] calldata) internal pure override {}
 }
 
 contract InitialSwapReentrantClaimTest is Test {
