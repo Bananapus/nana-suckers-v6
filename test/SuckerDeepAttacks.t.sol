@@ -1263,7 +1263,7 @@ contract SuckerDeepAttacks is Test {
         // Verify all roots are unique.
         for (uint256 i = 0; i < 20; i++) {
             for (uint256 j = i + 1; j < 20; j++) {
-                assertTrue(roots[i] != roots[j], "Roots should be unique");
+                assertNotEq(roots[i], roots[j], "Roots should be unique");
             }
         }
 
@@ -1280,7 +1280,7 @@ contract SuckerDeepAttacks is Test {
             keccak256(abi.encode(uint256(5 ether), uint256(10 ether), bytes32(uint256(uint160(address(0xAAA)))))); // swapped
 
         assertEq(hash1, hash2, "Same inputs should produce same hash");
-        assertTrue(hash1 != hash3, "Different inputs should produce different hash");
+        assertNotEq(hash1, hash3, "Different inputs should produce different hash");
     }
 
     // =========================================================================
