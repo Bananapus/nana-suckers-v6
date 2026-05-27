@@ -946,6 +946,16 @@ contract SuckerDeepAttacks is Test {
         sucker.prepare(10 ether, bytes32(0), 0, TOKEN, bytes32(0));
     }
 
+    /// @notice prepare with `projectTokenCount = 0` → should revert. The guard exists to block a
+    /// permissionless nonce-inflation DoS on swap-CCIP suckers (a zero-token prepare burns
+    /// nothing yet still ships a bridge message that grows the remote nonce list).
+    function test_prepare_zeroProjectTokenCount_reverts() public {
+        _enableTokenMapping(TOKEN);
+
+        vm.expectRevert(JBSucker.JBSucker_ZeroProjectTokenCount.selector);
+        sucker.prepare(0, bytes32(uint256(uint160(address(this)))), 0, TOKEN, bytes32(0));
+    }
+
     /// @notice prepare when SENDING_DISABLED → should revert.
     function test_prepare_sendingDisabled_reverts() public {
         _enableTokenMapping(TOKEN);

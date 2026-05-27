@@ -627,7 +627,6 @@ library JBSwapPoolLib {
     /// Sigmoid slippage tolerance is driven by `amountIn / liquidity`; feeding spot liquidity into a TWAP-derived
     /// tick lets an LP shrink the denominator in the same block as a CCIP delivery, ballooning the tolerance to
     /// `MAX_SLIPPAGE` (88%) for a one-shot per-batch immutable conversion rate that all claimers then inherit.
-    /// See M-12 (`NEW-F-SUCK-A11`).
     /// @param config The swap configuration (pool manager, wrapped native token addresses).
     /// @param key The V4 pool key to quote against.
     /// @param normalizedTokenIn The normalized input token address.

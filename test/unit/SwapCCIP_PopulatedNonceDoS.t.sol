@@ -103,9 +103,9 @@ contract Harness is JBSwapCCIPSucker {
 }
 
 /// @title SwapCCIP_PopulatedNonceDoS
-/// @notice NEW-F-SUCK-A10: quantify gas growth of the claim path as a function of
-/// the number of populated nonces, and verify the real ccipReceive flow lets an
-/// attacker grow that list with zero-backed-value batches.
+/// @notice Quantify gas growth of the claim path as a function of the number of populated
+/// nonces, and verify that zero-value batches arriving via the real ccipReceive path no
+/// longer grow that list (defense-in-depth on top of the base-sucker `prepare(0)` revert).
 contract SwapCCIP_PopulatedNonceDoS is Test {
     address constant MOCK_DEPLOYER = address(0xDE);
     address constant MOCK_DIRECTORY = address(0xD1);
@@ -166,10 +166,12 @@ contract SwapCCIP_PopulatedNonceDoS is Test {
     }
 
     // --------------------------------------------------------------------- //
-    // Q1 — REACHABILITY: zero-value batch from a real ccipReceive path      //
-    // populates `_populatedNonceCount` without any backing tokens.          //
+    // Q1 — DESTINATION-SIDE CLOSURE: with the `leafTotal > 0` gate on the   //
+    // nonce-list append, a zero-value batch arriving via the real          //
+    // `ccipReceive` path no longer populates `_populatedNonceCount`. This  //
+    // is the layered defense on top of the base-sucker `prepare(0)` revert.//
     // --------------------------------------------------------------------- //
-    function test_Q1_zeroValueBatchPopulatesNonceWithoutBacking() public {
+    function test_Q1_zeroValueBatchDoesNotPopulateNonceList() public {
         address token = address(usdc);
 
         // Build the ROOT message for a zero-value batch:
@@ -203,15 +205,16 @@ contract SwapCCIP_PopulatedNonceDoS is Test {
         vm.prank(MOCK_ROUTER);
         sucker.ccipReceive(msg_);
 
-        // Populated nonce was appended with NO backing tokens, NO swap, NO cash-out.
-        assertEq(sucker.populatedCount(token), 1, "zero-value batch should have populated 1 nonce slot");
+        // After the destination-side guard, zero-value batches MUST NOT populate the list.
+        assertEq(sucker.populatedCount(token), 0, "zero-value batch must not populate any nonce slot");
     }
 
-    /// @notice Sweep `populatedNonceCount` from 1 -> N via the real ccipReceive path,
-    /// then measure the gas required by a single claim that walks the full list.
-    function test_Q1_real_ccipReceive_growsListAndDoSesClaim() public {
+    /// @notice Sweep N zero-value batches through the real ccipReceive path and assert the
+    /// populated-nonce list stays empty. A legitimate batch is then appended via the harness to
+    /// confirm the claim path still works for real batches.
+    function test_Q1_real_ccipReceive_zeroValueBatchesDoNotGrowList() public {
         address token = address(usdc);
-        uint64 N = 50; // 50 grief batches via the real CCIP path
+        uint64 N = 50; // 50 grief attempts via the real CCIP path
 
         for (uint64 i = 0; i < N; ++i) {
             JBMessageRoot memory root = JBMessageRoot({
@@ -238,18 +241,18 @@ contract SwapCCIP_PopulatedNonceDoS is Test {
             sucker.ccipReceive(msg_);
         }
 
-        assertEq(sucker.populatedCount(token), N, "all grief batches populated via real ccipReceive");
+        assertEq(sucker.populatedCount(token), 0, "zero-value grief batches must NOT grow the list");
 
-        // Now a legitimate batch arrives. Use harness shortcut so we don't need to mock a
-        // working swap (the swap-vs-no-swap path doesn't affect _findNonceForLeafIndex gas).
+        // A legitimate batch (via the harness shortcut) still appends correctly and is claimable.
         sucker.legitBatch(token, N + 1, 100, 100, N, N + 1);
         usdc.mint(address(sucker), 100);
 
         uint256 g = gasleft();
         sucker.claimPath(token, 100, PROJECT_ID, N);
         uint256 used = g - gasleft();
-        console2.log("[real-flow ccipReceive] grief nonces:", N);
-        console2.log("[real-flow ccipReceive] claim gas:   ", used);
+        console2.log("[real-flow ccipReceive] zero-value attempts:", N);
+        console2.log("[real-flow ccipReceive] legit claim gas:    ", used);
+        assertEq(sucker.populatedCount(token), 1, "only the legitimate batch should populate");
     }
 
     // --------------------------------------------------------------------- //
@@ -315,13 +318,19 @@ contract SwapCCIP_PopulatedNonceDoS is Test {
         console2.log("[10000 grief nonces] claim gas:", used);
     }
 
-    /// @dev `_runDoS(30_000)` exceeds the default forge-test gas budget (~9.2e18 wei equivalent
-    /// is fine, but the EVM interpreter trips its own cap somewhere around 2e9 gas). Locally with
-    /// `--gas-limit 60000000000` it passes and reports the same linear fit as the lower-N cases.
-    /// Renamed off the `test_` prefix so CI doesn't run it; promoted to a `demo_` helper that
-    /// can still be invoked via `forge test --match-test demo_dos_30000 --gas-limit 60000000000`.
-    function demo_dos_30000() public {
-        uint256 used = _runDoS(30_000);
-        console2.log("[30000 grief nonces] claim gas:", used);
+    /// @notice At 30k grief nonces the claim path's gas requirement exceeds the EVM interpreter's
+    /// per-call cap and reverts with a bare OOG (no revert reason). `vm.expectRevert(bytes(""))`
+    /// matches the empty-data revert and asserts the bound rather than skipping the case in CI.
+    /// Locally, `forge test --gas-limit 60000000000` lifts the cap and the same `_runDoS(30_000)`
+    /// returns a measurement consistent with the linear fit of the lower-N cases.
+    function test_dos_30000_revertsOnGasBudgetCap() public {
+        vm.expectRevert(bytes(""));
+        this.invokeRunDoS(30_000);
+    }
+
+    /// @dev External wrapper around `_runDoS` so `vm.expectRevert` can attach to a call boundary
+    /// (it cannot see the OOG of an internal call directly inside the test function).
+    function invokeRunDoS(uint64 griefCount) external {
+        _runDoS(griefCount);
     }
 }

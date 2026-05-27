@@ -557,7 +557,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         // Reject zero-token prepares. A zero-token prepare burns nothing and reclaims nothing, but it still inserts a
         // leaf into the outbox tree and lets `toRemote` ship a zero-value bridge message — a permissionless way to
         // inflate the per-token populated-nonce list on swap-CCIP suckers, taxing every legitimate claim with extra
-        // lookup work and eventually exceeding the block gas limit. See H-6 (`SwapCCIP_PopulatedNonceDoS`).
+        // lookup work and eventually exceeding the block gas limit.
         if (projectTokenCount == 0) {
             revert JBSucker_ZeroProjectTokenCount();
         }

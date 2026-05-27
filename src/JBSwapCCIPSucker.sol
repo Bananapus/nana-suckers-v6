@@ -376,7 +376,15 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
             // either a batch range (batchEnd > 0) or a conversion rate / pending swap recorded.
             // Record the batch range so _findNonceForLeafIndex can resolve leaf ownership
             // independently of nonce ordering. Each nonce is self-describing: [start, end).
-            if (batchEnd > 0) {
+            //
+            // Only record metadata for batches that carry value (`leafTotal > 0`). The base-sucker
+            // `prepare` revert on zero `projectTokenCount` blocks the legitimate spam entry point,
+            // but a compromised peer or a `projectTokenCount = 1`-style bypass could still ship a
+            // zero-leaf root over the bridge. Skipping the metadata write here ensures such roots
+            // cannot inflate `_populatedNonceByIndex` and tax future `_findNonceForLeafIndex`
+            // walks. Roots with `leafTotal == 0` carry no claimable leaves, so there is nothing
+            // for `_findNonceForLeafIndex` to resolve against them.
+            if (batchEnd > 0 && leafTotal > 0) {
                 // Record this batch's half-open leaf range `[batchStart, batchEnd)`. Self-
                 // describing per-nonce — no implicit chain across nonces — so out-of-order
                 // delivery can still resolve a leaf to its batch.
