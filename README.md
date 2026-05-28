@@ -2,7 +2,6 @@
 
 `@bananapus/suckers-v6` provides cross-chain bridging for Juicebox project tokens and the terminal assets that back them. A pair of suckers lets users burn on one chain, move value across a bridge, and mint the same project token representation on another chain.
 
-External docs: <https://docs.juicebox.money>
 
 ## Documentation
 
