@@ -37,7 +37,8 @@
 - `JBSuckerRegistry.deploySuckersFor(...)`
 - `JBSucker.mapToken(...)`
 - `JBSucker.setDeprecation(...)`
-- emergency hatch and deprecated-sucker removal paths
+- `JBSucker.enableEmergencyHatchFor(...)`
+- `JBSuckerRegistry.removeDeprecatedSucker(...)`
 
 ## Immutable And One-Way
 

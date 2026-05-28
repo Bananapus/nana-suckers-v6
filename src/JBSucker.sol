@@ -360,7 +360,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
 
     /// @notice Emergency escape hatch: lets a user reclaim their project tokens and terminal tokens on the chain they
     /// originally deposited from, when the bridge has become permanently non-functional. Must be enabled by the project
-    /// owner via the registry's `setEmergencyHatchStatusOf`.
+    /// owner via `enableEmergencyHatchFor`.
     /// @param claimData The terminal token, merkle tree leaf, and proof for the claim.
     function exitThroughEmergencyHatch(JBClaim calldata claimData) external override {
         // Does all the needed validation to ensure that the claim is valid *and* that claiming through the emergency
