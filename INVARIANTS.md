@@ -1,7 +1,5 @@
 # Invariants of `nana-suckers-v6`
 
-Last updated: 2026-05-28.
-
 Scope: the cross-chain bridging primitives that move a Juicebox V6 project-token position from one chain to another — the `JBSucker` base contract, its chain-specific transports (`JBOptimismSucker` / `JBBaseSucker` / `JBCeloSucker` / `JBArbitrumSucker` / `JBCCIPSucker` / `JBSwapCCIPSucker`), and the `JBSuckerRegistry` that gates deployment and shared fees. The package on npm is `@bananapus/suckers-v6`.
 
 Trust model in one sentence: a **pair of suckers** lets a holder burn project tokens on the local chain into a Merkle-committed claim, ship the committing root + backing terminal-token value across an external AMB, and let any caller mint to the **leaf-encoded beneficiary** on the destination — front-run safe, double-spend safe, fee-bypass safe, and operator-driven only at the configuration boundary.

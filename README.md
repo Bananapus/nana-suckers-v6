@@ -2,14 +2,19 @@
 
 `@bananapus/suckers-v6` provides cross-chain bridging for Juicebox project tokens and the terminal assets that back them. A pair of suckers lets users burn on one chain, move value across a bridge, and mint the same project token representation on another chain.
 
-Docs: <https://docs.juicebox.money>
-Architecture: [ARCHITECTURE.md](./ARCHITECTURE.md)  
-User journeys: [USER_JOURNEYS.md](./USER_JOURNEYS.md)  
-Invariants: [INVARIANTS.md](./INVARIANTS.md)  
-Skills: [SKILLS.md](./SKILLS.md)  
-Risks: [RISKS.md](./RISKS.md)  
-Administration: [ADMINISTRATION.md](./ADMINISTRATION.md)  
-Audit instructions: [AUDIT_INSTRUCTIONS.md](./AUDIT_INSTRUCTIONS.md)
+External docs: <https://docs.juicebox.money>
+
+## Documentation
+
+- [INVARIANTS.md](./INVARIANTS.md) — guarantees this code enforces at runtime, organized by user/operator/contract.
+- [ARCHITECTURE.md](./ARCHITECTURE.md) — system layout, contract responsibilities, and the bridge-variant taxonomy.
+- [ADMINISTRATION.md](./ADMINISTRATION.md) — change-management posture, Safe-controlled surfaces, and operational roles.
+- [RISKS.md](./RISKS.md) — bridge-flavored risk register: AMB trust, merkle progression, mapping, deprecation, atomicity.
+- [USER_JOURNEYS.md](./USER_JOURNEYS.md) — end-to-end flows for token holders, operators, and integrators.
+- [AUDIT_INSTRUCTIONS.md](./AUDIT_INSTRUCTIONS.md) — scope, entrypoints, and reading order for security review.
+- [SKILLS.md](./SKILLS.md) — reusable patterns and gotchas distilled from this codebase.
+- [STYLE_GUIDE.md](./STYLE_GUIDE.md) — Solidity conventions used across this repo.
+- [CHANGELOG.md](./CHANGELOG.md) — versioned change history.
 
 The codebase includes multiple bridge variants, but the canonical deployment and discovery tooling in this repo is narrower than the full runtime surface. Treat the deployment scripts and helper libraries as the source of truth for what is operationally supported today.
 

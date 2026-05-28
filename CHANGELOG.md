@@ -12,6 +12,7 @@ This file describes the verified change from `nana-suckers-v5` to the current `n
 - `JBArbitrumSucker`
 - `JBBaseSucker`
 - `JBCCIPSucker`
+- `JBSwapCCIPSucker`
 - `JBCeloSucker`
 - the deployers, structs, and interfaces under `src/`
 
