@@ -81,7 +81,7 @@ contract PeerTopologyAuthBreakTest is Test {
     }
 
     function test_sameSaltDifferentDeploymentTopology_breaksDefaultPeerAuthentication() public {
-        bytes32 salt = keccak256("NEMESIS_PEER_BREAK");
+        bytes32 salt = keccak256("PEER_BREAK");
 
         vm.startPrank(USER);
         IJBSucker suckerA = deployerA.createForSender({localProjectId: 1, salt: salt, peer: bytes32(0)});
@@ -115,7 +115,7 @@ contract PeerTopologyAuthBreakTest is Test {
     }
 
     function test_explicitPeerSupportsDifferentDeploymentTopology() public {
-        bytes32 salt = keccak256("NEMESIS_EXPLICIT_PEER");
+        bytes32 salt = keccak256("EXPLICIT_PEER");
         address expectedA = _predictSucker({deployer: deployerA, sender: USER, salt: salt});
         address expectedB = _predictSucker({deployer: deployerB, sender: USER, salt: salt});
 

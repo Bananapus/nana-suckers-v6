@@ -508,7 +508,7 @@ contract CCIPNativeInteropTest is Test {
             sourceTimestamp: 1
         });
 
-        // Provide a delivery matching the root's positive amount so the L-6 consistency check passes.
+        // Provide a delivery matching the root's positive amount so the consistency check passes.
         Client.EVMTokenAmount[] memory tokenAmounts = new Client.EVMTokenAmount[](1);
         tokenAmounts[0] = Client.EVMTokenAmount({token: celoETH, amount: 1 ether});
 
