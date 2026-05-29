@@ -31,7 +31,7 @@ contract ParityHarness {
 /// @dev Asserts that `JBSuckerLib.convertPeerValue` and the `JBTerminalStore` conversion pattern
 ///      produce equivalent results for the same economic conversion. A divergence would mean
 ///      cross-chain accounting (suckers) and local accounting (terminal store) disagree on value,
-///      which was the root cause of finding AM.
+///      which was the root cause of the conversion-direction bug.
 ///
 ///      The two components use slightly different decimal strategies:
 ///      - JBTerminalStore: `mulDiv(amount, 10^18, price_at_18_decimals)` then adjustDecimals

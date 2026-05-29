@@ -16,7 +16,7 @@ import {JBRemoteToken} from "../../src/structs/JBRemoteToken.sol";
 import {JBTokenMapping} from "../../src/structs/JBTokenMapping.sol";
 import {DeployerTests} from "../unit/deployer.t.sol";
 
-contract CodexNemesisDeployMappingBypassTest is DeployerTests {
+contract DeployMappingBypassTest is DeployerTests {
     function test_operatorWithDeployButNoMapCanInstallInitialMappingsThroughRegistry() public {
         address operator = address(0xBEEF);
 
@@ -57,7 +57,7 @@ contract CodexNemesisDeployMappingBypassTest is DeployerTests {
         vm.chainId(10);
         vm.prank(operator);
         address[] memory suckers = registry.deploySuckersFor({
-            projectId: projectId, salt: bytes32("codex-nemesis"), configurations: configurations
+            projectId: projectId, salt: bytes32("deploy-mapping"), configurations: configurations
         });
 
         JBRemoteToken memory remote = IJBSucker(suckers[0]).remoteTokenFor(JBConstants.NATIVE_TOKEN);

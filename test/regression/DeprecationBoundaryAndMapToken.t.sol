@@ -12,13 +12,13 @@ import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import {IJBTerminal} from "@bananapus/core-v6/src/interfaces/IJBTerminal.sol";
 import {IJBSuckerRegistry} from "../../src/interfaces/IJBSuckerRegistry.sol";
 
-/// @title CertikAIScan
-/// @notice Regression coverage for CertiK AI scan remediation items:
+/// @title DeprecationBoundaryAndMapToken
+/// @notice Regression coverage for deprecation-boundary and map-token behaviors:
 ///   1. Arbitrum ERC-20 retryable data length is covered by fork/integration tests.
 ///   2. CCIP LINK-fee mode requires caller-provided LINK and is covered by integration tests.
 ///   3. `setDeprecation` rejects the exact unsafe boundary timestamp.
 ///   4. `_mapToken` disables a token before sending its final root.
-contract CertikAIScanTest is Test {
+contract DeprecationBoundaryAndMapTokenTest is Test {
     address constant DIRECTORY = address(600);
     address constant PERMISSIONS = address(800);
     address constant TOKENS = address(700);
@@ -75,7 +75,7 @@ contract CertikAIScanTest is Test {
 
     /// @notice `setDeprecation` rejects timestamps exactly at the minimum-delay boundary.
     function test_setDeprecation_rejectsTimestampAtExactBoundary() external {
-        CertikTestSucker sucker = _createTestSucker(PROJECT_ID, "fix3-boundary");
+        TestSucker sucker = _createTestSucker(PROJECT_ID, "fix3-boundary");
 
         // _maxMessagingDelay() returns 14 days.
         uint256 exactBoundary = block.timestamp + 14 days;
@@ -96,7 +96,7 @@ contract CertikAIScanTest is Test {
 
     /// @notice A timestamp one second past the boundary is accepted.
     function test_setDeprecation_acceptsTimestampPastBoundary() external {
-        CertikTestSucker sucker = _createTestSucker(PROJECT_ID, "fix3-accept");
+        TestSucker sucker = _createTestSucker(PROJECT_ID, "fix3-accept");
 
         // One second past the boundary should be accepted.
         uint256 pastBoundary = block.timestamp + 14 days + 1;
@@ -110,7 +110,7 @@ contract CertikAIScanTest is Test {
 
     /// @notice Timestamps well past the boundary are accepted.
     function test_setDeprecation_acceptsTimestampWellPastBoundary() external {
-        CertikTestSucker sucker = _createTestSucker(PROJECT_ID, "fix3-well-past");
+        TestSucker sucker = _createTestSucker(PROJECT_ID, "fix3-well-past");
 
         uint256 wellPast = block.timestamp + 30 days;
 
@@ -122,7 +122,7 @@ contract CertikAIScanTest is Test {
 
     /// @notice Cancelling deprecation (`timestamp == 0`) is always allowed.
     function test_setDeprecation_cancellingAlwaysAllowed() external {
-        CertikTestSucker sucker = _createTestSucker(PROJECT_ID, "fix3-cancel");
+        TestSucker sucker = _createTestSucker(PROJECT_ID, "fix3-cancel");
 
         // First set a valid deprecation.
         uint256 validTime = block.timestamp + 14 days + 1;
@@ -171,7 +171,7 @@ contract CertikAIScanTest is Test {
         // Allow any caller to pass permission checks.
         vm.mockCall(PERMISSIONS, abi.encodeWithSelector(IJBPermissions.hasPermission.selector), abi.encode(true));
 
-        CertikTestSucker sucker = _createTestSucker(PROJECT_ID, "fix4-disable");
+        TestSucker sucker = _createTestSucker(PROJECT_ID, "fix4-disable");
 
         // Set up a mapped token with an unsent outbox entry.
         sucker.test_setRemoteToken(
@@ -193,13 +193,13 @@ contract CertikAIScanTest is Test {
     //  Helpers
     // -----------------------------------------------------------------------
 
-    function _createTestSucker(uint256 projectId, bytes32 salt) internal returns (CertikTestSucker) {
-        CertikTestSucker singleton =
-            new CertikTestSucker(IJBDirectory(DIRECTORY), IJBPermissions(PERMISSIONS), IJBTokens(TOKENS), FORWARDER);
+    function _createTestSucker(uint256 projectId, bytes32 salt) internal returns (TestSucker) {
+        TestSucker singleton =
+            new TestSucker(IJBDirectory(DIRECTORY), IJBPermissions(PERMISSIONS), IJBTokens(TOKENS), FORWARDER);
         vm.label(address(singleton), "SUCKER_SINGLETON");
 
-        CertikTestSucker sucker =
-            CertikTestSucker(payable(address(LibClone.cloneDeterministic(address(singleton), salt))));
+        TestSucker sucker =
+            TestSucker(payable(address(LibClone.cloneDeterministic(address(singleton), salt))));
         vm.label(address(sucker), "SUCKER");
         sucker.initialize(projectId);
 
@@ -220,9 +220,9 @@ contract CertikAIScanTest is Test {
     }
 }
 
-/// @notice A minimal test sucker for CertiK regression tests.
+/// @notice A minimal test sucker for these regression tests.
 /// @dev Extends JBSucker with no-op AMB and helpers for setting internal state.
-contract CertikTestSucker is JBSucker {
+contract TestSucker is JBSucker {
     constructor(
         IJBDirectory directory,
         IJBPermissions permissions,

@@ -216,7 +216,7 @@ abstract contract CCIPSuckerClaimForkTestBase is SuckerForkHelpers {
 
     /// @notice Builds a `Client.Any2EVMMessage` for manual ccipReceive delivery on L2.
     /// @dev `destTokenAmounts` must mirror the root's advertised value or `JBCCIPSucker.ccipReceive` rejects the
-    /// message (L-6). For zero-value roots we deliver an empty array; for positive roots we synthesize a single
+    /// message. For zero-value roots we deliver an empty array; for positive roots we synthesize a single
     /// delivery whose `amount` matches `messageRoot.amount` and whose `token` is derived from `messageRoot.token`
     /// (the local mapped token).
     ///
