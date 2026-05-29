@@ -61,9 +61,6 @@ library JBSwapPoolLib {
     /// @dev The default TWAP observation window in seconds (10 minutes).
     uint32 private constant _DEFAULT_TWAP_WINDOW = 600;
 
-    /// @dev The minimum acceptable TWAP observation window in seconds (2 minutes).
-    uint256 private constant _MIN_TWAP_WINDOW = 120;
-
     /// @dev The TWAP observation window used for V4 geomean oracle queries in seconds (2 minutes).
     uint32 private constant _V4_TWAP_WINDOW = 120;
 
