@@ -198,8 +198,7 @@ contract DeprecationBoundaryAndMapTokenTest is Test {
             new TestSucker(IJBDirectory(DIRECTORY), IJBPermissions(PERMISSIONS), IJBTokens(TOKENS), FORWARDER);
         vm.label(address(singleton), "SUCKER_SINGLETON");
 
-        TestSucker sucker =
-            TestSucker(payable(address(LibClone.cloneDeterministic(address(singleton), salt))));
+        TestSucker sucker = TestSucker(payable(address(LibClone.cloneDeterministic(address(singleton), salt))));
         vm.label(address(sucker), "SUCKER");
         sucker.initialize(projectId);
 
