@@ -300,8 +300,9 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         // Claim each. Isolate each leaf in its own external sub-call so one bad/stale leaf cannot revert the batch.
         for (uint256 i; i < claims.length;) {
             try this.claim(claims[i]) {
-                // Leaf settled successfully.
-            } catch {
+            // Leaf settled successfully.
+            }
+            catch {
                 // The leaf failed: its sub-call reverted atomically, leaving no persisted state for it. Surface the
                 // skip for off-chain monitoring; the leaf remains claimable in a future call.
                 emit ClaimFailed({token: claims[i].token, index: claims[i].leaf.index, caller: _msgSender()});

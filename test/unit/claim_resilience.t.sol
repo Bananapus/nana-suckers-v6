@@ -84,7 +84,14 @@ contract ResilienceTestSucker is JBSucker {
     }
 
     // forge-lint: disable-next-line(mixed-case-function)
-    function _sendRootOverAMB(uint256, uint256, address, uint256, JBRemoteToken memory, JBMessageRoot memory)
+    function _sendRootOverAMB(
+        uint256,
+        uint256,
+        address,
+        uint256,
+        JBRemoteToken memory,
+        JBMessageRoot memory
+    )
         internal
         override
     {}
@@ -137,8 +144,9 @@ contract BatchClaimResilienceTest is Test {
     function setUp() public {
         vm.mockCall(DIRECTORY, abi.encodeCall(IJBDirectory.PROJECTS, ()), abi.encode(PROJECT));
 
-        ResilienceTestSucker singleton =
-            new ResilienceTestSucker(IJBDirectory(DIRECTORY), IJBPermissions(PERMISSIONS), IJBTokens(TOKENS), FORWARDER);
+        ResilienceTestSucker singleton = new ResilienceTestSucker(
+            IJBDirectory(DIRECTORY), IJBPermissions(PERMISSIONS), IJBTokens(TOKENS), FORWARDER
+        );
         sucker = ResilienceTestSucker(payable(address(LibClone.cloneDeterministic(address(singleton), bytes32(0)))));
         sucker.initialize(PROJECT_ID);
 
