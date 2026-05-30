@@ -286,12 +286,26 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
 
     /// @notice Claim multiple bridged entries in a single transaction. Each claim mints project tokens for the
     /// beneficiary and deposits the corresponding terminal tokens into the project's local balance.
+    /// @dev Per-leaf resilience: each leaf is claimed through an external `this.claim(JBClaim)` sub-call wrapped in
+    /// try/catch, so a single failing or stale leaf (e.g. its inbox root has not arrived yet, it was already executed,
+    /// or a transient mint/add-to-balance dependency reverts) only skips that one leaf — the rest of the batch still
+    /// settles. Because the sub-call is a separate message frame, a caught revert rolls back every state change that
+    /// leaf attempted (its `_executedFor` bit, its `executedLeafHashOf` entry, and any `_addToBalance`/`mintTokensOf`
+    /// effects), so the skipped leaf stays fully claimable later. Routing through `this.claim` is safe because the
+    /// single-leaf `claim` mints to `claimData.leaf.beneficiary` and adds funds to the project balance — it never
+    /// depends on `msg.sender` being the original batch caller, so the self-call does not change who is credited.
     /// @param claims A list of claims to perform (including the terminal token, merkle tree leaf, and proof for each
     /// claim).
     function claim(JBClaim[] calldata claims) external override {
-        // Claim each.
+        // Claim each. Isolate each leaf in its own external sub-call so one bad/stale leaf cannot revert the batch.
         for (uint256 i; i < claims.length;) {
-            claim(claims[i]);
+            try this.claim(claims[i]) {
+                // Leaf settled successfully.
+            } catch {
+                // The leaf failed: its sub-call reverted atomically, leaving no persisted state for it. Surface the
+                // skip for off-chain monitoring; the leaf remains claimable in a future call.
+                emit ClaimFailed({token: claims[i].token, index: claims[i].leaf.index, caller: _msgSender()});
+            }
             unchecked {
                 ++i;
             }
