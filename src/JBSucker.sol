@@ -109,9 +109,6 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     // ------------------------- internal constants ----------------------- //
     //*********************************************************************//
 
-    /// @notice The depth of the merkle tree used to store the outbox and inbox.
-    uint32 internal constant _TREE_DEPTH = 32;
-
     /// @notice The number of recently-accepted inbox roots retained per token so that a proof generated against a
     /// slightly older root still validates after a later `toRemote`/`fromRemote` advances the inbox.
     /// @dev The inbox is append-only and a leaf's `(hash, index)` is stable across roots, so honoring a small window
@@ -120,6 +117,9 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     /// later proof matches. The window only widens which still-valid proofs are accepted; it never relaxes the
     /// double-spend guard.
     uint256 internal constant _INBOX_ROOT_RING_SIZE = 4;
+
+    /// @notice The depth of the merkle tree used to store the outbox and inbox.
+    uint32 internal constant _TREE_DEPTH = 32;
 
     //*********************************************************************//
     // --------------- public immutable stored properties ---------------- //
@@ -193,6 +193,12 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     /// @custom:param token The local terminal token to get the inbox for.
     mapping(address token => JBInboxTreeRoot root) internal _inboxOf;
 
+    /// @notice The index of the most recently-written slot in `_inboxRootRingOf[token]`.
+    /// @dev Advances modulo `_INBOX_ROOT_RING_SIZE` each time `fromRemote` accepts a newer-nonce root, overwriting the
+    /// oldest retained root. Defaults to `0`; the first accepted root is written to slot `1` after the pre-increment.
+    /// @custom:param token The local terminal token to get the ring cursor for.
+    mapping(address token => uint256 cursor) internal _inboxRootRingCursorOf;
+
     /// @notice A small ring buffer of the most recently-accepted inbox roots for a given token.
     /// @dev Holds the last `_INBOX_ROOT_RING_SIZE` distinct roots accepted by `fromRemote` (the newest is also mirrored
     /// in `_inboxOf[token].root`). `_validate` accepts a proof matching ANY retained, not-yet-executed leaf's root, so
@@ -202,12 +208,6 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     /// `MerkleLib.Z_32`, and roots only enter the ring once a non-empty tree has been bridged).
     /// @custom:param token The local terminal token to get the retained inbox roots for.
     mapping(address token => bytes32[_INBOX_ROOT_RING_SIZE] roots) internal _inboxRootRingOf;
-
-    /// @notice The index of the most recently-written slot in `_inboxRootRingOf[token]`.
-    /// @dev Advances modulo `_INBOX_ROOT_RING_SIZE` each time `fromRemote` accepts a newer-nonce root, overwriting the
-    /// oldest retained root. Defaults to `0`; the first accepted root is written to slot `1` after the pre-increment.
-    /// @custom:param token The local terminal token to get the ring cursor for.
-    mapping(address token => uint256 cursor) internal _inboxRootRingCursorOf;
 
     /// @notice The local token that has reserved each remote token address in this sucker.
     /// @dev Inbound roots are keyed by `root.token` on the destination chain. Within a single sucker, allowing two
@@ -1411,51 +1411,6 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         _validateBranchRoot({expectedRoot: expectedRoot, leafHash: leafHash, index: index, leaves: leaves});
     }
 
-    /// @notice Selects which retained inbox root a proof should be validated against, honoring a small window of
-    /// recently-accepted roots rather than only the latest.
-    /// @dev Computes the branch root implied by the proof once, then returns the first retained ring root it matches.
-    /// Falls back to the latest inbox root (`_inboxOf[terminalToken].root`) when the proof matches no retained root, so
-    /// the caller's subsequent `_validateBranchRoot` reverts against the live root exactly as it did before the ring
-    /// existed. This is `view` and side-effect free; the double-spend guard lives entirely in `_validate`'s bitmap.
-    /// @param terminalToken The terminal token whose retained inbox roots are searched.
-    /// @param leafHash The precomputed leaf hash for the leaf being validated.
-    /// @param index The index of the leaf in the inbox tree.
-    /// @param leaves The merkle branch proving the leaf's inclusion.
-    /// @return expectedRoot The retained root the proof matches, or the latest inbox root if none match.
-    function _selectRetainedInboxRoot(
-        address terminalToken,
-        bytes32 leafHash,
-        uint256 index,
-        bytes32[_TREE_DEPTH] calldata leaves
-    )
-        internal
-        view
-        virtual
-        returns (bytes32 expectedRoot)
-    {
-        // The latest accepted root. Used as the fallback so the failure path is unchanged.
-        bytes32 latestRoot = _inboxOf[terminalToken].root;
-
-        // Compute the root implied by this proof once.
-        bytes32 computedRoot = JBSuckerLib.computeBranchRoot({item: leafHash, branch: leaves, index: index});
-
-        // Honor the latest root first (the common case), then any other retained root in the ring.
-        if (computedRoot == latestRoot) return latestRoot;
-
-        bytes32[_INBOX_ROOT_RING_SIZE] storage ring = _inboxRootRingOf[terminalToken];
-        for (uint256 i; i < _INBOX_ROOT_RING_SIZE;) {
-            bytes32 retained = ring[i];
-            // Skip empty slots; a real inbox root is never `bytes32(0)`.
-            if (retained != bytes32(0) && computedRoot == retained) return retained;
-            unchecked {
-                ++i;
-            }
-        }
-
-        // No retained root matched. Fall back to the latest root so `_validateBranchRoot` reverts against it.
-        return latestRoot;
-    }
-
     /// @notice Validates a branch root against the expected root.
     /// @dev This is a virtual function to allow a tests to override the behavior, it should never be overwritten
     /// otherwise.
@@ -1731,6 +1686,51 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         if (deprecationState == JBSuckerState.DEPRECATED || deprecationState == JBSuckerState.SENDING_DISABLED) {
             revert JBSucker_Deprecated({state: deprecationState});
         }
+    }
+
+    /// @notice Selects which retained inbox root a proof should be validated against, honoring a small window of
+    /// recently-accepted roots rather than only the latest.
+    /// @dev Computes the branch root implied by the proof once, then returns the first retained ring root it matches.
+    /// Falls back to the latest inbox root (`_inboxOf[terminalToken].root`) when the proof matches no retained root, so
+    /// the caller's subsequent `_validateBranchRoot` reverts against the live root exactly as it did before the ring
+    /// existed. This is `view` and side-effect free; the double-spend guard lives entirely in `_validate`'s bitmap.
+    /// @param terminalToken The terminal token whose retained inbox roots are searched.
+    /// @param leafHash The precomputed leaf hash for the leaf being validated.
+    /// @param index The index of the leaf in the inbox tree.
+    /// @param leaves The merkle branch proving the leaf's inclusion.
+    /// @return expectedRoot The retained root the proof matches, or the latest inbox root if none match.
+    function _selectRetainedInboxRoot(
+        address terminalToken,
+        bytes32 leafHash,
+        uint256 index,
+        bytes32[_TREE_DEPTH] calldata leaves
+    )
+        internal
+        view
+        virtual
+        returns (bytes32 expectedRoot)
+    {
+        // The latest accepted root. Used as the fallback so the failure path is unchanged.
+        bytes32 latestRoot = _inboxOf[terminalToken].root;
+
+        // Compute the root implied by this proof once.
+        bytes32 computedRoot = JBSuckerLib.computeBranchRoot({item: leafHash, branch: leaves, index: index});
+
+        // Honor the latest root first (the common case), then any other retained root in the ring.
+        if (computedRoot == latestRoot) return latestRoot;
+
+        bytes32[_INBOX_ROOT_RING_SIZE] storage ring = _inboxRootRingOf[terminalToken];
+        for (uint256 i; i < _INBOX_ROOT_RING_SIZE;) {
+            bytes32 retained = ring[i];
+            // Skip empty slots; a real inbox root is never `bytes32(0)`.
+            if (retained != bytes32(0) && computedRoot == retained) return retained;
+            unchecked {
+                ++i;
+            }
+        }
+
+        // No retained root matched. Fall back to the latest root so `_validateBranchRoot` reverts against it.
+        return latestRoot;
     }
 
     /// @notice Convert a bytes32 remote address to a local EVM address.
