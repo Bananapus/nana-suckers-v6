@@ -60,13 +60,12 @@ contract AdversarialSuckerForkTest is CCIPSuckerClaimForkTestBase {
     //   - Deliver nonce=2 to L2 inbox (overwrites inbox root)
     //   - Attempt to claim User A's leaf using the STALE proof from nonce=1's tree
     //
-    // Expected: The stale proof FAILS because the inbox root is now nonce=2's root (2-leaf tree),
-    // and the zero proof (valid for a single-leaf tree) does not match. The outbox tree is
-    // append-only, so nonce=2's root is the cumulative root of both leaves -- a different value
-    // from nonce=1's root.
-    //
-    // After the stale proof fails, we verify User A CAN claim with a proof computed against
-    // the 2-leaf tree (using leafB.hashed as the sibling at proof[0]).
+    // Expected (with the inbox-root ring): the stale proof SUCCEEDS, because the ring still retains nonce=1's
+    // root even after nonce=2 overwrites the latest inbox root. The outbox is append-only, so nonce=2's root
+    // is the cumulative root of both leaves; nonce=1's root is kept in the ring window so a proof against it
+    // remains valid. We then verify the double-spend guard still holds: re-claiming leaf A (against any root)
+    // reverts JBSucker_LeafAlreadyExecuted, since the `_executedFor` bitmap is keyed by leaf index, independent
+    // of which retained root validated the first claim.
     //
     // ════════════════════════════════════════════════════════════════════════
 
@@ -113,9 +112,10 @@ contract AdversarialSuckerForkTest is CCIPSuckerClaimForkTestBase {
         _deliverToL2(root2, nonce2, leafA.terminalTokenAmount + leafB.terminalTokenAmount);
         assertEq(suckerL1.inboxOf(token).root, root2, "Inbox should now hold root from nonce=2");
 
-        // ── Attempt to claim User A's leaf with STALE proof (from nonce=1's 1-leaf tree) ──
-        // The zero proof is correct for a 1-leaf tree but NOT for a 2-leaf tree.
-        vm.expectPartialRevert(JBSucker.JBSucker_InvalidProof.selector);
+        // ── User A claims with the STALE proof (from nonce=1's 1-leaf tree) — SUCCEEDS via the ring ──
+        // The latest inbox root is now nonce=2's, but the inbox-root ring still retains nonce=1's root, so
+        // the proof computed against nonce=1's tree (the zero proof) still validates. (Pre-ring this reverted
+        // with JBSucker_InvalidProof; the ring intentionally widens the accepted-root window.)
         suckerL1.claim(
             JBClaim({
                 token: token,
@@ -126,15 +126,21 @@ contract AdversarialSuckerForkTest is CCIPSuckerClaimForkTestBase {
                     terminalTokenAmount: leafA.terminalTokenAmount,
                     metadata: bytes32(0)
                 }),
-                proof: _zeroProof() // Stale proof: valid for root1 but NOT root2.
+                proof: _zeroProof() // Stale-but-retained proof: valid for root1, still within the ring.
             })
         );
+        assertEq(
+            jbTokens().totalBalanceOf(userA, 1),
+            leafA.projectTokenCount,
+            "User A should receive tokens claiming against the retained (recent-but-superseded) root"
+        );
 
-        // ── User A CAN claim with the correct proof against the 2-leaf tree ──
-        // In a 2-leaf tree, the sibling of leaf A (index 0) is leaf B's hash at proof[0].
+        // ── Double-spend guard still holds across retained roots ──
+        // Re-claiming leaf A — even with a DIFFERENT (current-root) proof — reverts: the `_executedFor`
+        // bitmap is keyed by leaf index, independent of which retained root validated the first claim.
         bytes32[32] memory correctProofA = _zeroProof();
         correctProofA[0] = leafB.hashed;
-
+        vm.expectRevert(abi.encodeWithSelector(JBSucker.JBSucker_LeafAlreadyExecuted.selector, token, leafA.index));
         suckerL1.claim(
             JBClaim({
                 token: token,
@@ -147,11 +153,6 @@ contract AdversarialSuckerForkTest is CCIPSuckerClaimForkTestBase {
                 }),
                 proof: correctProofA
             })
-        );
-        assertEq(
-            jbTokens().totalBalanceOf(userA, 1),
-            leafA.projectTokenCount,
-            "User A should receive tokens after claiming with correct 2-leaf proof"
         );
 
         // ── User B claims normally against the 2-leaf tree ──
@@ -189,13 +190,13 @@ contract AdversarialSuckerForkTest is CCIPSuckerClaimForkTestBase {
     //   - toRemote (nonce=2, root of 2-leaf tree)
     //   - Deliver nonce=1 to L2 (inbox root = root1)
     //   - Deliver nonce=2 to L2 (inbox root = root2, overwrites root1)
-    //   - Attempt to claim User A with nonce=1 proof (zero proof) -> should FAIL
-    //   - Claim User A with nonce=2 proof (leafB sibling) -> should SUCCEED
-    //   - Claim User B with nonce=2 proof (leafA sibling) -> should SUCCEED
+    //   - Claim User A with nonce=1 proof (zero proof) -> SUCCEEDS (root1 retained in the ring)
+    //   - Re-claim User A with nonce=2 proof -> reverts JBSucker_LeafAlreadyExecuted (double-spend guard)
+    //   - Claim User B with nonce=2 proof (leafA sibling) -> SUCCEEDS
     //
-    // Key insight: Even though nonce=1 was delivered first, nonce=2 overwrites the inbox root.
-    // All claims must use proofs against nonce=2's root. The append-only tree ensures leaf A
-    // is still in nonce=2's tree, just with a different proof path.
+    // Key insight: nonce=2 overwrites the LATEST inbox root, but the inbox-root ring retains a small window
+    // of recent roots (incl. root1), so a proof against root1 still validates. Double-spend is still blocked
+    // by the index-keyed `_executedFor` bitmap, independent of which retained root validated the claim.
     //
     // ════════════════════════════════════════════════════════════════════════
 
@@ -232,9 +233,9 @@ contract AdversarialSuckerForkTest is CCIPSuckerClaimForkTestBase {
         _deliverToL2(root2, nonce2, leafA.terminalTokenAmount + leafB.terminalTokenAmount);
         assertEq(suckerL1.inboxOf(token).root, root2, "Inbox should now hold root2 after nonce=2 delivery");
 
-        // ── Attempt to claim User A with nonce=1's proof (zero proof) ──
-        // This MUST fail because inbox root is now root2 (2-leaf tree).
-        vm.expectPartialRevert(JBSucker.JBSucker_InvalidProof.selector);
+        // ── User A claims with nonce=1's (stale) proof — SUCCEEDS via the inbox-root ring ──
+        // Both root1 and root2 were delivered; root1 is still retained in the ring, so the zero proof
+        // (valid for root1) validates even though the latest inbox root is root2.
         suckerL1.claim(
             JBClaim({
                 token: token,
@@ -248,11 +249,16 @@ contract AdversarialSuckerForkTest is CCIPSuckerClaimForkTestBase {
                 proof: _zeroProof()
             })
         );
+        assertEq(
+            jbTokens().totalBalanceOf(userA, 1),
+            leafA.projectTokenCount,
+            "User A claim should succeed against the retained root1"
+        );
 
-        // ── Claim User A with correct proof against the 2-leaf tree ──
+        // ── Double-spend guard holds: re-claiming leaf A (now with the nonce=2 proof) reverts ──
         bytes32[32] memory proofA = _zeroProof();
         proofA[0] = leafB.hashed;
-
+        vm.expectRevert(abi.encodeWithSelector(JBSucker.JBSucker_LeafAlreadyExecuted.selector, token, leafA.index));
         suckerL1.claim(
             JBClaim({
                 token: token,
@@ -265,11 +271,6 @@ contract AdversarialSuckerForkTest is CCIPSuckerClaimForkTestBase {
                 }),
                 proof: proofA
             })
-        );
-        assertEq(
-            jbTokens().totalBalanceOf(userA, 1),
-            leafA.projectTokenCount,
-            "User A claim should succeed with nonce=2 proof"
         );
 
         // ── Claim User B (only exists in nonce=2's tree) ──

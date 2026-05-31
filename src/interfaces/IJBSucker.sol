@@ -34,6 +34,15 @@ interface IJBSucker is IERC165 {
         address caller
     );
 
+    /// @notice Emitted when a single leaf in a batch `claim(JBClaim[])` fails so the rest of the batch can proceed.
+    /// @dev The failing leaf's state changes are fully reverted (the batch routes each leaf through an external
+    /// `this.claim` sub-call), so the leaf remains claimable later once the underlying cause is resolved (e.g. its
+    /// inbox root arrives, or a transient mint/add-to-balance dependency recovers).
+    /// @param token The terminal token address of the failing leaf.
+    /// @param index The leaf index in the inbox tree.
+    /// @param caller The address that submitted the batch.
+    event ClaimFailed(address indexed token, uint256 index, address caller);
+
     /// @notice Emitted when a leaf is inserted into the outbox tree.
     /// @param beneficiary The beneficiary on the remote chain.
     /// @param token The terminal token address.
