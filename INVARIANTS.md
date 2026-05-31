@@ -209,8 +209,8 @@ Chainlink CCIP transport. Adds inbound `ccipReceive`.
 - **`peerChainId()`** — returns `REMOTE_CHAIN_ID` set at construction.
 - **`getRouter()`** view — returns `CCIP_ROUTER` address.
 - **`ccipReceive(Client.Any2EVMMessage)`** — `JBCCIPSucker.sol:160-230`. Only the immutable `CCIP_ROUTER` (raw `msg.sender` check). Verifies decoded `origin == _peerAddress()` and `sourceChainSelector == REMOTE_CHAIN_SELECTOR`. Discriminates message type via `JBCCIPLib.decodeTypedMessage`; only `_CCIP_MSG_TYPE_ROOT` accepted.
-  - **Delivered-amount invariants** (`JBCCIPSucker.sol:190-216`): `destTokenAmounts.length <= 1`; if length 0 then `root.amount == 0`; if length 1 then `delivered.token == localMappedToken` (for non-native roots) and `delivered.amount >= root.amount`. These bind the advertised root to the actually-bridged tokens — a compromised peer that ships an inflated root cannot mint unbacked project tokens.
-  - For native-token roots (`root.token == NATIVE_TOKEN`), the delivered token-identity check happens in `JBCCIPLib.unwrapReceivedTokens` against the router-reported wrapped-native address.
+  - **Delivered-amount invariants** (`JBCCIPSucker.sol:190-216`): `destTokenAmounts.length <= 1`; if length 0 then `root.amount == 0`; if length 1 then `delivered.token` equals the local mapped token for ERC-20 roots or the router-reported wrapped-native token for native roots, and `delivered.amount >= root.amount`. These bind the advertised root to the actually-bridged tokens — a compromised peer that ships an inflated root cannot mint unbacked project tokens.
+  - Native-token roots are unwrapped only after the delivered token is confirmed to be the router's wrapped-native token.
   - Forwards to `this.fromRemote(root)` after delivery validation.
 - **`_sendRootOverAMB(...)`** — supports two fee modes: native-ETH (`transportPayment > 0`) or LINK pulled from `_msgSender()` (`transportPayment == 0`, for chains like Tempo with no meaningful native). Failed refunds retained as caller credit via `_retainTransportPaymentRefund`.
 - **`_isRemotePeer(address)`** — returns `sender == address(this)` because `ccipReceive` (not the AMB callback) is the authoritative ingress point.
@@ -290,7 +290,7 @@ Ownable registry. Tracks per-project sucker inventory + deployer allowlist + sha
 
 10. **Fee retention isolates caller-paid ETH.** `retainedToRemoteFeeBalance` and `retainedTransportPaymentRefundBalance` are **excluded** from `amountToAddToBalanceOf(NATIVE_TOKEN)` — failed fees and CCIP refunds never silently become project-claimable.
 
-11. **CCIP delivered-amount check.** `JBCCIPSucker.ccipReceive` verifies `destTokenAmounts.length <= 1`, identity of the delivered token (for non-native), and `delivered.amount >= root.amount`. A compromised peer cannot ship an inflated root that would let claims mint unbacked project tokens.
+11. **CCIP delivered-token and delivered-amount checks.** `JBCCIPSucker.ccipReceive` verifies `destTokenAmounts.length <= 1`, the delivered token identity (including router wrapped-native for native roots), and `delivered.amount >= root.amount`. A compromised peer cannot ship an inflated root that would let claims mint unbacked project tokens.
 
 12. **`_buildTreeHash` ↔ `abi.encodePacked` equivalence.** The leaf hash construction is exactly `keccak256(abi.encodePacked(projectTokenCount, terminalTokenAmount, beneficiary, metadata))` — downstream contracts (referral hook, project payers, distributors) can re-derive it without a library import.
 

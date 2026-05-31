@@ -195,16 +195,15 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
                 if (root.amount > 0) revert JBCCIPSucker_PositiveRootWithoutDelivery(root.amount);
             } else {
                 Client.EVMTokenAmount calldata delivered = any2EvmMessage.destTokenAmounts[0];
+                bool rootIsNativeToken = root.token == bytes32(uint256(uint160(JBConstants.NATIVE_TOKEN)));
 
                 // For NATIVE_TOKEN bridges the delivered ERC-20 is the wrapped native token (CCIP cannot transport
-                // raw native), so the token-identity check happens inside `unwrapReceivedTokens` against the
-                // router-reported wrapped native address. For everything else, the delivered token must equal the
-                // local mapped token the root advertises.
-                if (root.token != bytes32(uint256(uint160(JBConstants.NATIVE_TOKEN)))) {
-                    address expectedToken = _toAddress(root.token);
-                    if (delivered.token != expectedToken) {
-                        revert JBCCIPSucker_WrongDeliveredToken({delivered: delivered.token, expected: expectedToken});
-                    }
+                // raw native), so require the router-reported wrapped native address before unwrapping. For
+                // everything else, the delivered token must equal the local mapped token the root advertises.
+                address expectedToken =
+                    rootIsNativeToken ? address(CCIP_ROUTER.getWrappedNative()) : _toAddress(root.token);
+                if (delivered.token != expectedToken) {
+                    revert JBCCIPSucker_WrongDeliveredToken({delivered: delivered.token, expected: expectedToken});
                 }
 
                 // The bridged amount must back at least the value the root advertises. A short delivery against a

@@ -9,6 +9,7 @@ import {IJBDirectory} from "@bananapus/core-v6/src/interfaces/IJBDirectory.sol";
 import {IJBPermissions} from "@bananapus/core-v6/src/interfaces/IJBPermissions.sol";
 import {IJBPrices} from "@bananapus/core-v6/src/interfaces/IJBPrices.sol";
 import {IJBTokens} from "@bananapus/core-v6/src/interfaces/IJBTokens.sol";
+import {JBConstants} from "@bananapus/core-v6/src/libraries/JBConstants.sol";
 import {LibClone} from "solady/src/utils/LibClone.sol";
 
 import "../../src/JBCCIPSucker.sol";
@@ -203,6 +204,46 @@ contract RegressionCCIPWrappedNativeMisunwrapTest is Test {
         assertEq(address(sucker).balance, 0, "no native ETH - WETH was correctly kept as ERC-20");
         assertEq(weth.balanceOf(address(sucker)), amount, "WETH remains available for claim settlement");
         assertEq(sucker.inboxRootOf(address(weth)), root.remoteRoot.root, "root is stored under the WETH key");
+    }
+
+    /// @notice Native-token roots must be backed by the router's wrapped-native token before unwrapping.
+    function test_ccipReceive_revertsWhenNativeRootUsesDifferentDeliveredToken() external {
+        uint256 amount = 1 ether;
+        address deliveredToken = makeAddr("deliveredToken");
+
+        JBMessageRoot memory root = JBMessageRoot({
+            version: 1,
+            token: bytes32(uint256(uint160(JBConstants.NATIVE_TOKEN))),
+            amount: amount,
+            remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(1))}),
+            sourceTotalSupply: 0,
+            sourceCurrency: 0,
+            sourceDecimals: 0,
+            sourceSurplus: 0,
+            sourceBalance: 0,
+            sourceTimestamp: 1
+        });
+
+        Client.EVMTokenAmount[] memory tokenAmounts = new Client.EVMTokenAmount[](1);
+        tokenAmounts[0] = Client.EVMTokenAmount({token: deliveredToken, amount: amount});
+
+        Client.Any2EVMMessage memory message = Client.Any2EVMMessage({
+            messageId: bytes32(uint256(1)),
+            sourceChainSelector: REMOTE_CHAIN_SELECTOR,
+            sender: abi.encode(address(sucker)),
+            data: abi.encode(uint8(0), abi.encode(root)),
+            destTokenAmounts: tokenAmounts
+        });
+
+        vm.prank(ROUTER);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                JBCCIPSucker.JBCCIPSucker_WrongDeliveredToken.selector, deliveredToken, address(weth)
+            )
+        );
+        sucker.ccipReceive(message);
+
+        assertEq(sucker.inboxRootOf(JBConstants.NATIVE_TOKEN), bytes32(0), "native inbox root must remain unset");
     }
 
     receive() external payable {}
