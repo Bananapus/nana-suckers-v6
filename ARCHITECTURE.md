@@ -6,7 +6,7 @@
 
 ## System Overview
 
-`JBSucker` owns shared project-token burn, outbox, inbox, claim, token-mapping, deprecation, and emergency-exit logic. `JBSuckerRegistry` owns project-to-sucker inventory, deployer allowlists, shared bridge fees, and best-effort aggregate remote-state views. Chain-specific suckers handle transport authentication and asset delivery for OP Stack, Arbitrum, CCIP, Celo, and related environments. Deployers bind those implementations to the external bridge addresses and peer-chain configuration used at runtime.
+`JBSucker` owns shared project-token burn, outbox, inbox, claim, token-mapping, deprecation, and emergency-exit logic. `JBSuckerRegistry` owns project-to-sucker inventory, deployer allowlists, shared bridge fees, and best-effort aggregate remote-state views. Chain-specific suckers handle transport authentication and asset delivery for OP Stack, Arbitrum, CCIP, and related environments. Deployers bind those implementations to the external bridge addresses and peer-chain configuration used at runtime. Archived (reference only — not compiled or deployed): `JBSwapCCIPSucker` (+ its swap libs/structs) and `JBCeloSucker`; see `src/archive/`.
 
 ## Core Invariants
 
@@ -25,10 +25,10 @@
 | `JBSuckerRegistry` | Deployment inventory, deployer allowlists, remote fees, and aggregate remote-state views | Governance and discovery surface |
 | `JBOptimismSucker` / `JBBaseSucker` | OP Stack message and token bridging | Uses messenger and standard bridge |
 | `JBArbitrumSucker` | Arbitrum retryable-ticket and gateway flow | Transport-specific fee sizing matters |
-| `JBCCIPSucker` / `JBSwapCCIPSucker` | Chainlink CCIP delivery, optional LINK fee mode, and swap-assisted bridging | Higher external dependency surface |
-| `JBCeloSucker` | Celo-oriented native-token handling | Similar shape, different asset assumptions |
+| `JBCCIPSucker` | Chainlink CCIP delivery and optional LINK fee mode | Higher external dependency surface |
 | `JBSuckerDeployer` variants | Clone and configure chain-specific suckers | Deployment wiring is part of correctness |
 | `MerkleLib` / `JBSuckerLib` | Merkle and bytecode-heavy accounting helpers | Shared by runtime paths |
+| `JBSwapCCIPSucker` (+ swap libs/structs) / `JBCeloSucker` | Swap-assisted CCIP bridging / Celo-oriented native-token handling | Archived (reference only — not compiled or deployed); see `src/archive/` |
 
 ## Trust Boundaries
 
@@ -97,9 +97,9 @@ The local sucker snapshots project supply, surplus, and balance before sending r
 - Cross-chain and transport edges:
   `test/ForkMainnet.t.sol`
   `test/ForkArbitrum.t.sol`
-  `test/ForkCelo.t.sol`
   `test/ForkOPStack.t.sol`
   `test/ForkClaimMainnet.t.sol`
+  `test/archive/ForkCelo.t.sol` (archived — not compiled or deployed)
 - Regression and attack coverage:
   `test/SuckerAttacks.t.sol`
   `test/SuckerDeepAttacks.t.sol`
@@ -111,5 +111,7 @@ The local sucker snapshots project supply, surplus, and balance before sending r
 - `src/JBSuckerRegistry.sol`
 - `src/deployers/`
 - `src/libraries/JBSuckerLib.sol`
-- `src/libraries/JBSwapPoolLib.sol`
 - `src/utils/MerkleLib.sol`
+- Archived (reference only — not compiled or deployed; see `src/archive/`):
+  - `src/archive/JBSwapCCIPSucker.sol` and its swap libs/structs (`JBSwapPoolLib`, `JBSwapLib`, `JBPendingSwap`, `JBConversionRate`)
+  - `src/archive/JBCeloSucker.sol`
