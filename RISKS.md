@@ -19,7 +19,7 @@ This file focuses on the bridge-like risks in the sucker system: merkle-root pro
 ## 1. Trust Assumptions
 
 - **Bridge liveness.** Each implementation delegates message authentication to an external AMB (Optimism `CrossDomainMessenger`, Arbitrum `Bridge`/`Outbox`/`ArbSys`, Chainlink CCIP `Router`). A compromised or censoring AMB can forge roots, withhold messages, or permanently block claims.
-- **OP Stack (Optimism, Base, Celo):** trusts `OPMESSENGER.xDomainMessageSender()` for peer identity. A vulnerability in the OP messenger (or a malicious upgrade behind a proxy) would bypass all access control.
+- **OP Stack (Optimism, Base):** trusts `OPMESSENGER.xDomainMessageSender()` for peer identity. A vulnerability in the OP messenger (or a malicious upgrade behind a proxy) would bypass all access control.
 - **Arbitrum:** L1 side trusts `ARBINBOX.bridge().activeOutbox().l2ToL1Sender()`; L2 side trusts `AddressAliasHelper.applyL1ToL2Alias(peer)`. A compromised bridge or outbox contract breaks authentication.
 - **CCIP:** trusts `CCIP_ROUTER` identity plus `any2EvmMessage.sender` and `sourceChainSelector`. The router address is immutable at deploy time -- if Chainlink rotates routers, the sucker is bricked (no upgrade path).
 - **Bridge spend approvals are single-use.** Sucker send paths grant external bridge/router contracts the ERC-20
@@ -30,6 +30,7 @@ This file focuses on the bridge-like risks in the sucker system: merkle-root pro
 - **Controller/terminal must exist on destination chain.** `_handleClaim` calls `controllerOf(projectId).mintTokensOf()`. If the project does not exist or has no controller on the remote chain, all claims permanently revert -- funds are stuck.
 - **Registry allowlisting does not verify deployer singleton provenance.** `JBSuckerRegistry.deploySuckersFor()` only checks the deployer allowlist, not the singleton implementation behind the deployer. `configureSingleton()` can point an approved deployer at any JBSucker singleton. This is a privileged-only concern (both deployer configuration and registry allowlisting require governance). Defense: validate deployer configuration during registry allowlist reviews.
 - **No reentrancy guard.** The contract relies on state ordering (mark-executed-before-external-call) rather than explicit ReentrancyGuard. Correct today, but fragile to future refactors.
+- **Archived (reference only — not compiled or deployed):** `JBSwapCCIPSucker` (with its swap libraries/structs `JBSwapPoolLib`, `JBSwapLib`, `JBPendingSwap`, `JBConversionRate`) and `JBCeloSucker`, plus their deployers (`JBSwapCCIPSuckerDeployer`, `JBCeloSuckerDeployer`). These live under `src/archive/` and are excluded from compilation and deployment; the active suckers are `JBSucker`, `JBOptimismSucker`, `JBBaseSucker`, `JBArbitrumSucker`, and `JBCCIPSucker`, plus `JBSuckerRegistry`. The archived analyses below are flagged `[ARCHIVED]`.
 
 ## 2. Merkle Tree Risks
 
@@ -57,7 +58,7 @@ This file focuses on the bridge-like risks in the sucker system: merkle-root pro
 - **Emergency hatch is irreversible.** Once `enableEmergencyHatchFor(token)` is called, `enabled` is set to false and `emergencyHatch` to true. There is no way to re-enable the mapping or close the hatch. This is permanent.
 - **Native token mapping constraints differ by sucker.**
   - OP/Arb suckers: `NATIVE_TOKEN` can only map to `NATIVE_TOKEN` or `bytes32(0)`.
-  - CCIP and Celo suckers: `NATIVE_TOKEN` can map to any remote token (for chains where ETH is an ERC-20).
+  - CCIP suckers: `NATIVE_TOKEN` can map to any remote token (for chains where ETH is an ERC-20).
   - Wrong native mapping can cause permanent loss: e.g., bridging ETH to a non-WETH ERC-20 address on the remote chain.
 - **`fromRemote` accepts roots for unmapped tokens.** By design, to avoid permanent loss of already-bridged tokens. Claims against those roots fail at the mapping lookup. This means stale token data can accumulate in inbox storage indefinitely.
 - **minGas too low = permanent fund loss.** If `minGas` is below the actual gas needed for the remote call, the bridge message will fail on the remote chain. The OP/CCIP implementations enforce `MESSENGER_ERC20_MIN_GAS_LIMIT` (200k), but the actual gas needed could be higher depending on the remote token implementation.
@@ -141,11 +142,15 @@ The fee is paid to `FEE_PROJECT_ID` (the protocol project), not to the sucker's 
 
 `JBSuckerRegistry.remoteBalanceOf`, `remoteSurplusOf`, and `remoteTotalSupplyOf` intentionally use `try/catch` around each sucker and silently ignore peers that revert. Both active and deprecated suckers can be included, with per-chain deduplication: when multiple suckers target the same peer chain (e.g., redundant bridge providers for resilience, or during a migration window), active suckers are deduped to the freshest accepted snapshot because each sucker caches the entire remote chain's state (not a per-sucker share) -- SUM would double-count. MAX is only a same-freshness tie-breaker and a deprecated-sucker fallback when no active sucker answers for that peer chain. This lets a project run multiple bridge lanes for the same asset pair so users can choose a risk profile, while preventing redundant active lanes from inflating aggregate remote values. This is accepted because a single bad peer should not brick every cross-chain dashboard or estimator. The trade-off is that these read surfaces are best-effort only: consumers must treat them as freshness-biased estimates, not exact reconciled totals, unless they independently verify that every active sucker responded successfully and agree with the selected snapshot.
 
-### 10.6 Zero-output swap batches route to pendingSwapOf
+### [ARCHIVED] 10.6 Zero-output swap batches route to pendingSwapOf
+
+Archived (src/archive/, not compiled or deployed) — retained for reference.
 
 When `JBSwapCCIPSucker.ccipReceive` receives bridge tokens and the swap succeeds but returns zero local tokens (e.g., due to extreme price impact or dust amounts), the batch is routed to `pendingSwapOf` for later retry via `retrySwap`. Without this, claims would proceed with zero terminal backing, minting unbacked project tokens. The trade-off is that these batches require a manual `retrySwap` call once pool conditions improve. Anyone can call `retrySwap` — it is permissionless.
 
-### 10.7 Hookless V4 spot pricing is sandwich-vulnerable by design
+### [ARCHIVED] 10.7 Hookless V4 spot pricing is sandwich-vulnerable by design
+
+Archived (src/archive/, not compiled or deployed) — retained for reference.
 
 When no TWAP-capable route is available for a cross-denomination swap, a hookless V4 pool can be used as a last-resort spot-priced fallback. `_getV4Quote` then uses the instantaneous spot tick from `POOL_MANAGER.getSlot0()` instead of a TWAP oracle. This tick is manipulable via sandwich attacks, allowing an attacker to skew the `minAmountOut` and extract value from the swap. The sigmoid slippage model limits the damage but operates on a corrupted baseline. This is an accepted liveness tradeoff for the no-TWAP-route case: reverting when no TWAP is available would cause the CCIP message to fail, leaving bridged tokens stuck until manual retry. Hooked V4 pools must serve the configured TWAP window; if the hook's `observe()` reverts or lacks history, that pool is not eligible to beat a V3 TWAP route or degrade silently to spot.
 
@@ -153,14 +158,16 @@ When no TWAP-capable route is available for a cross-denomination swap, a hookles
 
 `mapTokens()` only uses `msg.value` when one or more mappings are being disabled and need transport payment for the final root flush. If every mapping in the batch is enable-only (`numberToDisable == 0`), the full `msg.value` is refunded to `_msgSender()`. If the refund transfer fails (e.g., the caller is a non-payable contract), the call reverts with `JBSucker_RefundFailed`. When disables are present, any dust remainder from integer division (`msg.value % numberToDisable`) is also refunded on a best-effort basis.
 
-### 10.9 Zero-value `prepare()` is rejected (layered with zero-leaf inbox skip)
+### [ARCHIVED] 10.9 Zero-value `prepare()` is rejected (layered with zero-leaf inbox skip)
+
+Archived (src/archive/, not compiled or deployed) — retained for reference.
 
 The nonce-inflation DoS on swap-CCIP suckers is defended at two layers:
 
 1. **Source-side**: `prepare()` reverts with `JBSucker_ZeroProjectTokenCount` when `projectTokenCount == 0`. The source-side revert is partial — an attacker who already holds project tokens can still pass `projectTokenCount = 1` and pay roughly the same gas to grief nonces; the floor moves from "any EOA" to "any project-token holder," but a holder with a meaningful supply can still spam at 1-wei-of-project-token-per-nonce.
 2. **Destination-side**: `JBSwapCCIPSucker.ccipReceive` only writes `_batchStartOf`, `_batchEndOf`, and the `_populatedNonceByIndex` append when the incoming root has `leafTotal > 0`. Zero-leaf roots — whether shipped by a compromised peer or by the `projectTokenCount = 1` bypass cashing out to 0 terminal tokens — record nothing and cannot grow the per-token nonce list that `_findNonceForLeafIndex` walks.
 
-Together the layers close the DoS surface: an attacker can still burn gas spamming `prepare(1) -> toRemote()`, but the remote sucker no longer pays a permanent storage cost for it. See `test/unit/SwapCCIP_PopulatedNonceDoS.t.sol` for the quantified gas curve and the destination-side closure proof (`test_Q1_real_ccipReceive_zeroValueBatchesDoNotGrowList`).
+Together the layers close the DoS surface: an attacker can still burn gas spamming `prepare(1) -> toRemote()`, but the remote sucker no longer pays a permanent storage cost for it. See `test/archive/SwapCCIP_PopulatedNonceDoS.t.sol` (archived) for the quantified gas curve and the destination-side closure proof (`test_Q1_real_ccipReceive_zeroValueBatchesDoNotGrowList`).
 
 ### 10.10 Cross-chain currency uses standardized `JBCurrencyIds.ETH` (1), not local token addresses
 
@@ -170,6 +177,8 @@ On the consuming side, contracts like `REVOwner` and `REVLoans` query sucker-rep
 
 Projects that need accurate cross-chain surplus and supply accounting should register a price feed for the `1 ↔ 61166` pair via `JBPrices`. On chains where the native token is ETH, this is a 1:1 identity feed. On chains where the native token is not ETH, the feed should reflect the actual exchange rate.
 
-### 10.11 Claim nonce lookup is bounded by received batches, not sparse nonce gaps
+### [ARCHIVED] 10.11 Claim nonce lookup is bounded by received batches, not sparse nonce gaps
+
+Archived (src/archive/, not compiled or deployed) — retained for reference.
 
 `_findNonceForLeafIndex` in `JBSwapCCIPSucker` walks a compact `_populatedNonceByIndex` list, which is appended once for each received non-empty batch. This means sparse or out-of-order CCIP nonce delivery (for example nonce 10 arriving before nonce 2) does not force the claim path to scan empty nonce slots. The remaining cost is O(number of received batches for the token), because the populated list is insertion-ordered and each entry's `[batchStart, batchEnd)` range must be checked until the matching batch is found. This is accepted because received batches are expected to stay small for a given project/token lane, and preserving an unbounded but complete lookup avoids making older valid claims unreachable. If a lane is expected to process a very large number of batches, operators should monitor claim gas and rotate to a fresh sucker before lookup cost becomes operationally painful.

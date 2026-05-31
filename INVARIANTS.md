@@ -1,6 +1,6 @@
 # Invariants of `nana-suckers-v6`
 
-Scope: the cross-chain bridging primitives that move a Juicebox V6 project-token position from one chain to another — the `JBSucker` base contract, its chain-specific transports (`JBOptimismSucker` / `JBBaseSucker` / `JBCeloSucker` / `JBArbitrumSucker` / `JBCCIPSucker` / `JBSwapCCIPSucker`), and the `JBSuckerRegistry` that gates deployment and shared fees. The package on npm is `@bananapus/suckers-v6`.
+Scope: the cross-chain bridging primitives that move a Juicebox V6 project-token position from one chain to another — the `JBSucker` base contract, its chain-specific transports (`JBOptimismSucker` / `JBBaseSucker` / `JBArbitrumSucker` / `JBCCIPSucker`), and the `JBSuckerRegistry` that gates deployment and shared fees. The package on npm is `@bananapus/suckers-v6`. Archived (reference only — not compiled or deployed): `JBSwapCCIPSucker` (+ its swap libs/structs `JBSwapPoolLib` / `JBSwapLib` / `JBPendingSwap` / `JBConversionRate`) and `JBCeloSucker`; see `src/archive/`.
 
 Trust model in one sentence: a **pair of suckers** lets a holder burn project tokens on the local chain into a Merkle-committed claim, ship the committing root + backing terminal-token value across an external AMB, and let any caller mint to the **leaf-encoded beneficiary** on the destination — front-run safe, double-spend safe, fee-bypass safe, and operator-driven only at the configuration boundary.
 
@@ -13,7 +13,7 @@ This file documents the invariants the **runtime contracts in this repo** enforc
 ## A.1 Prepare — burn local, commit to a leaf
 
 - `prepare(projectTokenCount, beneficiary, minTokensReclaimed, token, metadata)` pulls the caller's project tokens, cashes them out at the **local** terminal rate via the project's primary terminal for `token`, and appends a leaf to the outbox tree (`JBSucker.sol:547-602`).
-- Reverts on `projectTokenCount == 0` (`JBSucker_ZeroProjectTokenCount`) — closes the swap-CCIP populated-nonce DoS at the source layer.
+- Reverts on `projectTokenCount == 0` (`JBSucker_ZeroProjectTokenCount`) — closes a populated-nonce DoS at the source layer (this source-side guard also covered the archived swap-CCIP destination leg).
 - Reverts on `beneficiary == bytes32(0)` — the remote chain mint would fail unrecoverably.
 - Reverts when the token is not mapped (`enabled == false`) or the sucker is in `SENDING_DISABLED` / `DEPRECATED`.
 - The reclaimed terminal-token amount is enforced by `_pullBackingAssets` to equal exactly the terminal's reported `reclaimedAmount` via balance-delta `assert` — guarantees no fee-on-transfer silent loss, and acts as an implicit reentrancy guard (a nested `prepare` would corrupt the delta).
@@ -24,7 +24,7 @@ This file documents the invariants the **runtime contracts in this repo** enforc
 
 - `toRemote(token)` is permissionless (`JBSucker.sol:646-700`). Anyone willing to pay the registry's `toRemoteFee` plus the bridge transport cost can ship the current outbox root + locked funds across the AMB.
 - Reverts on emergency-hatched tokens; reverts in `SENDING_DISABLED` / `DEPRECATED`; reverts when nothing has changed since the last relay (`outbox.balance == 0 && tree.count == numberOfClaimsSent`).
-- Fee payment is **best-effort**: a `try/catch` around the fee project's `terminal.pay(...)`. On failure the fee ETH is retained as **refundable caller credit** (not silently rebated to `transportPayment`), which is critical for zero-cost bridges (OP/Base/Celo/Arb L2→L1) that revert if any value is forwarded to the AMB call.
+- Fee payment is **best-effort**: a `try/catch` around the fee project's `terminal.pay(...)`. On failure the fee ETH is retained as **refundable caller credit** (not silently rebated to `transportPayment`), which is critical for zero-cost bridges (OP/Base/Arb L2→L1) that revert if any value is forwarded to the AMB call.
 - `transportPayment = msg.value - toRemoteFee` is exactly what flows to `_sendRootOverAMB`. The implementation does not silently re-route ETH between accounts.
 
 ## A.3 Claim — mint to leaf beneficiary, never to caller
@@ -78,7 +78,7 @@ This file documents the invariants the **runtime contracts in this repo** enforc
 - **Immutability rule:** once `_outboxOf[localToken].tree.count != 0` (first `prepare` happened), the mapping cannot be changed to a *different* non-zero remote token — only disabled. This is the operator-side load-bearing invariant for cross-chain accounting coherence.
 - `_validateTokenMapping` enforces a per-bridge native-mapping policy:
   - OP / Arb (base class): `NATIVE_TOKEN` may only map to `NATIVE_TOKEN` or `bytes32(0)`.
-  - CCIP / Celo: `NATIVE_TOKEN` may map to an arbitrary remote ERC-20 (the remote chain might denominate ETH as a wrapped token).
+  - CCIP: `NATIVE_TOKEN` may map to an arbitrary remote ERC-20 (the remote chain might denominate ETH as a wrapped token).
 - All variants enforce `map.minGas >= MESSENGER_ERC20_MIN_GAS_LIMIT` so a too-low gas limit cannot strand bridged tokens.
 - `mapTokens` refunds `msg.value` on enable-only batches and refunds dust on mixed batches (best-effort).
 
@@ -188,7 +188,9 @@ OP-Stack transport. Used for Optimism mainnet and similarly-shaped chains.
 
 Thin OP-Stack subclass for Base. Overrides only `peerChainId()` (Base ↔ mainnet pair).
 
-## C.4 JBCeloSucker — `src/JBCeloSucker.sol`
+## C.4 [ARCHIVED] JBCeloSucker — `src/archive/JBCeloSucker.sol`
+
+Archived (`src/archive/`, not compiled or deployed) — retained for reference.
 
 OP-Stack-like transport on Celo. Adjusts `_addToBalance` and `_sendRootOverAMB` for Celo's native-token semantics. Overrides `_validateTokenMapping` to allow native↔ERC-20 mappings (Celo's native is CELO, not ETH).
 
@@ -214,11 +216,13 @@ Chainlink CCIP transport. Adds inbound `ccipReceive`.
 - **`_isRemotePeer(address)`** — returns `sender == address(this)` because `ccipReceive` (not the AMB callback) is the authoritative ingress point.
 - **`_validateTokenMapping(...)`** — removes the OP/Arb native-only restriction; still enforces `minGas >= MESSENGER_ERC20_MIN_GAS_LIMIT`.
 
-## C.7 JBSwapCCIPSucker — `src/JBSwapCCIPSucker.sol`
+## C.7 [ARCHIVED] JBSwapCCIPSucker — `src/archive/JBSwapCCIPSucker.sol`
+
+Archived (`src/archive/`, not compiled or deployed) — retained for reference.
 
 CCIP variant that swaps the bridged token into the locally-required token (e.g. bridge USDC, swap to ETH on the destination).
 
-- Overrides **`claim(JBClaim)`** — `JBSwapCCIPSucker.sol:530-537`. Blocks claims while `_retrySwapLocked || _ccipReceiveSwapLocked`; sets transient `_currentClaimLeafIndex` so the overridden `_addToBalance` looks up the correct nonce-indexed conversion rate.
+- Overrides **`claim(JBClaim)`** — `src/archive/JBSwapCCIPSucker.sol:530-537`. Blocks claims while `_retrySwapLocked || _ccipReceiveSwapLocked`; sets transient `_currentClaimLeafIndex` so the overridden `_addToBalance` looks up the correct nonce-indexed conversion rate.
 - Overrides **`_addToBalance(...)`** — scales the source-denominated leaf amount to local-denomination via `_conversionRateOf[token][nonce]`. Reverts if there is a `pendingSwapOf[token][nonce]` (failed swap awaiting retry).
 - **`ccipReceive(Client.Any2EVMMessage)`** — extends the CCIP validation with: zero-leaf batches **record nothing** in `_batchStartOf` / `_batchEndOf` / `_populatedNonceByIndex` (closes the destination-side leg of the populated-nonce DoS — paired with the source-side `prepare(0)` revert in `JBSucker`); successful-but-zero-output swaps route to `pendingSwapOf` for `retrySwap`.
 - **`retrySwap(address localToken, uint64 nonce)`** — permissionless. Locks `_retrySwapLocked` (blocks concurrent claims), re-runs the swap via `_executeSwapOrRevert`, populates the conversion rate so claims can proceed.
@@ -263,7 +267,7 @@ Ownable registry. Tracks per-project sucker inventory + deployer allowlist + sha
 
 1. **Per-leaf executed-hash defense.** `executedLeafHashOf[token][index]` stores the keccak256 of the leaf content after `_validate` succeeds. Downstream beneficiary contracts (notably `JBReferralSplitHook`) re-derive the hash via `abi.encodePacked(projectTokenCount, terminalTokenAmount, beneficiary, metadata)` (same shape as `_buildTreeHash`) and authenticate that a front-runner did not pre-empt their claim with a different leaf shape. The naive "just check the executed bitmap" defense is **insufficient**; see `jb-sucker-claim-front-run-defense` skill.
 
-2. **AMB ingress uses raw `msg.sender`.** `fromRemote` (`JBSucker.sol:415-480`) and `ccipReceive` (`JBCCIPSucker.sol:160-230`, `JBSwapCCIPSucker.sol:263-...`) **never** use `_msgSender()` for caller authentication. ERC-2771 forwarder spoofing is structurally impossible.
+2. **AMB ingress uses raw `msg.sender`.** `fromRemote` (`JBSucker.sol:415-480`) and `ccipReceive` (`JBCCIPSucker.sol:160-230`) **never** use `_msgSender()` for caller authentication. ERC-2771 forwarder spoofing is structurally impossible.
 
 3. **Snapshot freshness key.** `peerChainTotalSupply` / `_peerChainSurplus` / `_peerChainBalance` are gated by `snapshotTimestamp` (strictly greater source-timestamp wins, regardless of which token's message carried it). Per-token inbox roots are gated by per-token nonce (strictly greater). Two independent gates — neither can roll the other back.
 
@@ -286,7 +290,7 @@ Ownable registry. Tracks per-project sucker inventory + deployer allowlist + sha
 
 10. **Fee retention isolates caller-paid ETH.** `retainedToRemoteFeeBalance` and `retainedTransportPaymentRefundBalance` are **excluded** from `amountToAddToBalanceOf(NATIVE_TOKEN)` — failed fees and CCIP refunds never silently become project-claimable.
 
-11. **CCIP delivered-amount check.** `JBCCIPSucker.ccipReceive` (and `JBSwapCCIPSucker.ccipReceive`) verify `destTokenAmounts.length <= 1`, identity of the delivered token (for non-native), and `delivered.amount >= root.amount`. A compromised peer cannot ship an inflated root that would let claims mint unbacked project tokens. The defensive baseline is symmetric across both CCIP variants.
+11. **CCIP delivered-amount check.** `JBCCIPSucker.ccipReceive` verifies `destTokenAmounts.length <= 1`, identity of the delivered token (for non-native), and `delivered.amount >= root.amount`. A compromised peer cannot ship an inflated root that would let claims mint unbacked project tokens.
 
 12. **`_buildTreeHash` ↔ `abi.encodePacked` equivalence.** The leaf hash construction is exactly `keccak256(abi.encodePacked(projectTokenCount, terminalTokenAmount, beneficiary, metadata))` — downstream contracts (referral hook, project payers, distributors) can re-derive it without a library import.
 

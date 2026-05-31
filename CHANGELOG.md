@@ -12,9 +12,40 @@ This file describes the verified change from `nana-suckers-v5` to the current `n
 - `JBArbitrumSucker`
 - `JBBaseSucker`
 - `JBCCIPSucker`
-- `JBSwapCCIPSucker`
-- `JBCeloSucker`
 - the deployers, structs, and interfaces under `src/`
+
+Archived (reference only — not compiled or deployed): `JBSwapCCIPSucker` (+ its swap libs/structs `JBSwapPoolLib`, `JBSwapLib`, `JBPendingSwap`, `JBConversionRate`) and `JBCeloSucker`, along with their deployers and interfaces; see `src/archive/`.
+
+## 0.0.65 — Archive `JBCeloSucker` subsystem
+
+The `JBCeloSucker` subsystem (`JBCeloSucker`, `JBCeloSuckerDeployer`, `IJBCeloSuckerDeployer`, plus
+`test/ForkCelo.t.sol`) is unused and has been moved to `src/archive/` and `test/archive/`. It is
+excluded from compilation via the `foundry.toml` skip glob and is not deployed by `deploy-all`. The
+code is retained for reference only.
+
+## 0.0.64 — Archive `JBSwapCCIPSucker` swap subsystem + claim resilience
+
+**Archived (reference only)**
+
+The `JBSwapCCIPSucker` swap subsystem (`JBSwapCCIPSucker`, `JBSwapCCIPSuckerDeployer`,
+`IJBSwapCCIPSuckerDeployer`, the swap libraries `JBSwapPoolLib` / `JBSwapLib`, and the swap structs
+`JBPendingSwap` / `JBConversionRate`, plus its swap test suite) is unused and has been moved to
+`src/archive/` and `test/archive/`. It is excluded from compilation via the `foundry.toml` skip glob
+and is not deployed by `deploy-all`. Retiring it from the build also freed the EIP-170 headroom that
+the live sucker variants had been competing for.
+
+**Per-leaf batch-claim resilience**
+
+`claim(JBClaim[])` now wraps each leaf in a `try`/`catch`: a single bad leaf no longer reverts the
+whole batch. Failed leaves emit `ClaimFailed` and are skipped, so the remaining valid claims still
+settle.
+
+**Inbox-root ring**
+
+`fromRemote` now retains the last 4 inbox roots in a ring buffer instead of only the latest. `_validate`
+accepts a proof against any retained root, which tolerates out-of-order / racing root deliveries.
+Double-spend is still guarded by the index-keyed `_executedFor` bitmap, so accepting an older retained
+root cannot replay an already-executed leaf.
 
 ## Unreleased — `executedLeafHashOf` + `allSuckersOf` for hook hardening
 
