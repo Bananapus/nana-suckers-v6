@@ -5,6 +5,9 @@ evm_version = 'cancun'
 optimizer_runs = 200
 libs = ["node_modules", "lib"]
 fs_permissions = [{ access = "read-write", path = "./"}]
+# Archived, unused contracts (e.g. JBSwapCCIPSucker) and their tests live under `archive/` folders and are
+# excluded from compilation, sizing, and test runs. Kept for reference only.
+skip = ["src/archive/**", "test/archive/**"]
 
 [fuzz]
 runs = 4096
