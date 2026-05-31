@@ -222,24 +222,19 @@ abstract contract CCIPSuckerClaimForkTestBase is SuckerForkHelpers {
     ///
     /// We intentionally do NOT call `_terminalToken()` here — that helper can trigger a DELEGATECALL to
     /// `CCIPHelper`, which would consume any active `vm.prank` (see the note on the L2 router prank above
-    /// `_mapTerminalToken`). Reading directly from `messageRoot.token` keeps the helper prank-neutral.
+    /// `_mapTerminalToken`). Build this message before the router prank because native roots query the router's
+    /// wrapped-native token.
     ///
-    /// Test simulation still funds the sucker separately via `vm.deal`/`deal`, so for native-token roots we
-    /// substitute a non-wrapped-native address in `destTokenAmounts[0].token`. This satisfies the consistency
-    /// check (which exempts native roots from the strict token-identity comparison) while keeping
-    /// `unwrapReceivedTokens` short-circuited — no WETH balance is required in the harness.
+    /// Test simulation still funds the sucker separately via `vm.deal`/`deal`, so native-token roots use the
+    /// L2 router's wrapped-native token in `destTokenAmounts[0].token` and seed that wrapped token before delivery.
     function _buildCCIPMessage(JBMessageRoot memory messageRoot) internal view returns (Client.Any2EVMMessage memory) {
         Client.EVMTokenAmount[] memory destTokenAmounts;
         if (messageRoot.amount > 0) {
             address rootLocalToken = address(uint160(uint256(messageRoot.token)));
+            address wrappedNative = address(ICCIPRouter(CCIPHelper.routerOfChain(_l2ChainId())).getWrappedNative());
             destTokenAmounts = new Client.EVMTokenAmount[](1);
             destTokenAmounts[0] = Client.EVMTokenAmount({
-                token: rootLocalToken == JBConstants.NATIVE_TOKEN
-                    // For native-token roots the destTokenAmounts entry can't be the NATIVE_TOKEN sentinel (CCIP
-                    // delivers ERC-20). Any non-wrapped-native address works here because the strict token check
-                    // is exempt for native roots and the unwrap path is gated on the wrapped native address.
-                    ? address(uint160(uint256(keccak256("test:NonWrappedSentinel"))))
-                    : rootLocalToken,
+                token: rootLocalToken == JBConstants.NATIVE_TOKEN ? wrappedNative : rootLocalToken,
                 amount: messageRoot.amount
             });
         }
@@ -354,7 +349,9 @@ abstract contract CCIPSuckerClaimForkTestBase is SuckerForkHelpers {
 
         // Fund sucker with terminal token (simulates CCIP delivery).
         if (token == JBConstants.NATIVE_TOKEN) {
-            vm.deal(address(suckerL1), totalAmount);
+            address wrappedNative = address(ICCIPRouter(CCIPHelper.routerOfChain(_l2ChainId())).getWrappedNative());
+            vm.deal(address(suckerL1), 0);
+            deal(wrappedNative, address(suckerL1), totalAmount);
         } else {
             deal(token, address(suckerL1), totalAmount);
         }
@@ -372,8 +369,10 @@ abstract contract CCIPSuckerClaimForkTestBase is SuckerForkHelpers {
             sourceTimestamp: 1
         });
 
+        Client.Any2EVMMessage memory ccipMessage = _buildCCIPMessage(messageRoot);
+
         vm.prank(CCIPHelper.routerOfChain(_l2ChainId()));
-        JBCCIPSucker(payable(address(suckerL1))).ccipReceive(_buildCCIPMessage(messageRoot));
+        JBCCIPSucker(payable(address(suckerL1))).ccipReceive(ccipMessage);
     }
 
     /// @notice Map terminal token for bridging on the current fork.
@@ -815,8 +814,10 @@ abstract contract CCIPSuckerClaimForkTestBase is SuckerForkHelpers {
             sourceTimestamp: 2
         });
 
+        Client.Any2EVMMessage memory ccipMessage = _buildCCIPMessage(staleMessage);
+
         vm.prank(CCIPHelper.routerOfChain(_l2ChainId()));
-        JBCCIPSucker(payable(address(suckerL1))).ccipReceive(_buildCCIPMessage(staleMessage));
+        JBCCIPSucker(payable(address(suckerL1))).ccipReceive(ccipMessage);
 
         // Inbox root should be unchanged — stale nonce was rejected.
         assertEq(suckerL1.inboxOf(token).root, sentRoot, "Inbox root should NOT be updated by stale nonce");
