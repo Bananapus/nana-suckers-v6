@@ -16,6 +16,25 @@ This file describes the verified change from `nana-suckers-v5` to the current `n
 
 Archived (reference only — not compiled or deployed): `JBSwapCCIPSucker` (+ its swap libs/structs `JBSwapPoolLib`, `JBSwapLib`, `JBPendingSwap`, `JBConversionRate`) and `JBCeloSucker`, along with their deployers and interfaces; see `src/archive/`.
 
+## 0.0.67 — Fold per-sucker remote-aggregate reads into one call
+
+`JBSuckerRegistry`'s cross-chain aggregate views (`remoteBalanceOf`, `remoteSurplusOf`,
+`remoteTotalSupplyOf`) previously made **three** separate `staticcall`s into each of a project's suckers
+per iteration: one for the value, one for the immutable peer chain ID, and one for the snapshot freshness
+key. Each sucker now exposes a combined view (`peerChainBalanceValueOf`, `peerChainSurplusValueOf`,
+`peerChainTotalSupplyValue`) that returns the value bundled with the peer chain ID and snapshot freshness
+key in a single `JBPeerChainValue` struct, and the registry reads each sucker **once**. The aggregated
+results are unchanged — same per-chain dedup, same active-over-deprecated preference, same
+freshness/MAX tie-break, and the same revert when a sucker reports a zero peer chain ID.
+
+`JBSucker.peerChainId()` is now `public` (was `external`) so the combined views can read it internally
+without a self-call; its external ABI is unchanged. `JBSuckerRegistry`'s runtime size shrank slightly;
+each sucker variant grew by ~0.5 KB for the three added views and stays well under the EIP-170 limit.
+
+A new regression suite (`RegistryAggregateReadEquivalence.t.sol`) pins the aggregate return values
+across distinct-chain, same-chain-dedup, deprecated-fallback, active-override, zero-peer-chain, and
+empty cases, proving the single-call path is behavior-preserving.
+
 ## 0.0.65 — Archive `JBCeloSucker` subsystem
 
 The `JBCeloSucker` subsystem (`JBCeloSucker`, `JBCeloSuckerDeployer`, `IJBCeloSuckerDeployer`, plus

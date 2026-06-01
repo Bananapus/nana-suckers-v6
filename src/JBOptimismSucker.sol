@@ -64,7 +64,7 @@ contract JBOptimismSucker is JBSucker, IJBOptimismSucker {
 
     /// @notice Returns the chain on which the peer is located.
     /// @return chainId of the peer.
-    function peerChainId() external view virtual override returns (uint256) {
+    function peerChainId() public view virtual override returns (uint256) {
         uint256 chainId = block.chainid;
         if (chainId == 1) return 10;
         if (chainId == 10) return 1;

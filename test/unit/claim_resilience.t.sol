@@ -100,7 +100,7 @@ contract ResilienceTestSucker is JBSucker {
         return sender == _toAddress(peer());
     }
 
-    function peerChainId() external view override returns (uint256) {
+    function peerChainId() public view override returns (uint256) {
         return block.chainid;
     }
 
@@ -321,7 +321,7 @@ contract RingTestSucker is JBSucker {
         return sender == PEER_ADDR;
     }
 
-    function peerChainId() external view override returns (uint256) {
+    function peerChainId() public view override returns (uint256) {
         return block.chainid;
     }
 

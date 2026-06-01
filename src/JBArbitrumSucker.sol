@@ -81,7 +81,7 @@ contract JBArbitrumSucker is JBSucker, IJBArbitrumSucker {
 
     /// @notice Returns the chain on which the peer is located.
     /// @return chainId of the peer.
-    function peerChainId() external view virtual override returns (uint256) {
+    function peerChainId() public view virtual override returns (uint256) {
         uint256 chainId = block.chainid;
         if (chainId == ARBChains.ETH_CHAINID) return ARBChains.ARB_CHAINID;
         if (chainId == ARBChains.ARB_CHAINID) return ARBChains.ETH_CHAINID;

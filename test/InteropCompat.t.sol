@@ -51,7 +51,7 @@ contract InteropTestSucker is JBSucker {
         return false;
     }
 
-    function peerChainId() external pure override returns (uint256) {
+    function peerChainId() public pure override returns (uint256) {
         return 1;
     }
 

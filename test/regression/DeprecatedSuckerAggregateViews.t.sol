@@ -37,7 +37,7 @@ contract DeprecatedViewMockSucker is JBSucker {
         _peerChain = chainId;
     }
 
-    function peerChainId() external view override returns (uint256) {
+    function peerChainId() public view override returns (uint256) {
         return _peerChain;
     }
 

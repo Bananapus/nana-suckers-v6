@@ -11,6 +11,7 @@ import {EnumerableMap} from "@openzeppelin/contracts/utils/structs/EnumerableMap
 
 import {JBSuckerRegistry} from "../../src/JBSuckerRegistry.sol";
 import {JBDenominatedAmount} from "../../src/structs/JBDenominatedAmount.sol";
+import {JBPeerChainValue} from "../../src/structs/JBPeerChainValue.sol";
 
 contract RegistryProjectsMock {
     function ownerOf(uint256) external pure returns (address) {
@@ -75,6 +76,20 @@ contract SameChainSuckerMock {
 
     function peerChainTotalSupply() external view returns (uint256) {
         return _supply;
+    }
+
+    // This mock exposes no snapshot freshness, so the combined reads report a zero freshness key — matching the
+    // prior behavior where the registry's snapshot-timestamp read fell back to zero for this mock.
+    function peerChainSurplusValueOf(uint256, uint256) external view returns (JBPeerChainValue memory) {
+        return JBPeerChainValue({value: _surplus, peerChainId: _chainId, snapshotTimestamp: 0});
+    }
+
+    function peerChainBalanceValueOf(uint256, uint256) external view returns (JBPeerChainValue memory) {
+        return JBPeerChainValue({value: 0, peerChainId: _chainId, snapshotTimestamp: 0});
+    }
+
+    function peerChainTotalSupplyValue() external view returns (JBPeerChainValue memory) {
+        return JBPeerChainValue({value: _supply, peerChainId: _chainId, snapshotTimestamp: 0});
     }
 }
 

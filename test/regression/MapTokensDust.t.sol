@@ -222,7 +222,7 @@ contract MapTokensDustSucker is JBSucker {
         return sender == _toAddress(peer());
     }
 
-    function peerChainId() external view virtual override returns (uint256) {
+    function peerChainId() public view virtual override returns (uint256) {
         return block.chainid;
     }
 

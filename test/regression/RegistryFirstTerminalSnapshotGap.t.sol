@@ -65,7 +65,7 @@ contract SnapshotGapHarness is JBSucker {
         return sender == _toAddress(peer());
     }
 
-    function peerChainId() external view override returns (uint256) {
+    function peerChainId() public view override returns (uint256) {
         return block.chainid;
     }
 

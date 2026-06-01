@@ -171,6 +171,7 @@ Base contract. All cross-chain variants inherit. ERC-2771–aware for app-layer 
 ### Views
 
 - `inboxOf(token)`, `outboxOf(token)`, `remoteTokenFor(token)`, `isMapped(token)`, `amountToAddToBalanceOf(token)`, `peer()`, `projectId()`, `state()`, `peerChainBalanceOf(decimals, currency)`, `peerChainSurplusOf(decimals, currency)`, `peerChainTotalSupply` (public storage), `executedLeafHashOf(token, index)` (public storage), `snapshotTimestamp` (public storage), `peerChainId()` (virtual — overridden per chain), `supportsInterface(bytes4)`.
+- Combined peer-chain reads `peerChainBalanceValueOf(decimals, currency)`, `peerChainSurplusValueOf(decimals, currency)`, `peerChainTotalSupplyValue()` each return a `JBPeerChainValue{value, peerChainId, snapshotTimestamp}`. The `value` is identical to the matching single-purpose view above; the bundled peer chain ID and snapshot freshness key let `JBSuckerRegistry` read everything it needs to dedupe and rank a sucker in one call. **Invariant:** these are pure projections of the same storage — they introduce no new state and the aggregate results are identical to reading the three values separately.
 
 ### `receive() external payable`
 
@@ -255,7 +256,9 @@ Ownable registry. Tracks per-project sucker inventory + deployer allowlist + sha
 - `suckerPairsOf(projectId)` — active suckers with their `peerChainId`.
 - `isSuckerOf(projectId, addr)` — true for both active and deprecated entries.
 - `remoteBalanceOf(projectId, decimals, currency)` / `remoteSurplusOf(projectId, decimals, currency)` / `remoteTotalSupplyOf(projectId)` — **aggregate views with explicit failure semantics**:
+  - Each sucker is read with a **single** combined call (`peerChainBalanceValueOf` / `peerChainSurplusValueOf` / `peerChainTotalSupplyValue`) that returns the value, peer chain ID, and snapshot freshness key together.
   - `try/catch` around each sucker; failing peers are silently skipped (fail-open for liveness).
+  - A sucker that reports a zero peer chain ID (after a successful read) reverts the whole aggregate, matching deploy-time validation.
   - Multiple active suckers targeting the same peer chain are **deduped by freshest accepted snapshot timestamp** (each sucker caches the *entire* remote chain's state; SUM would double-count).
   - MAX is only a same-freshness tie-breaker.
   - Deprecated suckers are used only as a fallback when no active sucker answers for that peer chain.

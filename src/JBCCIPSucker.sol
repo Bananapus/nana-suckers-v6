@@ -119,7 +119,7 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
 
     /// @notice Returns the chain on which the peer is located.
     /// @return chainId The chain ID of the peer.
-    function peerChainId() external view virtual override returns (uint256 chainId) {
+    function peerChainId() public view virtual override returns (uint256 chainId) {
         return REMOTE_CHAIN_ID;
     }
 
