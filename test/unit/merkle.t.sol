@@ -224,7 +224,7 @@ contract MerkleUnitTest is JBSucker, Test {
         override
     {}
 
-    function peerChainId() external view override returns (uint256 chainId) {}
+    function peerChainId() public view override returns (uint256 chainId) {}
 }
 
 contract DeployerUnitTest is Test {

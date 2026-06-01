@@ -13,6 +13,7 @@ import "../../src/JBSucker.sol";
 import {IJBSuckerDeployer} from "../../src/interfaces/IJBSuckerDeployer.sol";
 import {IJBSuckerRegistry} from "../../src/interfaces/IJBSuckerRegistry.sol";
 import {JBDenominatedAmount} from "../../src/structs/JBDenominatedAmount.sol";
+import {JBPeerChainValue} from "../../src/structs/JBPeerChainValue.sol";
 
 // forge-lint: disable-next-line(unaliased-plain-import)
 import "../../src/deployers/JBOptimismSuckerDeployer.sol";
@@ -586,13 +587,18 @@ contract DeployerTests is Test, TestBaseWorkflow, IERC721Receiver {
 
         uint256 ethCurrency = uint256(uint160(JBConstants.NATIVE_TOKEN));
 
-        // Mock: sucker1 reports 900e18, sucker2 reports 1000e18.
-        vm.mockCall(address(sucker1), abi.encodeCall(IJBSucker.peerChainTotalSupply, ()), abi.encode(900e18));
-        vm.mockCall(address(sucker2), abi.encodeCall(IJBSucker.peerChainTotalSupply, ()), abi.encode(1000e18));
-
-        // Mock peerChainId for both (same chain).
-        vm.mockCall(address(sucker1), abi.encodeCall(IJBSucker.peerChainId, ()), abi.encode(remoteChainId));
-        vm.mockCall(address(sucker2), abi.encodeCall(IJBSucker.peerChainId, ()), abi.encode(remoteChainId));
+        // Mock: sucker1 reports 900e18, sucker2 reports 1000e18 — both on the same peer chain at the same freshness,
+        // so the registry's combined read collapses them to MAX rather than SUM.
+        vm.mockCall(
+            address(sucker1),
+            abi.encodeCall(IJBSucker.peerChainTotalSupplyValue, ()),
+            abi.encode(JBPeerChainValue({value: 900e18, peerChainId: remoteChainId, snapshotTimestamp: 0}))
+        );
+        vm.mockCall(
+            address(sucker2),
+            abi.encodeCall(IJBSucker.peerChainTotalSupplyValue, ()),
+            abi.encode(JBPeerChainValue({value: 1000e18, peerChainId: remoteChainId, snapshotTimestamp: 0}))
+        );
 
         // remoteTotalSupplyOf should return MAX(900, 1000) = 1000, NOT SUM 1900.
         assertEq(registry.remoteTotalSupplyOf(projectId), 1000e18, "should use MAX, not SUM");
@@ -600,30 +606,26 @@ contract DeployerTests is Test, TestBaseWorkflow, IERC721Receiver {
         // Same pattern for balance.
         vm.mockCall(
             address(sucker1),
-            abi.encodeCall(IJBSucker.peerChainBalanceOf, (18, ethCurrency)),
-            // forge-lint: disable-next-line(unsafe-typecast)
-            abi.encode(JBDenominatedAmount({value: 900e18, currency: uint32(ethCurrency), decimals: 18}))
+            abi.encodeCall(IJBSucker.peerChainBalanceValueOf, (18, ethCurrency)),
+            abi.encode(JBPeerChainValue({value: 900e18, peerChainId: remoteChainId, snapshotTimestamp: 0}))
         );
         vm.mockCall(
             address(sucker2),
-            abi.encodeCall(IJBSucker.peerChainBalanceOf, (18, ethCurrency)),
-            // forge-lint: disable-next-line(unsafe-typecast)
-            abi.encode(JBDenominatedAmount({value: 1000e18, currency: uint32(ethCurrency), decimals: 18}))
+            abi.encodeCall(IJBSucker.peerChainBalanceValueOf, (18, ethCurrency)),
+            abi.encode(JBPeerChainValue({value: 1000e18, peerChainId: remoteChainId, snapshotTimestamp: 0}))
         );
         assertEq(registry.remoteBalanceOf(projectId, 18, ethCurrency), 1000e18, "balance should use MAX");
 
         // Same pattern for surplus.
         vm.mockCall(
             address(sucker1),
-            abi.encodeCall(IJBSucker.peerChainSurplusOf, (18, ethCurrency)),
-            // forge-lint: disable-next-line(unsafe-typecast)
-            abi.encode(JBDenominatedAmount({value: 900e18, currency: uint32(ethCurrency), decimals: 18}))
+            abi.encodeCall(IJBSucker.peerChainSurplusValueOf, (18, ethCurrency)),
+            abi.encode(JBPeerChainValue({value: 900e18, peerChainId: remoteChainId, snapshotTimestamp: 0}))
         );
         vm.mockCall(
             address(sucker2),
-            abi.encodeCall(IJBSucker.peerChainSurplusOf, (18, ethCurrency)),
-            // forge-lint: disable-next-line(unsafe-typecast)
-            abi.encode(JBDenominatedAmount({value: 1000e18, currency: uint32(ethCurrency), decimals: 18}))
+            abi.encodeCall(IJBSucker.peerChainSurplusValueOf, (18, ethCurrency)),
+            abi.encode(JBPeerChainValue({value: 1000e18, peerChainId: remoteChainId, snapshotTimestamp: 0}))
         );
         assertEq(registry.remoteSurplusOf(projectId, 18, ethCurrency), 1000e18, "surplus should use MAX");
     }
@@ -678,9 +680,17 @@ contract DeployerTests is Test, TestBaseWorkflow, IERC721Receiver {
         // forge-lint: disable-next-line(unsafe-typecast)
         IJBSucker sucker2 = _deployThroughRegistry(deployer2, projectId, bytes32("salt2"));
 
-        // Mock peerChainTotalSupply on each sucker.
-        vm.mockCall(address(sucker1), abi.encodeCall(IJBSucker.peerChainTotalSupply, ()), abi.encode(100e18));
-        vm.mockCall(address(sucker2), abi.encodeCall(IJBSucker.peerChainTotalSupply, ()), abi.encode(250e18));
+        // Mock the combined peer-chain read on each sucker (distinct peer chains, so they sum).
+        vm.mockCall(
+            address(sucker1),
+            abi.encodeCall(IJBSucker.peerChainTotalSupplyValue, ()),
+            abi.encode(JBPeerChainValue({value: 100e18, peerChainId: 10, snapshotTimestamp: 0}))
+        );
+        vm.mockCall(
+            address(sucker2),
+            abi.encodeCall(IJBSucker.peerChainTotalSupplyValue, ()),
+            abi.encode(JBPeerChainValue({value: 250e18, peerChainId: 42_161, snapshotTimestamp: 0}))
+        );
 
         assertEq(registry.remoteTotalSupplyOf(projectId), 350e18);
     }
@@ -703,18 +713,16 @@ contract DeployerTests is Test, TestBaseWorkflow, IERC721Receiver {
 
         uint256 ethCurrency = uint256(uint160(JBConstants.NATIVE_TOKEN));
 
-        // Mock peerChainBalanceOf on each sucker.
+        // Mock the combined peer-chain read on each sucker (distinct peer chains, so they sum).
         vm.mockCall(
             address(sucker1),
-            abi.encodeCall(IJBSucker.peerChainBalanceOf, (18, ethCurrency)),
-            // forge-lint: disable-next-line(unsafe-typecast)
-            abi.encode(JBDenominatedAmount({value: 5e18, currency: uint32(ethCurrency), decimals: 18}))
+            abi.encodeCall(IJBSucker.peerChainBalanceValueOf, (18, ethCurrency)),
+            abi.encode(JBPeerChainValue({value: 5e18, peerChainId: 10, snapshotTimestamp: 0}))
         );
         vm.mockCall(
             address(sucker2),
-            abi.encodeCall(IJBSucker.peerChainBalanceOf, (18, ethCurrency)),
-            // forge-lint: disable-next-line(unsafe-typecast)
-            abi.encode(JBDenominatedAmount({value: 3e18, currency: uint32(ethCurrency), decimals: 18}))
+            abi.encodeCall(IJBSucker.peerChainBalanceValueOf, (18, ethCurrency)),
+            abi.encode(JBPeerChainValue({value: 3e18, peerChainId: 42_161, snapshotTimestamp: 0}))
         );
 
         assertEq(registry.remoteBalanceOf(projectId, 18, ethCurrency), 8e18);
@@ -738,18 +746,16 @@ contract DeployerTests is Test, TestBaseWorkflow, IERC721Receiver {
 
         uint256 ethCurrency = uint256(uint160(JBConstants.NATIVE_TOKEN));
 
-        // Mock peerChainSurplusOf on each sucker.
+        // Mock the combined peer-chain read on each sucker (distinct peer chains, so they sum).
         vm.mockCall(
             address(sucker1),
-            abi.encodeCall(IJBSucker.peerChainSurplusOf, (18, ethCurrency)),
-            // forge-lint: disable-next-line(unsafe-typecast)
-            abi.encode(JBDenominatedAmount({value: 10e18, currency: uint32(ethCurrency), decimals: 18}))
+            abi.encodeCall(IJBSucker.peerChainSurplusValueOf, (18, ethCurrency)),
+            abi.encode(JBPeerChainValue({value: 10e18, peerChainId: 10, snapshotTimestamp: 0}))
         );
         vm.mockCall(
             address(sucker2),
-            abi.encodeCall(IJBSucker.peerChainSurplusOf, (18, ethCurrency)),
-            // forge-lint: disable-next-line(unsafe-typecast)
-            abi.encode(JBDenominatedAmount({value: 7e18, currency: uint32(ethCurrency), decimals: 18}))
+            abi.encodeCall(IJBSucker.peerChainSurplusValueOf, (18, ethCurrency)),
+            abi.encode(JBPeerChainValue({value: 7e18, peerChainId: 42_161, snapshotTimestamp: 0}))
         );
 
         assertEq(registry.remoteSurplusOf(projectId, 18, ethCurrency), 17e18);
@@ -775,8 +781,12 @@ contract DeployerTests is Test, TestBaseWorkflow, IERC721Receiver {
         // forge-lint: disable-next-line(unsafe-typecast)
         IJBSucker sucker1 = _deployThroughRegistry(deployer1, projectId, bytes32("salt1"));
 
-        // Mock peerChainTotalSupply.
-        vm.mockCall(address(sucker1), abi.encodeCall(IJBSucker.peerChainTotalSupply, ()), abi.encode(100e18));
+        // Mock the combined peer-chain read.
+        vm.mockCall(
+            address(sucker1),
+            abi.encodeCall(IJBSucker.peerChainTotalSupplyValue, ()),
+            abi.encode(JBPeerChainValue({value: 100e18, peerChainId: 10, snapshotTimestamp: 0}))
+        );
 
         // Before deprecation: 100e18.
         assertEq(registry.remoteTotalSupplyOf(projectId), 100e18);
@@ -807,9 +817,13 @@ contract DeployerTests is Test, TestBaseWorkflow, IERC721Receiver {
         // forge-lint: disable-next-line(unsafe-typecast)
         IJBSucker sucker2 = _deployThroughRegistry(deployer2, projectId, bytes32("salt2"));
 
-        // sucker1 returns 100e18, sucker2 reverts.
-        vm.mockCall(address(sucker1), abi.encodeCall(IJBSucker.peerChainTotalSupply, ()), abi.encode(100e18));
-        vm.mockCallRevert(address(sucker2), abi.encodeCall(IJBSucker.peerChainTotalSupply, ()), "boom");
+        // sucker1 returns 100e18, sucker2's combined read reverts.
+        vm.mockCall(
+            address(sucker1),
+            abi.encodeCall(IJBSucker.peerChainTotalSupplyValue, ()),
+            abi.encode(JBPeerChainValue({value: 100e18, peerChainId: 10, snapshotTimestamp: 0}))
+        );
+        vm.mockCallRevert(address(sucker2), abi.encodeCall(IJBSucker.peerChainTotalSupplyValue, ()), "boom");
 
         // Should still return 100e18 (sucker2's revert is silently skipped).
         assertEq(registry.remoteTotalSupplyOf(projectId), 100e18);

@@ -92,7 +92,7 @@ contract ZeroCostBridgeSuckerHarness is JBSucker {
         JBSucker(directory, permissions, IJBPrices(address(1)), tokens, feeProjectId, registry, trustedForwarder)
     {}
 
-    function peerChainId() external view override returns (uint256) {
+    function peerChainId() public view override returns (uint256) {
         return block.chainid;
     }
 

@@ -9,6 +9,7 @@ import {IJBProjects} from "@bananapus/core-v6/src/interfaces/IJBProjects.sol";
 import {EnumerableMap} from "@openzeppelin/contracts/utils/structs/EnumerableMap.sol";
 
 import {JBDenominatedAmount} from "../../src/structs/JBDenominatedAmount.sol";
+import {JBPeerChainValue} from "../../src/structs/JBPeerChainValue.sol";
 import {JBSuckerRegistry} from "../../src/JBSuckerRegistry.sol";
 
 contract RegistryHarness is JBSuckerRegistry {
@@ -51,6 +52,19 @@ contract MockAggregateSucker {
     function peerChainBalanceOf(uint256 decimals, uint256 currency) external pure returns (JBDenominatedAmount memory) {
         // forge-lint: disable-next-line(unsafe-typecast)
         return JBDenominatedAmount({value: 0, currency: uint32(currency), decimals: uint8(decimals)});
+    }
+
+    function peerChainSurplusValueOf(uint256, uint256) external view returns (JBPeerChainValue memory) {
+        return JBPeerChainValue({value: surplus, peerChainId: chainId, snapshotTimestamp: snapshotTimestamp});
+    }
+
+    function peerChainBalanceValueOf(uint256, uint256) external view returns (JBPeerChainValue memory) {
+        return JBPeerChainValue({value: 0, peerChainId: chainId, snapshotTimestamp: snapshotTimestamp});
+    }
+
+    function peerChainTotalSupplyValue() external view returns (JBPeerChainValue memory) {
+        return
+            JBPeerChainValue({value: peerChainTotalSupply, peerChainId: chainId, snapshotTimestamp: snapshotTimestamp});
     }
 }
 

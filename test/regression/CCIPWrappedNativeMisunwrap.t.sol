@@ -77,7 +77,7 @@ contract RegressionCCIPHarness is JBCCIPSucker {
         )
     {}
 
-    function peerChainId() external pure override returns (uint256) {
+    function peerChainId() public pure override returns (uint256) {
         return 1;
     }
 

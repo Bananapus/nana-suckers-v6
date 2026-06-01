@@ -170,7 +170,7 @@ contract BaseTestSucker is JBSucker {
         return sender == address(this);
     }
 
-    function peerChainId() external pure override returns (uint256) {
+    function peerChainId() public pure override returns (uint256) {
         return 1;
     }
 }

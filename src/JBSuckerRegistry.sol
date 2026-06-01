@@ -11,7 +11,7 @@ import {ERC2771Context} from "@openzeppelin/contracts/metatx/ERC2771Context.sol"
 import {Context} from "@openzeppelin/contracts/utils/Context.sol";
 import {EnumerableMap} from "@openzeppelin/contracts/utils/structs/EnumerableMap.sol";
 
-import {JBDenominatedAmount} from "./structs/JBDenominatedAmount.sol";
+import {JBPeerChainValue} from "./structs/JBPeerChainValue.sol";
 import {JBSuckerState} from "./enums/JBSuckerState.sol";
 import {IJBSucker} from "./interfaces/IJBSucker.sol";
 import {IJBSuckerDeployer} from "./interfaces/IJBSuckerDeployer.sol";
@@ -231,16 +231,12 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
             (, uint256 val) = _suckersOf[projectId].tryGet(allSuckers[i]);
             // Include both active and deprecated suckers in aggregate economic views.
             if (val == _SUCKER_EXISTS || val == _SUCKER_DEPRECATED) {
-                try IJBSucker(allSuckers[i]).peerChainBalanceOf({decimals: decimals, currency: currency}) returns (
-                    JBDenominatedAmount memory amt
+                // One call returns the value, peer chain ID, and snapshot freshness key together.
+                try IJBSucker(allSuckers[i]).peerChainBalanceValueOf({decimals: decimals, currency: currency}) returns (
+                    JBPeerChainValue memory read
                 ) {
-                    uint256 chainId = _peerChainIdOf(IJBSucker(allSuckers[i]));
-                    scratch.chainCount = _recordPeerValue({
-                        scratch: scratch,
-                        chainId: chainId,
-                        value: amt.value,
-                        snapshotTimestamp: _snapshotTimestampOf(allSuckers[i]),
-                        isActive: val == _SUCKER_EXISTS
+                    scratch.chainCount = _recordPeerChainValue({
+                        scratch: scratch, read: read, sucker: allSuckers[i], isActive: val == _SUCKER_EXISTS
                     });
                 } catch {}
             }
@@ -287,16 +283,12 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
             (, uint256 val) = _suckersOf[projectId].tryGet(allSuckers[i]);
             // Include both active and deprecated suckers in aggregate economic views.
             if (val == _SUCKER_EXISTS || val == _SUCKER_DEPRECATED) {
-                try IJBSucker(allSuckers[i]).peerChainSurplusOf({decimals: decimals, currency: currency}) returns (
-                    JBDenominatedAmount memory amt
+                // One call returns the value, peer chain ID, and snapshot freshness key together.
+                try IJBSucker(allSuckers[i]).peerChainSurplusValueOf({decimals: decimals, currency: currency}) returns (
+                    JBPeerChainValue memory read
                 ) {
-                    uint256 chainId = _peerChainIdOf(IJBSucker(allSuckers[i]));
-                    scratch.chainCount = _recordPeerValue({
-                        scratch: scratch,
-                        chainId: chainId,
-                        value: amt.value,
-                        snapshotTimestamp: _snapshotTimestampOf(allSuckers[i]),
-                        isActive: val == _SUCKER_EXISTS
+                    scratch.chainCount = _recordPeerChainValue({
+                        scratch: scratch, read: read, sucker: allSuckers[i], isActive: val == _SUCKER_EXISTS
                     });
                 } catch {}
             }
@@ -332,14 +324,10 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
             (, uint256 val) = _suckersOf[projectId].tryGet(allSuckers[i]);
             // Include both active and deprecated suckers in aggregate economic views.
             if (val == _SUCKER_EXISTS || val == _SUCKER_DEPRECATED) {
-                try IJBSucker(allSuckers[i]).peerChainTotalSupply() returns (uint256 supply) {
-                    uint256 chainId = _peerChainIdOf(IJBSucker(allSuckers[i]));
-                    scratch.chainCount = _recordPeerValue({
-                        scratch: scratch,
-                        chainId: chainId,
-                        value: supply,
-                        snapshotTimestamp: _snapshotTimestampOf(allSuckers[i]),
-                        isActive: val == _SUCKER_EXISTS
+                // One call returns the value, peer chain ID, and snapshot freshness key together.
+                try IJBSucker(allSuckers[i]).peerChainTotalSupplyValue() returns (JBPeerChainValue memory read) {
+                    scratch.chainCount = _recordPeerChainValue({
+                        scratch: scratch, read: read, sucker: allSuckers[i], isActive: val == _SUCKER_EXISTS
                     });
                 } catch {}
             }
@@ -459,16 +447,34 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
         }
     }
 
-    /// @notice Reads a sucker's snapshot timestamp, returning zero if the sucker does not expose it.
-    /// @dev Older or malformed suckers should not brick aggregate registry views. A zero timestamp makes their value
-    /// lose to any successful fresh read for the same peer chain.
-    /// @param sucker The sucker to query.
-    /// @return timestamp The reported snapshot timestamp, or zero if the call fails.
-    function _snapshotTimestampOf(address sucker) internal view returns (uint256 timestamp) {
-        // Keep aggregate views available even if one registered sucker has a stale ABI or reverts unexpectedly.
-        try IJBSucker(sucker).snapshotTimestamp() returns (uint256 result) {
-            timestamp = result;
-        } catch {}
+    /// @notice Records a combined peer-chain read (value, peer chain ID, snapshot freshness key) from one sucker.
+    /// @dev A wrapper over `_recordPeerValue` that unpacks the single-call `JBPeerChainValue` read and enforces the
+    /// same non-zero peer-chain requirement the registry applies everywhere else. The peer-chain check reverts here
+    /// (inside the caller's `try` success body, so the revert propagates) to preserve the prior behavior where a
+    /// sucker reporting a zero peer chain ID fails the whole aggregate view.
+    /// @param scratch The per-chain aggregate values and freshness keys recorded so far.
+    /// @param read The combined value, peer chain ID, and snapshot freshness key returned by the sucker.
+    /// @param sucker The sucker the read came from, used only for the zero-peer-chain error.
+    /// @param isActive Whether the value came from an active sucker.
+    /// @return The updated number of populated chain entries.
+    function _recordPeerChainValue(
+        PeerValueScratch memory scratch,
+        JBPeerChainValue memory read,
+        address sucker,
+        bool isActive
+    )
+        internal
+        pure
+        returns (uint256)
+    {
+        if (read.peerChainId == 0) revert JBSuckerRegistry_ZeroPeerChainId({sucker: sucker});
+        return _recordPeerValue({
+            scratch: scratch,
+            chainId: read.peerChainId,
+            value: read.value,
+            snapshotTimestamp: read.snapshotTimestamp,
+            isActive: isActive
+        });
     }
 
     //*********************************************************************//

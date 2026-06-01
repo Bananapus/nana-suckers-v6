@@ -30,7 +30,7 @@ contract RegressionDeprecatedLiveSucker is JBSucker {
         JBSucker(directory, permissions, IJBPrices(address(1)), tokens, 1, IJBSuckerRegistry(address(1)), address(0))
     {}
 
-    function peerChainId() external pure override returns (uint256) {
+    function peerChainId() public pure override returns (uint256) {
         return 10;
     }
 

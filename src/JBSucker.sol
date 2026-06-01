@@ -40,6 +40,7 @@ import {JBDenominatedAmount} from "./structs/JBDenominatedAmount.sol";
 import {JBInboxTreeRoot} from "./structs/JBInboxTreeRoot.sol";
 import {JBMessageRoot} from "./structs/JBMessageRoot.sol";
 import {JBOutboxTree} from "./structs/JBOutboxTree.sol";
+import {JBPeerChainValue} from "./structs/JBPeerChainValue.sol";
 import {JBRemoteToken} from "./structs/JBRemoteToken.sol";
 import {JBTokenMapping} from "./structs/JBTokenMapping.sol";
 
@@ -773,10 +774,6 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         return _outboxOf[token];
     }
 
-    /// @notice Returns the chain on which the peer is located.
-    /// @return chain ID of the peer.
-    function peerChainId() external view virtual returns (uint256);
-
     /// @notice The peer chain balance, converted from the source denomination to the requested currency and decimal
     /// precision using the local JBPrices oracle.
     /// @param decimals The decimal precision for the returned value.
@@ -792,6 +789,28 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         });
     }
 
+    /// @notice The peer chain balance bundled with the peer chain ID and snapshot freshness key.
+    /// @dev Lets aggregators (e.g. `JBSuckerRegistry`) read the value, the peer chain it belongs to, and its
+    /// freshness in one call instead of three separate staticcalls. The `value` is identical to
+    /// `peerChainBalanceOf`.
+    /// @param decimals The decimal precision for the returned value.
+    /// @param currency The currency to normalize to (e.g. `uint256(uint160(JBConstants.NATIVE_TOKEN))` for ETH).
+    /// @return A `JBPeerChainValue` with the converted balance, peer chain ID, and snapshot freshness key.
+    function peerChainBalanceValueOf(
+        uint256 decimals,
+        uint256 currency
+    )
+        external
+        view
+        returns (JBPeerChainValue memory)
+    {
+        return JBPeerChainValue({
+            value: _convertPeerValue({source: _peerChainBalance, decimals: decimals, currency: currency}),
+            peerChainId: peerChainId(),
+            snapshotTimestamp: snapshotTimestamp
+        });
+    }
+
     /// @notice The peer chain surplus, converted from the source denomination to the requested currency and decimal
     /// precision using the local JBPrices oracle.
     /// @param decimals The decimal precision for the returned value.
@@ -804,6 +823,39 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
             currency: uint32(currency),
             // forge-lint: disable-next-line(unsafe-typecast)
             decimals: uint8(decimals)
+        });
+    }
+
+    /// @notice The peer chain surplus bundled with the peer chain ID and snapshot freshness key.
+    /// @dev Lets aggregators (e.g. `JBSuckerRegistry`) read the value, the peer chain it belongs to, and its
+    /// freshness in one call instead of three separate staticcalls. The `value` is identical to
+    /// `peerChainSurplusOf`.
+    /// @param decimals The decimal precision for the returned value.
+    /// @param currency The currency to normalize to (e.g. `uint256(uint160(JBConstants.NATIVE_TOKEN))` for ETH).
+    /// @return A `JBPeerChainValue` with the converted surplus, peer chain ID, and snapshot freshness key.
+    function peerChainSurplusValueOf(
+        uint256 decimals,
+        uint256 currency
+    )
+        external
+        view
+        returns (JBPeerChainValue memory)
+    {
+        return JBPeerChainValue({
+            value: _convertPeerValue({source: _peerChainSurplus, decimals: decimals, currency: currency}),
+            peerChainId: peerChainId(),
+            snapshotTimestamp: snapshotTimestamp
+        });
+    }
+
+    /// @notice The peer chain total supply bundled with the peer chain ID and snapshot freshness key.
+    /// @dev Lets aggregators (e.g. `JBSuckerRegistry`) read the value, the peer chain it belongs to, and its
+    /// freshness in one call instead of three separate staticcalls. The `value` is identical to
+    /// `peerChainTotalSupply`.
+    /// @return A `JBPeerChainValue` with the total supply, peer chain ID, and snapshot freshness key.
+    function peerChainTotalSupplyValue() external view returns (JBPeerChainValue memory) {
+        return JBPeerChainValue({
+            value: peerChainTotalSupply, peerChainId: peerChainId(), snapshotTimestamp: snapshotTimestamp
         });
     }
 
@@ -840,6 +892,12 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         }
         return amount;
     }
+
+    /// @notice Returns the chain on which the peer is located.
+    /// @dev `public` (not `external`) so the combined peer-chain views in this contract can read it internally
+    /// without a self-call; subclasses implement the bridge-specific chain ID.
+    /// @return chain ID of the peer.
+    function peerChainId() public view virtual returns (uint256);
 
     /// @notice The peer sucker on the remote chain, as a bytes32 for cross-VM compatibility.
     /// @dev Defaults to `_toBytes32(address(this))`, assuming deterministic cross-chain deployment via CREATE2. The
