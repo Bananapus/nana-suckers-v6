@@ -16,6 +16,11 @@ This file describes the verified change from `nana-suckers-v5` to the current `n
 
 Archived (reference only — not compiled or deployed): `JBSwapCCIPSucker` (+ its swap libs/structs `JBSwapPoolLib`, `JBSwapLib`, `JBPendingSwap`, `JBConversionRate`) and `JBCeloSucker`, along with their deployers and interfaces; see `src/archive/`.
 
+## 0.0.68 — Raise dependency floors and document conventions
+
+Raise dependency floors to the latest published versions, and document NatSpec, comment, and lint conventions in
+STYLE_GUIDE.md. No source contracts changed.
+
 ## 0.0.67 — Fold per-sucker remote-aggregate reads into one call
 
 `JBSuckerRegistry`'s cross-chain aggregate views (`remoteBalanceOf`, `remoteSurplusOf`,
