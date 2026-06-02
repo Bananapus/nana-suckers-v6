@@ -147,10 +147,10 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
     }
 
     /// @notice Values one sucker's raw peer-chain balance into a currency, bundled with the peer chain ID and
-    /// freshness. @dev A registry self-call boundary so `totalRemoteBalanceOf` can `try` it and skip a sucker whose
-    /// feed is missing. A
-    /// context whose currency matches `currency` folds in at par (no feed); a missing cross-currency feed reverts (and
-    /// is caught by the caller, dropping just this sucker).
+    /// freshness.
+    /// @dev Exposed as an external self-call boundary so `totalRemoteBalanceOf` can `try` it and drop a single sucker
+    /// whose price feed is missing. A context whose currency already matches `currency` folds in at par (no feed read);
+    /// a missing cross-currency feed reverts, and the aggregator catches it and skips just this sucker.
     /// @param sucker The sucker to read.
     /// @param projectId The project whose price feeds to use.
     /// @param currency The currency to value into.
@@ -167,8 +167,14 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
         view
         returns (JBPeerChainValue memory)
     {
+        // Read this sucker's raw snapshot: one context per distinct local currency the peer reported, plus the peer
+        // chain ID and the snapshot's freshness key.
         (JBPeerChainContext[] memory contexts, uint256 chainId, uint256 snapshot) =
             IJBSucker(sucker).peerChainContextsOf();
+
+        // Value each context's balance out of the currency and decimals it was recorded in, into the requested
+        // `currency` and `decimals`, and sum across every context. A context already denominated in `currency` folds
+        // in at par; a cross-currency context is converted through the project's price feed.
         uint256 value;
         uint256 numContexts = contexts.length;
         for (uint256 i; i < numContexts;) {
@@ -184,14 +190,17 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
                 ++i;
             }
         }
+
+        // Carry the peer chain ID and snapshot freshness alongside the summed value so the aggregator can deduplicate
+        // peers and keep only the freshest snapshot per chain.
         return JBPeerChainValue({value: value, peerChainId: chainId, snapshotTimestamp: snapshot});
     }
 
     /// @notice Values one sucker's raw peer-chain surplus into a currency, bundled with the peer chain ID and
-    /// freshness. @dev A registry self-call boundary so `totalRemoteSurplusOf` can `try` it and skip a sucker whose
-    /// feed is missing. A
-    /// context whose currency matches `currency` folds in at par (no feed); a missing cross-currency feed reverts (and
-    /// is caught by the caller, dropping just this sucker).
+    /// freshness.
+    /// @dev Exposed as an external self-call boundary so `totalRemoteSurplusOf` can `try` it and drop a single sucker
+    /// whose price feed is missing. A context whose currency already matches `currency` folds in at par (no feed read);
+    /// a missing cross-currency feed reverts, and the aggregator catches it and skips just this sucker.
     /// @param sucker The sucker to read.
     /// @param projectId The project whose price feeds to use.
     /// @param currency The currency to value into.
@@ -208,8 +217,14 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
         view
         returns (JBPeerChainValue memory)
     {
+        // Read this sucker's raw snapshot: one context per distinct local currency the peer reported, plus the peer
+        // chain ID and the snapshot's freshness key.
         (JBPeerChainContext[] memory contexts, uint256 chainId, uint256 snapshot) =
             IJBSucker(sucker).peerChainContextsOf();
+
+        // Value each context's surplus out of the currency and decimals it was recorded in, into the requested
+        // `currency` and `decimals`, and sum across every context. A context already denominated in `currency` folds
+        // in at par; a cross-currency context is converted through the project's price feed.
         uint256 value;
         uint256 numContexts = contexts.length;
         for (uint256 i; i < numContexts;) {
@@ -225,6 +240,9 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
                 ++i;
             }
         }
+
+        // Carry the peer chain ID and snapshot freshness alongside the summed value so the aggregator can deduplicate
+        // peers and keep only the freshest snapshot per chain.
         return JBPeerChainValue({value: value, peerChainId: chainId, snapshotTimestamp: snapshot});
     }
 
