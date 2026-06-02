@@ -5,7 +5,6 @@ import "forge-std/Test.sol";
 
 import {IJBDirectory} from "@bananapus/core-v6/src/interfaces/IJBDirectory.sol";
 import {IJBPermissions} from "@bananapus/core-v6/src/interfaces/IJBPermissions.sol";
-import {IJBPrices} from "@bananapus/core-v6/src/interfaces/IJBPrices.sol";
 import {IJBTokens} from "@bananapus/core-v6/src/interfaces/IJBTokens.sol";
 
 import {JBOptimismSucker} from "../../src/JBOptimismSucker.sol";
@@ -17,6 +16,7 @@ import {IOPMessenger} from "../../src/interfaces/IOPMessenger.sol";
 import {IOPStandardBridge} from "../../src/interfaces/IOPStandardBridge.sol";
 import {JBInboxTreeRoot} from "../../src/structs/JBInboxTreeRoot.sol";
 import {JBMessageRoot} from "../../src/structs/JBMessageRoot.sol";
+import {JBSourceContext} from "../../src/structs/JBSourceContext.sol";
 import {LibClone} from "solady/src/utils/LibClone.sol";
 
 contract PeerTopologyAuthBreakTest is Test {
@@ -59,7 +59,6 @@ contract PeerTopologyAuthBreakTest is Test {
             deployer: deployerA,
             directory: IJBDirectory(DIRECTORY_A),
             permissions: IJBPermissions(PERMISSIONS),
-            prices: IJBPrices(address(1)),
             tokens: IJBTokens(TOKENS),
             feeProjectId: 1,
             registry: IJBSuckerRegistry(REGISTRY),
@@ -69,7 +68,6 @@ contract PeerTopologyAuthBreakTest is Test {
             deployer: deployerB,
             directory: IJBDirectory(DIRECTORY_B),
             permissions: IJBPermissions(PERMISSIONS),
-            prices: IJBPrices(address(1)),
             tokens: IJBTokens(TOKENS),
             feeProjectId: 1,
             registry: IJBSuckerRegistry(REGISTRY),
@@ -102,10 +100,7 @@ contract PeerTopologyAuthBreakTest is Test {
             amount: 0,
             remoteRoot: JBInboxTreeRoot({nonce: 1, root: keccak256("root")}),
             sourceTotalSupply: 0,
-            sourceCurrency: 1,
-            sourceDecimals: 18,
-            sourceSurplus: 0,
-            sourceBalance: 0,
+            sourceContexts: new JBSourceContext[](0),
             sourceTimestamp: 1
         });
 
@@ -139,10 +134,7 @@ contract PeerTopologyAuthBreakTest is Test {
             amount: 0,
             remoteRoot: JBInboxTreeRoot({nonce: 1, root: keccak256("root")}),
             sourceTotalSupply: 0,
-            sourceCurrency: 1,
-            sourceDecimals: 18,
-            sourceSurplus: 0,
-            sourceBalance: 0,
+            sourceContexts: new JBSourceContext[](0),
             sourceTimestamp: 1
         });
 

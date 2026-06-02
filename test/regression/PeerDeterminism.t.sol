@@ -37,8 +37,8 @@ contract RegressionPeerDeterminismTest is Test, TestBaseWorkflow, IERC721Receive
         vm.chainId(10);
         super.setUp();
 
-        registryA = new JBSuckerRegistry(jbDirectory(), jbPermissions(), address(this), address(0));
-        registryB = new JBSuckerRegistry(jbDirectory(), jbPermissions(), address(this), address(0));
+        registryA = new JBSuckerRegistry(jbDirectory(), jbPermissions(), jbPrices(), address(this), address(0));
+        registryB = new JBSuckerRegistry(jbDirectory(), jbPermissions(), jbPrices(), address(this), address(0));
 
         deployer = new JBOptimismSuckerDeployer({
             directory: jbDirectory(),
@@ -53,7 +53,6 @@ contract RegressionPeerDeterminismTest is Test, TestBaseWorkflow, IERC721Receive
             deployer: deployer,
             directory: jbDirectory(),
             permissions: jbPermissions(),
-            prices: jbPrices(),
             tokens: jbTokens(),
             feeProjectId: 1,
             registry: registryA,

@@ -8,7 +8,6 @@ import {Client} from "@chainlink/contracts-ccip/contracts/libraries/Client.sol";
 import {IRouterClient} from "@chainlink/contracts-ccip/contracts/interfaces/IRouterClient.sol";
 import {IJBDirectory} from "@bananapus/core-v6/src/interfaces/IJBDirectory.sol";
 import {IJBPermissions} from "@bananapus/core-v6/src/interfaces/IJBPermissions.sol";
-import {IJBPrices} from "@bananapus/core-v6/src/interfaces/IJBPrices.sol";
 import {IJBTokens} from "@bananapus/core-v6/src/interfaces/IJBTokens.sol";
 import {JBConstants} from "@bananapus/core-v6/src/libraries/JBConstants.sol";
 import {LibClone} from "solady/src/utils/LibClone.sol";
@@ -22,6 +21,7 @@ import {JBCCIPSuckerDeployer} from "../../src/deployers/JBCCIPSuckerDeployer.sol
 import {IJBSuckerRegistry} from "../../src/interfaces/IJBSuckerRegistry.sol";
 import {JBInboxTreeRoot} from "../../src/structs/JBInboxTreeRoot.sol";
 import {JBMessageRoot} from "../../src/structs/JBMessageRoot.sol";
+import {JBSourceContext} from "../../src/structs/JBSourceContext.sol";
 import {JBRemoteToken} from "../../src/structs/JBRemoteToken.sol";
 import {JBTokenMapping} from "../../src/structs/JBTokenMapping.sol";
 import {MerkleLib} from "../../src/utils/MerkleLib.sol";
@@ -78,16 +78,7 @@ contract CCIPTestSucker is JBCCIPSucker {
         IJBTokens tokens,
         IJBPermissions permissions
     )
-        JBCCIPSucker(
-            deployer,
-            directory,
-            permissions,
-            IJBPrices(address(1)),
-            tokens,
-            1,
-            IJBSuckerRegistry(address(1)),
-            address(0)
-        )
+        JBCCIPSucker(deployer, directory, permissions, tokens, 1, IJBSuckerRegistry(address(1)), address(0))
     {}
 
     // forge-lint: disable-next-line(mixed-case-function)
@@ -145,7 +136,7 @@ contract BaseTestSucker is JBSucker {
         IJBPermissions permissions,
         IJBTokens tokens
     )
-        JBSucker(directory, permissions, IJBPrices(address(1)), tokens, 1, IJBSuckerRegistry(address(1)), address(0))
+        JBSucker(directory, permissions, tokens, 1, IJBSuckerRegistry(address(1)), address(0))
     {}
 
     // forge-lint: disable-next-line(mixed-case-function)
@@ -347,10 +338,7 @@ contract CCIPNativeInteropTest is Test {
             amount: bridgeAmount,
             remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(0xdead))}),
             sourceTotalSupply: 0,
-            sourceCurrency: 0,
-            sourceDecimals: 0,
-            sourceSurplus: 0,
-            sourceBalance: 0,
+            sourceContexts: new JBSourceContext[](0),
             sourceTimestamp: 1
         });
 
@@ -389,10 +377,7 @@ contract CCIPNativeInteropTest is Test {
             amount: bridgeAmount,
             remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(0xbeef))}),
             sourceTotalSupply: 0,
-            sourceCurrency: 0,
-            sourceDecimals: 0,
-            sourceSurplus: 0,
-            sourceBalance: 0,
+            sourceContexts: new JBSourceContext[](0),
             sourceTimestamp: 1
         });
 
@@ -440,10 +425,7 @@ contract CCIPNativeInteropTest is Test {
             amount: amount,
             remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(0xdead))}),
             sourceTotalSupply: 0,
-            sourceCurrency: 0,
-            sourceDecimals: 0,
-            sourceSurplus: 0,
-            sourceBalance: 0,
+            sourceContexts: new JBSourceContext[](0),
             sourceTimestamp: 1
         });
 
@@ -501,10 +483,7 @@ contract CCIPNativeInteropTest is Test {
             amount: 1 ether,
             remoteRoot: JBInboxTreeRoot({nonce: 1, root: outboxRoot}),
             sourceTotalSupply: 0,
-            sourceCurrency: 0,
-            sourceDecimals: 0,
-            sourceSurplus: 0,
-            sourceBalance: 0,
+            sourceContexts: new JBSourceContext[](0),
             sourceTimestamp: 1
         });
 
@@ -547,10 +526,7 @@ contract CCIPNativeInteropTest is Test {
             amount: bridgeAmount,
             remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(0xcafe))}),
             sourceTotalSupply: 0,
-            sourceCurrency: 0,
-            sourceDecimals: 0,
-            sourceSurplus: 0,
-            sourceBalance: 0,
+            sourceContexts: new JBSourceContext[](0),
             sourceTimestamp: 1
         });
 
@@ -621,10 +597,7 @@ contract CCIPNativeInteropTest is Test {
             amount: bridgeAmount,
             remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(0xaaa))}),
             sourceTotalSupply: 0,
-            sourceCurrency: 0,
-            sourceDecimals: 0,
-            sourceSurplus: 0,
-            sourceBalance: 0,
+            sourceContexts: new JBSourceContext[](0),
             sourceTimestamp: 1
         });
         ccipSucker.exposed_sendRootOverAMB{value: 0.01 ether}(
@@ -650,10 +623,7 @@ contract CCIPNativeInteropTest is Test {
             amount: bridgeAmount,
             remoteRoot: JBInboxTreeRoot({nonce: 2, root: bytes32(uint256(0xbbb))}),
             sourceTotalSupply: 0,
-            sourceCurrency: 0,
-            sourceDecimals: 0,
-            sourceSurplus: 0,
-            sourceBalance: 0,
+            sourceContexts: new JBSourceContext[](0),
             sourceTimestamp: 1
         });
 

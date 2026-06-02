@@ -7,7 +7,6 @@ import "forge-std/Test.sol";
 import {IJBController} from "@bananapus/core-v6/src/interfaces/IJBController.sol";
 import {IJBDirectory} from "@bananapus/core-v6/src/interfaces/IJBDirectory.sol";
 import {IJBPermissions} from "@bananapus/core-v6/src/interfaces/IJBPermissions.sol";
-import {IJBPrices} from "@bananapus/core-v6/src/interfaces/IJBPrices.sol";
 import {IJBTerminal} from "@bananapus/core-v6/src/interfaces/IJBTerminal.sol";
 import {IJBTokens} from "@bananapus/core-v6/src/interfaces/IJBTokens.sol";
 import {JBConstants} from "@bananapus/core-v6/src/libraries/JBConstants.sol";
@@ -23,6 +22,7 @@ import {JBClaim} from "../src/structs/JBClaim.sol";
 import {JBLeaf} from "../src/structs/JBLeaf.sol";
 import {JBInboxTreeRoot} from "../src/structs/JBInboxTreeRoot.sol";
 import {JBMessageRoot} from "../src/structs/JBMessageRoot.sol";
+import {JBSourceContext} from "../src/structs/JBSourceContext.sol";
 import {JBRemoteToken} from "../src/structs/JBRemoteToken.sol";
 import {JBOutboxTree} from "../src/structs/JBOutboxTree.sol";
 import {MerkleLib} from "../src/utils/MerkleLib.sol";
@@ -33,7 +33,11 @@ contract CrossChainTestSucker is JBSucker {
 
     bool public ambShouldRevert;
     uint256 public ambCallCount;
-    JBMessageRoot public lastSentRoot;
+
+    /// @notice The last JBMessageRoot passed to _sendRootOverAMB, abi-encoded (the struct's dynamic context array
+    /// can't be copied straight to storage without the IR pipeline).
+    bytes private _lastSentRoot;
+
     bool private _nextMerkleCheckPasses;
 
     constructor(
@@ -42,7 +46,7 @@ contract CrossChainTestSucker is JBSucker {
         IJBTokens tokens,
         address forwarder
     )
-        JBSucker(directory, permissions, IJBPrices(address(1)), tokens, 1, IJBSuckerRegistry(address(1)), forwarder)
+        JBSucker(directory, permissions, tokens, 1, IJBSuckerRegistry(address(1)), forwarder)
     {}
 
     // forge-lint: disable-next-line(mixed-case-function)
@@ -58,8 +62,12 @@ contract CrossChainTestSucker is JBSucker {
         override
     {
         ambCallCount++;
-        lastSentRoot = root;
+        _lastSentRoot = abi.encode(root);
         if (ambShouldRevert) revert("AMB_FAILURE");
+    }
+
+    function lastSentRoot() external view returns (JBMessageRoot memory) {
+        return abi.decode(_lastSentRoot, (JBMessageRoot));
     }
 
     function _isRemotePeer(address sender) internal view override returns (bool) {
@@ -243,10 +251,7 @@ contract SuckerCrossChainAdversarial is Test {
                 amount: 0,
                 remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(111))}),
                 sourceTotalSupply: 1000,
-                sourceCurrency: 0,
-                sourceDecimals: 0,
-                sourceSurplus: 0,
-                sourceBalance: 0,
+                sourceContexts: new JBSourceContext[](0),
                 sourceTimestamp: 1
             })
         );
@@ -263,10 +268,7 @@ contract SuckerCrossChainAdversarial is Test {
                 amount: 0,
                 remoteRoot: JBInboxTreeRoot({nonce: 2, root: bytes32(uint256(222))}),
                 sourceTotalSupply: 1000,
-                sourceCurrency: 0,
-                sourceDecimals: 0,
-                sourceSurplus: 0,
-                sourceBalance: 0,
+                sourceContexts: new JBSourceContext[](0),
                 sourceTimestamp: 2
             })
         );
@@ -283,10 +285,7 @@ contract SuckerCrossChainAdversarial is Test {
                 amount: 0,
                 remoteRoot: JBInboxTreeRoot({nonce: 3, root: bytes32(uint256(333))}),
                 sourceTotalSupply: 1000,
-                sourceCurrency: 0,
-                sourceDecimals: 0,
-                sourceSurplus: 0,
-                sourceBalance: 0,
+                sourceContexts: new JBSourceContext[](0),
                 sourceTimestamp: 3
             })
         );
@@ -324,10 +323,7 @@ contract SuckerCrossChainAdversarial is Test {
                 amount: 0,
                 remoteRoot: JBInboxTreeRoot({nonce: 100, root: bytes32(uint256(999))}),
                 sourceTotalSupply: 0,
-                sourceCurrency: 0,
-                sourceDecimals: 0,
-                sourceSurplus: 0,
-                sourceBalance: 0,
+                sourceContexts: new JBSourceContext[](0),
                 sourceTimestamp: 100
             })
         );
@@ -342,10 +338,7 @@ contract SuckerCrossChainAdversarial is Test {
                 amount: 0,
                 remoteRoot: JBInboxTreeRoot({nonce: 50, root: bytes32(uint256(555))}),
                 sourceTotalSupply: 0,
-                sourceCurrency: 0,
-                sourceDecimals: 0,
-                sourceSurplus: 0,
-                sourceBalance: 0,
+                sourceContexts: new JBSourceContext[](0),
                 sourceTimestamp: 50
             })
         );
@@ -375,10 +368,7 @@ contract SuckerCrossChainAdversarial is Test {
                 amount: 0,
                 remoteRoot: JBInboxTreeRoot({nonce: 5, root: bytes32(uint256(111))}),
                 sourceTotalSupply: 0,
-                sourceCurrency: 0,
-                sourceDecimals: 0,
-                sourceSurplus: 0,
-                sourceBalance: 0,
+                sourceContexts: new JBSourceContext[](0),
                 sourceTimestamp: 5
             })
         );
@@ -392,10 +382,7 @@ contract SuckerCrossChainAdversarial is Test {
                 amount: 0,
                 remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(222))}),
                 sourceTotalSupply: 0,
-                sourceCurrency: 0,
-                sourceDecimals: 0,
-                sourceSurplus: 0,
-                sourceBalance: 0,
+                sourceContexts: new JBSourceContext[](0),
                 sourceTimestamp: 1
             })
         );
@@ -427,10 +414,7 @@ contract SuckerCrossChainAdversarial is Test {
                 amount: 1 ether,
                 remoteRoot: JBInboxTreeRoot({nonce: 1, root: rootHash}),
                 sourceTotalSupply: 0,
-                sourceCurrency: 0,
-                sourceDecimals: 0,
-                sourceSurplus: 0,
-                sourceBalance: 0,
+                sourceContexts: new JBSourceContext[](0),
                 sourceTimestamp: 1
             })
         );
@@ -515,10 +499,7 @@ contract SuckerCrossChainAdversarial is Test {
                 amount: 0,
                 remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(111))}),
                 sourceTotalSupply: 1000,
-                sourceCurrency: 0,
-                sourceDecimals: 0,
-                sourceSurplus: 500,
-                sourceBalance: 800,
+                sourceContexts: _nativeContext({surplus: 500, balance: 800}),
                 sourceTimestamp: 1
             })
         );
@@ -533,10 +514,7 @@ contract SuckerCrossChainAdversarial is Test {
                 amount: 0,
                 remoteRoot: JBInboxTreeRoot({nonce: 2, root: bytes32(uint256(222))}),
                 sourceTotalSupply: 2000,
-                sourceCurrency: 0,
-                sourceDecimals: 0,
-                sourceSurplus: 300,
-                sourceBalance: 700,
+                sourceContexts: _nativeContext({surplus: 300, balance: 700}),
                 sourceTimestamp: 2
             })
         );
@@ -551,10 +529,7 @@ contract SuckerCrossChainAdversarial is Test {
                 amount: 0,
                 remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(111))}),
                 sourceTotalSupply: 1000,
-                sourceCurrency: 0,
-                sourceDecimals: 0,
-                sourceSurplus: 500,
-                sourceBalance: 800,
+                sourceContexts: _nativeContext({surplus: 500, balance: 800}),
                 sourceTimestamp: 1
             })
         );
@@ -574,10 +549,7 @@ contract SuckerCrossChainAdversarial is Test {
                 amount: 0,
                 remoteRoot: JBInboxTreeRoot({nonce: 3, root: bytes32(uint256(333))}),
                 sourceTotalSupply: 500,
-                sourceCurrency: 0,
-                sourceDecimals: 0,
-                sourceSurplus: 200,
-                sourceBalance: 400,
+                sourceContexts: _nativeContext({surplus: 200, balance: 400}),
                 sourceTimestamp: 2
             })
         );
@@ -593,10 +565,7 @@ contract SuckerCrossChainAdversarial is Test {
                 amount: 0,
                 remoteRoot: JBInboxTreeRoot({nonce: 5, root: bytes32(uint256(555))}),
                 sourceTotalSupply: 300,
-                sourceCurrency: 0,
-                sourceDecimals: 0,
-                sourceSurplus: 100,
-                sourceBalance: 200,
+                sourceContexts: _nativeContext({surplus: 100, balance: 200}),
                 sourceTimestamp: 1
             })
         );
@@ -643,10 +612,7 @@ contract SuckerCrossChainAdversarial is Test {
                 amount: 1 ether,
                 remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(999))}),
                 sourceTotalSupply: 1000,
-                sourceCurrency: 0,
-                sourceDecimals: 0,
-                sourceSurplus: 0,
-                sourceBalance: 0,
+                sourceContexts: new JBSourceContext[](0),
                 sourceTimestamp: 1
             })
         );
@@ -665,10 +631,7 @@ contract SuckerCrossChainAdversarial is Test {
                 amount: 1 ether,
                 remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(999))}),
                 sourceTotalSupply: 1000,
-                sourceCurrency: 0,
-                sourceDecimals: 0,
-                sourceSurplus: 0,
-                sourceBalance: 0,
+                sourceContexts: new JBSourceContext[](0),
                 sourceTimestamp: 1
             })
         );
@@ -740,5 +703,13 @@ contract SuckerCrossChainAdversarial is Test {
     function _toAddressArray(address addr) internal pure returns (address[] memory arr) {
         arr = new address[](1);
         arr[0] = addr;
+    }
+
+    /// @notice Build a single native-token source context with the given surplus and balance.
+    function _nativeContext(uint128 surplus, uint128 balance) internal pure returns (JBSourceContext[] memory ctxs) {
+        ctxs = new JBSourceContext[](1);
+        ctxs[0] = JBSourceContext({
+            token: bytes32(uint256(uint160(TOKEN))), decimals: 18, surplus: surplus, balance: balance
+        });
     }
 }

@@ -18,6 +18,7 @@ import {IOPStandardBridge} from "../../src/interfaces/IOPStandardBridge.sol";
 import {JBTokenMapping} from "../../src/structs/JBTokenMapping.sol";
 import {JBSuckerDeployerConfig} from "../../src/structs/JBSuckerDeployerConfig.sol";
 import {JBMessageRoot} from "../../src/structs/JBMessageRoot.sol";
+import {JBSourceContext} from "../../src/structs/JBSourceContext.sol";
 import {JBInboxTreeRoot} from "../../src/structs/JBInboxTreeRoot.sol";
 
 contract RegistryPeerMismatchTest is Test {
@@ -29,6 +30,8 @@ contract RegistryPeerMismatchTest is Test {
     address internal constant PERMISSIONS = address(0xD2);
     address internal constant TOKENS = address(0xD3);
     address internal constant PROJECTS = address(0xD4);
+    /// @dev The contexts use same-currency par valuation, so the registry never reads this feed.
+    address internal constant PRICES = address(0xD7);
     address internal constant MESSENGER = address(0xD5);
     address internal constant BRIDGE = address(0xD6);
 
@@ -44,8 +47,12 @@ contract RegistryPeerMismatchTest is Test {
     }
 
     function test_registryDeployPathBreaksDefaultPeerSymmetry() public {
-        registryA = new JBSuckerRegistry(IJBDirectory(DIRECTORY), IJBPermissions(PERMISSIONS), OWNER, address(0));
-        registryB = new JBSuckerRegistry(IJBDirectory(DIRECTORY), IJBPermissions(PERMISSIONS), OWNER, address(0));
+        registryA = new JBSuckerRegistry(
+            IJBDirectory(DIRECTORY), IJBPermissions(PERMISSIONS), IJBPrices(PRICES), OWNER, address(0)
+        );
+        registryB = new JBSuckerRegistry(
+            IJBDirectory(DIRECTORY), IJBPermissions(PERMISSIONS), IJBPrices(PRICES), OWNER, address(0)
+        );
 
         JBOptimismSuckerDeployer deployerA = _deployOptimismDeployer(registryA);
         JBOptimismSuckerDeployer deployerB = _deployOptimismDeployer(registryB);
@@ -77,10 +84,7 @@ contract RegistryPeerMismatchTest is Test {
                 amount: 0,
                 remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(1))}),
                 sourceTotalSupply: 0,
-                sourceCurrency: 0,
-                sourceDecimals: 0,
-                sourceSurplus: 0,
-                sourceBalance: 0,
+                sourceContexts: new JBSourceContext[](0),
                 sourceTimestamp: 1
             })
             );
@@ -94,14 +98,7 @@ contract RegistryPeerMismatchTest is Test {
         deployer.setChainSpecificConstants(IOPMessenger(MESSENGER), IOPStandardBridge(BRIDGE));
 
         JBOptimismSucker singleton = new JBOptimismSucker(
-            deployer,
-            IJBDirectory(DIRECTORY),
-            IJBPermissions(PERMISSIONS),
-            IJBPrices(address(1)),
-            IJBTokens(TOKENS),
-            1,
-            registry,
-            address(0)
+            deployer, IJBDirectory(DIRECTORY), IJBPermissions(PERMISSIONS), IJBTokens(TOKENS), 1, registry, address(0)
         );
         vm.prank(OWNER);
         deployer.configureSingleton(singleton);

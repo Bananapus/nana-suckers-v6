@@ -17,8 +17,8 @@ import {JBSuckerRegistry} from "../src/JBSuckerRegistry.sol";
 import {IJBSucker} from "../src/interfaces/IJBSucker.sol";
 import {IJBSuckerDeployer} from "../src/interfaces/IJBSuckerDeployer.sol";
 import {IJBSuckerRegistry} from "../src/interfaces/IJBSuckerRegistry.sol";
-import {JBDenominatedAmount} from "../src/structs/JBDenominatedAmount.sol";
 import {JBMessageRoot} from "../src/structs/JBMessageRoot.sol";
+import {JBSourceContext} from "../src/structs/JBSourceContext.sol";
 import {JBInboxTreeRoot} from "../src/structs/JBInboxTreeRoot.sol";
 import {JBRemoteToken} from "../src/structs/JBRemoteToken.sol";
 import {JBTokenMapping} from "../src/structs/JBTokenMapping.sol";
@@ -35,7 +35,7 @@ contract MultiSuckerMock is JBSucker {
         IJBTokens tokens,
         IJBSuckerRegistry registry
     )
-        JBSucker(directory, permissions, IJBPrices(address(1)), tokens, 1, registry, address(0))
+        JBSucker(directory, permissions, tokens, 1, registry, address(0))
     {}
 
     function setPeerChainId(uint256 chainId) external {
@@ -121,6 +121,7 @@ contract MultiSuckerForkTest is Test {
     address internal constant PERMISSIONS = address(0xD2);
     address internal constant PROJECTS = address(0xD3);
     address internal constant TOKENS = address(0xD4);
+    address internal constant PRICES = address(0xD5);
 
     uint256 internal constant PROJECT_ID = 1;
     uint256 internal constant ARBITRUM = 42_161;
@@ -141,8 +142,10 @@ contract MultiSuckerForkTest is Test {
         vm.mockCall(DIRECTORY, abi.encodeWithSignature("PROJECTS()"), abi.encode(PROJECTS));
         vm.mockCall(PROJECTS, abi.encodeWithSelector(IERC721.ownerOf.selector, PROJECT_ID), abi.encode(address(this)));
 
-        // Deploy real registry.
-        registry = new JBSuckerRegistry(IJBDirectory(DIRECTORY), IJBPermissions(PERMISSIONS), address(this), address(0));
+        // Deploy real registry. The contexts and queries use ETH_CURRENCY, so valuation is par (no feed consulted).
+        registry = new JBSuckerRegistry(
+            IJBDirectory(DIRECTORY), IJBPermissions(PERMISSIONS), IJBPrices(PRICES), address(this), address(0)
+        );
 
         // Create mock sucker singleton.
         singleton = new MultiSuckerMock(
@@ -185,19 +188,26 @@ contract MultiSuckerForkTest is Test {
         uint256 balance
     )
         internal
-        view
+        pure
         returns (JBMessageRoot memory)
     {
+        JBSourceContext[] memory ctxs = new JBSourceContext[](1);
+        ctxs[0] = JBSourceContext({
+            token: bytes32(uint256(uint160(JBConstants.NATIVE_TOKEN))),
+            decimals: 18,
+            // forge-lint: disable-next-line(unsafe-typecast)
+            surplus: uint128(surplus),
+            // forge-lint: disable-next-line(unsafe-typecast)
+            balance: uint128(balance)
+        });
+
         return JBMessageRoot({
             version: 1,
             token: bytes32(uint256(uint160(JBConstants.NATIVE_TOKEN))),
             amount: 0,
             remoteRoot: JBInboxTreeRoot({nonce: sourceTimestamp, root: bytes32(0)}),
             sourceTotalSupply: totalSupply,
-            sourceCurrency: ETH_CURRENCY,
-            sourceDecimals: 18,
-            sourceSurplus: surplus,
-            sourceBalance: balance,
+            sourceContexts: ctxs,
             sourceTimestamp: sourceTimestamp
         });
     }
@@ -263,8 +273,12 @@ contract MultiSuckerForkTest is Test {
 
         // Verify registry aggregate views before deprecation.
         assertEq(registry.remoteTotalSupplyOf(PROJECT_ID), 1000e18, "registry total supply before deprecation");
-        assertEq(registry.remoteBalanceOf(PROJECT_ID, 18, ETH_CURRENCY), 2000e18, "registry balance before deprecation");
-        assertEq(registry.remoteSurplusOf(PROJECT_ID, 18, ETH_CURRENCY), 500e18, "registry surplus before deprecation");
+        assertEq(
+            registry.totalRemoteBalanceOf(PROJECT_ID, ETH_CURRENCY, 18), 2000e18, "registry balance before deprecation"
+        );
+        assertEq(
+            registry.totalRemoteSurplusOf(PROJECT_ID, ETH_CURRENCY, 18), 500e18, "registry surplus before deprecation"
+        );
 
         // Deprecate sucker1 and remove from active listing.
         _deprecateAndRemove(sucker1);
@@ -281,12 +295,12 @@ contract MultiSuckerForkTest is Test {
             registry.remoteTotalSupplyOf(PROJECT_ID), 1200e18, "registry total supply should be MAX(1000, 1200) = 1200"
         );
         assertEq(
-            registry.remoteBalanceOf(PROJECT_ID, 18, ETH_CURRENCY),
+            registry.totalRemoteBalanceOf(PROJECT_ID, ETH_CURRENCY, 18),
             2500e18,
             "registry balance should be MAX(2000, 2500) = 2500"
         );
         assertEq(
-            registry.remoteSurplusOf(PROJECT_ID, 18, ETH_CURRENCY),
+            registry.totalRemoteSurplusOf(PROJECT_ID, ETH_CURRENCY, 18),
             600e18,
             "registry surplus should be MAX(500, 600) = 600"
         );
@@ -328,12 +342,12 @@ contract MultiSuckerForkTest is Test {
             "active replacement should own the peer-chain total supply"
         );
         assertEq(
-            registry.remoteBalanceOf(PROJECT_ID, 18, ETH_CURRENCY),
+            registry.totalRemoteBalanceOf(PROJECT_ID, ETH_CURRENCY, 18),
             4000e18,
             "active replacement should own the peer-chain balance"
         );
         assertEq(
-            registry.remoteSurplusOf(PROJECT_ID, 18, ETH_CURRENCY),
+            registry.totalRemoteSurplusOf(PROJECT_ID, ETH_CURRENCY, 18),
             1000e18,
             "active replacement should own the peer-chain surplus"
         );
@@ -362,12 +376,12 @@ contract MultiSuckerForkTest is Test {
             "different chains should SUM total supply: 1000 + 300 = 1300"
         );
         assertEq(
-            registry.remoteBalanceOf(PROJECT_ID, 18, ETH_CURRENCY),
+            registry.totalRemoteBalanceOf(PROJECT_ID, ETH_CURRENCY, 18),
             2800e18,
             "different chains should SUM balance: 2000 + 800 = 2800"
         );
         assertEq(
-            registry.remoteSurplusOf(PROJECT_ID, 18, ETH_CURRENCY),
+            registry.totalRemoteSurplusOf(PROJECT_ID, ETH_CURRENCY, 18),
             700e18,
             "different chains should SUM surplus: 500 + 200 = 700"
         );
@@ -402,8 +416,10 @@ contract MultiSuckerForkTest is Test {
         assertEq(
             registry.remoteTotalSupplyOf(PROJECT_ID), 1100e18, "dedup per chain + sum across: active 800 + 300 = 1100"
         );
-        assertEq(registry.remoteBalanceOf(PROJECT_ID, 18, ETH_CURRENCY), 2300e18, "balance: active 1500 + 800 = 2300");
-        assertEq(registry.remoteSurplusOf(PROJECT_ID, 18, ETH_CURRENCY), 600e18, "surplus: active 400 + 200 = 600");
+        assertEq(
+            registry.totalRemoteBalanceOf(PROJECT_ID, ETH_CURRENCY, 18), 2300e18, "balance: active 1500 + 800 = 2300"
+        );
+        assertEq(registry.totalRemoteSurplusOf(PROJECT_ID, ETH_CURRENCY, 18), 600e18, "surplus: active 400 + 200 = 600");
     }
 
     // ═══════════════════════════════════════════════════════════════════
@@ -448,7 +464,9 @@ contract MultiSuckerForkTest is Test {
         // State SHOULD update to the newer (lower) values.
         assertEq(sucker.peerChainTotalSupply(), 2000e18, "nonce=2 should overwrite nonce=1 even with lower values");
         assertEq(
-            registry.remoteBalanceOf(PROJECT_ID, 18, ETH_CURRENCY), 4000e18, "registry should reflect updated balance"
+            registry.totalRemoteBalanceOf(PROJECT_ID, ETH_CURRENCY, 18),
+            4000e18,
+            "registry should reflect updated balance"
         );
     }
 
@@ -510,8 +528,8 @@ contract MultiSuckerForkTest is Test {
 
         // Aggregate should use the fresher same-chain snapshot, not MAX and not SUM.
         assertEq(registry.remoteTotalSupplyOf(PROJECT_ID), 1000e18, "fresh supply should win");
-        assertEq(registry.remoteBalanceOf(PROJECT_ID, 18, ETH_CURRENCY), 2000e18, "fresh balance should win");
-        assertEq(registry.remoteSurplusOf(PROJECT_ID, 18, ETH_CURRENCY), 500e18, "fresh surplus should win");
+        assertEq(registry.totalRemoteBalanceOf(PROJECT_ID, ETH_CURRENCY, 18), 2000e18, "fresh balance should win");
+        assertEq(registry.totalRemoteSurplusOf(PROJECT_ID, ETH_CURRENCY, 18), 500e18, "fresh surplus should win");
     }
 
     // ═══════════════════════════════════════════════════════════════════
@@ -533,6 +551,6 @@ contract MultiSuckerForkTest is Test {
 
         // Registry should ignore stale deprecated values once an active replacement exists for that peer chain.
         assertEq(registry.remoteTotalSupplyOf(PROJECT_ID), 0, "active zero state should own total supply");
-        assertEq(registry.remoteBalanceOf(PROJECT_ID, 18, ETH_CURRENCY), 0, "active zero state should own balance");
+        assertEq(registry.totalRemoteBalanceOf(PROJECT_ID, ETH_CURRENCY, 18), 0, "active zero state should own balance");
     }
 }

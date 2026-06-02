@@ -7,7 +7,6 @@ import {IJBController} from "@bananapus/core-v6/src/interfaces/IJBController.sol
 import {IJBDirectory} from "@bananapus/core-v6/src/interfaces/IJBDirectory.sol";
 import {IJBMultiTerminal} from "@bananapus/core-v6/src/interfaces/IJBMultiTerminal.sol";
 import {IJBPermissions} from "@bananapus/core-v6/src/interfaces/IJBPermissions.sol";
-import {IJBPrices} from "@bananapus/core-v6/src/interfaces/IJBPrices.sol";
 import {IJBProjects} from "@bananapus/core-v6/src/interfaces/IJBProjects.sol";
 import {IJBTerminal} from "@bananapus/core-v6/src/interfaces/IJBTerminal.sol";
 import {IJBTerminalStore} from "@bananapus/core-v6/src/interfaces/IJBTerminalStore.sol";
@@ -25,6 +24,8 @@ import {JBMessageRoot} from "../../src/structs/JBMessageRoot.sol";
 import {JBRemoteToken} from "../../src/structs/JBRemoteToken.sol";
 import {MerkleLib} from "../../src/utils/MerkleLib.sol";
 
+/// @notice A terminal that holds no accounting contexts (it forwards funds elsewhere), used as the first terminal so
+/// it contributes nothing to the snapshot.
 contract ZeroSurplusForwardingTerminal {
     function currentSurplusOf(uint256, address[] calldata, uint256, uint256) external pure returns (uint256) {
         return 0;
@@ -35,16 +36,16 @@ contract SnapshotGapHarness is JBSucker {
     using MerkleLib for MerkleLib.Tree;
     using BitMaps for BitMaps.BitMap;
 
-    JBMessageRoot private _lastSentMessage;
+    // The struct's dynamic context array can't be copied to storage without the IR pipeline, so capture it encoded.
+    bytes private _lastSentMessage;
 
     constructor(
         IJBDirectory directory,
         IJBPermissions permissions,
-        IJBPrices prices,
         IJBTokens tokens,
         address forwarder
     )
-        JBSucker(directory, permissions, prices, tokens, 1, IJBSuckerRegistry(address(1)), forwarder)
+        JBSucker(directory, permissions, tokens, 1, IJBSuckerRegistry(address(1)), forwarder)
     {}
 
     function _sendRootOverAMB(
@@ -58,7 +59,7 @@ contract SnapshotGapHarness is JBSucker {
         internal
         override
     {
-        _lastSentMessage = message;
+        _lastSentMessage = abi.encode(message);
     }
 
     function _isRemotePeer(address sender) internal view override returns (bool) {
@@ -70,7 +71,7 @@ contract SnapshotGapHarness is JBSucker {
     }
 
     function test_getLastSentMessage() external view returns (JBMessageRoot memory) {
-        return _lastSentMessage;
+        return abi.decode(_lastSentMessage, (JBMessageRoot));
     }
 
     function test_insertIntoTree(
@@ -97,13 +98,15 @@ contract RegistryFirstTerminalSnapshotGapTest is Test {
     address internal constant CONTROLLER = address(1100);
     address internal constant REAL_TERMINAL = address(1200);
     address internal constant STORE = address(1300);
-    address internal constant PRICES = address(1400);
     address internal constant FORWARDER = address(1500);
 
     uint256 internal constant PROJECT_ID = 1;
-    uint256 internal constant ETH_CURRENCY = 1;
     uint8 internal constant ETH_DECIMALS = 18;
     address internal constant TOKEN = address(0x000000000000000000000000000000000000EEEe);
+
+    /// @dev An accounting context's currency is token-keyed.
+    // forge-lint: disable-next-line(unsafe-typecast)
+    uint32 internal constant NATIVE_CURRENCY = uint32(uint160(TOKEN));
 
     SnapshotGapHarness internal sucker;
     ZeroSurplusForwardingTerminal internal forwardingTerminal;
@@ -122,7 +125,6 @@ contract RegistryFirstTerminalSnapshotGapTest is Test {
         vm.mockCall(
             CONTROLLER, abi.encodeCall(IERC165.supportsInterface, (type(IJBController).interfaceId)), abi.encode(true)
         );
-        vm.mockCall(CONTROLLER, abi.encodeCall(IJBController.PRICES, ()), abi.encode(PRICES));
         vm.mockCall(
             CONTROLLER,
             abi.encodeCall(IJBController.totalTokenSupplyWithReservedTokensOf, (PROJECT_ID)),
@@ -137,7 +139,7 @@ contract RegistryFirstTerminalSnapshotGapTest is Test {
         );
     }
 
-    function test_forwardingTerminalFirstDoesNotZeroLaterTreasurySnapshot() public {
+    function test_forwardingTerminalFirstDoesNotDropLaterTreasurySnapshot() public {
         sucker.test_setRemoteToken(
             TOKEN,
             JBRemoteToken({
@@ -151,43 +153,32 @@ contract RegistryFirstTerminalSnapshotGapTest is Test {
         vm.deal(address(sucker), 1 ether);
         sucker.test_insertIntoTree(1 ether, TOKEN, 1 ether, bytes32(uint256(uint160(address(0xBEEF)))));
 
+        // Forwarding terminal first (no accounting contexts), real treasury terminal second.
         IJBTerminal[] memory terminals = new IJBTerminal[](2);
         terminals[0] = IJBTerminal(address(forwardingTerminal));
         terminals[1] = IJBTerminal(REAL_TERMINAL);
         vm.mockCall(DIRECTORY, abi.encodeCall(IJBDirectory.terminalsOf, (PROJECT_ID)), abi.encode(terminals));
 
-        // forge-lint: disable-next-line(unsafe-typecast)
-        uint32 nativeTokenCurrency = uint32(uint160(TOKEN));
+        vm.etch(REAL_TERMINAL, hex"00");
+        vm.etch(STORE, hex"00");
+
+        // Real terminal: one native accounting context with raw per-token surplus and balance.
+        JBAccountingContext[] memory contexts = new JBAccountingContext[](1);
+        contexts[0] = JBAccountingContext({token: TOKEN, decimals: 18, currency: NATIVE_CURRENCY});
+        vm.mockCall(REAL_TERMINAL, abi.encodeCall(IJBTerminal.accountingContextsOf, (PROJECT_ID)), abi.encode(contexts));
+
+        address[] memory oneToken = new address[](1);
+        oneToken[0] = TOKEN;
         vm.mockCall(
             REAL_TERMINAL,
-            abi.encodeCall(
-                // forge-lint: disable-next-line(unsafe-typecast)
-                IJBTerminal.currentSurplusOf,
-                // forge-lint: disable-next-line(unsafe-typecast)
-                (PROJECT_ID, new address[](0), ETH_DECIMALS, uint32(ETH_CURRENCY))
-            ),
+            abi.encodeCall(IJBTerminal.currentSurplusOf, (PROJECT_ID, oneToken, ETH_DECIMALS, NATIVE_CURRENCY)),
             abi.encode(uint256(40 ether))
         );
         vm.mockCall(REAL_TERMINAL, abi.encodeCall(IJBMultiTerminal.STORE, ()), abi.encode(STORE));
-        vm.etch(PRICES, hex"00");
-
-        JBAccountingContext[] memory contexts = new JBAccountingContext[](1);
-        contexts[0] = JBAccountingContext({token: TOKEN, decimals: 18, currency: nativeTokenCurrency});
-        vm.mockCall(REAL_TERMINAL, abi.encodeCall(IJBTerminal.accountingContextsOf, (PROJECT_ID)), abi.encode(contexts));
         vm.mockCall(
             STORE,
             abi.encodeCall(IJBTerminalStore.balanceOf, (REAL_TERMINAL, PROJECT_ID, TOKEN)),
             abi.encode(uint256(70 ether))
-        );
-        vm.mockCall(
-            PRICES,
-            abi.encodeCall(
-                // forge-lint: disable-next-line(unsafe-typecast)
-                IJBPrices.pricePerUnitOf,
-                // forge-lint: disable-next-line(unsafe-typecast)
-                (PROJECT_ID, nativeTokenCurrency, uint32(ETH_CURRENCY), ETH_DECIMALS)
-            ),
-            abi.encode(uint256(1 ether))
         );
 
         sucker.toRemote(TOKEN);
@@ -195,14 +186,17 @@ contract RegistryFirstTerminalSnapshotGapTest is Test {
         JBMessageRoot memory message = sucker.test_getLastSentMessage();
 
         assertEq(message.sourceTotalSupply, 1000 ether, "control: snapshot still records controller supply");
-        assertEq(message.sourceSurplus, 40 ether, "later terminal surplus is still snapshotted");
-        assertEq(message.sourceBalance, 70 ether, "later terminal balance is still snapshotted");
+        assertEq(message.sourceContexts.length, 1, "only the treasury terminal contributes a context");
+        assertEq(
+            message.sourceContexts[0].token, bytes32(uint256(uint160(TOKEN))), "later terminal's token is snapshotted"
+        );
+        assertEq(message.sourceContexts[0].surplus, 40 ether, "later terminal surplus is still snapshotted");
+        assertEq(message.sourceContexts[0].balance, 70 ether, "later terminal balance is still snapshotted");
     }
 
     function _createSucker() internal returns (SnapshotGapHarness) {
-        SnapshotGapHarness singleton = new SnapshotGapHarness(
-            IJBDirectory(DIRECTORY), IJBPermissions(PERMISSIONS), IJBPrices(PRICES), IJBTokens(TOKENS), FORWARDER
-        );
+        SnapshotGapHarness singleton =
+            new SnapshotGapHarness(IJBDirectory(DIRECTORY), IJBPermissions(PERMISSIONS), IJBTokens(TOKENS), FORWARDER);
 
         SnapshotGapHarness clone =
         // forge-lint: disable-next-line(unsafe-typecast)

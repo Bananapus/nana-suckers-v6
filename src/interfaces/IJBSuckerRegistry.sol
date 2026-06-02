@@ -69,6 +69,13 @@ interface IJBSuckerRegistry {
     /// @return Whether the sucker belongs to the project.
     function isSuckerOf(uint256 projectId, address addr) external view returns (bool);
 
+    /// @notice The cumulative total supply across all remote peer chains for a project.
+    /// @dev Dedupes same-peer active suckers by freshest snapshot, then sums peer-chain values. Silently skips suckers
+    /// that revert.
+    /// @param projectId The ID of the project.
+    /// @return totalSupply The combined peer chain total supply.
+    function remoteTotalSupplyOf(uint256 projectId) external view returns (uint256 totalSupply);
+
     /// @notice Whether the specified sucker deployer is approved by this registry.
     /// @param deployer The address of the deployer to check.
     /// @return Whether the deployer is allowed.
@@ -84,48 +91,43 @@ interface IJBSuckerRegistry {
     /// @return The addresses of the suckers.
     function suckersOf(uint256 projectId) external view returns (address[] memory);
 
-    /// @notice The cumulative total supply across all remote peer chains for a project.
-    /// @dev Dedupes same-peer active suckers by freshest snapshot, then sums peer-chain values. Silently skips suckers
-    /// that revert.
-    /// @param projectId The ID of the project.
-    /// @return totalSupply The combined peer chain total supply.
-    function remoteTotalSupplyOf(uint256 projectId) external view returns (uint256 totalSupply);
+    /// @notice The ETH fee (in wei) paid into the fee project on each toRemote() call.
+    /// @return The current fee.
+    function toRemoteFee() external view returns (uint256);
 
-    /// @notice The cumulative balance across all remote peer chains for a project, denominated in a given currency.
-    /// @dev Dedupes same-peer active suckers by freshest snapshot, then sums peer-chain values. Silently skips suckers
-    /// that revert.
+    /// @notice The cumulative peer-chain balance across all remote peer chains for a project, valued into a currency.
+    /// @dev Dedups same-peer active suckers by freshest snapshot, then sums each sucker's balance valued into
+    /// `currency`. A context whose currency already matches is taken at par (no feed); a missing cross-currency feed
+    /// reverts and that sucker is silently skipped (conservative, bias-low).
     /// @param projectId The ID of the project.
+    /// @param currency The currency to value the combined balance into.
     /// @param decimals The decimal precision for the returned value.
-    /// @param currency The currency to normalize to.
     /// @return balance The combined peer chain balance.
-    function remoteBalanceOf(
+    function totalRemoteBalanceOf(
         uint256 projectId,
-        uint256 decimals,
-        uint256 currency
+        uint256 currency,
+        uint256 decimals
     )
         external
         view
         returns (uint256 balance);
 
-    /// @notice The cumulative surplus across all remote peer chains for a project, denominated in a given currency.
-    /// @dev Dedupes same-peer active suckers by freshest snapshot, then sums peer-chain values. Silently skips suckers
-    /// that revert.
+    /// @notice The cumulative peer-chain surplus across all remote peer chains for a project, valued into a currency.
+    /// @dev Dedups same-peer active suckers by freshest snapshot, then sums each sucker's surplus valued into
+    /// `currency`. A context whose currency already matches is taken at par (no feed); a missing cross-currency feed
+    /// reverts and that sucker is silently skipped (conservative, bias-low).
     /// @param projectId The ID of the project.
+    /// @param currency The currency to value the combined surplus into.
     /// @param decimals The decimal precision for the returned value.
-    /// @param currency The currency to normalize to.
     /// @return surplus The combined peer chain surplus.
-    function remoteSurplusOf(
+    function totalRemoteSurplusOf(
         uint256 projectId,
-        uint256 decimals,
-        uint256 currency
+        uint256 currency,
+        uint256 decimals
     )
         external
         view
         returns (uint256 surplus);
-
-    /// @notice The ETH fee (in wei) paid into the fee project on each toRemote() call.
-    /// @return The current fee.
-    function toRemoteFee() external view returns (uint256);
 
     // State-changing functions
 

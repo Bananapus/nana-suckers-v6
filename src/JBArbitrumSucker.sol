@@ -8,7 +8,6 @@ import {AddressAliasHelper} from "@arbitrum/nitro-contracts/src/libraries/Addres
 import {ArbSys} from "@arbitrum/nitro-contracts/src/precompiles/ArbSys.sol";
 import {IJBDirectory} from "@bananapus/core-v6/src/interfaces/IJBDirectory.sol";
 import {IJBPermissions} from "@bananapus/core-v6/src/interfaces/IJBPermissions.sol";
-import {IJBPrices} from "@bananapus/core-v6/src/interfaces/IJBPrices.sol";
 import {IJBTokens} from "@bananapus/core-v6/src/interfaces/IJBTokens.sol";
 import {JBConstants} from "@bananapus/core-v6/src/libraries/JBConstants.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
@@ -56,19 +55,17 @@ contract JBArbitrumSucker is JBSucker, IJBArbitrumSucker {
 
     /// @param directory A contract storing directories of terminals and controllers for each project.
     /// @param permissions A contract storing permissions.
-    /// @param prices The price oracle used to convert peer-chain balances and surplus.
     /// @param tokens A contract that manages token minting and burning.
     constructor(
         JBArbitrumSuckerDeployer deployer,
         IJBDirectory directory,
         IJBPermissions permissions,
-        IJBPrices prices,
         IJBTokens tokens,
         uint256 feeProjectId,
         IJBSuckerRegistry registry,
         address trustedForwarder
     )
-        JBSucker(directory, permissions, prices, tokens, feeProjectId, registry, trustedForwarder)
+        JBSucker(directory, permissions, tokens, feeProjectId, registry, trustedForwarder)
     {
         GATEWAYROUTER = JBArbitrumSuckerDeployer(deployer).arbGatewayRouter();
         ARBINBOX = JBArbitrumSuckerDeployer(deployer).arbInbox();

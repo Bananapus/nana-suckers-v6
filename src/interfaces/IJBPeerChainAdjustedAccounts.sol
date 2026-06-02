@@ -1,21 +1,19 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
+import {JBSourceContext} from "../structs/JBSourceContext.sol";
+
 /// @notice Optional data-hook interface for adding project-specific adjusted accounts to peer-chain snapshots.
 interface IJBPeerChainAdjustedAccounts {
-    /// @notice Extra supply, surplus, and balance that should be included in cross-chain peer snapshots.
+    /// @notice Extra project token supply and per-context surplus/balance to include in cross-chain peer snapshots.
+    /// @dev The hook reports off-terminal surplus and balance per accounting context in each context's own currency,
+    /// un-valued — exactly like the terminal contexts. The receiving chain folds each one into its same-asset local
+    /// context at par, so no price oracle is consulted for the hook's contribution either.
     /// @param projectId The ID of the project to snapshot.
-    /// @param decimals The decimals the returned surplus and balance should use.
-    /// @param currency The currency the returned surplus and balance should be in terms of.
-    /// @return supply The extra supply to include in `sourceTotalSupply`.
-    /// @return surplus The extra surplus to include in `sourceSurplus`.
-    /// @return balance The extra balance to include in `sourceBalance`.
-    function peerChainAdjustedAccountsOf(
-        uint256 projectId,
-        uint256 decimals,
-        uint256 currency
-    )
+    /// @return supply The extra project token supply to include in `sourceTotalSupply`.
+    /// @return contexts The extra per-context surplus and balance to include in the snapshot, un-valued.
+    function peerChainAdjustedAccountsOf(uint256 projectId)
         external
         view
-        returns (uint256 supply, uint256 surplus, uint256 balance);
+        returns (uint256 supply, JBSourceContext[] memory contexts);
 }

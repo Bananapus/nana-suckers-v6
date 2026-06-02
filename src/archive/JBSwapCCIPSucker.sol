@@ -4,7 +4,6 @@ pragma solidity 0.8.28;
 // Core JB imports.
 import {IJBDirectory} from "@bananapus/core-v6/src/interfaces/IJBDirectory.sol";
 import {IJBPermissions} from "@bananapus/core-v6/src/interfaces/IJBPermissions.sol";
-import {IJBPrices} from "@bananapus/core-v6/src/interfaces/IJBPrices.sol";
 import {IJBTokens} from "@bananapus/core-v6/src/interfaces/IJBTokens.sol";
 // CCIP imports.
 import {Client} from "@chainlink/contracts-ccip/contracts/libraries/Client.sol";
@@ -204,7 +203,6 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
     /// @param deployer The deployer that stores chain-specific configuration.
     /// @param directory The directory of terminals and controllers for projects.
     /// @param permissions The permissions contract.
-    /// @param prices The price oracle used to convert peer-chain balances and surplus.
     /// @param tokens The contract that manages token minting and burning.
     /// @param feeProjectId The project ID that receives bridge fees.
     /// @param registry The sucker registry.
@@ -213,13 +211,12 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
         JBSwapCCIPSuckerDeployer deployer,
         IJBDirectory directory,
         IJBPermissions permissions,
-        IJBPrices prices,
         IJBTokens tokens,
         uint256 feeProjectId,
         IJBSuckerRegistry registry,
         address trustedForwarder
     )
-        JBCCIPSucker(deployer, directory, permissions, prices, tokens, feeProjectId, registry, trustedForwarder)
+        JBCCIPSucker(deployer, directory, permissions, tokens, feeProjectId, registry, trustedForwarder)
     {
         IJBSwapCCIPSuckerDeployer swapDeployer = IJBSwapCCIPSuckerDeployer(address(deployer));
         BRIDGE_TOKEN = swapDeployer.bridgeToken();

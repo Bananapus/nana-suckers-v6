@@ -6,7 +6,6 @@ import "forge-std/Test.sol";
 
 import {IJBDirectory} from "@bananapus/core-v6/src/interfaces/IJBDirectory.sol";
 import {IJBPermissions} from "@bananapus/core-v6/src/interfaces/IJBPermissions.sol";
-import {IJBPrices} from "@bananapus/core-v6/src/interfaces/IJBPrices.sol";
 import {IJBTokens} from "@bananapus/core-v6/src/interfaces/IJBTokens.sol";
 import {IJBTerminal} from "@bananapus/core-v6/src/interfaces/IJBTerminal.sol";
 import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
@@ -33,16 +32,7 @@ contract CCIPSuckerHarness is JBCCIPSucker {
         // forge-lint: disable-next-line(mixed-case-variable)
         address trusted_forwarder
     )
-        JBCCIPSucker(
-            deployer,
-            directory,
-            permissions,
-            IJBPrices(address(1)),
-            tokens,
-            1,
-            IJBSuckerRegistry(address(1)),
-            trusted_forwarder
-        )
+        JBCCIPSucker(deployer, directory, permissions, tokens, 1, IJBSuckerRegistry(address(1)), trusted_forwarder)
     {}
 
     /// @notice Directly insert a leaf into the outbox tree for testing.
@@ -146,7 +136,7 @@ contract CCIPRefundTest is Test {
         // Mock the registry's toRemoteFee() to return 0 (registry is address(1) with no code).
         vm.mockCall(address(1), abi.encodeCall(IJBSuckerRegistry.toRemoteFee, ()), abi.encode(uint256(0)));
 
-        // Mock DIRECTORY.terminalsOf() so _buildETHAggregate() in _sendRoot() doesn't revert.
+        // Mock DIRECTORY.terminalsOf() so the per-context snapshot builder in _sendRoot() doesn't revert.
         vm.mockCall(DIRECTORY, abi.encodeCall(IJBDirectory.terminalsOf, (PROJECT_ID)), abi.encode(new IJBTerminal[](0)));
 
         // Put code at MOCK_ROUTER so etch works.

@@ -8,7 +8,6 @@ import {IJBController} from "@bananapus/core-v6/src/interfaces/IJBController.sol
 import {IJBDirectory} from "@bananapus/core-v6/src/interfaces/IJBDirectory.sol";
 import {IJBMultiTerminal} from "@bananapus/core-v6/src/interfaces/IJBMultiTerminal.sol";
 import {IJBPermissions} from "@bananapus/core-v6/src/interfaces/IJBPermissions.sol";
-import {IJBPrices} from "@bananapus/core-v6/src/interfaces/IJBPrices.sol";
 import {IJBRulesetApprovalHook} from "@bananapus/core-v6/src/interfaces/IJBRulesetApprovalHook.sol";
 import {IJBTerminal} from "@bananapus/core-v6/src/interfaces/IJBTerminal.sol";
 import {IJBTerminalStore} from "@bananapus/core-v6/src/interfaces/IJBTerminalStore.sol";
@@ -26,10 +25,11 @@ import "../../src/JBSucker.sol";
 
 import {IJBPeerChainAdjustedAccounts} from "../../src/interfaces/IJBPeerChainAdjustedAccounts.sol";
 import {IJBSuckerRegistry} from "../../src/interfaces/IJBSuckerRegistry.sol";
-import {JBDenominatedAmount} from "../../src/structs/JBDenominatedAmount.sol";
 import {JBInboxTreeRoot} from "../../src/structs/JBInboxTreeRoot.sol";
 import {JBMessageRoot} from "../../src/structs/JBMessageRoot.sol";
+import {JBPeerChainContext} from "../../src/structs/JBPeerChainContext.sol";
 import {JBRemoteToken} from "../../src/structs/JBRemoteToken.sol";
+import {JBSourceContext} from "../../src/structs/JBSourceContext.sol";
 import {MerkleLib} from "../../src/utils/MerkleLib.sol";
 
 /// @notice Test harness sucker that exposes internals for peer chain state tests.
@@ -37,8 +37,9 @@ contract PeerChainStateSucker is JBSucker {
     using MerkleLib for MerkleLib.Tree;
     using BitMaps for BitMaps.BitMap;
 
-    /// @notice The last JBMessageRoot passed to _sendRootOverAMB.
-    JBMessageRoot private _lastSentMessage;
+    /// @notice The last JBMessageRoot passed to _sendRootOverAMB, abi-encoded (the struct's dynamic context array
+    /// can't be copied straight to storage without the IR pipeline).
+    bytes private _lastSentMessage;
 
     /// @notice Whether _sendRootOverAMB was called.
     // forge-lint: disable-next-line(mixed-case-variable)
@@ -50,7 +51,7 @@ contract PeerChainStateSucker is JBSucker {
         IJBTokens tokens,
         address forwarder
     )
-        JBSucker(directory, permissions, IJBPrices(address(1400)), tokens, 1, IJBSuckerRegistry(address(1)), forwarder)
+        JBSucker(directory, permissions, tokens, 1, IJBSuckerRegistry(address(1)), forwarder)
     {}
 
     // forge-lint: disable-next-line(mixed-case-function)
@@ -65,7 +66,7 @@ contract PeerChainStateSucker is JBSucker {
         internal
         override
     {
-        _lastSentMessage = message;
+        _lastSentMessage = abi.encode(message);
         sendRootOverAMBCalled = true;
     }
 
@@ -103,37 +104,43 @@ contract PeerChainStateSucker is JBSucker {
     }
 
     function test_getLastSentMessage() external view returns (JBMessageRoot memory) {
-        return _lastSentMessage;
+        return abi.decode(_lastSentMessage, (JBMessageRoot));
     }
 }
 
+/// @notice A data hook that contributes one extra off-terminal accounting context to the peer-chain snapshot.
 contract PeerChainAdjustedAccountsHookMock is IJBPeerChainAdjustedAccounts {
-    uint256 internal immutable _balance;
     uint256 internal immutable _supply;
-    uint256 internal immutable _surplus;
+    uint128 internal immutable _surplus;
+    uint128 internal immutable _balance;
+    address internal immutable _token;
+    uint8 internal immutable _decimals;
 
-    constructor(uint256 supply, uint256 surplus) {
-        _balance = 0;
+    constructor(uint256 supply, uint128 surplus, uint128 balance, address token, uint8 decimals) {
         _supply = supply;
         _surplus = surplus;
+        _balance = balance;
+        _token = token;
+        _decimals = decimals;
     }
 
-    function peerChainAdjustedAccountsOf(
-        uint256,
-        uint256,
-        uint256
-    )
+    function peerChainAdjustedAccountsOf(uint256)
         external
         view
-        returns (uint256 supply, uint256 surplus, uint256 balance)
+        returns (uint256 supply, JBSourceContext[] memory contexts)
     {
-        return (_supply, _surplus, _balance);
+        contexts = new JBSourceContext[](1);
+        contexts[0] = JBSourceContext({
+            token: bytes32(uint256(uint160(_token))), decimals: _decimals, surplus: _surplus, balance: _balance
+        });
+        return (_supply, contexts);
     }
 }
 
 /// @title PeerChainStateTest
-/// @notice Tests for peer chain state tracking: fromRemote storage, peerChainBalanceOf/SurplusOf views,
-/// and buildETHAggregate message propagation via toRemote/sendRoot.
+/// @notice Tests the sucker as a raw cross-chain data carrier: fromRemote rebuilds the per-currency context set
+/// (deriving and caching each token's authoritative currency), peerChainContextsOf exposes it un-valued, and toRemote
+/// emits one un-valued context per accounting context. Valuation lives in the registry and is tested there.
 contract PeerChainStateTest is Test {
     address constant DIRECTORY = address(600);
     address constant PERMISSIONS = address(800);
@@ -143,14 +150,16 @@ contract PeerChainStateTest is Test {
     address constant FORWARDER = address(1100);
     address constant TERMINAL = address(1200);
     address constant STORE = address(1300);
-    address constant PRICES = address(1400);
 
     uint256 constant PROJECT_ID = 1;
     address constant TOKEN = address(0x000000000000000000000000000000000000EEEe);
 
-    /// @dev ETH currency = JBCurrencyIds.ETH = 1
-    uint256 constant ETH_CURRENCY = 1;
     uint8 constant ETH_DECIMALS = 18;
+
+    /// @dev With no local accounting context configured for a token, the sucker derives the conventional token-keyed
+    /// currency `uint32(uint160(token))`. The tests rely on that fallback unless they explicitly mock a context.
+    // forge-lint: disable-next-line(unsafe-typecast)
+    uint32 constant NATIVE_CURRENCY = uint32(uint160(TOKEN));
 
     PeerChainStateSucker sucker;
 
@@ -164,7 +173,6 @@ contract PeerChainStateTest is Test {
         vm.label(PROJECT, "MOCK_PROJECT");
         vm.label(TERMINAL, "MOCK_TERMINAL");
         vm.label(STORE, "MOCK_STORE");
-        vm.label(PRICES, "MOCK_PRICES");
 
         // Mock PROJECTS() so the constructor can cache the immutable.
         vm.mockCall(DIRECTORY, abi.encodeCall(IJBDirectory.PROJECTS, ()), abi.encode(PROJECT));
@@ -181,7 +189,6 @@ contract PeerChainStateTest is Test {
             abi.encodeCall(IJBController.totalTokenSupplyWithReservedTokensOf, (PROJECT_ID)),
             abi.encode(uint256(0))
         );
-        vm.mockCall(CONTROLLER, abi.encodeCall(IJBController.PRICES, ()), abi.encode(PRICES));
         vm.mockCall(
             DIRECTORY, abi.encodeCall(IJBDirectory.primaryTerminalOf, (PROJECT_ID, TOKEN)), abi.encode(TERMINAL)
         );
@@ -196,241 +203,193 @@ contract PeerChainStateTest is Test {
     }
 
     // =========================================================================
-    // Group 1: fromRemote stores peer chain state
+    // Group 1: fromRemote rebuilds the per-currency context set
     // =========================================================================
 
-    /// @notice fromRemote with populated fields stores peerChainTotalSupply, _peerChainBalance, _peerChainSurplus.
+    /// @notice fromRemote stores the supply and a single native context keyed by the native currency.
     function test_fromRemoteStoresPeerChainState() public {
-        JBMessageRoot memory root = _makeMessageRoot({
-            nonce: 1,
-            totalSupply: 500 ether,
-            surplus: 100 ether,
-            balance: 200 ether,
-            // forge-lint: disable-next-line(unsafe-typecast)
-            currency: uint256(uint32(ETH_CURRENCY)),
-            decimals: ETH_DECIMALS
-        });
-
-        // Call fromRemote as the peer (address(sucker) since peer() returns _toBytes32(address(this))).
         vm.prank(address(sucker));
-        sucker.fromRemote(root);
+        sucker.fromRemote(_makeMessageRoot({nonce: 1, totalSupply: 500 ether, surplus: 100 ether, balance: 200 ether}));
 
-        // Verify peerChainTotalSupply.
         assertEq(sucker.peerChainTotalSupply(), 500 ether, "peerChainTotalSupply should be stored");
 
-        // Verify balance via public view (query in same currency/decimals as stored).
-        JBDenominatedAmount memory storedBalance = sucker.peerChainBalanceOf(ETH_DECIMALS, ETH_CURRENCY);
-        assertEq(storedBalance.value, 200 ether, "balance value should be stored");
+        (JBPeerChainContext[] memory contexts, uint256 chainId, uint256 snapshot) = sucker.peerChainContextsOf();
+        assertEq(contexts.length, 1, "one native context");
+        assertEq(contexts[0].currency, NATIVE_CURRENCY, "native currency");
+        assertEq(contexts[0].decimals, ETH_DECIMALS, "native decimals");
+        assertEq(contexts[0].surplus, 100 ether, "native surplus stored");
+        assertEq(contexts[0].balance, 200 ether, "native balance stored");
+        assertEq(chainId, block.chainid, "chain id");
+        assertEq(snapshot, 1, "snapshot freshness key");
+    }
+
+    /// @notice fromRemote with a non-increasing source freshness key does NOT update shared state.
+    function test_fromRemoteOnlyUpdatesOnHigherFreshnessKey() public {
+        vm.prank(address(sucker));
+        sucker.fromRemote(_makeMessageRoot({nonce: 5, totalSupply: 500 ether, surplus: 100 ether, balance: 200 ether}));
+
+        // Same freshness key — should NOT update.
+        vm.prank(address(sucker));
+        sucker.fromRemote(_makeMessageRoot({nonce: 5, totalSupply: 999 ether, surplus: 999 ether, balance: 999 ether}));
+
+        assertEq(sucker.peerChainTotalSupply(), 500 ether, "supply should not update on same freshness key");
+        assertEq(_contextFor(NATIVE_CURRENCY).surplus, 100 ether, "surplus should not update");
+        assertEq(_contextFor(NATIVE_CURRENCY).balance, 200 ether, "balance should not update");
+    }
+
+    /// @notice fromRemote with a higher source freshness key updates shared state.
+    function test_fromRemoteUpdatesOnNewFreshnessKey() public {
+        vm.prank(address(sucker));
+        sucker.fromRemote(_makeMessageRoot({nonce: 1, totalSupply: 500 ether, surplus: 100 ether, balance: 200 ether}));
+
+        vm.prank(address(sucker));
+        sucker.fromRemote(_makeMessageRoot({nonce: 2, totalSupply: 750 ether, surplus: 300 ether, balance: 400 ether}));
+
+        assertEq(sucker.peerChainTotalSupply(), 750 ether, "supply should update on newer freshness key");
+        assertEq(_contextFor(NATIVE_CURRENCY).surplus, 300 ether, "surplus should update");
+        assertEq(_contextFor(NATIVE_CURRENCY).balance, 400 ether, "balance should update");
+    }
+
+    /// @notice fromRemote stores each context under the local currency it resolves to.
+    function test_fromRemoteStoresMultipleContexts() public {
+        address usdc = makeAddr("USDC");
         // forge-lint: disable-next-line(unsafe-typecast)
-        assertEq(storedBalance.currency, uint32(ETH_CURRENCY), "balance currency should be stored");
-        assertEq(storedBalance.decimals, ETH_DECIMALS, "balance decimals should be stored");
+        uint32 usdcCurrency = uint32(uint160(usdc));
 
-        // Verify surplus via public view.
-        JBDenominatedAmount memory storedSurplus = sucker.peerChainSurplusOf(ETH_DECIMALS, ETH_CURRENCY);
-        assertEq(storedSurplus.value, 100 ether, "surplus value should be stored");
-        // forge-lint: disable-next-line(unsafe-typecast)
-        assertEq(storedSurplus.currency, uint32(ETH_CURRENCY), "surplus currency should be stored");
-        assertEq(storedSurplus.decimals, ETH_DECIMALS, "surplus decimals should be stored");
+        JBSourceContext[] memory contexts = new JBSourceContext[](2);
+        contexts[0] = _ctx({token: TOKEN, decimals: 18, surplus: 100 ether, balance: 200 ether});
+        contexts[1] = _ctx({token: usdc, decimals: 6, surplus: 5000e6, balance: 9000e6});
+
+        vm.prank(address(sucker));
+        sucker.fromRemote(_root({nonce: 1, totalSupply: 500 ether, contexts: contexts}));
+
+        assertEq(_contextFor(NATIVE_CURRENCY).surplus, 100 ether, "native surplus");
+        assertEq(_contextFor(NATIVE_CURRENCY).balance, 200 ether, "native balance");
+
+        JBPeerChainContext memory usdcContext = _contextFor(usdcCurrency);
+        assertEq(usdcContext.decimals, 6, "usdc decimals");
+        assertEq(usdcContext.surplus, 5000e6, "usdc surplus");
+        assertEq(usdcContext.balance, 9000e6, "usdc balance");
     }
 
-    /// @notice fromRemote with same nonce as current inbox does NOT update state.
-    function test_fromRemoteOnlyUpdatesOnHigherNonce() public {
-        // First call with nonce 5.
-        JBMessageRoot memory root1 = _makeMessageRoot({
-            nonce: 5,
-            totalSupply: 500 ether,
-            surplus: 100 ether,
-            balance: 200 ether,
-            // forge-lint: disable-next-line(unsafe-typecast)
-            currency: uint256(uint32(ETH_CURRENCY)),
-            decimals: ETH_DECIMALS
-        });
+    /// @notice fromRemote keys a context by the project's AUTHORITATIVE accounting-context currency (which may be a
+    /// well-known id like USD), read from the terminal — not the token-keyed convention.
+    function test_fromRemoteUsesAuthoritativeContextCurrency() public {
+        address usdc = makeAddr("USDC_AUTHORITATIVE");
+        uint32 usdCurrency = 2; // JBCurrencyIds.USD
 
-        vm.prank(address(sucker));
-        sucker.fromRemote(root1);
-
-        // Second call with same nonce 5 — should NOT update.
-        JBMessageRoot memory root2 = _makeMessageRoot({
-            nonce: 5,
-            totalSupply: 999 ether,
-            surplus: 999 ether,
-            balance: 999 ether,
-            // forge-lint: disable-next-line(unsafe-typecast)
-            currency: uint256(uint32(ETH_CURRENCY)),
-            decimals: ETH_DECIMALS
-        });
-
-        vm.prank(address(sucker));
-        sucker.fromRemote(root2);
-
-        // State should still reflect root1 values.
-        assertEq(sucker.peerChainTotalSupply(), 500 ether, "supply should not update on same nonce");
-
-        JBDenominatedAmount memory storedBalance = sucker.peerChainBalanceOf(ETH_DECIMALS, ETH_CURRENCY);
-        assertEq(storedBalance.value, 200 ether, "balance should not update on same nonce");
-
-        JBDenominatedAmount memory storedSurplus = sucker.peerChainSurplusOf(ETH_DECIMALS, ETH_CURRENCY);
-        assertEq(storedSurplus.value, 100 ether, "surplus should not update on same nonce");
-    }
-
-    /// @notice fromRemote with higher nonce updates state.
-    function test_fromRemoteUpdatesOnNewNonce() public {
-        // First call with nonce 1.
-        JBMessageRoot memory root1 = _makeMessageRoot({
-            nonce: 1,
-            totalSupply: 500 ether,
-            surplus: 100 ether,
-            balance: 200 ether,
-            // forge-lint: disable-next-line(unsafe-typecast)
-            currency: uint256(uint32(ETH_CURRENCY)),
-            decimals: ETH_DECIMALS
-        });
-
-        vm.prank(address(sucker));
-        sucker.fromRemote(root1);
-
-        // Second call with nonce 2 — should update.
-        JBMessageRoot memory root2 = _makeMessageRoot({
-            nonce: 2,
-            totalSupply: 750 ether,
-            surplus: 300 ether,
-            balance: 400 ether,
-            // forge-lint: disable-next-line(unsafe-typecast)
-            currency: uint256(uint32(ETH_CURRENCY)),
-            decimals: ETH_DECIMALS
-        });
-
-        vm.prank(address(sucker));
-        sucker.fromRemote(root2);
-
-        // State should reflect root2 values.
-        assertEq(sucker.peerChainTotalSupply(), 750 ether, "supply should update on new nonce");
-
-        JBDenominatedAmount memory storedBalance = sucker.peerChainBalanceOf(ETH_DECIMALS, ETH_CURRENCY);
-        assertEq(storedBalance.value, 400 ether, "balance should update on new nonce");
-
-        JBDenominatedAmount memory storedSurplus = sucker.peerChainSurplusOf(ETH_DECIMALS, ETH_CURRENCY);
-        assertEq(storedSurplus.value, 300 ether, "surplus should update on new nonce");
-    }
-
-    // =========================================================================
-    // Group 2: peerChainBalanceOf / peerChainSurplusOf views
-    // =========================================================================
-
-    /// @notice peerChainBalanceOf with same currency returns decimal-adjusted value.
-    function test_peerChainBalanceOfSameCurrency() public {
-        // Store balance via fromRemote (18 decimals ETH, currency = JBCurrencyIds.ETH = 1).
-        JBMessageRoot memory root = _makeMessageRoot({
-            nonce: 1,
-            totalSupply: 100 ether,
-            surplus: 50 ether,
-            balance: 10 ether,
-            // forge-lint: disable-next-line(unsafe-typecast)
-            currency: uint256(uint32(ETH_CURRENCY)),
-            decimals: ETH_DECIMALS
-        });
-
-        vm.prank(address(sucker));
-        sucker.fromRemote(root);
-
-        // Query balance in ETH currency (JBCurrencyIds.ETH = 1) at 18 decimals — should return exact value.
-        JBDenominatedAmount memory result = sucker.peerChainBalanceOf(18, ETH_CURRENCY);
-        assertEq(result.value, 10 ether, "same currency same decimals should return exact value");
-        // forge-lint: disable-next-line(unsafe-typecast)
-        assertEq(result.currency, uint32(ETH_CURRENCY), "returned currency should match requested");
-        assertEq(result.decimals, 18, "returned decimals should match requested");
-    }
-
-    /// @notice peerChainSurplusOf with same currency returns decimal-adjusted value.
-    function test_peerChainSurplusOfSameCurrency() public {
-        JBMessageRoot memory root = _makeMessageRoot({
-            nonce: 1,
-            totalSupply: 100 ether,
-            surplus: 50 ether,
-            balance: 10 ether,
-            // forge-lint: disable-next-line(unsafe-typecast)
-            currency: uint256(uint32(ETH_CURRENCY)),
-            decimals: ETH_DECIMALS
-        });
-
-        vm.prank(address(sucker));
-        sucker.fromRemote(root);
-
-        JBDenominatedAmount memory result = sucker.peerChainSurplusOf(18, ETH_CURRENCY);
-        assertEq(result.value, 50 ether, "same currency same decimals should return exact surplus");
-    }
-
-    /// @notice peerChainBalanceOf returns zero when no balance stored.
-    function test_peerChainBalanceOfZeroValue() public view {
-        JBDenominatedAmount memory result = sucker.peerChainBalanceOf(18, ETH_CURRENCY);
-        assertEq(result.value, 0, "zero stored should return zero");
-    }
-
-    /// @notice peerChainBalanceOf with different currency uses price feed for conversion.
-    function test_peerChainBalanceOfDifferentCurrency() public {
-        // Store balance of 10 ETH via fromRemote.
-        JBMessageRoot memory root = _makeMessageRoot({
-            nonce: 1,
-            totalSupply: 100 ether,
-            surplus: 50 ether,
-            balance: 10 ether,
-            // forge-lint: disable-next-line(unsafe-typecast)
-            currency: uint256(uint32(ETH_CURRENCY)),
-            decimals: ETH_DECIMALS
-        });
-
-        vm.prank(address(sucker));
-        sucker.fromRemote(root);
-
-        // Set up terminal mocks for price conversion.
-        _mockSingleETHTerminal({ethBalance: 5 ether, ethSurplus: 3 ether});
-
-        // Mock price: 1 USD = 0.0005 ETH (pricingCurrency = ETH, unitCurrency = USD, decimals = 18).
-        // pricePerUnitOf returns "price of 1 unitCurrency in pricingCurrency": 5e14 at 18 decimals.
-        uint32 usdCurrency = 2;
+        // The project configures USDC with currency = USD(2) on its terminal.
+        vm.mockCall(DIRECTORY, abi.encodeCall(IJBDirectory.primaryTerminalOf, (PROJECT_ID, usdc)), abi.encode(TERMINAL));
         vm.mockCall(
-            PRICES,
-            // forge-lint: disable-next-line(unsafe-typecast)
-            abi.encodeCall(IJBPrices.pricePerUnitOf, (PROJECT_ID, uint32(ETH_CURRENCY), usdCurrency, 18)),
-            abi.encode(uint256(5e14))
+            TERMINAL,
+            abi.encodeCall(IJBTerminal.accountingContextForTokenOf, (PROJECT_ID, usdc)),
+            abi.encode(JBAccountingContext({token: usdc, decimals: 6, currency: usdCurrency}))
         );
 
-        // Query balance in USD at 18 decimals.
-        // convertPeerValue: mulDiv(10e18, 10^18, 5e14) = 20000e18
-        JBDenominatedAmount memory result = sucker.peerChainBalanceOf(18, uint256(usdCurrency));
-        assertEq(result.value, 20_000 ether, "10 ETH at 2000 USD/ETH should return 20000 USD");
-        assertEq(result.currency, usdCurrency, "returned currency should be USD");
+        JBSourceContext[] memory contexts = new JBSourceContext[](1);
+        contexts[0] = _ctx({token: usdc, decimals: 6, surplus: 4000e6, balance: 7000e6});
+        vm.prank(address(sucker));
+        sucker.fromRemote(_root({nonce: 1, totalSupply: 0, contexts: contexts}));
+
+        // Keyed by the authoritative currency (USD), not uint32(uint160(usdc)).
+        JBPeerChainContext memory ctx = _contextFor(usdCurrency);
+        assertEq(ctx.surplus, 4000e6, "kept under authoritative currency");
+        // forge-lint: disable-next-line(unsafe-typecast)
+        assertEq(_hasContext(uint32(uint160(usdc))), false, "not keyed by the token convention");
+    }
+
+    /// @notice An authoritative currency is cached: once derived, a later snapshot reuses it even if the terminal can
+    /// no longer be read.
+    function test_fromRemoteCachesAuthoritativeCurrency() public {
+        address usdc = makeAddr("USDC_CACHED");
+        uint32 usdCurrency = 2;
+
+        vm.mockCall(DIRECTORY, abi.encodeCall(IJBDirectory.primaryTerminalOf, (PROJECT_ID, usdc)), abi.encode(TERMINAL));
+        vm.mockCall(
+            TERMINAL,
+            abi.encodeCall(IJBTerminal.accountingContextForTokenOf, (PROJECT_ID, usdc)),
+            abi.encode(JBAccountingContext({token: usdc, decimals: 6, currency: usdCurrency}))
+        );
+
+        JBSourceContext[] memory first = new JBSourceContext[](1);
+        first[0] = _ctx({token: usdc, decimals: 6, surplus: 4000e6, balance: 7000e6});
+        vm.prank(address(sucker));
+        sucker.fromRemote(_root({nonce: 1, totalSupply: 0, contexts: first}));
+
+        // The terminal can no longer answer; a fresh read would fall back to the token convention.
+        vm.mockCall(
+            DIRECTORY, abi.encodeCall(IJBDirectory.primaryTerminalOf, (PROJECT_ID, usdc)), abi.encode(address(0))
+        );
+
+        JBSourceContext[] memory second = new JBSourceContext[](1);
+        second[0] = _ctx({token: usdc, decimals: 6, surplus: 5000e6, balance: 8000e6});
+        vm.prank(address(sucker));
+        sucker.fromRemote(_root({nonce: 2, totalSupply: 0, contexts: second}));
+
+        // Still keyed by the cached authoritative currency, not the fallback.
+        assertEq(_contextFor(usdCurrency).surplus, 5000e6, "reused cached currency");
+        // forge-lint: disable-next-line(unsafe-typecast)
+        assertEq(_hasContext(uint32(uint160(usdc))), false, "did not fall back after caching");
+    }
+
+    /// @notice fromRemote sums contexts within the same snapshot that resolve to the same local currency.
+    function test_fromRemoteSameCurrencyContextsAccumulate() public {
+        JBSourceContext[] memory contexts = new JBSourceContext[](2);
+        contexts[0] = _ctx({token: TOKEN, decimals: 18, surplus: 100 ether, balance: 200 ether});
+        contexts[1] = _ctx({token: TOKEN, decimals: 18, surplus: 30 ether, balance: 50 ether});
+
+        vm.prank(address(sucker));
+        sucker.fromRemote(_root({nonce: 1, totalSupply: 500 ether, contexts: contexts}));
+
+        (JBPeerChainContext[] memory stored,,) = sucker.peerChainContextsOf();
+        assertEq(stored.length, 1, "same currency merged into one entry");
+        assertEq(_contextFor(NATIVE_CURRENCY).surplus, 130 ether, "surplus accumulates");
+        assertEq(_contextFor(NATIVE_CURRENCY).balance, 250 ether, "balance accumulates");
+    }
+
+    /// @notice A fresher snapshot rebuilds the set from scratch, so a context that dropped out is simply absent.
+    function test_fromRemoteRebuildDropsAbsentContexts() public {
+        address usdc = makeAddr("USDC");
+        // forge-lint: disable-next-line(unsafe-typecast)
+        uint32 usdcCurrency = uint32(uint160(usdc));
+
+        // Snapshot 1 carries both native and USDC contexts.
+        JBSourceContext[] memory first = new JBSourceContext[](2);
+        first[0] = _ctx({token: TOKEN, decimals: 18, surplus: 100 ether, balance: 200 ether});
+        first[1] = _ctx({token: usdc, decimals: 6, surplus: 5000e6, balance: 9000e6});
+        vm.prank(address(sucker));
+        sucker.fromRemote(_root({nonce: 1, totalSupply: 500 ether, contexts: first}));
+
+        // Snapshot 2 carries only the native context — USDC dropped out.
+        JBSourceContext[] memory second = new JBSourceContext[](1);
+        second[0] = _ctx({token: TOKEN, decimals: 18, surplus: 120 ether, balance: 220 ether});
+        vm.prank(address(sucker));
+        sucker.fromRemote(_root({nonce: 2, totalSupply: 600 ether, contexts: second}));
+
+        (JBPeerChainContext[] memory stored,,) = sucker.peerChainContextsOf();
+        assertEq(stored.length, 1, "only the native context remains");
+        assertEq(_contextFor(NATIVE_CURRENCY).surplus, 120 ether, "native reflects fresher snapshot");
+        assertEq(_hasContext(usdcCurrency), false, "dropped context is absent");
     }
 
     // =========================================================================
-    // Group 3: buildETHAggregate via toRemote / _sendRoot
+    // Group 2: per-context snapshot propagation via toRemote
     // =========================================================================
 
-    /// @notice toRemote sends ETH aggregate (surplus, balance, currency, decimals) in the message.
-    function test_toRemoteSendsETHAggregateInMessage() public {
-        // Set up token mapping.
-        sucker.test_setRemoteToken(
-            TOKEN,
-            JBRemoteToken({
-                enabled: true,
-                emergencyHatch: false,
-                minGas: 200_000,
-                addr: bytes32(uint256(uint160(makeAddr("remoteToken"))))
-            })
-        );
+    /// @notice toRemote emits one raw context per terminal accounting context, un-valued.
+    function test_toRemoteSendsPerContextSnapshot() public {
+        _setRemoteTokenMapping();
 
         // Insert a leaf so the outbox is non-empty.
         vm.deal(address(sucker), 1 ether);
         sucker.test_insertIntoTree(1 ether, TOKEN, 1 ether, bytes32(uint256(uint160(address(0xBEEF)))));
 
-        // Mock total supply.
         vm.mockCall(
             CONTROLLER,
             abi.encodeCall(IJBController.totalTokenSupplyWithReservedTokensOf, (PROJECT_ID)),
             abi.encode(uint256(1000 ether))
         );
 
-        // Set up terminal mocks with known surplus/balance.
         _mockSingleETHTerminal({ethBalance: 50 ether, ethSurplus: 30 ether});
 
         sucker.test_resetSendRootOverAMBCalled();
@@ -438,28 +397,19 @@ contract PeerChainStateTest is Test {
 
         assertTrue(sucker.sendRootOverAMBCalled(), "sendRootOverAMB should be called");
 
-        // Inspect the captured message.
         JBMessageRoot memory m = sucker.test_getLastSentMessage();
-
         assertEq(m.version, 1, "message version should be 1");
         assertEq(m.sourceTotalSupply, 1000 ether, "sourceTotalSupply should match mock");
-        assertEq(m.sourceCurrency, ETH_CURRENCY, "sourceCurrency should be ETH");
-        assertEq(m.sourceDecimals, ETH_DECIMALS, "sourceDecimals should be 18");
-        assertEq(m.sourceSurplus, 30 ether, "sourceSurplus should match mock");
-        assertEq(m.sourceBalance, 50 ether, "sourceBalance should match mock");
+        assertEq(m.sourceContexts.length, 1, "one terminal context");
+        assertEq(m.sourceContexts[0].token, bytes32(uint256(uint160(TOKEN))), "context keyed by source-local token");
+        assertEq(m.sourceContexts[0].decimals, ETH_DECIMALS, "context decimals are the terminal's");
+        assertEq(m.sourceContexts[0].surplus, 30 ether, "context surplus is the raw per-token surplus");
+        assertEq(m.sourceContexts[0].balance, 50 ether, "context balance is the raw per-token balance");
     }
 
-    /// @notice toRemote includes optional data-hook accounting in the peer-chain supply and surplus snapshot.
+    /// @notice toRemote appends the data hook's off-terminal contexts after the terminal contexts.
     function test_toRemoteAddsDataHookPeerChainAdjustedAccounts() public {
-        sucker.test_setRemoteToken(
-            TOKEN,
-            JBRemoteToken({
-                enabled: true,
-                emergencyHatch: false,
-                minGas: 200_000,
-                addr: bytes32(uint256(uint160(makeAddr("remoteToken"))))
-            })
-        );
+        _setRemoteTokenMapping();
 
         vm.deal(address(sucker), 1 ether);
         sucker.test_insertIntoTree(1 ether, TOKEN, 1 ether, bytes32(uint256(uint160(address(0xBEEF)))));
@@ -471,8 +421,9 @@ contract PeerChainStateTest is Test {
         );
         _mockSingleETHTerminal({ethBalance: 50 ether, ethSurplus: 30 ether});
 
-        PeerChainAdjustedAccountsHookMock accountingHook =
-            new PeerChainAdjustedAccountsHookMock({supply: 12 ether, surplus: 3 ether});
+        PeerChainAdjustedAccountsHookMock accountingHook = new PeerChainAdjustedAccountsHookMock({
+            supply: 12 ether, surplus: 3 ether, balance: 0, token: TOKEN, decimals: 18
+        });
         vm.etch(CONTROLLER, hex"00");
         JBRulesetMetadata memory metadata;
         metadata.dataHook = address(accountingHook);
@@ -496,21 +447,21 @@ contract PeerChainStateTest is Test {
 
         JBMessageRoot memory m = sucker.test_getLastSentMessage();
         assertEq(m.sourceTotalSupply, 1012 ether, "sourceTotalSupply should include data-hook supply");
-        assertEq(m.sourceSurplus, 33 ether, "sourceSurplus should include data-hook surplus");
-        assertEq(m.sourceBalance, 50 ether, "sourceBalance should not include loan debt");
+        assertEq(m.sourceContexts.length, 2, "terminal context plus hook context");
+
+        // Terminal context first.
+        assertEq(m.sourceContexts[0].surplus, 30 ether, "terminal surplus");
+        assertEq(m.sourceContexts[0].balance, 50 ether, "terminal balance excludes loan debt");
+
+        // Hook context appended.
+        assertEq(m.sourceContexts[1].token, bytes32(uint256(uint160(TOKEN))), "hook context token");
+        assertEq(m.sourceContexts[1].surplus, 3 ether, "hook surplus appended");
+        assertEq(m.sourceContexts[1].balance, 0, "hook balance appended");
     }
 
     /// @notice toRemote assigns a monotonic source freshness key even when multiple roots are sent in one block.
     function test_toRemoteUsesMonotonicSnapshotFreshnessWithinSameBlock() public {
-        sucker.test_setRemoteToken(
-            TOKEN,
-            JBRemoteToken({
-                enabled: true,
-                emergencyHatch: false,
-                minGas: 200_000,
-                addr: bytes32(uint256(uint160(makeAddr("remoteToken"))))
-            })
-        );
+        _setRemoteTokenMapping();
 
         vm.deal(address(sucker), 2 ether);
         sucker.test_insertIntoTree(1 ether, TOKEN, 1 ether, bytes32(uint256(uint160(address(0xBEEF)))));
@@ -538,20 +489,10 @@ contract PeerChainStateTest is Test {
         assertEq(block.timestamp, 100 days, "test stayed in one block timestamp");
     }
 
-    /// @notice toRemote with no terminals produces surplus=0, balance=0 in message.
+    /// @notice toRemote with no terminals produces an empty context array in the message.
     function test_toRemoteWithNoTerminals() public {
-        // Set up token mapping.
-        sucker.test_setRemoteToken(
-            TOKEN,
-            JBRemoteToken({
-                enabled: true,
-                emergencyHatch: false,
-                minGas: 200_000,
-                addr: bytes32(uint256(uint160(makeAddr("remoteToken"))))
-            })
-        );
+        _setRemoteTokenMapping();
 
-        // Insert a leaf so the outbox is non-empty.
         vm.deal(address(sucker), 1 ether);
         sucker.test_insertIntoTree(1 ether, TOKEN, 1 ether, bytes32(uint256(uint160(address(0xBEEF)))));
 
@@ -562,31 +503,16 @@ contract PeerChainStateTest is Test {
         assertTrue(sucker.sendRootOverAMBCalled(), "sendRootOverAMB should be called");
 
         JBMessageRoot memory m = sucker.test_getLastSentMessage();
-
-        assertEq(m.sourceSurplus, 0, "surplus should be 0 with no terminals");
-        assertEq(m.sourceBalance, 0, "balance should be 0 with no terminals");
-        assertEq(m.sourceCurrency, ETH_CURRENCY, "currency should still be ETH");
-        assertEq(m.sourceDecimals, ETH_DECIMALS, "decimals should still be 18");
+        assertEq(m.sourceContexts.length, 0, "no contexts with no terminals");
     }
 
-    /// @notice toRemote with a multi-token terminal aggregates ETH + ERC20 balance via price conversion.
-    function test_toRemoteWithMultiTokenTerminal() public {
-        // Set up token mapping.
-        sucker.test_setRemoteToken(
-            TOKEN,
-            JBRemoteToken({
-                enabled: true,
-                emergencyHatch: false,
-                minGas: 200_000,
-                addr: bytes32(uint256(uint160(makeAddr("remoteToken"))))
-            })
-        );
+    /// @notice toRemote with a multi-token terminal emits one raw context per token — no cross-token valuation.
+    function test_toRemoteWithMultiTokenTerminalEmitsRawContexts() public {
+        _setRemoteTokenMapping();
 
-        // Insert a leaf so the outbox is non-empty.
         vm.deal(address(sucker), 1 ether);
         sucker.test_insertIntoTree(1 ether, TOKEN, 1 ether, bytes32(uint256(uint160(address(0xBEEF)))));
 
-        // Set up a terminal with both ETH and an ERC20 token.
         address erc20Token = makeAddr("USDC");
         // forge-lint: disable-next-line(unsafe-typecast)
         uint32 erc20Currency = uint32(uint160(erc20Token));
@@ -594,33 +520,29 @@ contract PeerChainStateTest is Test {
         IJBTerminal[] memory terminals = new IJBTerminal[](1);
         terminals[0] = IJBTerminal(TERMINAL);
         vm.mockCall(DIRECTORY, abi.encodeCall(IJBDirectory.terminalsOf, (PROJECT_ID)), abi.encode(terminals));
+        vm.etch(TERMINAL, hex"00");
 
-        // Mock surplus (aggregated by first terminal).
-        vm.mockCall(
-            TERMINAL,
-            abi.encodeCall(
-                // forge-lint: disable-next-line(unsafe-typecast)
-                IJBTerminal.currentSurplusOf,
-                // forge-lint: disable-next-line(unsafe-typecast)
-                (PROJECT_ID, new address[](0), ETH_DECIMALS, uint32(ETH_CURRENCY))
-            ),
-            abi.encode(uint256(25 ether))
-        );
-
-        // Mock STORE and PRICES.
-        vm.mockCall(TERMINAL, abi.encodeCall(IJBMultiTerminal.STORE, ()), abi.encode(STORE));
-        vm.mockCall(STORE, abi.encodeCall(IJBTerminalStore.PRICES, ()), abi.encode(PRICES));
-        vm.etch(PRICES, hex"00");
-
-        // Set up two accounting contexts: ETH (18 decimals) + ERC20 (6 decimals).
-        // forge-lint: disable-next-line(unsafe-typecast)
-        uint32 nativeTokenCurrency = uint32(uint160(TOKEN));
         JBAccountingContext[] memory contexts = new JBAccountingContext[](2);
-        contexts[0] = JBAccountingContext({token: TOKEN, decimals: 18, currency: nativeTokenCurrency});
+        contexts[0] = JBAccountingContext({token: TOKEN, decimals: 18, currency: NATIVE_CURRENCY});
         contexts[1] = JBAccountingContext({token: erc20Token, decimals: 6, currency: erc20Currency});
         vm.mockCall(TERMINAL, abi.encodeCall(IJBTerminal.accountingContextsOf, (PROJECT_ID)), abi.encode(contexts));
 
-        // Mock balances: 10 ETH + 5000 USDC (6 decimals).
+        vm.mockCall(TERMINAL, abi.encodeCall(IJBMultiTerminal.STORE, ()), abi.encode(STORE));
+        vm.etch(STORE, hex"00");
+
+        // Per-token surplus, each requested in its own currency.
+        vm.mockCall(
+            TERMINAL,
+            abi.encodeCall(IJBTerminal.currentSurplusOf, (PROJECT_ID, _oneToken(TOKEN), 18, NATIVE_CURRENCY)),
+            abi.encode(uint256(25 ether))
+        );
+        vm.mockCall(
+            TERMINAL,
+            abi.encodeCall(IJBTerminal.currentSurplusOf, (PROJECT_ID, _oneToken(erc20Token), 6, erc20Currency)),
+            abi.encode(uint256(4000e6))
+        );
+
+        // Per-token recorded balance.
         vm.mockCall(
             STORE,
             abi.encodeCall(IJBTerminalStore.balanceOf, (TERMINAL, PROJECT_ID, TOKEN)),
@@ -632,41 +554,25 @@ contract PeerChainStateTest is Test {
             abi.encode(uint256(5000e6))
         );
 
-        // Mock price: native token → ETH (1:1 identity since it IS ETH).
-        // buildETHAggregate compares uint32(uint160(token)) vs JBCurrencyIds.ETH — these differ,
-        // so it falls through to the price feed path for all tokens including native ETH.
-        vm.mockCall(
-            PRICES,
-            abi.encodeCall(
-                // forge-lint: disable-next-line(unsafe-typecast)
-                IJBPrices.pricePerUnitOf,
-                // forge-lint: disable-next-line(unsafe-typecast)
-                (PROJECT_ID, nativeTokenCurrency, uint32(ETH_CURRENCY), ETH_DECIMALS)
-            ),
-            abi.encode(uint256(1e18))
-        );
-
-        // Mock price: pricePerUnitOf(erc20Currency, ETH, 6) = 2000e6
-        // Semantics: "2000 USDC (at 6 decimals) per 1 ETH".
-        // mulDiv(5000e6, 1e18, 2000e6) = 2.5 ETH.
-        vm.mockCall(
-            PRICES,
-            // forge-lint: disable-next-line(unsafe-typecast)
-            abi.encodeCall(IJBPrices.pricePerUnitOf, (PROJECT_ID, erc20Currency, uint32(ETH_CURRENCY), uint256(6))),
-            abi.encode(uint256(2000e6))
-        );
-
         sucker.test_resetSendRootOverAMBCalled();
         sucker.toRemote(TOKEN);
 
         assertTrue(sucker.sendRootOverAMBCalled(), "sendRootOverAMB should be called");
 
         JBMessageRoot memory m = sucker.test_getLastSentMessage();
+        assertEq(m.sourceContexts.length, 2, "one context per token, no collapse");
 
-        assertEq(m.sourceSurplus, 25 ether, "surplus should be the aggregated ETH surplus");
+        // Native context: raw, no conversion.
+        assertEq(m.sourceContexts[0].token, bytes32(uint256(uint160(TOKEN))), "native context token");
+        assertEq(m.sourceContexts[0].decimals, 18, "native context decimals");
+        assertEq(m.sourceContexts[0].surplus, 25 ether, "native surplus raw");
+        assertEq(m.sourceContexts[0].balance, 10 ether, "native balance raw");
 
-        // Expected balance: 10 ETH + mulDiv(5000e6, 1e18, 2000e6) = 10e18 + 2.5e18 = 12.5e18
-        assertEq(m.sourceBalance, 12.5 ether, "balance should aggregate ETH + ERC20 converted to ETH");
+        // ERC20 context: raw, in its own 6 decimals.
+        assertEq(m.sourceContexts[1].token, bytes32(uint256(uint160(erc20Token))), "erc20 context token");
+        assertEq(m.sourceContexts[1].decimals, 6, "erc20 context decimals");
+        assertEq(m.sourceContexts[1].surplus, 4000e6, "erc20 surplus raw");
+        assertEq(m.sourceContexts[1].balance, 5000e6, "erc20 balance raw");
     }
 
     // =========================================================================
@@ -685,14 +591,65 @@ contract PeerChainStateTest is Test {
         return s;
     }
 
-    /// @notice Build a JBMessageRoot with the given parameters.
-    function _makeMessageRoot(
+    /// @notice The stored peer context for a currency, reverting if none exists.
+    function _contextFor(uint32 currency) internal view returns (JBPeerChainContext memory) {
+        (JBPeerChainContext[] memory contexts,,) = sucker.peerChainContextsOf();
+        for (uint256 i; i < contexts.length; ++i) {
+            if (contexts[i].currency == currency) return contexts[i];
+        }
+        revert("no context for currency");
+    }
+
+    /// @notice Whether a stored peer context exists for a currency.
+    function _hasContext(uint32 currency) internal view returns (bool) {
+        (JBPeerChainContext[] memory contexts,,) = sucker.peerChainContextsOf();
+        for (uint256 i; i < contexts.length; ++i) {
+            if (contexts[i].currency == currency) return true;
+        }
+        return false;
+    }
+
+    /// @notice Map the native token to a remote token so the outbox accepts leaves.
+    function _setRemoteTokenMapping() internal {
+        sucker.test_setRemoteToken(
+            TOKEN,
+            JBRemoteToken({
+                enabled: true,
+                emergencyHatch: false,
+                minGas: 200_000,
+                addr: bytes32(uint256(uint160(makeAddr("remoteToken"))))
+            })
+        );
+    }
+
+    /// @notice Build a single-element address array (matches the library's per-token surplus request).
+    function _oneToken(address token) internal pure returns (address[] memory arr) {
+        arr = new address[](1);
+        arr[0] = token;
+    }
+
+    /// @notice Build one source context keyed by the given source-local token.
+    function _ctx(
+        address token,
+        uint8 decimals,
+        uint128 surplus,
+        uint128 balance
+    )
+        internal
+        pure
+        returns (JBSourceContext memory)
+    {
+        return JBSourceContext({
+            token: bytes32(uint256(uint160(token))), decimals: decimals, surplus: surplus, balance: balance
+        });
+    }
+
+    /// @notice Build a JBMessageRoot carrying the given contexts, using `nonce` as both the inbox nonce and the
+    /// source freshness key.
+    function _root(
         uint64 nonce,
         uint256 totalSupply,
-        uint256 surplus,
-        uint256 balance,
-        uint256 currency,
-        uint8 decimals
+        JBSourceContext[] memory contexts
     )
         internal
         pure
@@ -704,64 +661,53 @@ contract PeerChainStateTest is Test {
             amount: 0,
             remoteRoot: JBInboxTreeRoot({nonce: nonce, root: bytes32(uint256(0xDEAD))}),
             sourceTotalSupply: totalSupply,
-            sourceCurrency: currency,
-            sourceDecimals: decimals,
-            sourceSurplus: surplus,
-            sourceBalance: balance,
+            sourceContexts: contexts,
             sourceTimestamp: nonce
         });
     }
 
-    /// @notice Mock a single ETH terminal with known balance and surplus.
+    /// @notice Build a JBMessageRoot carrying a single native context.
+    function _makeMessageRoot(
+        uint64 nonce,
+        uint256 totalSupply,
+        uint128 surplus,
+        uint128 balance
+    )
+        internal
+        pure
+        returns (JBMessageRoot memory)
+    {
+        JBSourceContext[] memory contexts = new JBSourceContext[](1);
+        contexts[0] = JBSourceContext({
+            token: bytes32(uint256(uint160(TOKEN))), decimals: ETH_DECIMALS, surplus: surplus, balance: balance
+        });
+        return _root({nonce: nonce, totalSupply: totalSupply, contexts: contexts});
+    }
+
+    /// @notice Mock a single native-token terminal with a known recorded balance and per-token surplus.
     function _mockSingleETHTerminal(uint256 ethBalance, uint256 ethSurplus) internal {
         IJBTerminal[] memory terminals = new IJBTerminal[](1);
         terminals[0] = IJBTerminal(TERMINAL);
         vm.mockCall(DIRECTORY, abi.encodeCall(IJBDirectory.terminalsOf, (PROJECT_ID)), abi.encode(terminals));
+        vm.etch(TERMINAL, hex"00");
 
-        // Mock surplus.
+        // Single native accounting context (currency is token-keyed).
+        JBAccountingContext[] memory contexts = new JBAccountingContext[](1);
+        contexts[0] = JBAccountingContext({token: TOKEN, decimals: 18, currency: NATIVE_CURRENCY});
+        vm.mockCall(TERMINAL, abi.encodeCall(IJBTerminal.accountingContextsOf, (PROJECT_ID)), abi.encode(contexts));
+
+        // Per-token surplus, requested in the context's own currency.
         vm.mockCall(
             TERMINAL,
-            abi.encodeCall(
-                // forge-lint: disable-next-line(unsafe-typecast)
-                IJBTerminal.currentSurplusOf,
-                // forge-lint: disable-next-line(unsafe-typecast)
-                (PROJECT_ID, new address[](0), ETH_DECIMALS, uint32(ETH_CURRENCY))
-            ),
+            abi.encodeCall(IJBTerminal.currentSurplusOf, (PROJECT_ID, _oneToken(TOKEN), 18, NATIVE_CURRENCY)),
             abi.encode(ethSurplus)
         );
 
-        // Mock STORE and PRICES.
+        // Per-token recorded balance via the store.
         vm.mockCall(TERMINAL, abi.encodeCall(IJBMultiTerminal.STORE, ()), abi.encode(STORE));
-        vm.mockCall(STORE, abi.encodeCall(IJBTerminalStore.PRICES, ()), abi.encode(PRICES));
-
-        // Etch minimal bytecode at mock addresses so Solidity's try-statement extcodesize checks pass.
-        vm.etch(PRICES, hex"00");
-
-        // Single ETH accounting context.
-        // Note: accounting context currency = uint32(uint160(TOKEN)) which differs from JBCurrencyIds.ETH.
-        // forge-lint: disable-next-line(unsafe-typecast)
-        uint32 nativeTokenCurrency = uint32(uint160(TOKEN));
-        JBAccountingContext[] memory contexts = new JBAccountingContext[](1);
-        contexts[0] = JBAccountingContext({token: TOKEN, decimals: 18, currency: nativeTokenCurrency});
-        vm.mockCall(TERMINAL, abi.encodeCall(IJBTerminal.accountingContextsOf, (PROJECT_ID)), abi.encode(contexts));
-
-        // Mock ETH balance.
+        vm.etch(STORE, hex"00");
         vm.mockCall(
             STORE, abi.encodeCall(IJBTerminalStore.balanceOf, (TERMINAL, PROJECT_ID, TOKEN)), abi.encode(ethBalance)
-        );
-
-        // Mock price feed: native token currency → ETH currency (identity conversion, 1:1 at 18 decimals).
-        // buildETHAggregate compares uint32(uint160(token)) against JBCurrencyIds.ETH — these differ for native
-        // token, so it falls through to the price feed path.
-        vm.mockCall(
-            PRICES,
-            abi.encodeCall(
-                // forge-lint: disable-next-line(unsafe-typecast)
-                IJBPrices.pricePerUnitOf,
-                // forge-lint: disable-next-line(unsafe-typecast)
-                (PROJECT_ID, nativeTokenCurrency, uint32(ETH_CURRENCY), ETH_DECIMALS)
-            ),
-            abi.encode(uint256(1e18))
         );
     }
 }

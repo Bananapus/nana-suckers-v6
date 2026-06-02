@@ -7,7 +7,6 @@ import "forge-std/Test.sol";
 import {IJBController} from "@bananapus/core-v6/src/interfaces/IJBController.sol";
 import {IJBDirectory} from "@bananapus/core-v6/src/interfaces/IJBDirectory.sol";
 import {IJBPermissions} from "@bananapus/core-v6/src/interfaces/IJBPermissions.sol";
-import {IJBPrices} from "@bananapus/core-v6/src/interfaces/IJBPrices.sol";
 import {IJBTerminal} from "@bananapus/core-v6/src/interfaces/IJBTerminal.sol";
 import {IJBTokens} from "@bananapus/core-v6/src/interfaces/IJBTokens.sol";
 import {JBConstants} from "@bananapus/core-v6/src/libraries/JBConstants.sol";
@@ -36,7 +35,7 @@ contract RegressionFeeIrrecoverableHarness is JBSucker {
         IJBTokens tokens,
         IJBSuckerRegistry registry
     )
-        JBSucker(directory, permissions, IJBPrices(address(1)), tokens, 1, registry, address(0))
+        JBSucker(directory, permissions, tokens, 1, registry, address(0))
     {}
 
     function peerChainId() public view override returns (uint256) {
@@ -165,7 +164,7 @@ contract RegressionToRemoteFeeIrrecoverableTest is Test {
         );
         vm.mockCall(REGISTRY, abi.encodeCall(IJBSuckerRegistry.toRemoteFee, ()), abi.encode(FEE));
 
-        // Mock DIRECTORY.terminalsOf() so _buildETHAggregate() in _sendRoot() doesn't revert.
+        // Mock DIRECTORY.terminalsOf() so the per-context snapshot builder in _sendRoot() doesn't revert.
         vm.mockCall(DIRECTORY, abi.encodeCall(IJBDirectory.terminalsOf, (PROJECT_ID)), abi.encode(new IJBTerminal[](0)));
     }
 

@@ -1,23 +1,78 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.28;
 
+import {IJBDirectory} from "@bananapus/core-v6/src/interfaces/IJBDirectory.sol";
+import {IJBPermissions} from "@bananapus/core-v6/src/interfaces/IJBPermissions.sol";
 import {IJBPrices} from "@bananapus/core-v6/src/interfaces/IJBPrices.sol";
 import {JBFixedPointNumber} from "@bananapus/core-v6/src/libraries/JBFixedPointNumber.sol";
 
-import {JBDenominatedAmount} from "../../src/structs/JBDenominatedAmount.sol";
+import {JBSuckerRegistry} from "../../src/JBSuckerRegistry.sol";
 import {JBSuckerLib} from "../../src/libraries/JBSuckerLib.sol";
 import {MerkleLib} from "../../src/utils/MerkleLib.sol";
 
-/// @notice Small Halmos entrypoints for cross-chain peer value and merkle helper invariants.
-/// @dev The peer-value proofs stay on the same-currency path so no oracle mocking is required.
-contract JBSuckerLibHalmos {
-    /// @notice A sentinel prices address. The same-currency and zero-value paths must not call it.
-    IJBPrices internal constant _NO_PRICES = IJBPrices(address(0));
+/// @notice A directory stub whose only job is to answer the registry constructor's `PROJECTS()` lookup.
+/// @dev The valuation under proof never reads the projects registry, so a zero address is sufficient.
+contract HalmosValuationDirectory {
+    function PROJECTS() external pure returns (address) {
+        return address(0);
+    }
+}
 
-    /// @notice An arbitrary project ID for the library call.
+/// @notice Exposes the registry's internal per-context valuation so Halmos can prove its currency/decimal invariants.
+/// @dev The same-currency and zero-amount proofs never reach the price feed, so a zero prices address is sufficient.
+contract HalmosValuationHarness is JBSuckerRegistry {
+    constructor(IJBDirectory directory)
+        JBSuckerRegistry(directory, IJBPermissions(address(0)), IJBPrices(address(0)), address(this), address(0))
+    {}
+
+    /// @notice Values an amount from one currency/decimal pair into another, delegating to the registry internals.
+    /// @param amount The amount to value.
+    /// @param fromCurrency The currency the amount is denominated in.
+    /// @param fromDecimals The decimal precision the amount is denominated in.
+    /// @param toCurrency The currency to value the amount into.
+    /// @param toDecimals The decimal precision to value the amount into.
+    /// @param projectId The project whose price feeds are consulted for cross-currency valuation.
+    /// @return The amount valued into the target currency and decimal precision.
+    function valued(
+        uint256 amount,
+        uint256 fromCurrency,
+        uint256 fromDecimals,
+        uint256 toCurrency,
+        uint256 toDecimals,
+        uint256 projectId
+    )
+        external
+        view
+        returns (uint256)
+    {
+        return _valued({
+            amount: amount,
+            fromCurrency: fromCurrency,
+            fromDecimals: fromDecimals,
+            toCurrency: toCurrency,
+            toDecimals: toDecimals,
+            projectId: projectId
+        });
+    }
+}
+
+/// @notice Small Halmos entrypoints for cross-chain peer value and merkle helper invariants.
+/// @dev The peer-value proofs stay on the same-currency path so the registry's price feed is never consulted.
+contract JBSuckerLibHalmos {
+    /// @notice An arbitrary project ID for the valuation call.
     uint256 internal constant _PROJECT_ID = 1;
 
-    /// @notice Proves zero source values convert to zero for every currency/decimal combination.
+    /// @notice The largest decimal precision the valuation proofs exercise, keeping `10 ** delta` within `uint256`.
+    uint256 internal constant _MAX_DECIMALS = 18;
+
+    /// @notice The registry harness whose internal per-context valuation is under proof.
+    HalmosValuationHarness internal immutable _registry;
+
+    constructor() {
+        _registry = new HalmosValuationHarness(IJBDirectory(address(new HalmosValuationDirectory())));
+    }
+
+    /// @notice Proves zero source values value to zero for every currency pair and bounded decimal combination.
     /// @param sourceDecimals The source value's decimal precision.
     /// @param targetDecimals The requested output decimal precision.
     /// @param sourceCurrency The source currency ID.
@@ -31,41 +86,44 @@ contract JBSuckerLibHalmos {
         public
         view
     {
-        JBDenominatedAmount memory source =
-            JBDenominatedAmount({value: 0, currency: sourceCurrency, decimals: sourceDecimals});
+        if (sourceDecimals > _MAX_DECIMALS || targetDecimals > _MAX_DECIMALS) return;
 
-        uint256 converted = JBSuckerLib.convertPeerValue({
-            prices: _NO_PRICES,
-            projectId: _PROJECT_ID,
-            source: source,
-            decimals: targetDecimals,
-            currency: targetCurrency
+        uint256 converted = _registry.valued({
+            amount: 0,
+            fromCurrency: sourceCurrency,
+            fromDecimals: sourceDecimals,
+            toCurrency: targetCurrency,
+            toDecimals: targetDecimals,
+            projectId: _PROJECT_ID
         });
 
         assert(converted == 0);
     }
 
-    /// @notice Proves same-currency, same-decimal conversion is identity over the full uint256 value domain.
-    /// @param value The source value.
+    /// @notice Proves same-currency, same-decimal valuation is identity over the full uint256 amount domain.
+    /// @param amount The source amount.
     /// @param decimals The shared source and target decimal precision.
     /// @param currency The shared source and target currency ID.
-    function check_sameCurrencySameDecimalsIdentity(uint256 value, uint8 decimals, uint32 currency) public view {
-        JBDenominatedAmount memory source = JBDenominatedAmount({value: value, currency: currency, decimals: decimals});
-
-        uint256 converted = JBSuckerLib.convertPeerValue({
-            prices: _NO_PRICES, projectId: _PROJECT_ID, source: source, decimals: decimals, currency: currency
+    function check_sameCurrencySameDecimalsIdentity(uint256 amount, uint8 decimals, uint32 currency) public view {
+        uint256 converted = _registry.valued({
+            amount: amount,
+            fromCurrency: currency,
+            fromDecimals: decimals,
+            toCurrency: currency,
+            toDecimals: decimals,
+            projectId: _PROJECT_ID
         });
 
-        assert(converted == value);
+        assert(converted == amount);
     }
 
-    /// @notice Proves same-currency conversion matches the shared fixed-point decimal helper.
-    /// @param value The source value, bounded for solver speed and multiplication safety.
+    /// @notice Proves same-currency valuation matches the shared fixed-point decimal helper.
+    /// @param amount The source amount, bounded for solver speed and multiplication safety.
     /// @param sourceDecimals The source value's decimal precision.
     /// @param targetDecimals The requested output decimal precision.
     /// @param currency The shared source and target currency ID.
     function check_sameCurrencyMatchesAdjustDecimals(
-        uint64 value,
+        uint64 amount,
         uint8 sourceDecimals,
         uint8 targetDecimals,
         uint32 currency
@@ -73,17 +131,19 @@ contract JBSuckerLibHalmos {
         public
         view
     {
-        if (sourceDecimals > 18 || targetDecimals > 18) return;
+        if (sourceDecimals > _MAX_DECIMALS || targetDecimals > _MAX_DECIMALS) return;
 
-        JBDenominatedAmount memory source =
-            JBDenominatedAmount({value: uint256(value), currency: currency, decimals: sourceDecimals});
-
-        uint256 converted = JBSuckerLib.convertPeerValue({
-            prices: _NO_PRICES, projectId: _PROJECT_ID, source: source, decimals: targetDecimals, currency: currency
+        uint256 converted = _registry.valued({
+            amount: uint256(amount),
+            fromCurrency: currency,
+            fromDecimals: sourceDecimals,
+            toCurrency: currency,
+            toDecimals: targetDecimals,
+            projectId: _PROJECT_ID
         });
 
         uint256 expected = JBFixedPointNumber.adjustDecimals({
-            value: uint256(value), decimals: sourceDecimals, targetDecimals: targetDecimals
+            value: uint256(amount), decimals: sourceDecimals, targetDecimals: targetDecimals
         });
 
         assert(converted == expected);

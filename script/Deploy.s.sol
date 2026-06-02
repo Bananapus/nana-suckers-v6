@@ -84,7 +84,7 @@ contract DeployScript is Script, Sphinx {
         bool registryAlreadyDeployed = _isDeployed({
             salt: _REGISTRY_SALT,
             creationCode: type(JBSuckerRegistry).creationCode,
-            arguments: abi.encode(core.directory, core.permissions, safeAddress(), trustedForwarder)
+            arguments: abi.encode(core.directory, core.permissions, core.prices, safeAddress(), trustedForwarder)
         });
 
         if (!registryAlreadyDeployed) {
@@ -93,6 +93,7 @@ contract DeployScript is Script, Sphinx {
                     new JBSuckerRegistry{salt: _REGISTRY_SALT}({
                         directory: core.directory,
                         permissions: core.permissions,
+                        prices: core.prices,
                         initialOwner: safeAddress(),
                         trustedForwarder: trustedForwarder
                     })
@@ -106,7 +107,7 @@ contract DeployScript is Script, Sphinx {
                     initCodeHash: keccak256(
                         abi.encodePacked(
                             type(JBSuckerRegistry).creationCode,
-                            abi.encode(core.directory, core.permissions, safeAddress(), trustedForwarder)
+                            abi.encode(core.directory, core.permissions, core.prices, safeAddress(), trustedForwarder)
                         )
                     ),
                     deployer: address(0x4e59b44847b379578588920cA78FbF26c0B4956C)
@@ -210,7 +211,6 @@ contract DeployScript is Script, Sphinx {
                     deployer: _opDeployer,
                     directory: core.directory,
                     permissions: core.permissions,
-                    prices: core.prices,
                     tokens: core.tokens,
                     feeProjectId: 1,
                     registry: registry,
@@ -262,7 +262,6 @@ contract DeployScript is Script, Sphinx {
                     deployer: _opDeployer,
                     directory: core.directory,
                     permissions: core.permissions,
-                    prices: core.prices,
                     tokens: core.tokens,
                     feeProjectId: 1,
                     registry: registry,
@@ -345,7 +344,6 @@ contract DeployScript is Script, Sphinx {
                     deployer: _baseDeployer,
                     directory: core.directory,
                     permissions: core.permissions,
-                    prices: core.prices,
                     tokens: core.tokens,
                     feeProjectId: 1,
                     registry: registry,
@@ -397,7 +395,6 @@ contract DeployScript is Script, Sphinx {
                     deployer: _baseDeployer,
                     directory: core.directory,
                     permissions: core.permissions,
-                    prices: core.prices,
                     tokens: core.tokens,
                     feeProjectId: 1,
                     registry: registry,
@@ -476,7 +473,6 @@ contract DeployScript is Script, Sphinx {
                     deployer: _arbDeployer,
                     directory: core.directory,
                     permissions: core.permissions,
-                    prices: core.prices,
                     tokens: core.tokens,
                     feeProjectId: 1,
                     registry: registry,
@@ -531,7 +527,6 @@ contract DeployScript is Script, Sphinx {
                     deployer: _arbDeployer,
                     directory: core.directory,
                     permissions: core.permissions,
-                    prices: core.prices,
                     tokens: core.tokens,
                     feeProjectId: 1,
                     registry: registry,
@@ -708,7 +703,6 @@ contract DeployScript is Script, Sphinx {
             salt: salt,
             directory: core.directory,
             permissions: core.permissions,
-            prices: core.prices,
             tokens: core.tokens,
             configurator: safeAddress(),
             forwarder: trustedForwarder,
@@ -725,7 +719,6 @@ contract DeployScript is Script, Sphinx {
         bytes32 salt,
         IJBDirectory directory,
         IJBPermissions permissions,
-        IJBPrices prices,
         IJBTokens tokens,
         address configurator,
         address forwarder,
@@ -781,7 +774,6 @@ contract DeployScript is Script, Sphinx {
                 directory: directory,
                 tokens: tokens,
                 permissions: permissions,
-                prices: prices,
                 feeProjectId: 1,
                 registry: registry,
                 trustedForwarder: forwarder

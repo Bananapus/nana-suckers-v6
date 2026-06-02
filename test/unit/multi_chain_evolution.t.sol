@@ -84,7 +84,7 @@ contract MultiChainEvolutionTest is Test, TestBaseWorkflow, IERC721Receiver {
         vm.etch(MOCK_CCIP_ROUTER_ADDR, hex"01");
 
         // Deploy the registry.
-        registry = new JBSuckerRegistry(jbDirectory(), jbPermissions(), address(this), address(0));
+        registry = new JBSuckerRegistry(jbDirectory(), jbPermissions(), jbPrices(), address(this), address(0));
 
         // --- Set up OP deployer ---
         opDeployer = new JBOptimismSuckerDeployer({
@@ -100,7 +100,6 @@ contract MultiChainEvolutionTest is Test, TestBaseWorkflow, IERC721Receiver {
             deployer: opDeployer,
             directory: jbDirectory(),
             permissions: jbPermissions(),
-            prices: jbPrices(),
             tokens: jbTokens(),
             feeProjectId: 1,
             registry: IJBSuckerRegistry(address(0)),
@@ -126,7 +125,6 @@ contract MultiChainEvolutionTest is Test, TestBaseWorkflow, IERC721Receiver {
             deployer: ccipDeployer,
             directory: jbDirectory(),
             permissions: jbPermissions(),
-            prices: jbPrices(),
             tokens: jbTokens(),
             feeProjectId: 1,
             registry: IJBSuckerRegistry(address(0)),

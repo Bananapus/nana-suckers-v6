@@ -15,6 +15,7 @@ import {IJBSuckerRegistry} from "../src/interfaces/IJBSuckerRegistry.sol";
 import {Client} from "@chainlink/contracts-ccip/contracts/libraries/Client.sol";
 import {JBInboxTreeRoot} from "../src/structs/JBInboxTreeRoot.sol";
 import {JBMessageRoot} from "../src/structs/JBMessageRoot.sol";
+import {JBSourceContext} from "../src/structs/JBSourceContext.sol";
 import {JBClaim} from "../src/structs/JBClaim.sol";
 import {JBLeaf} from "../src/structs/JBLeaf.sol";
 import {JBSucker} from "../src/JBSucker.sol";
@@ -104,7 +105,6 @@ abstract contract CCIPSuckerClaimForkTestBase is SuckerForkHelpers {
             deployer: suckerDeployerL1,
             directory: jbDirectory(),
             permissions: jbPermissions(),
-            prices: jbPrices(),
             tokens: jbTokens(),
             feeProjectId: 1,
             registry: IJBSuckerRegistry(address(0)),
@@ -149,7 +149,6 @@ abstract contract CCIPSuckerClaimForkTestBase is SuckerForkHelpers {
             deployer: suckerDeployerL2,
             directory: jbDirectory(),
             permissions: jbPermissions(),
-            prices: jbPrices(),
             tokens: jbTokens(),
             feeProjectId: 1,
             registry: IJBSuckerRegistry(address(0)),
@@ -362,10 +361,7 @@ abstract contract CCIPSuckerClaimForkTestBase is SuckerForkHelpers {
             amount: totalAmount,
             remoteRoot: JBInboxTreeRoot({nonce: nonce, root: root}),
             sourceTotalSupply: 0,
-            sourceCurrency: 0,
-            sourceDecimals: 18,
-            sourceSurplus: 0,
-            sourceBalance: 0,
+            sourceContexts: new JBSourceContext[](0),
             sourceTimestamp: 1
         });
 
@@ -807,10 +803,7 @@ abstract contract CCIPSuckerClaimForkTestBase is SuckerForkHelpers {
             amount: 0,
             remoteRoot: JBInboxTreeRoot({nonce: sentNonce, root: fakeRoot}), // Same nonce, different root.
             sourceTotalSupply: 0,
-            sourceCurrency: 0,
-            sourceDecimals: 18,
-            sourceSurplus: 0,
-            sourceBalance: 0,
+            sourceContexts: new JBSourceContext[](0),
             sourceTimestamp: 2
         });
 

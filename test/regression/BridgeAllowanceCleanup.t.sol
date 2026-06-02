@@ -6,7 +6,6 @@ import {Client} from "@chainlink/contracts-ccip/contracts/libraries/Client.sol";
 import {IInbox} from "@arbitrum/nitro-contracts/src/bridge/IInbox.sol";
 import {IJBDirectory} from "@bananapus/core-v6/src/interfaces/IJBDirectory.sol";
 import {IJBPermissions} from "@bananapus/core-v6/src/interfaces/IJBPermissions.sol";
-import {IJBPrices} from "@bananapus/core-v6/src/interfaces/IJBPrices.sol";
 import {IJBTokens} from "@bananapus/core-v6/src/interfaces/IJBTokens.sol";
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
@@ -150,7 +149,7 @@ contract ArbitrumL2AllowanceHarness is JBArbitrumSucker {
         IJBTokens tokens,
         IJBSuckerRegistry registry
     )
-        JBArbitrumSucker(deployer, directory, permissions, IJBPrices(address(1)), tokens, 1, registry, address(0))
+        JBArbitrumSucker(deployer, directory, permissions, tokens, 1, registry, address(0))
     {}
 
     function sendTokenToL1(address token, uint256 amount) external {

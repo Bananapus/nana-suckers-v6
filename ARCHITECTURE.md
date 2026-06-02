@@ -70,7 +70,7 @@ project authority schedules deprecation or enables emergency hatch
 
 ## Accounting Model
 
-The local sucker snapshots project supply, surplus, and balance before sending roots so the peer can price remote positions against the source chain's state. Registry aggregate views are intentionally best-effort: they skip reverting suckers and dedupe active same-peer lanes by the freshest accepted snapshot, with deprecated lanes used only when no active lane answers for that peer chain.
+The local sucker snapshots project supply plus a per-currency set of raw surplus and balance amounts before sending roots. The peer sucker stores these as oracle-free contexts and never prices them itself; valuation happens at read time in `JBSuckerRegistry`, which holds the prices reference and converts each context into a requested currency exactly as the terminal store values local surplus — taking a context already in the requested currency at par with no feed, and valuing a different-currency context through the project's price feed. Registry aggregate views are intentionally best-effort: they skip reverting suckers (including any whose cross-currency feed is missing) and dedupe active same-peer lanes by the freshest accepted snapshot, with deprecated lanes used only when no active lane answers for that peer chain.
 
 ## Security Model
 

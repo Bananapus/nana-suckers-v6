@@ -15,7 +15,6 @@ import {JBSuckerRegistry} from "../../src/JBSuckerRegistry.sol";
 import {IJBSucker} from "../../src/interfaces/IJBSucker.sol";
 import {IJBSuckerDeployer} from "../../src/interfaces/IJBSuckerDeployer.sol";
 import {IJBSuckerRegistry} from "../../src/interfaces/IJBSuckerRegistry.sol";
-import {JBDenominatedAmount} from "../../src/structs/JBDenominatedAmount.sol";
 import {JBMessageRoot} from "../../src/structs/JBMessageRoot.sol";
 import {JBRemoteToken} from "../../src/structs/JBRemoteToken.sol";
 import {JBTokenMapping} from "../../src/structs/JBTokenMapping.sol";
@@ -27,7 +26,7 @@ contract RegressionDeprecatedLiveSucker is JBSucker {
         IJBPermissions permissions,
         IJBTokens tokens
     )
-        JBSucker(directory, permissions, IJBPrices(address(1)), tokens, 1, IJBSuckerRegistry(address(1)), address(0))
+        JBSucker(directory, permissions, tokens, 1, IJBSuckerRegistry(address(1)), address(0))
     {}
 
     function peerChainId() public pure override returns (uint256) {
@@ -92,6 +91,9 @@ contract RegressionDeprecatedRemovalUndercountTest is Test {
     address internal constant PERMISSIONS = address(0xD2);
     address internal constant PROJECTS = address(0xD3);
     address internal constant TOKENS = address(0xD4);
+
+    /// @dev This test only reads total supply (never valued), so any non-zero prices address suffices.
+    address internal constant PRICES = address(0xD5);
     uint256 internal constant PROJECT_ID = 1;
 
     JBSuckerRegistry internal registry;
@@ -104,7 +106,9 @@ contract RegressionDeprecatedRemovalUndercountTest is Test {
         vm.mockCall(DIRECTORY, abi.encodeWithSignature("PROJECTS()"), abi.encode(PROJECTS));
         vm.mockCall(PROJECTS, abi.encodeWithSelector(IERC721.ownerOf.selector, PROJECT_ID), abi.encode(address(this)));
 
-        registry = new JBSuckerRegistry(IJBDirectory(DIRECTORY), IJBPermissions(PERMISSIONS), address(this), address(0));
+        registry = new JBSuckerRegistry(
+            IJBDirectory(DIRECTORY), IJBPermissions(PERMISSIONS), IJBPrices(PRICES), address(this), address(0)
+        );
         RegressionDeprecatedLiveSucker singleton =
             new RegressionDeprecatedLiveSucker(IJBDirectory(DIRECTORY), IJBPermissions(PERMISSIONS), IJBTokens(TOKENS));
         sucker = RegressionDeprecatedLiveSucker(

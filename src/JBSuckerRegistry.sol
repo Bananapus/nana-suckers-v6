@@ -4,13 +4,17 @@ pragma solidity 0.8.28;
 import {JBPermissioned} from "@bananapus/core-v6/src/abstract/JBPermissioned.sol";
 import {IJBDirectory} from "@bananapus/core-v6/src/interfaces/IJBDirectory.sol";
 import {IJBPermissions} from "@bananapus/core-v6/src/interfaces/IJBPermissions.sol";
+import {IJBPrices} from "@bananapus/core-v6/src/interfaces/IJBPrices.sol";
 import {IJBProjects} from "@bananapus/core-v6/src/interfaces/IJBProjects.sol";
+import {JBFixedPointNumber} from "@bananapus/core-v6/src/libraries/JBFixedPointNumber.sol";
 import {JBPermissionIds} from "@bananapus/permission-ids-v6/src/JBPermissionIds.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {ERC2771Context} from "@openzeppelin/contracts/metatx/ERC2771Context.sol";
 import {Context} from "@openzeppelin/contracts/utils/Context.sol";
 import {EnumerableMap} from "@openzeppelin/contracts/utils/structs/EnumerableMap.sol";
+import {mulDiv} from "@prb/math/src/Common.sol";
 
+import {JBPeerChainContext} from "./structs/JBPeerChainContext.sol";
 import {JBPeerChainValue} from "./structs/JBPeerChainValue.sol";
 import {JBSuckerState} from "./enums/JBSuckerState.sol";
 import {IJBSucker} from "./interfaces/IJBSucker.sol";
@@ -48,6 +52,10 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
     // ------------------------- internal constants ----------------------- //
     //*********************************************************************//
 
+    /// @notice The fixed-point fidelity used when valuing remote contexts across currencies, matching the terminal
+    /// store's `_MAX_FIXED_POINT_FIDELITY`.
+    uint256 internal constant _PRICE_FIDELITY = 18;
+
     /// @notice A constant indicating that this sucker exists and belongs to a specific project.
     uint256 internal constant _SUCKER_EXISTS = 1;
 
@@ -61,6 +69,10 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
 
     /// @notice The Juicebox directory used to look up project terminals and controllers.
     IJBDirectory public immutable override DIRECTORY;
+
+    /// @notice The prices contract used to value remote per-context surplus and balance into a requested currency,
+    /// exactly as the terminal store values local surplus.
+    IJBPrices public immutable PRICES;
 
     /// @notice A contract which mints ERC-721s that represent project ownership and transfers.
     IJBProjects public immutable override PROJECTS;
@@ -89,10 +101,12 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
 
     /// @param directory The juicebox directory.
     /// @param permissions A contract storing permissions.
+    /// @param prices The prices contract used to value remote per-context surplus/balance into a requested currency.
     /// @param initialOwner The initial owner of this contract.
     constructor(
         IJBDirectory directory,
         IJBPermissions permissions,
+        IJBPrices prices,
         address initialOwner,
         address trustedForwarder
     )
@@ -101,6 +115,7 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
         Ownable(initialOwner)
     {
         DIRECTORY = directory;
+        PRICES = prices;
         PROJECTS = directory.PROJECTS();
         toRemoteFee = MAX_TO_REMOTE_FEE;
     }
@@ -129,6 +144,145 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
     function isSuckerOf(uint256 projectId, address addr) external view override returns (bool) {
         (bool exists, uint256 val) = _suckersOf[projectId].tryGet(addr);
         return exists && (val == _SUCKER_EXISTS || val == _SUCKER_DEPRECATED);
+    }
+
+    /// @notice Values one sucker's raw peer-chain balance into a currency, bundled with the peer chain ID and
+    /// freshness.
+    /// @dev Exposed as an external self-call boundary so `totalRemoteBalanceOf` can `try` it and drop a single sucker
+    /// whose price feed is missing. A context whose currency already matches `currency` folds in at par (no feed read);
+    /// a missing cross-currency feed reverts, and the aggregator catches it and skips just this sucker.
+    /// @param sucker The sucker to read.
+    /// @param projectId The project whose price feeds to use.
+    /// @param currency The currency to value into.
+    /// @param decimals The decimal precision for the returned value.
+    /// @return A `JBPeerChainValue` with the valued balance, the sucker's peer chain ID, and its snapshot freshness
+    /// key.
+    function remoteBalanceOf(
+        address sucker,
+        uint256 projectId,
+        uint256 currency,
+        uint256 decimals
+    )
+        external
+        view
+        returns (JBPeerChainValue memory)
+    {
+        // Read this sucker's raw snapshot: one context per distinct local currency the peer reported, plus the peer
+        // chain ID and the snapshot's freshness key.
+        (JBPeerChainContext[] memory contexts, uint256 chainId, uint256 snapshot) =
+            IJBSucker(sucker).peerChainContextsOf();
+
+        // Value each context's balance out of the currency and decimals it was recorded in, into the requested
+        // `currency` and `decimals`, and sum across every context. A context already denominated in `currency` folds
+        // in at par; a cross-currency context is converted through the project's price feed.
+        uint256 value;
+        uint256 numContexts = contexts.length;
+        for (uint256 i; i < numContexts;) {
+            value += _valued({
+                amount: contexts[i].balance,
+                fromCurrency: contexts[i].currency,
+                fromDecimals: contexts[i].decimals,
+                toCurrency: currency,
+                toDecimals: decimals,
+                projectId: projectId
+            });
+            unchecked {
+                ++i;
+            }
+        }
+
+        // Carry the peer chain ID and snapshot freshness alongside the summed value so the aggregator can deduplicate
+        // peers and keep only the freshest snapshot per chain.
+        return JBPeerChainValue({value: value, peerChainId: chainId, snapshotTimestamp: snapshot});
+    }
+
+    /// @notice Values one sucker's raw peer-chain surplus into a currency, bundled with the peer chain ID and
+    /// freshness.
+    /// @dev Exposed as an external self-call boundary so `totalRemoteSurplusOf` can `try` it and drop a single sucker
+    /// whose price feed is missing. A context whose currency already matches `currency` folds in at par (no feed read);
+    /// a missing cross-currency feed reverts, and the aggregator catches it and skips just this sucker.
+    /// @param sucker The sucker to read.
+    /// @param projectId The project whose price feeds to use.
+    /// @param currency The currency to value into.
+    /// @param decimals The decimal precision for the returned value.
+    /// @return A `JBPeerChainValue` with the valued surplus, the sucker's peer chain ID, and its snapshot freshness
+    /// key.
+    function remoteSurplusOf(
+        address sucker,
+        uint256 projectId,
+        uint256 currency,
+        uint256 decimals
+    )
+        external
+        view
+        returns (JBPeerChainValue memory)
+    {
+        // Read this sucker's raw snapshot: one context per distinct local currency the peer reported, plus the peer
+        // chain ID and the snapshot's freshness key.
+        (JBPeerChainContext[] memory contexts, uint256 chainId, uint256 snapshot) =
+            IJBSucker(sucker).peerChainContextsOf();
+
+        // Value each context's surplus out of the currency and decimals it was recorded in, into the requested
+        // `currency` and `decimals`, and sum across every context. A context already denominated in `currency` folds
+        // in at par; a cross-currency context is converted through the project's price feed.
+        uint256 value;
+        uint256 numContexts = contexts.length;
+        for (uint256 i; i < numContexts;) {
+            value += _valued({
+                amount: contexts[i].surplus,
+                fromCurrency: contexts[i].currency,
+                fromDecimals: contexts[i].decimals,
+                toCurrency: currency,
+                toDecimals: decimals,
+                projectId: projectId
+            });
+            unchecked {
+                ++i;
+            }
+        }
+
+        // Carry the peer chain ID and snapshot freshness alongside the summed value so the aggregator can deduplicate
+        // peers and keep only the freshest snapshot per chain.
+        return JBPeerChainValue({value: value, peerChainId: chainId, snapshotTimestamp: snapshot});
+    }
+
+    /// @notice The cumulative total supply across all remote peer chains for a project.
+    /// @dev Includes deprecated suckers only when no active sucker answers for the same peer chain, to prevent
+    /// undercounting during migration windows without letting stale deprecated snapshots dominate live routes.
+    /// Silently skips suckers that revert.
+    /// @param projectId The ID of the project.
+    /// @return totalSupply The combined peer chain total supply.
+    function remoteTotalSupplyOf(uint256 projectId) external view override returns (uint256 totalSupply) {
+        address[] memory allSuckers = _suckersOf[projectId].keys();
+        uint256 len = allSuckers.length;
+
+        // Per-chain dedup arrays. The number of suckers per project is small (typically 1-5),
+        // so a linear scan is cheaper than a mapping.
+        PeerValueScratch memory scratch = _peerValueScratch(len);
+
+        for (uint256 i; i < len;) {
+            (, uint256 val) = _suckersOf[projectId].tryGet(allSuckers[i]);
+            // Include both active and deprecated suckers in aggregate economic views.
+            if (val == _SUCKER_EXISTS || val == _SUCKER_DEPRECATED) {
+                // One call returns the value, peer chain ID, and snapshot freshness key together.
+                try IJBSucker(allSuckers[i]).peerChainTotalSupplyValue() returns (JBPeerChainValue memory read) {
+                    scratch.chainCount = _recordPeerChainValue({
+                        scratch: scratch, read: read, sucker: allSuckers[i], isActive: val == _SUCKER_EXISTS
+                    });
+                } catch {}
+            }
+            unchecked {
+                ++i;
+            }
+        }
+
+        // Sum the per-chain selected values.
+        for (uint256 k; k < scratch.chainCount;) {
+            totalSupply += scratch.values[k];
+            unchecked {
+                ++k;
+            }
+        }
     }
 
     /// @notice All active (non-deprecated) suckers for a project, with their remote peer address and chain ID.
@@ -202,18 +356,20 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
         }
     }
 
-    /// @notice The cumulative balance across all remote peer chains for a project, denominated in a given currency.
-    /// @dev Includes deprecated suckers only when no active sucker answers for the same peer chain, to prevent
-    /// undercounting during migration windows without letting stale deprecated snapshots dominate live routes.
-    /// Silently skips suckers that revert.
+    /// @notice The cumulative peer-chain balance across all remote peer chains for a project, valued into a currency.
+    /// @dev Dedups same-peer suckers by freshest snapshot, then sums each sucker's balance valued into `currency`.
+    /// Includes deprecated suckers only when no active sucker answers for the same peer chain, to prevent undercounting
+    /// during migration windows without letting stale deprecated snapshots dominate live routes. A context whose
+    /// currency already matches is taken at par (no feed); a missing cross-currency feed reverts and that sucker is
+    /// silently skipped (conservative, bias-low).
     /// @param projectId The ID of the project.
+    /// @param currency The currency to value the combined balance into.
     /// @param decimals The decimal precision for the returned value.
-    /// @param currency The currency to normalize to.
     /// @return balance The combined peer chain balance.
-    function remoteBalanceOf(
+    function totalRemoteBalanceOf(
         uint256 projectId,
-        uint256 decimals,
-        uint256 currency
+        uint256 currency,
+        uint256 decimals
     )
         external
         view
@@ -231,8 +387,11 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
             (, uint256 val) = _suckersOf[projectId].tryGet(allSuckers[i]);
             // Include both active and deprecated suckers in aggregate economic views.
             if (val == _SUCKER_EXISTS || val == _SUCKER_DEPRECATED) {
-                // One call returns the value, peer chain ID, and snapshot freshness key together.
-                try IJBSucker(allSuckers[i]).peerChainBalanceValueOf({decimals: decimals, currency: currency}) returns (
+                // A registry self-call values the sucker's raw contexts so a missing feed reverts only this sucker
+                // (caught here), and returns the value, peer chain ID, and snapshot freshness key together.
+                try this.remoteBalanceOf({
+                    sucker: allSuckers[i], projectId: projectId, currency: currency, decimals: decimals
+                }) returns (
                     JBPeerChainValue memory read
                 ) {
                     scratch.chainCount = _recordPeerChainValue({
@@ -254,18 +413,20 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
         }
     }
 
-    /// @notice The cumulative surplus across all remote peer chains for a project, denominated in a given currency.
-    /// @dev Includes deprecated suckers only when no active sucker answers for the same peer chain, to prevent
-    /// undercounting during migration windows without letting stale deprecated snapshots dominate live routes.
-    /// Silently skips suckers that revert.
+    /// @notice The cumulative peer-chain surplus across all remote peer chains for a project, valued into a currency.
+    /// @dev Dedups same-peer suckers by freshest snapshot, then sums each sucker's surplus valued into `currency`.
+    /// Includes deprecated suckers only when no active sucker answers for the same peer chain, to prevent undercounting
+    /// during migration windows without letting stale deprecated snapshots dominate live routes. A context whose
+    /// currency already matches is taken at par (no feed); a missing cross-currency feed reverts and that sucker is
+    /// silently skipped (conservative, bias-low).
     /// @param projectId The ID of the project.
+    /// @param currency The currency to value the combined surplus into.
     /// @param decimals The decimal precision for the returned value.
-    /// @param currency The currency to normalize to.
     /// @return surplus The combined peer chain surplus.
-    function remoteSurplusOf(
+    function totalRemoteSurplusOf(
         uint256 projectId,
-        uint256 decimals,
-        uint256 currency
+        uint256 currency,
+        uint256 decimals
     )
         external
         view
@@ -283,8 +444,11 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
             (, uint256 val) = _suckersOf[projectId].tryGet(allSuckers[i]);
             // Include both active and deprecated suckers in aggregate economic views.
             if (val == _SUCKER_EXISTS || val == _SUCKER_DEPRECATED) {
-                // One call returns the value, peer chain ID, and snapshot freshness key together.
-                try IJBSucker(allSuckers[i]).peerChainSurplusValueOf({decimals: decimals, currency: currency}) returns (
+                // A registry self-call values the sucker's raw contexts so a missing feed reverts only this sucker
+                // (caught here), and returns the value, peer chain ID, and snapshot freshness key together.
+                try this.remoteSurplusOf({
+                    sucker: allSuckers[i], projectId: projectId, currency: currency, decimals: decimals
+                }) returns (
                     JBPeerChainValue memory read
                 ) {
                     scratch.chainCount = _recordPeerChainValue({
@@ -300,45 +464,6 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
         // Sum the per-chain selected values.
         for (uint256 k; k < scratch.chainCount;) {
             surplus += scratch.values[k];
-            unchecked {
-                ++k;
-            }
-        }
-    }
-
-    /// @notice The cumulative total supply across all remote peer chains for a project.
-    /// @dev Includes deprecated suckers only when no active sucker answers for the same peer chain, to prevent
-    /// undercounting during migration windows without letting stale deprecated snapshots dominate live routes.
-    /// Silently skips suckers that revert.
-    /// @param projectId The ID of the project.
-    /// @return totalSupply The combined peer chain total supply.
-    function remoteTotalSupplyOf(uint256 projectId) external view override returns (uint256 totalSupply) {
-        address[] memory allSuckers = _suckersOf[projectId].keys();
-        uint256 len = allSuckers.length;
-
-        // Per-chain dedup arrays. The number of suckers per project is small (typically 1-5),
-        // so a linear scan is cheaper than a mapping.
-        PeerValueScratch memory scratch = _peerValueScratch(len);
-
-        for (uint256 i; i < len;) {
-            (, uint256 val) = _suckersOf[projectId].tryGet(allSuckers[i]);
-            // Include both active and deprecated suckers in aggregate economic views.
-            if (val == _SUCKER_EXISTS || val == _SUCKER_DEPRECATED) {
-                // One call returns the value, peer chain ID, and snapshot freshness key together.
-                try IJBSucker(allSuckers[i]).peerChainTotalSupplyValue() returns (JBPeerChainValue memory read) {
-                    scratch.chainCount = _recordPeerChainValue({
-                        scratch: scratch, read: read, sucker: allSuckers[i], isActive: val == _SUCKER_EXISTS
-                    });
-                } catch {}
-            }
-            unchecked {
-                ++i;
-            }
-        }
-
-        // Sum the per-chain selected values.
-        for (uint256 k; k < scratch.chainCount;) {
-            totalSupply += scratch.values[k];
             unchecked {
                 ++k;
             }
@@ -474,6 +599,46 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
             value: read.value,
             snapshotTimestamp: read.snapshotTimestamp,
             isActive: isActive
+        });
+    }
+
+    /// @notice Values an amount held in one currency/decimals into another, mirroring the terminal store.
+    /// @dev Adjusts decimals, then converts currency via the prices contract. Both steps short-circuit on identity, and
+    /// the currency step also short-circuits on a zero amount, so a same-currency context consults no feed. A missing
+    /// feed reverts (fail-closed), and the caller catches it to drop just the affected sucker.
+    /// @param amount The raw amount in `fromCurrency`/`fromDecimals`.
+    /// @param fromCurrency The currency the amount is held in.
+    /// @param fromDecimals The decimals the amount is held in.
+    /// @param toCurrency The currency to value into.
+    /// @param toDecimals The decimals to value into.
+    /// @param projectId The project whose price feeds to use.
+    /// @return The amount valued into `toCurrency`/`toDecimals`.
+    function _valued(
+        uint256 amount,
+        uint256 fromCurrency,
+        uint256 fromDecimals,
+        uint256 toCurrency,
+        uint256 toDecimals,
+        uint256 projectId
+    )
+        internal
+        view
+        returns (uint256)
+    {
+        // Step 1: adjust decimals.
+        uint256 value = fromDecimals == toDecimals
+            ? amount
+            : JBFixedPointNumber.adjustDecimals({value: amount, decimals: fromDecimals, targetDecimals: toDecimals});
+
+        // Step 2: convert currency. The price is the denominator: pricePerUnitOf returns the `fromCurrency` price of
+        // one `toCurrency`, so dividing the amount by it yields the amount in `toCurrency`.
+        if (value == 0 || fromCurrency == toCurrency) return value;
+        return mulDiv({
+            x: value,
+            y: 10 ** _PRICE_FIDELITY,
+            denominator: PRICES.pricePerUnitOf({
+                projectId: projectId, pricingCurrency: fromCurrency, unitCurrency: toCurrency, decimals: _PRICE_FIDELITY
+            })
         });
     }
 

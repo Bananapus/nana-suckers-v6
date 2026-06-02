@@ -27,6 +27,7 @@ import {JBClaim} from "../src/structs/JBClaim.sol";
 import {JBLeaf} from "../src/structs/JBLeaf.sol";
 import {JBInboxTreeRoot} from "../src/structs/JBInboxTreeRoot.sol";
 import {JBMessageRoot} from "../src/structs/JBMessageRoot.sol";
+import {JBSourceContext} from "../src/structs/JBSourceContext.sol";
 import {JBRemoteToken} from "../src/structs/JBRemoteToken.sol";
 import {JBTokenMapping} from "../src/structs/JBTokenMapping.sol";
 import {MerkleLib} from "../src/utils/MerkleLib.sol";
@@ -51,7 +52,7 @@ contract DeepAttackSucker is JBSucker {
         IJBSuckerRegistry registry,
         address forwarder
     )
-        JBSucker(directory, permissions, IJBPrices(address(1)), tokens, 1, registry, forwarder)
+        JBSucker(directory, permissions, tokens, 1, registry, forwarder)
     {}
 
     // forge-lint: disable-next-line(mixed-case-function)
@@ -196,6 +197,7 @@ contract SuckerDeepAttacks is Test {
     address constant FORWARDER = address(1100);
     address constant TERMINAL = address(1200);
     address constant MOCK_REGISTRY = address(1300);
+    address constant PRICES = address(1400);
 
     uint256 constant PROJECT_ID = 1;
     address constant TOKEN = address(0x000000000000000000000000000000000000EEEe); // JBConstants.NATIVE_TOKEN
@@ -235,7 +237,7 @@ contract SuckerDeepAttacks is Test {
         // Mock terminal.pay so the toRemote fee payment try-catch doesn't revert on ABI decode of empty return data.
         vm.mockCall(TERMINAL, abi.encodeWithSelector(IJBTerminal.pay.selector), abi.encode(uint256(0)));
 
-        // Mock DIRECTORY.terminalsOf() so _buildETHAggregate() in _sendRoot() doesn't revert.
+        // Mock DIRECTORY.terminalsOf() so the per-context snapshot builder in _sendRoot() doesn't revert.
         vm.mockCall(DIRECTORY, abi.encodeCall(IJBDirectory.terminalsOf, (PROJECT_ID)), abi.encode(new IJBTerminal[](0)));
     }
 
@@ -301,10 +303,7 @@ contract SuckerDeepAttacks is Test {
             amount: 1 ether,
             remoteRoot: JBInboxTreeRoot({nonce: 5, root: bytes32(uint256(0xbeef))}),
             sourceTotalSupply: 0,
-            sourceCurrency: 0,
-            sourceDecimals: 0,
-            sourceSurplus: 0,
-            sourceBalance: 0,
+            sourceContexts: new JBSourceContext[](0),
             sourceTimestamp: 1
         });
 
@@ -326,10 +325,7 @@ contract SuckerDeepAttacks is Test {
             amount: 1 ether,
             remoteRoot: JBInboxTreeRoot({nonce: 3, root: bytes32(uint256(0xbeef))}),
             sourceTotalSupply: 0,
-            sourceCurrency: 0,
-            sourceDecimals: 0,
-            sourceSurplus: 0,
-            sourceBalance: 0,
+            sourceContexts: new JBSourceContext[](0),
             sourceTimestamp: 1
         });
 
@@ -350,10 +346,7 @@ contract SuckerDeepAttacks is Test {
             amount: 1 ether,
             remoteRoot: JBInboxTreeRoot({nonce: 5, root: bytes32(uint256(0xbbb))}),
             sourceTotalSupply: 0,
-            sourceCurrency: 0,
-            sourceDecimals: 0,
-            sourceSurplus: 0,
-            sourceBalance: 0,
+            sourceContexts: new JBSourceContext[](0),
             sourceTimestamp: 1
         });
 
@@ -378,10 +371,7 @@ contract SuckerDeepAttacks is Test {
             amount: 1 ether,
             remoteRoot: JBInboxTreeRoot({nonce: 2, root: bytes32(uint256(0xbbbb))}),
             sourceTotalSupply: 0,
-            sourceCurrency: 0,
-            sourceDecimals: 0,
-            sourceSurplus: 0,
-            sourceBalance: 0,
+            sourceContexts: new JBSourceContext[](0),
             sourceTimestamp: 1
         });
 
@@ -412,10 +402,7 @@ contract SuckerDeepAttacks is Test {
             amount: 1 ether,
             remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(0xabc))}),
             sourceTotalSupply: 0,
-            sourceCurrency: 0,
-            sourceDecimals: 0,
-            sourceSurplus: 0,
-            sourceBalance: 0,
+            sourceContexts: new JBSourceContext[](0),
             sourceTimestamp: 1
         });
 
@@ -1064,6 +1051,7 @@ contract SuckerDeepAttacks is Test {
         JBSuckerRegistry registry = new JBSuckerRegistry({
             directory: IJBDirectory(DIRECTORY),
             permissions: IJBPermissions(PERMISSIONS),
+            prices: IJBPrices(PRICES),
             initialOwner: address(this),
             trustedForwarder: FORWARDER
         });
@@ -1077,6 +1065,7 @@ contract SuckerDeepAttacks is Test {
         JBSuckerRegistry registry = new JBSuckerRegistry({
             directory: IJBDirectory(DIRECTORY),
             permissions: IJBPermissions(PERMISSIONS),
+            prices: IJBPrices(PRICES),
             initialOwner: address(this),
             trustedForwarder: FORWARDER
         });
@@ -1090,6 +1079,7 @@ contract SuckerDeepAttacks is Test {
         JBSuckerRegistry registry = new JBSuckerRegistry({
             directory: IJBDirectory(DIRECTORY),
             permissions: IJBPermissions(PERMISSIONS),
+            prices: IJBPrices(PRICES),
             initialOwner: address(this),
             trustedForwarder: FORWARDER
         });
@@ -1105,6 +1095,7 @@ contract SuckerDeepAttacks is Test {
         JBSuckerRegistry registry = new JBSuckerRegistry({
             directory: IJBDirectory(DIRECTORY),
             permissions: IJBPermissions(PERMISSIONS),
+            prices: IJBPrices(PRICES),
             initialOwner: address(this),
             trustedForwarder: FORWARDER
         });
@@ -1119,6 +1110,7 @@ contract SuckerDeepAttacks is Test {
         JBSuckerRegistry registry = new JBSuckerRegistry({
             directory: IJBDirectory(DIRECTORY),
             permissions: IJBPermissions(PERMISSIONS),
+            prices: IJBPrices(PRICES),
             initialOwner: address(this),
             trustedForwarder: FORWARDER
         });
@@ -1134,6 +1126,7 @@ contract SuckerDeepAttacks is Test {
         JBSuckerRegistry registry = new JBSuckerRegistry({
             directory: IJBDirectory(DIRECTORY),
             permissions: IJBPermissions(PERMISSIONS),
+            prices: IJBPrices(PRICES),
             initialOwner: address(this),
             trustedForwarder: FORWARDER
         });
@@ -1149,6 +1142,7 @@ contract SuckerDeepAttacks is Test {
         JBSuckerRegistry registry = new JBSuckerRegistry({
             directory: IJBDirectory(DIRECTORY),
             permissions: IJBPermissions(PERMISSIONS),
+            prices: IJBPrices(PRICES),
             initialOwner: address(this),
             trustedForwarder: FORWARDER
         });
@@ -1537,10 +1531,7 @@ contract SuckerDeepAttacks is Test {
             amount: 1 ether,
             remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(0xbeef))}),
             sourceTotalSupply: 0,
-            sourceCurrency: 0,
-            sourceDecimals: 0,
-            sourceSurplus: 0,
-            sourceBalance: 0,
+            sourceContexts: new JBSourceContext[](0),
             sourceTimestamp: 1
         });
 
@@ -1559,10 +1550,7 @@ contract SuckerDeepAttacks is Test {
             amount: 1 ether,
             remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(0xbeef))}),
             sourceTotalSupply: 0,
-            sourceCurrency: 0,
-            sourceDecimals: 0,
-            sourceSurplus: 0,
-            sourceBalance: 0,
+            sourceContexts: new JBSourceContext[](0),
             sourceTimestamp: 1
         });
 
@@ -1581,10 +1569,7 @@ contract SuckerDeepAttacks is Test {
             amount: 0,
             remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(0xbeef))}),
             sourceTotalSupply: 0,
-            sourceCurrency: 0,
-            sourceDecimals: 0,
-            sourceSurplus: 0,
-            sourceBalance: 0,
+            sourceContexts: new JBSourceContext[](0),
             sourceTimestamp: 1
         });
 
@@ -1610,10 +1595,7 @@ contract SuckerDeepAttacks is Test {
             amount: 1 ether,
             remoteRoot: JBInboxTreeRoot({nonce: 3, root: bytes32(uint256(0xbeef))}),
             sourceTotalSupply: 0,
-            sourceCurrency: 0,
-            sourceDecimals: 0,
-            sourceSurplus: 0,
-            sourceBalance: 0,
+            sourceContexts: new JBSourceContext[](0),
             sourceTimestamp: 1
         });
 
@@ -1746,10 +1728,7 @@ contract SuckerDeepAttacks is Test {
             amount: 1 ether,
             remoteRoot: JBInboxTreeRoot({nonce: 5, root: bytes32(uint256(0xbeef))}),
             sourceTotalSupply: 0,
-            sourceCurrency: 0,
-            sourceDecimals: 0,
-            sourceSurplus: 0,
-            sourceBalance: 0,
+            sourceContexts: new JBSourceContext[](0),
             sourceTimestamp: 1
         });
 

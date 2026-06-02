@@ -5,17 +5,17 @@ import "forge-std/Test.sol";
 
 import {IJBDirectory} from "@bananapus/core-v6/src/interfaces/IJBDirectory.sol";
 import {IJBPermissions} from "@bananapus/core-v6/src/interfaces/IJBPermissions.sol";
-import {IJBPrices} from "@bananapus/core-v6/src/interfaces/IJBPrices.sol";
 import {IJBTokens} from "@bananapus/core-v6/src/interfaces/IJBTokens.sol";
 import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import {LibClone} from "solady/src/utils/LibClone.sol";
 
 import "../../src/JBSucker.sol";
 import {IJBSuckerRegistry} from "../../src/interfaces/IJBSuckerRegistry.sol";
-import {JBDenominatedAmount} from "../../src/structs/JBDenominatedAmount.sol";
 import {JBInboxTreeRoot} from "../../src/structs/JBInboxTreeRoot.sol";
 import {JBMessageRoot} from "../../src/structs/JBMessageRoot.sol";
+import {JBPeerChainContext} from "../../src/structs/JBPeerChainContext.sol";
 import {JBRemoteToken} from "../../src/structs/JBRemoteToken.sol";
+import {JBSourceContext} from "../../src/structs/JBSourceContext.sol";
 
 contract RegressionPeerSnapshotSucker is JBSucker {
     constructor(
@@ -23,7 +23,7 @@ contract RegressionPeerSnapshotSucker is JBSucker {
         IJBPermissions permissions,
         IJBTokens tokens
     )
-        JBSucker(directory, permissions, IJBPrices(address(1)), tokens, 1, IJBSuckerRegistry(address(1)), address(0))
+        JBSucker(directory, permissions, tokens, 1, IJBSuckerRegistry(address(1)), address(0))
     {}
 
     function _sendRootOverAMB(
@@ -55,7 +55,6 @@ contract RegressionPeerSnapshotDesyncTest is Test {
     address internal constant PROJECTS = address(1000);
 
     uint256 internal constant PROJECT_ID = 1;
-    uint256 internal constant ETH_CURRENCY = 1;
     uint8 internal constant ETH_DECIMALS = 18;
 
     address internal constant TOKEN_A = address(0xA11CE);
@@ -73,7 +72,7 @@ contract RegressionPeerSnapshotDesyncTest is Test {
         sucker.initialize(PROJECT_ID);
     }
 
-    /// @notice MEDIUM fix: zero-supply messages now correctly zero out peerChainTotalSupply.
+    /// @notice A legitimate zero-supply snapshot zeroes out peerChainTotalSupply rather than being skipped.
     function test_zeroSupplyUpdatesClearPhantomPeerSupply() public {
         // First message sets supply to 500.
         vm.prank(address(sucker));
@@ -84,16 +83,15 @@ contract RegressionPeerSnapshotDesyncTest is Test {
         vm.prank(address(sucker));
         sucker.fromRemote(_messageRoot(TOKEN_A, 2, 2, 0, 50 ether, 75 ether));
 
-        // Fixed: zero supply is no longer skipped — phantom supply is cleared.
+        // A legitimate zero supply clears the phantom cached supply rather than being skipped.
         assertEq(sucker.peerChainTotalSupply(), 0, "zero supply correctly clears phantom cached supply");
 
-        JBDenominatedAmount memory balance = sucker.peerChainBalanceOf(ETH_DECIMALS, ETH_CURRENCY);
-        JBDenominatedAmount memory surplus = sucker.peerChainSurplusOf(ETH_DECIMALS, ETH_CURRENCY);
-        assertEq(balance.value, 75 ether, "balance updated");
-        assertEq(surplus.value, 50 ether, "surplus updated");
+        JBPeerChainContext memory context = _contextFor(_currencyOf(TOKEN_A));
+        assertEq(context.balance, 75 ether, "balance updated");
+        assertEq(context.surplus, 50 ether, "surplus updated");
     }
 
-    /// @notice HIGH fix: cross-token out-of-order roots no longer rollback shared state.
+    /// @notice A later-delivered but staler cross-token snapshot does not roll back shared state.
     function test_crossTokenOutOfOrderRootsDoNotRollbackSharedState() public {
         // Token A arrives with per-token nonce=2 and snapshot nonce=2 (fresher project-wide state).
         vm.prank(address(sucker));
@@ -103,15 +101,14 @@ contract RegressionPeerSnapshotDesyncTest is Test {
         vm.prank(address(sucker));
         sucker.fromRemote(_messageRoot(TOKEN_B, 1, 1, 100 ether, 10 ether, 20 ether));
 
-        // Fixed: Token B's staler snapshot nonce (1 < 2) does NOT overwrite shared state.
+        // Token B's staler snapshot freshness key (1 < 2) does NOT overwrite shared state.
         assertEq(
             sucker.peerChainTotalSupply(), 900 ether, "fresher token-A supply preserved despite later token-B delivery"
         );
 
-        JBDenominatedAmount memory balance = sucker.peerChainBalanceOf(ETH_DECIMALS, ETH_CURRENCY);
-        JBDenominatedAmount memory surplus = sucker.peerChainSurplusOf(ETH_DECIMALS, ETH_CURRENCY);
-        assertEq(balance.value, 400 ether, "fresher token-A balance preserved");
-        assertEq(surplus.value, 300 ether, "fresher token-A surplus preserved");
+        JBPeerChainContext memory context = _contextFor(_currencyOf(TOKEN_A));
+        assertEq(context.balance, 400 ether, "fresher token-A balance preserved");
+        assertEq(context.surplus, 300 ether, "fresher token-A surplus preserved");
     }
 
     /// @notice Verify token-local inbox still updates even when shared state is stale.
@@ -135,6 +132,21 @@ contract RegressionPeerSnapshotDesyncTest is Test {
         sucker.fromRemote(_messageRoot(TOKEN_B, 1, 1, 100 ether, 10 ether, 20 ether));
     }
 
+    /// @notice The local currency a token folds into when no terminal answers (the token-keyed convention).
+    function _currencyOf(address token) internal pure returns (uint32) {
+        // forge-lint: disable-next-line(unsafe-typecast)
+        return uint32(uint160(token));
+    }
+
+    /// @notice The stored peer context for a currency, reverting if none exists.
+    function _contextFor(uint32 currency) internal view returns (JBPeerChainContext memory) {
+        (JBPeerChainContext[] memory contexts,,) = sucker.peerChainContextsOf();
+        for (uint256 i; i < contexts.length; ++i) {
+            if (contexts[i].currency == currency) return contexts[i];
+        }
+        revert("no context for currency");
+    }
+
     function _messageRoot(
         address token,
         uint64 nonce,
@@ -147,16 +159,23 @@ contract RegressionPeerSnapshotDesyncTest is Test {
         pure
         returns (JBMessageRoot memory)
     {
+        JBSourceContext[] memory contexts = new JBSourceContext[](1);
+        contexts[0] = JBSourceContext({
+            token: bytes32(uint256(uint160(token))),
+            decimals: ETH_DECIMALS,
+            // forge-lint: disable-next-line(unsafe-typecast)
+            surplus: uint128(surplus),
+            // forge-lint: disable-next-line(unsafe-typecast)
+            balance: uint128(balance)
+        });
+
         return JBMessageRoot({
             version: 1,
             token: bytes32(uint256(uint160(token))),
             amount: 0,
             remoteRoot: JBInboxTreeRoot({nonce: nonce, root: bytes32(uint256(nonce))}),
             sourceTotalSupply: totalSupply,
-            sourceCurrency: ETH_CURRENCY,
-            sourceDecimals: ETH_DECIMALS,
-            sourceSurplus: surplus,
-            sourceBalance: balance,
+            sourceContexts: contexts,
             sourceTimestamp: sourceTs
         });
     }
