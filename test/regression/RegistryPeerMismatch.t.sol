@@ -5,6 +5,7 @@ import {Test} from "forge-std/Test.sol";
 
 import {IJBDirectory} from "@bananapus/core-v6/src/interfaces/IJBDirectory.sol";
 import {IJBPermissions} from "@bananapus/core-v6/src/interfaces/IJBPermissions.sol";
+import {IJBPrices} from "@bananapus/core-v6/src/interfaces/IJBPrices.sol";
 import {IJBProjects} from "@bananapus/core-v6/src/interfaces/IJBProjects.sol";
 import {IJBTokens} from "@bananapus/core-v6/src/interfaces/IJBTokens.sol";
 
@@ -29,6 +30,8 @@ contract RegistryPeerMismatchTest is Test {
     address internal constant PERMISSIONS = address(0xD2);
     address internal constant TOKENS = address(0xD3);
     address internal constant PROJECTS = address(0xD4);
+    /// @dev The contexts use same-currency par valuation, so the registry never reads this feed.
+    address internal constant PRICES = address(0xD7);
     address internal constant MESSENGER = address(0xD5);
     address internal constant BRIDGE = address(0xD6);
 
@@ -44,8 +47,10 @@ contract RegistryPeerMismatchTest is Test {
     }
 
     function test_registryDeployPathBreaksDefaultPeerSymmetry() public {
-        registryA = new JBSuckerRegistry(IJBDirectory(DIRECTORY), IJBPermissions(PERMISSIONS), OWNER, address(0));
-        registryB = new JBSuckerRegistry(IJBDirectory(DIRECTORY), IJBPermissions(PERMISSIONS), OWNER, address(0));
+        registryA =
+            new JBSuckerRegistry(IJBDirectory(DIRECTORY), IJBPermissions(PERMISSIONS), IJBPrices(PRICES), OWNER, address(0));
+        registryB =
+            new JBSuckerRegistry(IJBDirectory(DIRECTORY), IJBPermissions(PERMISSIONS), IJBPrices(PRICES), OWNER, address(0));
 
         JBOptimismSuckerDeployer deployerA = _deployOptimismDeployer(registryA);
         JBOptimismSuckerDeployer deployerB = _deployOptimismDeployer(registryB);

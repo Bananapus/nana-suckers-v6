@@ -4,6 +4,7 @@ pragma solidity 0.8.28;
 import {IInbox} from "@arbitrum/nitro-contracts/src/bridge/IInbox.sol";
 import {IJBDirectory} from "@bananapus/core-v6/src/interfaces/IJBDirectory.sol";
 import {IJBPermissions} from "@bananapus/core-v6/src/interfaces/IJBPermissions.sol";
+import {IJBPrices} from "@bananapus/core-v6/src/interfaces/IJBPrices.sol";
 import {IJBTokens} from "@bananapus/core-v6/src/interfaces/IJBTokens.sol";
 import {CoreDeployment, CoreDeploymentLib} from "@bananapus/core-v6/script/helpers/CoreDeploymentLib.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
@@ -83,7 +84,7 @@ contract DeployScript is Script, Sphinx {
         bool registryAlreadyDeployed = _isDeployed({
             salt: _REGISTRY_SALT,
             creationCode: type(JBSuckerRegistry).creationCode,
-            arguments: abi.encode(core.directory, core.permissions, safeAddress(), trustedForwarder)
+            arguments: abi.encode(core.directory, core.permissions, core.prices, safeAddress(), trustedForwarder)
         });
 
         if (!registryAlreadyDeployed) {
@@ -92,6 +93,7 @@ contract DeployScript is Script, Sphinx {
                     new JBSuckerRegistry{salt: _REGISTRY_SALT}({
                         directory: core.directory,
                         permissions: core.permissions,
+                        prices: core.prices,
                         initialOwner: safeAddress(),
                         trustedForwarder: trustedForwarder
                     })
@@ -105,7 +107,7 @@ contract DeployScript is Script, Sphinx {
                     initCodeHash: keccak256(
                         abi.encodePacked(
                             type(JBSuckerRegistry).creationCode,
-                            abi.encode(core.directory, core.permissions, safeAddress(), trustedForwarder)
+                            abi.encode(core.directory, core.permissions, core.prices, safeAddress(), trustedForwarder)
                         )
                     ),
                     deployer: address(0x4e59b44847b379578588920cA78FbF26c0B4956C)

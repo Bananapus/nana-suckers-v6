@@ -7,6 +7,7 @@ import "forge-std/Test.sol";
 import {IJBController} from "@bananapus/core-v6/src/interfaces/IJBController.sol";
 import {IJBDirectory} from "@bananapus/core-v6/src/interfaces/IJBDirectory.sol";
 import {IJBPermissions} from "@bananapus/core-v6/src/interfaces/IJBPermissions.sol";
+import {IJBPrices} from "@bananapus/core-v6/src/interfaces/IJBPrices.sol";
 import {IJBTerminal} from "@bananapus/core-v6/src/interfaces/IJBTerminal.sol";
 import {IJBTokens} from "@bananapus/core-v6/src/interfaces/IJBTokens.sol";
 import {JBConstants} from "@bananapus/core-v6/src/libraries/JBConstants.sol";
@@ -196,6 +197,7 @@ contract SuckerDeepAttacks is Test {
     address constant FORWARDER = address(1100);
     address constant TERMINAL = address(1200);
     address constant MOCK_REGISTRY = address(1300);
+    address constant PRICES = address(1400);
 
     uint256 constant PROJECT_ID = 1;
     address constant TOKEN = address(0x000000000000000000000000000000000000EEEe); // JBConstants.NATIVE_TOKEN
@@ -1049,6 +1051,7 @@ contract SuckerDeepAttacks is Test {
         JBSuckerRegistry registry = new JBSuckerRegistry({
             directory: IJBDirectory(DIRECTORY),
             permissions: IJBPermissions(PERMISSIONS),
+            prices: IJBPrices(PRICES),
             initialOwner: address(this),
             trustedForwarder: FORWARDER
         });
@@ -1062,6 +1065,7 @@ contract SuckerDeepAttacks is Test {
         JBSuckerRegistry registry = new JBSuckerRegistry({
             directory: IJBDirectory(DIRECTORY),
             permissions: IJBPermissions(PERMISSIONS),
+            prices: IJBPrices(PRICES),
             initialOwner: address(this),
             trustedForwarder: FORWARDER
         });
@@ -1075,6 +1079,7 @@ contract SuckerDeepAttacks is Test {
         JBSuckerRegistry registry = new JBSuckerRegistry({
             directory: IJBDirectory(DIRECTORY),
             permissions: IJBPermissions(PERMISSIONS),
+            prices: IJBPrices(PRICES),
             initialOwner: address(this),
             trustedForwarder: FORWARDER
         });
@@ -1090,6 +1095,7 @@ contract SuckerDeepAttacks is Test {
         JBSuckerRegistry registry = new JBSuckerRegistry({
             directory: IJBDirectory(DIRECTORY),
             permissions: IJBPermissions(PERMISSIONS),
+            prices: IJBPrices(PRICES),
             initialOwner: address(this),
             trustedForwarder: FORWARDER
         });
@@ -1104,6 +1110,7 @@ contract SuckerDeepAttacks is Test {
         JBSuckerRegistry registry = new JBSuckerRegistry({
             directory: IJBDirectory(DIRECTORY),
             permissions: IJBPermissions(PERMISSIONS),
+            prices: IJBPrices(PRICES),
             initialOwner: address(this),
             trustedForwarder: FORWARDER
         });
@@ -1119,6 +1126,7 @@ contract SuckerDeepAttacks is Test {
         JBSuckerRegistry registry = new JBSuckerRegistry({
             directory: IJBDirectory(DIRECTORY),
             permissions: IJBPermissions(PERMISSIONS),
+            prices: IJBPrices(PRICES),
             initialOwner: address(this),
             trustedForwarder: FORWARDER
         });
@@ -1134,6 +1142,7 @@ contract SuckerDeepAttacks is Test {
         JBSuckerRegistry registry = new JBSuckerRegistry({
             directory: IJBDirectory(DIRECTORY),
             permissions: IJBPermissions(PERMISSIONS),
+            prices: IJBPrices(PRICES),
             initialOwner: address(this),
             trustedForwarder: FORWARDER
         });

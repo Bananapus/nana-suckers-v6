@@ -6,6 +6,7 @@ import "forge-std/Test.sol";
 
 import {IJBDirectory} from "@bananapus/core-v6/src/interfaces/IJBDirectory.sol";
 import {IJBPermissions} from "@bananapus/core-v6/src/interfaces/IJBPermissions.sol";
+import {IJBPrices} from "@bananapus/core-v6/src/interfaces/IJBPrices.sol";
 import {IJBProjects} from "@bananapus/core-v6/src/interfaces/IJBProjects.sol";
 import {JBSuckerRegistry} from "../../src/JBSuckerRegistry.sol";
 import {PeerValueScratch} from "../../src/structs/PeerValueScratch.sol";
@@ -15,7 +16,7 @@ import {PeerValueScratch} from "../../src/structs/PeerValueScratch.sol";
 /// PROJECTS() call so construction succeeds.
 contract _RecordPeerValueHarness is JBSuckerRegistry {
     constructor(IJBDirectory directory)
-        JBSuckerRegistry(directory, IJBPermissions(address(0)), address(this), address(0))
+        JBSuckerRegistry(directory, IJBPermissions(address(0)), IJBPrices(address(0)), address(this), address(0))
     {}
 
     function exposed_peerValueScratch(uint256 len) external pure returns (PeerValueScratch memory) {

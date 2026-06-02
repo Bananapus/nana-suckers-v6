@@ -10,6 +10,7 @@ import {IJBPermissions} from "@bananapus/core-v6/src/interfaces/IJBPermissions.s
 import {IJBProjects} from "@bananapus/core-v6/src/interfaces/IJBProjects.sol";
 import {IJBTerminal} from "@bananapus/core-v6/src/interfaces/IJBTerminal.sol";
 import {IJBTokens} from "@bananapus/core-v6/src/interfaces/IJBTokens.sol";
+import {JBAccountingContext} from "@bananapus/core-v6/src/structs/JBAccountingContext.sol";
 import {JBConstants} from "@bananapus/core-v6/src/libraries/JBConstants.sol";
 import {JBFixedPointNumber} from "@bananapus/core-v6/src/libraries/JBFixedPointNumber.sol";
 import {JBPermissioned} from "@bananapus/core-v6/src/abstract/JBPermissioned.sol";
@@ -36,7 +37,6 @@ import {MerkleLib} from "./utils/MerkleLib.sol";
 
 // Local: structs (alphabetized)
 import {JBClaim} from "./structs/JBClaim.sol";
-import {JBDenominatedAmount} from "./structs/JBDenominatedAmount.sol";
 import {JBInboxTreeRoot} from "./structs/JBInboxTreeRoot.sol";
 import {JBMessageRoot} from "./structs/JBMessageRoot.sol";
 import {JBPeerChainContext} from "./structs/JBPeerChainContext.sol";
@@ -232,13 +232,17 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     /// @notice The ID of the project (on the local chain) that this sucker is associated with.
     uint256 private _localProjectId;
 
-    /// @notice The last known peer-chain surplus and balance for each local accounting context, keyed by the local
-    /// token a remote context resolves to. Updated each time a bridge message is received.
-    /// @dev Versioned by `snapshotTimestamp`: an entry whose `snapshotEpoch` differs from the current
-    /// `snapshotTimestamp` is treated as absent, so a context that dropped out of a fresher snapshot needs no explicit
-    /// clearing.
-    /// @custom:param localToken The local terminal token the context resolves to.
-    mapping(address localToken => JBPeerChainContext) private _peerContextOf;
+    /// @notice The peer chain's per-currency surplus and balance from the latest snapshot. Rebuilt in full each time a
+    /// fresher snapshot is received, so a context that dropped out of the new snapshot is simply absent — no per-entry
+    /// versioning or clearing is needed. A read sums these and values them into the requested currency.
+    JBPeerChainContext[] private _peerContexts;
+
+    /// @notice Caches a local token's authoritative accounting-context currency, derived once and reused on later
+    /// snapshots. A project's accounting-context currency is immutable once set, so the cached value never goes stale;
+    /// only an authoritative read is cached (a not-yet-configured token uses the convention without caching, so a later
+    /// snapshot re-reads it once its context exists).
+    /// @custom:param token The local token.
+    mapping(address token => uint32 currency) private _cachedCurrencyOf;
 
     /// @notice Optional explicit peer sucker address on the remote chain.
     /// @dev A zero value preserves the default same-address deterministic peer.
@@ -510,38 +514,58 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         // This prevents a staler per-token message from rolling back shared state (surplus, balance, supply)
         // that was already updated by a fresher message for a different token.
         if (root.sourceTimestamp > snapshotTimestamp) {
-            // Bump the snapshot epoch. Per-context entries are versioned against it, so entries written under an older
-            // epoch are implicitly stale without clearing the map.
+            // Advance the snapshot freshness key (used by the registry to dedup same-peer suckers).
             snapshotTimestamp = root.sourceTimestamp;
 
             // Update unconditionally — a legitimate zero supply must clear phantom cached supply.
             peerChainTotalSupply = root.sourceTotalSupply;
 
-            // Store each source context under the local token it resolves to. Resolution prefers the token mapping (so
+            // Rebuild the per-currency context set from scratch. A context that dropped out of this fresher snapshot is
+            // simply absent from the new set, so no per-entry clearing is needed.
+            delete _peerContexts;
+
+            // Fold each source context into the local currency it resolves to. Resolution prefers the token mapping (so
             // a same-asset token at a different remote address binds to the right local context) and falls back to
-            // identity for same-address tokens. Multiple source contexts that resolve to the same local token (e.g. the
-            // same token across multiple terminals) are summed.
+            // identity for same-address tokens; the local currency is then derived from that resolved local token's
+            // authoritative accounting context, NOT trusted from the wire, so a same-asset token at a different address
+            // still folds under the receiver's own currency. Multiple source contexts that resolve to the same local
+            // currency (e.g. the same token across multiple terminals) are summed.
             uint256 numContexts = root.sourceContexts.length;
             for (uint256 i; i < numContexts;) {
                 JBSourceContext calldata ctx = root.sourceContexts[i];
 
                 address contextToken = _localTokenForRemoteToken[ctx.token];
                 if (contextToken == address(0)) contextToken = _toAddress(ctx.token);
+                (uint32 contextCurrency, bool authoritative) = _localCurrencyOf(contextToken);
+                // Cache an authoritative currency so later snapshots reuse it instead of re-reading the terminal. The
+                // accounting-context currency is immutable, so the cache never goes stale; a not-yet-configured token
+                // is left uncached and re-read next time.
+                if (authoritative && _cachedCurrencyOf[contextToken] == 0) _cachedCurrencyOf[contextToken] = contextCurrency;
 
-                JBPeerChainContext storage stored = _peerContextOf[contextToken];
-                if (stored.snapshotEpoch == root.sourceTimestamp) {
-                    // A prior context this epoch already wrote this local token; accumulate (saturating at uint128).
-                    stored.surplus = _saturatingAddU128(stored.surplus, ctx.surplus);
-                    stored.balance = _saturatingAddU128(stored.balance, ctx.balance);
-                } else {
-                    // First entry for this local token this epoch; overwrite any stale prior-epoch value.
-                    _peerContextOf[contextToken] = JBPeerChainContext({
-                        surplus: ctx.surplus,
-                        balance: ctx.balance,
-                        currency: ctx.currency,
-                        decimals: ctx.decimals,
-                        snapshotEpoch: root.sourceTimestamp
-                    });
+                // Accumulate into an existing same-currency entry, or append a new one. The context set is small
+                // (one entry per distinct local currency), so a linear scan is cheaper than a mapping.
+                uint256 numStored = _peerContexts.length;
+                bool merged;
+                for (uint256 j; j < numStored;) {
+                    if (_peerContexts[j].currency == contextCurrency) {
+                        _peerContexts[j].surplus = _saturatingAddU128(_peerContexts[j].surplus, ctx.surplus);
+                        _peerContexts[j].balance = _saturatingAddU128(_peerContexts[j].balance, ctx.balance);
+                        merged = true;
+                        break;
+                    }
+                    unchecked {
+                        ++j;
+                    }
+                }
+                if (!merged) {
+                    _peerContexts.push(
+                        JBPeerChainContext({
+                            currency: contextCurrency,
+                            decimals: ctx.decimals,
+                            surplus: ctx.surplus,
+                            balance: ctx.balance
+                        })
+                    );
                 }
 
                 unchecked {
@@ -796,68 +820,19 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         return _outboxOf[token];
     }
 
-    /// @notice The peer chain balance for a token, folded into the requested decimal precision at par.
-    /// @dev "At par" means the remote amount is taken 1:1 (it is the same asset, resolved on receipt) and only its
-    /// decimals are adjusted — no price oracle is consulted. A context written under an older snapshot epoch is treated
-    /// as absent and returns zero.
-    /// @param token The local terminal token whose peer-chain balance to read.
-    /// @param decimals The decimal precision for the returned value.
-    /// @return A `JBDenominatedAmount` with the par value.
-    function peerChainBalanceOf(address token, uint256 decimals) external view returns (JBDenominatedAmount memory) {
-        JBPeerChainContext memory ctx = _freshPeerContextOf(token);
-        return JBDenominatedAmount({
-            value: JBFixedPointNumber.adjustDecimals({value: ctx.balance, decimals: ctx.decimals, targetDecimals: decimals}),
-            currency: ctx.currency,
-            // forge-lint: disable-next-line(unsafe-typecast)
-            decimals: uint8(decimals)
-        });
-    }
-
-    /// @notice The peer chain balance for a token bundled with the peer chain ID and snapshot freshness key.
-    /// @dev Lets aggregators (e.g. `JBSuckerRegistry`) read the value, the peer chain it belongs to, and its freshness
-    /// in one call. The `value` is identical to `peerChainBalanceOf` and is taken at par (no oracle).
-    /// @param token The local terminal token whose peer-chain balance to read.
-    /// @param decimals The decimal precision for the returned value.
-    /// @return A `JBPeerChainValue` with the par balance, peer chain ID, and snapshot freshness key.
-    function peerChainBalanceValueOf(address token, uint256 decimals) external view returns (JBPeerChainValue memory) {
-        JBPeerChainContext memory ctx = _freshPeerContextOf(token);
-        return JBPeerChainValue({
-            value: JBFixedPointNumber.adjustDecimals({value: ctx.balance, decimals: ctx.decimals, targetDecimals: decimals}),
-            peerChainId: peerChainId(),
-            snapshotTimestamp: snapshotTimestamp
-        });
-    }
-
-    /// @notice The peer chain surplus for a token, folded into the requested decimal precision at par.
-    /// @dev "At par" means the remote amount is taken 1:1 (it is the same asset, resolved on receipt) and only its
-    /// decimals are adjusted — no price oracle is consulted. A context written under an older snapshot epoch is treated
-    /// as absent and returns zero.
-    /// @param token The local terminal token whose peer-chain surplus to read.
-    /// @param decimals The decimal precision for the returned value.
-    /// @return A `JBDenominatedAmount` with the par value.
-    function peerChainSurplusOf(address token, uint256 decimals) external view returns (JBDenominatedAmount memory) {
-        JBPeerChainContext memory ctx = _freshPeerContextOf(token);
-        return JBDenominatedAmount({
-            value: JBFixedPointNumber.adjustDecimals({value: ctx.surplus, decimals: ctx.decimals, targetDecimals: decimals}),
-            currency: ctx.currency,
-            // forge-lint: disable-next-line(unsafe-typecast)
-            decimals: uint8(decimals)
-        });
-    }
-
-    /// @notice The peer chain surplus for a token bundled with the peer chain ID and snapshot freshness key.
-    /// @dev Lets aggregators (e.g. `JBSuckerRegistry`) read the value, the peer chain it belongs to, and its freshness
-    /// in one call. The `value` is identical to `peerChainSurplusOf` and is taken at par (no oracle).
-    /// @param token The local terminal token whose peer-chain surplus to read.
-    /// @param decimals The decimal precision for the returned value.
-    /// @return A `JBPeerChainValue` with the par surplus, peer chain ID, and snapshot freshness key.
-    function peerChainSurplusValueOf(address token, uint256 decimals) external view returns (JBPeerChainValue memory) {
-        JBPeerChainContext memory ctx = _freshPeerContextOf(token);
-        return JBPeerChainValue({
-            value: JBFixedPointNumber.adjustDecimals({value: ctx.surplus, decimals: ctx.decimals, targetDecimals: decimals}),
-            peerChainId: peerChainId(),
-            snapshotTimestamp: snapshotTimestamp
-        });
+    /// @notice The peer chain's raw per-context surplus and balance from the latest snapshot, bundled with the peer
+    /// chain ID and snapshot freshness key.
+    /// @dev The contexts are un-valued, in each context's own currency and decimals — the registry dedups same-peer
+    /// suckers by freshness, then values each context into a requested currency. The sucker consults no price oracle.
+    /// @return contexts The per-currency surplus and balance from the latest snapshot.
+    /// @return chainId The peer chain these contexts belong to.
+    /// @return snapshot The source freshness key of the latest snapshot.
+    function peerChainContextsOf()
+        external
+        view
+        returns (JBPeerChainContext[] memory contexts, uint256 chainId, uint256 snapshot)
+    {
+        return (_peerContexts, peerChainId(), snapshotTimestamp);
     }
 
     /// @notice The peer chain total supply bundled with the peer chain ID and snapshot freshness key.
@@ -1670,17 +1645,45 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         return ERC2771Context._contextSuffixLength();
     }
 
-    /// @notice Returns the peer-chain context for a local token if it belongs to the current snapshot, or a zeroed
-    /// context otherwise.
-    /// @dev A context whose snapshot epoch is not the current `snapshotTimestamp` dropped out of a fresher snapshot and
-    /// is treated as absent — fail-closed, the safe direction.
-    /// @param token The local terminal token.
-    /// @return ctx The fresh context, or an all-zero context if stale or never set.
-    function _freshPeerContextOf(address token) internal view returns (JBPeerChainContext memory ctx) {
-        ctx = _peerContextOf[token];
-        if (ctx.snapshotEpoch != snapshotTimestamp) {
-            return JBPeerChainContext({surplus: 0, balance: 0, currency: 0, decimals: 0, snapshotEpoch: 0});
+    /// @notice The authoritative accounting-context currency the project uses for a local token. Peer context is keyed
+    /// by this currency so a consumer reads it under the same currency it already works in (which the project may set
+    /// to a well-known id like USD rather than the token-keyed convention).
+    /// @dev Both lookups use a low-level staticcall guarded by a returndata-length check, so a missing or
+    /// non-conforming directory/terminal (including one that returns short/empty data) can't block a bridge message —
+    /// it just yields the fallback. Returns the cached value when one exists (the accounting-context currency is
+    /// immutable, so the cache never goes stale). Falls back to the conventional `uint32(uint160(token))` only when the
+    /// project has no local accounting context for the token yet; that fallback is NOT cached, so a later snapshot
+    /// re-reads it once the context exists.
+    /// @param token The resolved local token.
+    /// @return currency The project's accounting-context currency for the token.
+    /// @return authoritative Whether `currency` came from a cached or configured accounting context (true) or the
+    /// convention fallback (false). `fromRemote` caches only authoritative results, since those are immutable.
+    function _localCurrencyOf(address token) internal view returns (uint32 currency, bool authoritative) {
+        // Reuse the value derived on an earlier snapshot — no need to read the terminal again.
+        uint32 cached = _cachedCurrencyOf[token];
+        if (cached != 0) return (cached, true);
+
+        uint256 forProjectId = projectId();
+
+        // Resolve the project's primary terminal for the token. An `address` return needs a full word.
+        (bool terminalOk, bytes memory terminalData) = address(DIRECTORY).staticcall(
+            abi.encodeCall(IJBDirectory.primaryTerminalOf, (forProjectId, token))
+        );
+        if (terminalOk && terminalData.length >= 32) {
+            address terminal = abi.decode(terminalData, (address));
+            if (terminal != address(0)) {
+                // Read the token's accounting context. The struct encodes to three words.
+                (bool contextOk, bytes memory contextData) = terminal.staticcall(
+                    abi.encodeCall(IJBTerminal.accountingContextForTokenOf, (forProjectId, token))
+                );
+                if (contextOk && contextData.length >= 96) {
+                    JBAccountingContext memory accountingContext = abi.decode(contextData, (JBAccountingContext));
+                    if (accountingContext.currency != 0) return (accountingContext.currency, true);
+                }
+            }
         }
+        // forge-lint: disable-next-line(unsafe-typecast)
+        return (uint32(uint160(token)), false);
     }
 
     /// @notice The calldata. Preferred to use over `msg.data`.

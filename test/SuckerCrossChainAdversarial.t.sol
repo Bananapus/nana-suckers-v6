@@ -170,7 +170,6 @@ contract SuckerCrossChainAdversarial is Test {
 
     /// @dev An accounting context's currency is token-keyed: `uint32(uint160(token))`.
     // forge-lint: disable-next-line(unsafe-typecast)
-    uint32 constant NATIVE_CURRENCY = uint32(uint160(TOKEN));
 
     CrossChainTestSucker sucker;
 
@@ -714,7 +713,6 @@ contract SuckerCrossChainAdversarial is Test {
         ctxs = new JBSourceContext[](1);
         ctxs[0] = JBSourceContext({
             token: bytes32(uint256(uint160(TOKEN))),
-            currency: NATIVE_CURRENCY,
             decimals: 18,
             surplus: surplus,
             balance: balance

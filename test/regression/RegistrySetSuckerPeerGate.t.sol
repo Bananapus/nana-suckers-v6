@@ -56,6 +56,7 @@ contract RegistrySetSuckerPeerGateTest is Test, TestBaseWorkflow, IERC721Receive
         registry = new JBSuckerRegistry({
             directory: jbDirectory(),
             permissions: jbPermissions(),
+            prices: jbPrices(),
             initialOwner: address(this),
             trustedForwarder: address(0)
         });

@@ -305,7 +305,6 @@ library JBSuckerLib {
 
         return JBSourceContext({
             token: bytes32(uint256(uint160(context.token))),
-            currency: context.currency,
             decimals: context.decimals,
             surplus: _toUint128(surplus),
             balance: _toUint128(balance)

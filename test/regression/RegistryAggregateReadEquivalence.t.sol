@@ -5,9 +5,9 @@ import "forge-std/Test.sol";
 
 import {IJBDirectory} from "@bananapus/core-v6/src/interfaces/IJBDirectory.sol";
 import {IJBPermissions} from "@bananapus/core-v6/src/interfaces/IJBPermissions.sol";
+import {IJBPrices} from "@bananapus/core-v6/src/interfaces/IJBPrices.sol";
 import {IJBTokens} from "@bananapus/core-v6/src/interfaces/IJBTokens.sol";
 import {JBConstants} from "@bananapus/core-v6/src/libraries/JBConstants.sol";
-import {JBCurrencyIds} from "@bananapus/core-v6/src/libraries/JBCurrencyIds.sol";
 import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import {LibClone} from "solady/src/utils/LibClone.sol";
 
@@ -53,7 +53,6 @@ contract AggregateMockSucker is JBSucker {
         JBSourceContext[] memory contexts = new JBSourceContext[](1);
         contexts[0] = JBSourceContext({
             token: bytes32(uint256(uint160(JBConstants.NATIVE_TOKEN))),
-            currency: JBCurrencyIds.ETH,
             decimals: 18,
             // forge-lint: disable-next-line(unsafe-typecast)
             surplus: uint128(surplus),
@@ -129,7 +128,7 @@ contract AggregateMockDeployer is IJBSuckerDeployer {
 
 /// @title RegistryAggregateReadEquivalenceTest
 /// @notice Pins the values returned by the registry's cross-chain aggregate views
-/// (`remoteBalanceOf` / `remoteSurplusOf` / `remoteTotalSupplyOf`). These golden values must hold
+/// (`totalRemoteBalanceOf` / `totalRemoteSurplusOf` / `remoteTotalSupplyOf`). These golden values must hold
 /// regardless of how many calls the registry makes into each sucker, proving that folding the
 /// per-sucker value / peer-chain-id / snapshot-freshness reads into a single call is behavior-preserving.
 contract RegistryAggregateReadEquivalenceTest is Test {
@@ -137,11 +136,16 @@ contract RegistryAggregateReadEquivalenceTest is Test {
     address internal constant PERMISSIONS = address(0xD2);
     address internal constant PROJECTS = address(0xD3);
     address internal constant TOKENS = address(0xD4);
+
+    /// @dev Each context resolves to this currency and the queries request it, so valuation is par (no feed consulted),
+    /// and any non-zero prices address suffices.
+    address internal constant PRICES = address(0xD5);
     uint256 internal constant PROJECT_ID = 1;
 
-    /// @dev The native token at 18 decimals reads each context at par, so these golden numbers do not depend on a
-    /// price feed.
-    address internal constant ETH_TOKEN = JBConstants.NATIVE_TOKEN;
+    /// @dev With no local accounting context configured, each native context resolves to the token-keyed currency
+    /// `uint32(uint160(NATIVE_TOKEN))`; the queries request that same currency, so the golden numbers are read at par.
+    // forge-lint: disable-next-line(unsafe-typecast)
+    uint32 internal constant CURRENCY = uint32(uint160(JBConstants.NATIVE_TOKEN));
     uint8 internal constant ETH_DECIMALS = 18;
 
     JBSuckerRegistry internal registry;
@@ -156,7 +160,9 @@ contract RegistryAggregateReadEquivalenceTest is Test {
         vm.mockCall(DIRECTORY, abi.encodeWithSignature("PROJECTS()"), abi.encode(PROJECTS));
         vm.mockCall(PROJECTS, abi.encodeWithSelector(IERC721.ownerOf.selector, PROJECT_ID), abi.encode(address(this)));
 
-        registry = new JBSuckerRegistry(IJBDirectory(DIRECTORY), IJBPermissions(PERMISSIONS), address(this), address(0));
+        registry = new JBSuckerRegistry(
+            IJBDirectory(DIRECTORY), IJBPermissions(PERMISSIONS), IJBPrices(PRICES), address(this), address(0)
+        );
 
         AggregateMockSucker singleton =
             new AggregateMockSucker(IJBDirectory(DIRECTORY), IJBPermissions(PERMISSIONS), IJBTokens(TOKENS));
@@ -199,12 +205,12 @@ contract RegistryAggregateReadEquivalenceTest is Test {
 
         assertEq(registry.remoteTotalSupplyOf(PROJECT_ID), 1050e18, "total supply sums across distinct chains");
         assertEq(
-            registry.remoteBalanceOf({projectId: PROJECT_ID, token: ETH_TOKEN, decimals: ETH_DECIMALS}),
+            registry.totalRemoteBalanceOf({projectId: PROJECT_ID, currency: CURRENCY, decimals: ETH_DECIMALS}),
             440e18,
             "balance sums across distinct chains"
         );
         assertEq(
-            registry.remoteSurplusOf({projectId: PROJECT_ID, token: ETH_TOKEN, decimals: ETH_DECIMALS}),
+            registry.totalRemoteSurplusOf({projectId: PROJECT_ID, currency: CURRENCY, decimals: ETH_DECIMALS}),
             220e18,
             "surplus sums across distinct chains"
         );
@@ -224,12 +230,12 @@ contract RegistryAggregateReadEquivalenceTest is Test {
         // Chain 10 collapses to suckerB (freshest); chain 8453 adds suckerC.
         assertEq(registry.remoteTotalSupplyOf(PROJECT_ID), 950e18, "same-chain dedupe keeps the freshest supply");
         assertEq(
-            registry.remoteBalanceOf({projectId: PROJECT_ID, token: ETH_TOKEN, decimals: ETH_DECIMALS}),
+            registry.totalRemoteBalanceOf({projectId: PROJECT_ID, currency: CURRENCY, decimals: ETH_DECIMALS}),
             440e18,
             "same-chain dedupe keeps the freshest balance"
         );
         assertEq(
-            registry.remoteSurplusOf({projectId: PROJECT_ID, token: ETH_TOKEN, decimals: ETH_DECIMALS}),
+            registry.totalRemoteSurplusOf({projectId: PROJECT_ID, currency: CURRENCY, decimals: ETH_DECIMALS}),
             220e18,
             "same-chain dedupe keeps the freshest surplus"
         );
@@ -247,12 +253,12 @@ contract RegistryAggregateReadEquivalenceTest is Test {
 
         assertEq(registry.remoteTotalSupplyOf(PROJECT_ID), 1050e18, "deprecated fallback keeps its supply");
         assertEq(
-            registry.remoteBalanceOf({projectId: PROJECT_ID, token: ETH_TOKEN, decimals: ETH_DECIMALS}),
+            registry.totalRemoteBalanceOf({projectId: PROJECT_ID, currency: CURRENCY, decimals: ETH_DECIMALS}),
             440e18,
             "deprecated fallback keeps its balance"
         );
         assertEq(
-            registry.remoteSurplusOf({projectId: PROJECT_ID, token: ETH_TOKEN, decimals: ETH_DECIMALS}),
+            registry.totalRemoteSurplusOf({projectId: PROJECT_ID, currency: CURRENCY, decimals: ETH_DECIMALS}),
             220e18,
             "deprecated fallback keeps its surplus"
         );
@@ -276,12 +282,12 @@ contract RegistryAggregateReadEquivalenceTest is Test {
         // Chain 10 = active suckerB (300/150/80); chain 8453 = suckerC (250/90/40).
         assertEq(registry.remoteTotalSupplyOf(PROJECT_ID), 550e18, "active sucker overrides deprecated supply");
         assertEq(
-            registry.remoteBalanceOf({projectId: PROJECT_ID, token: ETH_TOKEN, decimals: ETH_DECIMALS}),
+            registry.totalRemoteBalanceOf({projectId: PROJECT_ID, currency: CURRENCY, decimals: ETH_DECIMALS}),
             240e18,
             "active sucker overrides deprecated balance"
         );
         assertEq(
-            registry.remoteSurplusOf({projectId: PROJECT_ID, token: ETH_TOKEN, decimals: ETH_DECIMALS}),
+            registry.totalRemoteSurplusOf({projectId: PROJECT_ID, currency: CURRENCY, decimals: ETH_DECIMALS}),
             120e18,
             "active sucker overrides deprecated surplus"
         );
@@ -303,22 +309,22 @@ contract RegistryAggregateReadEquivalenceTest is Test {
         registry.remoteTotalSupplyOf(PROJECT_ID);
 
         vm.expectRevert(expectedRevert);
-        registry.remoteBalanceOf({projectId: PROJECT_ID, token: ETH_TOKEN, decimals: ETH_DECIMALS});
+        registry.totalRemoteBalanceOf({projectId: PROJECT_ID, currency: CURRENCY, decimals: ETH_DECIMALS});
 
         vm.expectRevert(expectedRevert);
-        registry.remoteSurplusOf({projectId: PROJECT_ID, token: ETH_TOKEN, decimals: ETH_DECIMALS});
+        registry.totalRemoteSurplusOf({projectId: PROJECT_ID, currency: CURRENCY, decimals: ETH_DECIMALS});
     }
 
     /// @notice With no snapshots populated, every aggregate view returns zero.
     function test_emptySnapshotsReturnZero() external view {
         assertEq(registry.remoteTotalSupplyOf(PROJECT_ID), 0, "no snapshot => zero supply");
         assertEq(
-            registry.remoteBalanceOf({projectId: PROJECT_ID, token: ETH_TOKEN, decimals: ETH_DECIMALS}),
+            registry.totalRemoteBalanceOf({projectId: PROJECT_ID, currency: CURRENCY, decimals: ETH_DECIMALS}),
             0,
             "no snapshot => zero balance"
         );
         assertEq(
-            registry.remoteSurplusOf({projectId: PROJECT_ID, token: ETH_TOKEN, decimals: ETH_DECIMALS}),
+            registry.totalRemoteSurplusOf({projectId: PROJECT_ID, currency: CURRENCY, decimals: ETH_DECIMALS}),
             0,
             "no snapshot => zero surplus"
         );

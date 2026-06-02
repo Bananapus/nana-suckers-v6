@@ -6,9 +6,9 @@ import {IJBDirectory} from "@bananapus/core-v6/src/interfaces/IJBDirectory.sol";
 import {IJBProjects} from "@bananapus/core-v6/src/interfaces/IJBProjects.sol";
 import {IJBTokens} from "@bananapus/core-v6/src/interfaces/IJBTokens.sol";
 import {JBClaim} from "../structs/JBClaim.sol";
-import {JBDenominatedAmount} from "../structs/JBDenominatedAmount.sol";
 import {JBInboxTreeRoot} from "../structs/JBInboxTreeRoot.sol";
 import {JBOutboxTree} from "../structs/JBOutboxTree.sol";
+import {JBPeerChainContext} from "../structs/JBPeerChainContext.sol";
 import {JBPeerChainValue} from "../structs/JBPeerChainValue.sol";
 import {JBRemoteToken} from "../structs/JBRemoteToken.sol";
 import {JBSuckerState} from "../enums/JBSuckerState.sol";
@@ -153,37 +153,17 @@ interface IJBSucker is IERC165 {
     /// @return chainId The remote chain ID.
     function peerChainId() external view returns (uint256 chainId);
 
-    /// @notice The peer chain balance for a local token, folded into a desired decimal precision at par.
-    /// @dev The remote amount is taken 1:1 (same asset, resolved on receipt) and only its decimals are adjusted — no
-    /// price oracle is consulted.
-    /// @param token The local terminal token whose peer-chain balance to read.
-    /// @param decimals The decimal precision for the returned value.
-    /// @return A `JBDenominatedAmount` with the par value.
-    function peerChainBalanceOf(address token, uint256 decimals) external view returns (JBDenominatedAmount memory);
-
-    /// @notice The peer chain balance for a token bundled with the peer chain ID and snapshot freshness key.
-    /// @dev Lets aggregators read the value, the peer chain it belongs to, and its freshness in one call. The `value`
-    /// matches `peerChainBalanceOf` and is taken at par.
-    /// @param token The local terminal token whose peer-chain balance to read.
-    /// @param decimals The decimal precision for the returned value.
-    /// @return A `JBPeerChainValue` with the par balance, peer chain ID, and snapshot freshness key.
-    function peerChainBalanceValueOf(address token, uint256 decimals) external view returns (JBPeerChainValue memory);
-
-    /// @notice The peer chain surplus for a local token, folded into a desired decimal precision at par.
-    /// @dev The remote amount is taken 1:1 (same asset, resolved on receipt) and only its decimals are adjusted — no
-    /// price oracle is consulted.
-    /// @param token The local terminal token whose peer-chain surplus to read.
-    /// @param decimals The decimal precision for the returned value.
-    /// @return A `JBDenominatedAmount` with the par value.
-    function peerChainSurplusOf(address token, uint256 decimals) external view returns (JBDenominatedAmount memory);
-
-    /// @notice The peer chain surplus for a token bundled with the peer chain ID and snapshot freshness key.
-    /// @dev Lets aggregators read the value, the peer chain it belongs to, and its freshness in one call. The `value`
-    /// matches `peerChainSurplusOf` and is taken at par.
-    /// @param token The local terminal token whose peer-chain surplus to read.
-    /// @param decimals The decimal precision for the returned value.
-    /// @return A `JBPeerChainValue` with the par surplus, peer chain ID, and snapshot freshness key.
-    function peerChainSurplusValueOf(address token, uint256 decimals) external view returns (JBPeerChainValue memory);
+    /// @notice The peer chain's raw per-context surplus and balance from the latest snapshot, bundled with the peer
+    /// chain ID and snapshot freshness key.
+    /// @dev Un-valued — each context is in its own currency and decimals. The registry dedups same-peer suckers by
+    /// freshness, then values each context into a requested currency. The sucker consults no price oracle.
+    /// @return contexts The per-currency surplus and balance from the latest snapshot.
+    /// @return chainId The peer chain these contexts belong to.
+    /// @return snapshot The source freshness key of the latest snapshot.
+    function peerChainContextsOf()
+        external
+        view
+        returns (JBPeerChainContext[] memory contexts, uint256 chainId, uint256 snapshot);
 
     /// @notice The last known total token supply on the peer chain, updated each time a bridge message is received.
     /// @dev Used by data hooks to compute `effectiveTotalSupply = localSupply + sum(peerChainTotalSupply)` across all

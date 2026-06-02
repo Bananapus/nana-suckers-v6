@@ -84,7 +84,7 @@ contract MultiChainEvolutionTest is Test, TestBaseWorkflow, IERC721Receiver {
         vm.etch(MOCK_CCIP_ROUTER_ADDR, hex"01");
 
         // Deploy the registry.
-        registry = new JBSuckerRegistry(jbDirectory(), jbPermissions(), address(this), address(0));
+        registry = new JBSuckerRegistry(jbDirectory(), jbPermissions(), jbPrices(), address(this), address(0));
 
         // --- Set up OP deployer ---
         opDeployer = new JBOptimismSuckerDeployer({

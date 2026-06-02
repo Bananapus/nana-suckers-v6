@@ -12,7 +12,7 @@ import "@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol";
 import "../../src/JBSucker.sol";
 import {IJBSuckerDeployer} from "../../src/interfaces/IJBSuckerDeployer.sol";
 import {IJBSuckerRegistry} from "../../src/interfaces/IJBSuckerRegistry.sol";
-import {JBDenominatedAmount} from "../../src/structs/JBDenominatedAmount.sol";
+import {JBPeerChainContext} from "../../src/structs/JBPeerChainContext.sol";
 import {JBPeerChainValue} from "../../src/structs/JBPeerChainValue.sol";
 
 // forge-lint: disable-next-line(unaliased-plain-import)
@@ -49,7 +49,7 @@ contract DeployerTests is Test, TestBaseWorkflow, IERC721Receiver {
         super.setUp();
 
         // Deploy the registry.
-        registry = new JBSuckerRegistry(jbDirectory(), jbPermissions(), address(this), address(0));
+        registry = new JBSuckerRegistry(jbDirectory(), jbPermissions(), jbPrices(), address(this), address(0));
 
         // Setup: terminal / project
         // Package up the limits for the given terminal.
@@ -582,8 +582,6 @@ contract DeployerTests is Test, TestBaseWorkflow, IERC721Receiver {
         // forge-lint: disable-next-line(unsafe-typecast)
         IJBSucker sucker2 = _deployThroughRegistry(deployer2, projectId, bytes32("salt2"));
 
-        address ethToken = JBConstants.NATIVE_TOKEN;
-
         // Mock: sucker1 reports 900e18, sucker2 reports 1000e18 — both on the same peer chain at the same freshness,
         // so the registry's combined read collapses them to MAX rather than SUM.
         vm.mockCall(
@@ -600,31 +598,13 @@ contract DeployerTests is Test, TestBaseWorkflow, IERC721Receiver {
         // remoteTotalSupplyOf should return MAX(900, 1000) = 1000, NOT SUM 1900.
         assertEq(registry.remoteTotalSupplyOf(projectId), 1000e18, "should use MAX, not SUM");
 
-        // Same pattern for balance.
-        vm.mockCall(
-            address(sucker1),
-            abi.encodeCall(IJBSucker.peerChainBalanceValueOf, (ethToken, 18)),
-            abi.encode(JBPeerChainValue({value: 900e18, peerChainId: remoteChainId, snapshotTimestamp: 0}))
-        );
-        vm.mockCall(
-            address(sucker2),
-            abi.encodeCall(IJBSucker.peerChainBalanceValueOf, (ethToken, 18)),
-            abi.encode(JBPeerChainValue({value: 1000e18, peerChainId: remoteChainId, snapshotTimestamp: 0}))
-        );
-        assertEq(registry.remoteBalanceOf(projectId, ethToken, 18), 1000e18, "balance should use MAX");
+        // Same pattern for balance and surplus: each sucker reports one native-currency context (same peer chain, same
+        // freshness), valued at par, so the registry collapses them to MAX.
+        _mockPeerChainContexts(address(sucker1), remoteChainId, 900e18, 900e18, 0);
+        _mockPeerChainContexts(address(sucker2), remoteChainId, 1000e18, 1000e18, 0);
 
-        // Same pattern for surplus.
-        vm.mockCall(
-            address(sucker1),
-            abi.encodeCall(IJBSucker.peerChainSurplusValueOf, (ethToken, 18)),
-            abi.encode(JBPeerChainValue({value: 900e18, peerChainId: remoteChainId, snapshotTimestamp: 0}))
-        );
-        vm.mockCall(
-            address(sucker2),
-            abi.encodeCall(IJBSucker.peerChainSurplusValueOf, (ethToken, 18)),
-            abi.encode(JBPeerChainValue({value: 1000e18, peerChainId: remoteChainId, snapshotTimestamp: 0}))
-        );
-        assertEq(registry.remoteSurplusOf(projectId, ethToken, 18), 1000e18, "surplus should use MAX");
+        assertEq(registry.totalRemoteBalanceOf(projectId, _ethCurrency(), 18), 1000e18, "balance should use MAX");
+        assertEq(registry.totalRemoteSurplusOf(projectId, _ethCurrency(), 18), 1000e18, "surplus should use MAX");
     }
 
     /// @notice After deprecating and removing a sucker, a new sucker to the same peer chain should succeed.
@@ -654,6 +634,35 @@ contract DeployerTests is Test, TestBaseWorkflow, IERC721Receiver {
         // forge-lint: disable-next-line(unsafe-typecast)
         IJBSucker sucker2 = _deployThroughRegistry(deployer2, projectId, bytes32("salt2"));
         assertTrue(registry.isSuckerOf(projectId, address(sucker2)));
+    }
+
+    /// @dev The native-token convention currency. Contexts are reported under this currency and the aggregate views
+    /// query it, so valuation is par (no price feed consulted).
+    // forge-lint: disable-next-line(unsafe-typecast)
+    function _ethCurrency() internal pure returns (uint32) {
+        // forge-lint: disable-next-line(unsafe-typecast)
+        return uint32(uint160(JBConstants.NATIVE_TOKEN));
+    }
+
+    /// @notice Mock a sucker's raw per-context snapshot: one native-currency context carrying `surplus` and `balance`,
+    /// reported for `peerChainId` at the given snapshot freshness key. The registry values this at par into the
+    /// native-token convention currency the aggregate views query.
+    function _mockPeerChainContexts(
+        address sucker,
+        uint256 peerChainId,
+        uint128 surplus,
+        uint128 balance,
+        uint256 snapshotTimestamp
+    )
+        internal
+    {
+        JBPeerChainContext[] memory contexts = new JBPeerChainContext[](1);
+        contexts[0] = JBPeerChainContext({currency: _ethCurrency(), decimals: 18, surplus: surplus, balance: balance});
+        vm.mockCall(
+            sucker,
+            abi.encodeCall(IJBSucker.peerChainContextsOf, ()),
+            abi.encode(contexts, peerChainId, snapshotTimestamp)
+        );
     }
 
     // ------------------------------------------------------------------
@@ -692,7 +701,7 @@ contract DeployerTests is Test, TestBaseWorkflow, IERC721Receiver {
         assertEq(registry.remoteTotalSupplyOf(projectId), 350e18);
     }
 
-    /// @notice remoteBalanceOf sums peerChainBalanceOf across active suckers.
+    /// @notice totalRemoteBalanceOf sums each sucker's valued peer-chain balance across active suckers.
     function testRemoteBalanceOf(ICCIPRouter _ccipRouter) public {
         vm.assume(uint160(address(_ccipRouter)) > 100);
         _assumeNotDeployed(address(_ccipRouter));
@@ -708,24 +717,14 @@ contract DeployerTests is Test, TestBaseWorkflow, IERC721Receiver {
         // forge-lint: disable-next-line(unsafe-typecast)
         IJBSucker sucker2 = _deployThroughRegistry(deployer2, projectId, bytes32("salt2"));
 
-        address ethToken = JBConstants.NATIVE_TOKEN;
+        // Mock the per-context snapshot on each sucker (distinct peer chains, so their valued balances sum).
+        _mockPeerChainContexts(address(sucker1), 10, 0, 5e18, 0);
+        _mockPeerChainContexts(address(sucker2), 42_161, 0, 3e18, 0);
 
-        // Mock the combined peer-chain read on each sucker (distinct peer chains, so they sum).
-        vm.mockCall(
-            address(sucker1),
-            abi.encodeCall(IJBSucker.peerChainBalanceValueOf, (ethToken, 18)),
-            abi.encode(JBPeerChainValue({value: 5e18, peerChainId: 10, snapshotTimestamp: 0}))
-        );
-        vm.mockCall(
-            address(sucker2),
-            abi.encodeCall(IJBSucker.peerChainBalanceValueOf, (ethToken, 18)),
-            abi.encode(JBPeerChainValue({value: 3e18, peerChainId: 42_161, snapshotTimestamp: 0}))
-        );
-
-        assertEq(registry.remoteBalanceOf(projectId, ethToken, 18), 8e18);
+        assertEq(registry.totalRemoteBalanceOf(projectId, _ethCurrency(), 18), 8e18);
     }
 
-    /// @notice remoteSurplusOf sums peerChainSurplusOf across active suckers.
+    /// @notice totalRemoteSurplusOf sums each sucker's valued peer-chain surplus across active suckers.
     function testRemoteSurplusOf(ICCIPRouter _ccipRouter) public {
         vm.assume(uint160(address(_ccipRouter)) > 100);
         _assumeNotDeployed(address(_ccipRouter));
@@ -741,28 +740,18 @@ contract DeployerTests is Test, TestBaseWorkflow, IERC721Receiver {
         // forge-lint: disable-next-line(unsafe-typecast)
         IJBSucker sucker2 = _deployThroughRegistry(deployer2, projectId, bytes32("salt2"));
 
-        address ethToken = JBConstants.NATIVE_TOKEN;
+        // Mock the per-context snapshot on each sucker (distinct peer chains, so their valued surpluses sum).
+        _mockPeerChainContexts(address(sucker1), 10, 10e18, 0, 0);
+        _mockPeerChainContexts(address(sucker2), 42_161, 7e18, 0, 0);
 
-        // Mock the combined peer-chain read on each sucker (distinct peer chains, so they sum).
-        vm.mockCall(
-            address(sucker1),
-            abi.encodeCall(IJBSucker.peerChainSurplusValueOf, (ethToken, 18)),
-            abi.encode(JBPeerChainValue({value: 10e18, peerChainId: 10, snapshotTimestamp: 0}))
-        );
-        vm.mockCall(
-            address(sucker2),
-            abi.encodeCall(IJBSucker.peerChainSurplusValueOf, (ethToken, 18)),
-            abi.encode(JBPeerChainValue({value: 7e18, peerChainId: 42_161, snapshotTimestamp: 0}))
-        );
-
-        assertEq(registry.remoteSurplusOf(projectId, ethToken, 18), 17e18);
+        assertEq(registry.totalRemoteSurplusOf(projectId, _ethCurrency(), 18), 17e18);
     }
 
     /// @notice Remote views return 0 for a project with no suckers.
     function testRemoteViewsZeroWithNoSuckers() public view {
         assertEq(registry.remoteTotalSupplyOf(projectId), 0);
-        assertEq(registry.remoteBalanceOf(projectId, JBConstants.NATIVE_TOKEN, 18), 0);
-        assertEq(registry.remoteSurplusOf(projectId, JBConstants.NATIVE_TOKEN, 18), 0);
+        assertEq(registry.totalRemoteBalanceOf(projectId, _ethCurrency(), 18), 0);
+        assertEq(registry.totalRemoteSurplusOf(projectId, _ethCurrency(), 18), 0);
     }
 
     /// @notice Deprecated suckers are included in aggregate views so their supply

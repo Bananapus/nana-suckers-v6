@@ -5,6 +5,7 @@ import "forge-std/Test.sol";
 
 import {IJBDirectory} from "@bananapus/core-v6/src/interfaces/IJBDirectory.sol";
 import {IJBPermissions} from "@bananapus/core-v6/src/interfaces/IJBPermissions.sol";
+import {IJBPrices} from "@bananapus/core-v6/src/interfaces/IJBPrices.sol";
 import {IJBTokens} from "@bananapus/core-v6/src/interfaces/IJBTokens.sol";
 import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import {LibClone} from "solady/src/utils/LibClone.sol";
@@ -14,7 +15,6 @@ import {JBSuckerRegistry} from "../../src/JBSuckerRegistry.sol";
 import {IJBSucker} from "../../src/interfaces/IJBSucker.sol";
 import {IJBSuckerDeployer} from "../../src/interfaces/IJBSuckerDeployer.sol";
 import {IJBSuckerRegistry} from "../../src/interfaces/IJBSuckerRegistry.sol";
-import {JBDenominatedAmount} from "../../src/structs/JBDenominatedAmount.sol";
 import {JBMessageRoot} from "../../src/structs/JBMessageRoot.sol";
 import {JBRemoteToken} from "../../src/structs/JBRemoteToken.sol";
 import {JBTokenMapping} from "../../src/structs/JBTokenMapping.sol";
@@ -108,6 +108,9 @@ contract DeprecatedSuckerAggregateViewsTest is Test {
     address internal constant PERMISSIONS = address(0xD2);
     address internal constant PROJECTS = address(0xD3);
     address internal constant TOKENS = address(0xD4);
+
+    /// @dev These tests only read total supply (never valued), so any non-zero prices address suffices.
+    address internal constant PRICES = address(0xD5);
     uint256 internal constant PROJECT_ID = 1;
 
     JBSuckerRegistry internal registry;
@@ -121,7 +124,9 @@ contract DeprecatedSuckerAggregateViewsTest is Test {
         vm.mockCall(DIRECTORY, abi.encodeWithSignature("PROJECTS()"), abi.encode(PROJECTS));
         vm.mockCall(PROJECTS, abi.encodeWithSelector(IERC721.ownerOf.selector, PROJECT_ID), abi.encode(address(this)));
 
-        registry = new JBSuckerRegistry(IJBDirectory(DIRECTORY), IJBPermissions(PERMISSIONS), address(this), address(0));
+        registry = new JBSuckerRegistry(
+            IJBDirectory(DIRECTORY), IJBPermissions(PERMISSIONS), IJBPrices(PRICES), address(this), address(0)
+        );
 
         // Create singleton.
         DeprecatedViewMockSucker singleton =

@@ -11,9 +11,9 @@ import {LibClone} from "solady/src/utils/LibClone.sol";
 
 import "../../src/JBSucker.sol";
 import {IJBSuckerRegistry} from "../../src/interfaces/IJBSuckerRegistry.sol";
-import {JBDenominatedAmount} from "../../src/structs/JBDenominatedAmount.sol";
 import {JBInboxTreeRoot} from "../../src/structs/JBInboxTreeRoot.sol";
 import {JBMessageRoot} from "../../src/structs/JBMessageRoot.sol";
+import {JBPeerChainContext} from "../../src/structs/JBPeerChainContext.sol";
 import {JBRemoteToken} from "../../src/structs/JBRemoteToken.sol";
 import {JBSourceContext} from "../../src/structs/JBSourceContext.sol";
 
@@ -85,13 +85,27 @@ contract SameTimestampSnapshotPinnedTest is Test {
             _messageRoot({nonce: 2, sourceTimestamp: 101, totalSupply: 100 ether, surplus: 50 ether, balance: 70 ether})
         );
 
-        JBDenominatedAmount memory balance = sucker.peerChainBalanceOf(TOKEN, ETH_DECIMALS);
-        JBDenominatedAmount memory surplus = sucker.peerChainSurplusOf(TOKEN, ETH_DECIMALS);
+        JBPeerChainContext memory context = _contextFor(_currencyOf(TOKEN));
 
         assertEq(sucker.snapshotTimestamp(), 101, "freshness key advances within the same block");
         assertEq(sucker.peerChainTotalSupply(), 100 ether, "later same-block supply update is applied");
-        assertEq(surplus.value, 50 ether, "later same-block surplus update is applied");
-        assertEq(balance.value, 70 ether, "later same-block balance update is applied");
+        assertEq(context.surplus, 50 ether, "later same-block surplus update is applied");
+        assertEq(context.balance, 70 ether, "later same-block balance update is applied");
+    }
+
+    /// @notice The local currency a token folds into when no terminal answers (the token-keyed convention).
+    function _currencyOf(address token) internal pure returns (uint32) {
+        // forge-lint: disable-next-line(unsafe-typecast)
+        return uint32(uint160(token));
+    }
+
+    /// @notice The stored peer context for a currency, reverting if none exists.
+    function _contextFor(uint32 currency) internal view returns (JBPeerChainContext memory) {
+        (JBPeerChainContext[] memory contexts,,) = sucker.peerChainContextsOf();
+        for (uint256 i; i < contexts.length; ++i) {
+            if (contexts[i].currency == currency) return contexts[i];
+        }
+        revert("no context for currency");
     }
 
     function _messageRoot(
@@ -108,8 +122,6 @@ contract SameTimestampSnapshotPinnedTest is Test {
         JBSourceContext[] memory contexts = new JBSourceContext[](1);
         contexts[0] = JBSourceContext({
             token: bytes32(uint256(uint160(TOKEN))),
-            // forge-lint: disable-next-line(unsafe-typecast)
-            currency: uint32(uint160(TOKEN)),
             decimals: ETH_DECIMALS,
             // forge-lint: disable-next-line(unsafe-typecast)
             surplus: uint128(surplus),

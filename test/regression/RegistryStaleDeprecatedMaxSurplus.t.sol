@@ -5,12 +5,13 @@ import "forge-std/Test.sol";
 
 import {IJBDirectory} from "@bananapus/core-v6/src/interfaces/IJBDirectory.sol";
 import {IJBPermissions} from "@bananapus/core-v6/src/interfaces/IJBPermissions.sol";
+import {IJBPrices} from "@bananapus/core-v6/src/interfaces/IJBPrices.sol";
 import {IJBProjects} from "@bananapus/core-v6/src/interfaces/IJBProjects.sol";
 import {JBCashOuts} from "@bananapus/core-v6/src/libraries/JBCashOuts.sol";
 import {EnumerableMap} from "@openzeppelin/contracts/utils/structs/EnumerableMap.sol";
 
 import {JBSuckerRegistry} from "../../src/JBSuckerRegistry.sol";
-import {JBDenominatedAmount} from "../../src/structs/JBDenominatedAmount.sol";
+import {JBPeerChainContext} from "../../src/structs/JBPeerChainContext.sol";
 import {JBPeerChainValue} from "../../src/structs/JBPeerChainValue.sol";
 
 contract RegistryProjectsMock {
@@ -40,6 +41,7 @@ contract RegistryHarness is JBSuckerRegistry {
         JBSuckerRegistry(
             IJBDirectory(address(new RegistryDirectoryMock())),
             IJBPermissions(address(0x1234)),
+            IJBPrices(address(0xA4)),
             address(this),
             address(0)
         )
@@ -54,37 +56,38 @@ contract RegistryHarness is JBSuckerRegistry {
     }
 }
 
+/// @notice A sucker that reports one raw peer-chain context plus a supply for a single peer chain. The context currency
+/// matches the test's query currency, so the registry values it at par (no price feed). The mock exposes no snapshot
+/// freshness, so the reads report a zero freshness key; active-over-deprecated selection does not depend on freshness.
 contract SameChainSuckerMock {
     uint256 internal immutable _chainId;
-    uint256 internal immutable _surplus;
+    uint128 internal immutable _surplus;
     uint256 internal immutable _supply;
+    uint32 internal immutable _currency;
 
-    constructor(uint256 chainId, uint256 surplus, uint256 supply) {
+    constructor(uint256 chainId, uint128 surplus, uint256 supply, uint32 currency) {
         _chainId = chainId;
         _surplus = surplus;
         _supply = supply;
+        _currency = currency;
     }
 
     function peerChainId() external view returns (uint256) {
         return _chainId;
     }
 
-    function peerChainSurplusOf(address token, uint256 decimals) external view returns (JBDenominatedAmount memory) {
-        // forge-lint: disable-next-line(unsafe-typecast)
-        return JBDenominatedAmount({value: _surplus, currency: uint32(uint160(token)), decimals: uint8(decimals)});
+    function peerChainContextsOf()
+        external
+        view
+        returns (JBPeerChainContext[] memory contexts, uint256, uint256)
+    {
+        contexts = new JBPeerChainContext[](1);
+        contexts[0] = JBPeerChainContext({currency: _currency, decimals: 18, surplus: _surplus, balance: 0});
+        return (contexts, _chainId, 0);
     }
 
     function peerChainTotalSupply() external view returns (uint256) {
         return _supply;
-    }
-
-    // This mock exposes no snapshot freshness, so the combined reads report a zero freshness key.
-    function peerChainSurplusValueOf(address, uint256) external view returns (JBPeerChainValue memory) {
-        return JBPeerChainValue({value: _surplus, peerChainId: _chainId, snapshotTimestamp: 0});
-    }
-
-    function peerChainBalanceValueOf(address, uint256) external view returns (JBPeerChainValue memory) {
-        return JBPeerChainValue({value: 0, peerChainId: _chainId, snapshotTimestamp: 0});
     }
 
     function peerChainTotalSupplyValue() external view returns (JBPeerChainValue memory) {
@@ -96,21 +99,25 @@ contract RegistryStaleDeprecatedMaxSurplusTest is Test {
     uint256 internal constant PROJECT_ID = 1;
     uint256 internal constant PEER_CHAIN_ID = 10;
 
+    /// @dev The contexts use this currency and the query requests it, so valuation is par (no feed consulted).
+    // forge-lint: disable-next-line(unsafe-typecast)
+    uint32 internal constant CURRENCY = uint32(uint160(address(0xEEE)));
+
     function test_freshActiveSnapshotDominatesStaleDeprecatedSameChainSurplus() external {
         RegistryHarness registry = new RegistryHarness();
 
         // Old deprecated sucker: stale surplus snapshot from before the migration.
         SameChainSuckerMock deprecatedSucker =
-            new SameChainSuckerMock({chainId: PEER_CHAIN_ID, surplus: 1000 ether, supply: 100 ether});
+            new SameChainSuckerMock({chainId: PEER_CHAIN_ID, surplus: 1000 ether, supply: 100 ether, currency: CURRENCY});
 
         // New active sucker: fresh snapshot after the remote chain already spent most of its surplus.
         SameChainSuckerMock activeSucker =
-            new SameChainSuckerMock({chainId: PEER_CHAIN_ID, surplus: 100 ether, supply: 100 ether});
+            new SameChainSuckerMock({chainId: PEER_CHAIN_ID, surplus: 100 ether, supply: 100 ether, currency: CURRENCY});
 
         registry.seedDeprecated(PROJECT_ID, address(deprecatedSucker));
         registry.seedActive(PROJECT_ID, address(activeSucker));
 
-        uint256 reportedRemoteSurplus = registry.remoteSurplusOf(PROJECT_ID, address(0xEEE), 18);
+        uint256 reportedRemoteSurplus = registry.totalRemoteSurplusOf(PROJECT_ID, CURRENCY, 18);
         uint256 reportedRemoteSupply = registry.remoteTotalSupplyOf(PROJECT_ID);
 
         // The registry prefers the live active sucker over stale deprecated same-chain snapshots.

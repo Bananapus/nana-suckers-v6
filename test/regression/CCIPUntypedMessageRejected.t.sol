@@ -63,7 +63,6 @@ contract RegressionCCIPUntypedMessageRejectedTest is Test {
         JBSourceContext[] memory contexts = new JBSourceContext[](1);
         contexts[0] = JBSourceContext({
             token: bytes32(uint256(uint160(address(0xBEEF)))),
-            currency: 1,
             decimals: 18,
             surplus: 1 ether,
             balance: 1 ether
