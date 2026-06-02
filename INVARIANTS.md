@@ -42,7 +42,7 @@ This file documents the invariants the **runtime contracts in this repo** enforc
 - `fromRemote(JBMessageRoot)` is auth-gated to the messenger (`JBSucker.sol:415-480`). Critically, it uses **raw `msg.sender`**, never `_msgSender()`, to authenticate the AMB (`JBSucker.sol:417-419`). This defeats ERC-2771 forwarder spoofing — a trusted forwarder cannot append a calldata suffix to impersonate the bridge messenger.
 - `MESSAGE_VERSION` mismatches revert.
 - Per-token inbox state advances on any **strictly-greater** `root.remoteRoot.nonce` (not strictly sequential). Stale nonces emit `StaleRootRejected` and return silently (intentional — reverting would lose bridged native ETH).
-- The **project-wide snapshot** (`peerChainTotalSupply`, `_peerChainSurplus`, `_peerChainBalance`) advances only when `root.sourceTimestamp > snapshotTimestamp` — fresher source-timestamp wins, regardless of which token's message carried it. Stale per-token messages cannot roll back shared state.
+- The **project-wide snapshot** (`peerChainTotalSupply` plus the enumerable per-currency context set `_peerContexts`) advances only when `root.sourceTimestamp > snapshotTimestamp` — fresher source-timestamp wins, regardless of which token's message carried it. A fresher snapshot rebuilds the whole `_peerContexts` set, so contexts dropped by the new snapshot simply vanish. Each remote context resolves to its local token, whose authoritative accounting-context currency is read once from the terminal (`accountingContextForTokenOf(token).currency`) and cached; same-currency contexts within a snapshot are summed. Stale per-token messages cannot roll back shared state.
 - Roots are accepted in `DEPRECATED` state to prevent stranding tokens already sent before deprecation — outbound sends are blocked in `SENDING_DISABLED`/`DEPRECATED` so double-spend is impossible.
 - Unmapped tokens are accepted (claims later fail at mapping lookup) — rejecting at ingress time would permanently lose bridged tokens for a token that becomes mappable later.
 
@@ -170,8 +170,9 @@ Base contract. All cross-chain variants inherit. ERC-2771–aware for app-layer 
 
 ### Views
 
-- `inboxOf(token)`, `outboxOf(token)`, `remoteTokenFor(token)`, `isMapped(token)`, `amountToAddToBalanceOf(token)`, `peer()`, `projectId()`, `state()`, `peerChainBalanceOf(decimals, currency)`, `peerChainSurplusOf(decimals, currency)`, `peerChainTotalSupply` (public storage), `executedLeafHashOf(token, index)` (public storage), `snapshotTimestamp` (public storage), `peerChainId()` (virtual — overridden per chain), `supportsInterface(bytes4)`.
-- Combined peer-chain reads `peerChainBalanceValueOf(decimals, currency)`, `peerChainSurplusValueOf(decimals, currency)`, `peerChainTotalSupplyValue()` each return a `JBPeerChainValue{value, peerChainId, snapshotTimestamp}`. The `value` is identical to the matching single-purpose view above; the bundled peer chain ID and snapshot freshness key let `JBSuckerRegistry` read everything it needs to dedupe and rank a sucker in one call. **Invariant:** these are pure projections of the same storage — they introduce no new state and the aggregate results are identical to reading the three values separately.
+- `inboxOf(token)`, `outboxOf(token)`, `remoteTokenFor(token)`, `isMapped(token)`, `amountToAddToBalanceOf(token)`, `peer()`, `projectId()`, `state()`, `peerChainContextsOf()`, `peerChainTotalSupply` (public storage), `executedLeafHashOf(token, index)` (public storage), `snapshotTimestamp` (public storage), `peerChainId()` (virtual — overridden per chain), `supportsInterface(bytes4)`.
+- `peerChainContextsOf()` returns `(JBPeerChainContext[] contexts, uint256 chainId, uint256 snapshot)` — the sucker's single **raw, oracle-free** peer-chain view, where `JBPeerChainContext{currency, decimals, surplus, balance}` carries the un-valued per-currency amounts. The sucker holds no prices/oracle reference; valuation happens at read time in the registry. **Invariant:** this is a pure projection of `_peerContexts` plus the snapshot freshness key — it introduces no new state.
+- `peerChainTotalSupplyValue()` returns a `JBPeerChainValue{value, peerChainId, snapshotTimestamp}` so `JBSuckerRegistry` can read the raw token supply, peer chain ID, and snapshot freshness in one call. **Invariant:** `value` equals `peerChainTotalSupply` exactly — a pure projection that introduces no new state.
 
 ### `receive() external payable`
 
@@ -255,9 +256,10 @@ Ownable registry. Tracks per-project sucker inventory + deployer allowlist + sha
 - `suckersOf(projectId)` — active only.
 - `suckerPairsOf(projectId)` — active suckers with their `peerChainId`.
 - `isSuckerOf(projectId, addr)` — true for both active and deprecated entries.
-- `remoteBalanceOf(projectId, decimals, currency)` / `remoteSurplusOf(projectId, decimals, currency)` / `remoteTotalSupplyOf(projectId)` — **aggregate views with explicit failure semantics**:
-  - Each sucker is read with a **single** combined call (`peerChainBalanceValueOf` / `peerChainSurplusValueOf` / `peerChainTotalSupplyValue`) that returns the value, peer chain ID, and snapshot freshness key together.
-  - `try/catch` around each sucker; failing peers are silently skipped (fail-open for liveness).
+- The registry holds `IJBPrices PRICES` and does the valuation, exactly as the terminal store values local surplus. Per-sucker `remoteBalanceOf(sucker, projectId, currency, decimals)` / `remoteSurplusOf(sucker, projectId, currency, decimals)` value one sucker's raw contexts into the requested currency. Each context is decimals-adjusted, then a context whose currency already equals the requested currency is taken at **par via an identity short-circuit** (no feed consulted), while a cross-currency context is valued through `PRICES.pricePerUnitOf(projectId, fromCurrency, toCurrency, 18)`. A missing cross-currency feed reverts, and the per-sucker `try/catch` in the aggregate swallows that revert — dropping just that sucker (bias-low / conservative, the safe direction).
+- `totalRemoteBalanceOf(projectId, currency, decimals)` / `totalRemoteSurplusOf(projectId, currency, decimals)` / `remoteTotalSupplyOf(projectId)` — **aggregate views with explicit failure semantics**:
+  - `totalRemoteBalanceOf` / `totalRemoteSurplusOf` value each sucker via the per-sucker `remoteBalanceOf` / `remoteSurplusOf` self-call; `remoteTotalSupplyOf` reads the raw token supply via the sucker's `peerChainTotalSupplyValue` (unchanged).
+  - `try/catch` around each sucker; failing peers (including a missing cross-currency feed) are silently skipped (fail-open for liveness, bias-low).
   - A sucker that reports a zero peer chain ID (after a successful read) reverts the whole aggregate, matching deploy-time validation.
   - Multiple active suckers targeting the same peer chain are **deduped by freshest accepted snapshot timestamp** (each sucker caches the *entire* remote chain's state; SUM would double-count).
   - MAX is only a same-freshness tie-breaker.
@@ -272,7 +274,7 @@ Ownable registry. Tracks per-project sucker inventory + deployer allowlist + sha
 
 2. **AMB ingress uses raw `msg.sender`.** `fromRemote` (`JBSucker.sol:415-480`) and `ccipReceive` (`JBCCIPSucker.sol:160-230`) **never** use `_msgSender()` for caller authentication. ERC-2771 forwarder spoofing is structurally impossible.
 
-3. **Snapshot freshness key.** `peerChainTotalSupply` / `_peerChainSurplus` / `_peerChainBalance` are gated by `snapshotTimestamp` (strictly greater source-timestamp wins, regardless of which token's message carried it). Per-token inbox roots are gated by per-token nonce (strictly greater). Two independent gates — neither can roll the other back.
+3. **Snapshot freshness key.** `peerChainTotalSupply` and the per-currency context set `_peerContexts` are gated by `snapshotTimestamp` (strictly greater source-timestamp wins, regardless of which token's message carried it; a fresher snapshot rebuilds the whole context set). Per-token inbox roots are gated by per-token nonce (strictly greater). Two independent gates — neither can roll the other back.
 
 4. **OZ BitMaps `_executedFor`** — one bit per leaf per token. Claim path uses key `terminalToken`; emergency-exit path uses key `address(bytes20(keccak256(abi.encode(terminalToken))))`. The two paths are slot-disjoint, but both are append-only (`set` only, never cleared).
 

@@ -16,6 +16,29 @@ This file describes the verified change from `nana-suckers-v5` to the current `n
 
 Archived (reference only — not compiled or deployed): `JBSwapCCIPSucker` (+ its swap libs/structs `JBSwapPoolLib`, `JBSwapLib`, `JBPendingSwap`, `JBConversionRate`) and `JBCeloSucker`, along with their deployers and interfaces; see `src/archive/`.
 
+## 0.0.69 — Value cross-chain surplus in the registry; suckers carry raw per-context snapshots
+
+Reworks how a project's cross-chain surplus and balance are reported. Previously a sucker collapsed its
+whole multi-token surplus to one ETH-denominated value on the source side and the destination converted it
+through a price feed whose missing-feed `try/catch` swallowed to zero on the numerator only — an asymmetric
+collapse that under-priced cash-outs.
+
+Now the **suckers are raw, oracle-free data carriers**. `fromRemote` rebuilds an enumerable per-currency
+context set; each remote context resolves to its local token, whose authoritative accounting-context
+currency is read once from the terminal (a project may set this to a well-known id like USD) and cached
+(immutable). Same-currency contexts within a snapshot sum; a fresher snapshot rebuilds the whole set. The
+sucker exposes one raw view, `peerChainContextsOf() -> (JBPeerChainContext[] contexts, uint256 chainId,
+uint256 snapshot)`; the `PRICES` reference and the four valued views are removed from the sucker.
+
+**`JBSuckerRegistry` now holds `IJBPrices PRICES` and does the valuation**, exactly as `JBTerminalStore`
+values local surplus: per-sucker `remoteBalanceOf`/`remoteSurplusOf(sucker, projectId, currency, decimals)`,
+aggregates `totalRemoteBalanceOf`/`totalRemoteSurplusOf(projectId, currency, decimals)` (dedup same-peer
+suckers by freshest snapshot, then sum), and the unchanged `remoteTotalSupplyOf(projectId)`. A context whose
+currency already matches the requested currency is taken at par with no feed (same-asset revnets never
+consult a feed); a missing cross-currency feed reverts and is swallowed per-sucker (conservative). The
+authoritative-currency terminal read uses a low-level staticcall guarded by a returndata-length check so a
+non-conforming terminal can't block a bridge message. The now-unused `JBDenominatedAmount` struct is removed.
+
 ## 0.0.68 — Raise dependency floors and document conventions
 
 Raise dependency floors to the latest published versions, and document NatSpec, comment, and lint conventions in

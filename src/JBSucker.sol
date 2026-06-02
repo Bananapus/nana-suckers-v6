@@ -176,6 +176,12 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     /// @notice The retained failed transport-payment refund ETH owed to each original bridge caller.
     mapping(address account => uint256 amount) public retainedTransportPaymentRefundOf;
 
+    /// @notice The source chain freshness key for the most recent accepted peer snapshot.
+    /// @dev Only snapshots with a strictly newer source freshness key are accepted, preventing stale rollbacks.
+    /// The historical name is retained for ABI compatibility with the `JBMessageRoot.sourceTimestamp` field.
+    /// Returns 0 if no snapshot has been received yet.
+    uint256 public snapshotTimestamp;
+
     //*********************************************************************//
     // -------------------- internal stored properties ------------------- //
     //*********************************************************************//
@@ -229,14 +235,6 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     // -------------------- private stored properties -------------------- //
     //*********************************************************************//
 
-    /// @notice The ID of the project (on the local chain) that this sucker is associated with.
-    uint256 private _localProjectId;
-
-    /// @notice The peer chain's per-currency surplus and balance from the latest snapshot. Rebuilt in full each time a
-    /// fresher snapshot is received, so a context that dropped out of the new snapshot is simply absent — no per-entry
-    /// versioning or clearing is needed. A read sums these and values them into the requested currency.
-    JBPeerChainContext[] private _peerContexts;
-
     /// @notice Caches a local token's authoritative accounting-context currency, derived once and reused on later
     /// snapshots. A project's accounting-context currency is immutable once set, so the cached value never goes stale;
     /// only an authoritative read is cached (a not-yet-configured token uses the convention without caching, so a later
@@ -244,18 +242,20 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     /// @custom:param token The local token.
     mapping(address token => uint32 currency) private _cachedCurrencyOf;
 
+    /// @notice The ID of the project (on the local chain) that this sucker is associated with.
+    uint256 private _localProjectId;
+
+    /// @notice Tie-breaker mixed into outbound snapshot freshness keys when multiple roots are sent at one timestamp.
+    uint256 private _outboundSnapshotSequence;
+
     /// @notice Optional explicit peer sucker address on the remote chain.
     /// @dev A zero value preserves the default same-address deterministic peer.
     bytes32 private _peer;
 
-    /// @notice The source chain freshness key for the most recent accepted peer snapshot.
-    /// @dev Only snapshots with a strictly newer source freshness key are accepted, preventing stale rollbacks.
-    /// The historical name is retained for ABI compatibility with the `JBMessageRoot.sourceTimestamp` field.
-    /// Returns 0 if no snapshot has been received yet.
-    uint256 public snapshotTimestamp;
-
-    /// @notice Tie-breaker mixed into outbound snapshot freshness keys when multiple roots are sent at one timestamp.
-    uint256 private _outboundSnapshotSequence;
+    /// @notice The peer chain's per-currency surplus and balance from the latest snapshot. Rebuilt in full each time a
+    /// fresher snapshot is received, so a context that dropped out of the new snapshot is simply absent — no per-entry
+    /// versioning or clearing is needed. A read sums these and values them into the requested currency.
+    JBPeerChainContext[] private _peerContexts;
 
     //*********************************************************************//
     // ---------------------------- constructor -------------------------- //

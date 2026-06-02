@@ -334,13 +334,14 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
         }
     }
 
-    /// @notice The cumulative peer-chain balance for a currency across all remote peer chains for a project, taken at
-    /// par.
-    /// @dev Includes deprecated suckers only when no active sucker answers for the same peer chain, to prevent
-    /// undercounting during migration windows without letting stale deprecated snapshots dominate live routes.
-    /// Silently skips suckers that revert. No price oracle is consulted — same-asset balances fold in 1:1.
+    /// @notice The cumulative peer-chain balance across all remote peer chains for a project, valued into a currency.
+    /// @dev Dedups same-peer suckers by freshest snapshot, then sums each sucker's balance valued into `currency`.
+    /// Includes deprecated suckers only when no active sucker answers for the same peer chain, to prevent undercounting
+    /// during migration windows without letting stale deprecated snapshots dominate live routes. A context whose
+    /// currency already matches is taken at par (no feed); a missing cross-currency feed reverts and that sucker is
+    /// silently skipped (conservative, bias-low).
     /// @param projectId The ID of the project.
-    /// @param currency The local accounting-context currency whose peer-chain balance to sum.
+    /// @param currency The currency to value the combined balance into.
     /// @param decimals The decimal precision for the returned value.
     /// @return balance The combined peer chain balance.
     function totalRemoteBalanceOf(
@@ -387,14 +388,14 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
         }
     }
 
-    /// @notice The cumulative peer-chain surplus for a currency across all remote peer chains for a project, taken at
-    /// par.
-    /// @dev Includes deprecated suckers only when no active sucker answers for the same peer chain, to prevent
-    /// undercounting during migration windows without letting stale deprecated snapshots dominate live routes.
-    /// Silently skips suckers that revert. No price oracle is consulted — same-asset surpluses fold in 1:1; remote
-    /// surplus held in a different currency is conservatively not counted.
+    /// @notice The cumulative peer-chain surplus across all remote peer chains for a project, valued into a currency.
+    /// @dev Dedups same-peer suckers by freshest snapshot, then sums each sucker's surplus valued into `currency`.
+    /// Includes deprecated suckers only when no active sucker answers for the same peer chain, to prevent undercounting
+    /// during migration windows without letting stale deprecated snapshots dominate live routes. A context whose
+    /// currency already matches is taken at par (no feed); a missing cross-currency feed reverts and that sucker is
+    /// silently skipped (conservative, bias-low).
     /// @param projectId The ID of the project.
-    /// @param currency The local accounting-context currency whose peer-chain surplus to sum.
+    /// @param currency The currency to value the combined surplus into.
     /// @param decimals The decimal precision for the returned value.
     /// @return surplus The combined peer chain surplus.
     function totalRemoteSurplusOf(

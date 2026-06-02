@@ -53,7 +53,7 @@
 - Deprecate both sides of a pair with matching timestamps and enough messaging-delay margin.
 - Treat CCIP LINK-fee mode and native-fee mode as different operational flows.
 - Verify bridge-specific gas and calldata sizing against the real transport API.
-- Do not treat `remoteBalanceOf`, `remoteSurplusOf`, or `remoteTotalSupplyOf` as exact settlement data unless every active peer lane is independently healthy and fresh.
+- Do not treat `totalRemoteBalanceOf`, `totalRemoteSurplusOf`, or `remoteTotalSupplyOf` as exact settlement data unless every active peer lane is independently healthy and fresh.
 
 ## Machine Notes
 
