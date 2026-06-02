@@ -19,6 +19,7 @@ import {IJBSuckerRegistry} from "../../src/interfaces/IJBSuckerRegistry.sol";
 import {JBInboxTreeRoot} from "../../src/structs/JBInboxTreeRoot.sol";
 import {JBMessageRoot} from "../../src/structs/JBMessageRoot.sol";
 import {JBRemoteToken} from "../../src/structs/JBRemoteToken.sol";
+import {JBSourceContext} from "../../src/structs/JBSourceContext.sol";
 import {JBTokenMapping} from "../../src/structs/JBTokenMapping.sol";
 import {JBSuckerDeployerConfig} from "../../src/structs/JBSuckerDeployerConfig.sol";
 
@@ -49,16 +50,24 @@ contract AggregateMockSucker is JBSucker {
 
     /// @notice Populate the peer-chain snapshot fields the registry aggregates over.
     function test_setSnapshot(uint256 supply, uint256 balance, uint256 surplus, uint256 freshness) external {
+        JBSourceContext[] memory contexts = new JBSourceContext[](1);
+        contexts[0] = JBSourceContext({
+            token: bytes32(uint256(uint160(JBConstants.NATIVE_TOKEN))),
+            currency: JBCurrencyIds.ETH,
+            decimals: 18,
+            // forge-lint: disable-next-line(unsafe-typecast)
+            surplus: uint128(surplus),
+            // forge-lint: disable-next-line(unsafe-typecast)
+            balance: uint128(balance)
+        });
+
         JBMessageRoot memory root = JBMessageRoot({
             version: MESSAGE_VERSION,
             token: bytes32(uint256(uint160(JBConstants.NATIVE_TOKEN))),
             amount: 0,
             remoteRoot: JBInboxTreeRoot({nonce: 0, root: bytes32(0)}),
             sourceTotalSupply: supply,
-            sourceCurrency: JBCurrencyIds.ETH,
-            sourceDecimals: 18,
-            sourceSurplus: surplus,
-            sourceBalance: balance,
+            sourceContexts: contexts,
             sourceTimestamp: freshness
         });
 
@@ -130,9 +139,9 @@ contract RegistryAggregateReadEquivalenceTest is Test {
     address internal constant TOKENS = address(0xD4);
     uint256 internal constant PROJECT_ID = 1;
 
-    /// @dev ETH currency (`JBCurrencyIds.ETH`) at 18 decimals exercises the same-currency fast path,
-    /// so these golden numbers do not depend on a price feed.
-    uint256 internal constant ETH_CURRENCY = 1;
+    /// @dev The native token at 18 decimals reads each context at par, so these golden numbers do not depend on a
+    /// price feed.
+    address internal constant ETH_TOKEN = JBConstants.NATIVE_TOKEN;
     uint8 internal constant ETH_DECIMALS = 18;
 
     JBSuckerRegistry internal registry;
@@ -190,12 +199,12 @@ contract RegistryAggregateReadEquivalenceTest is Test {
 
         assertEq(registry.remoteTotalSupplyOf(PROJECT_ID), 1050e18, "total supply sums across distinct chains");
         assertEq(
-            registry.remoteBalanceOf({projectId: PROJECT_ID, decimals: ETH_DECIMALS, currency: ETH_CURRENCY}),
+            registry.remoteBalanceOf({projectId: PROJECT_ID, token: ETH_TOKEN, decimals: ETH_DECIMALS}),
             440e18,
             "balance sums across distinct chains"
         );
         assertEq(
-            registry.remoteSurplusOf({projectId: PROJECT_ID, decimals: ETH_DECIMALS, currency: ETH_CURRENCY}),
+            registry.remoteSurplusOf({projectId: PROJECT_ID, token: ETH_TOKEN, decimals: ETH_DECIMALS}),
             220e18,
             "surplus sums across distinct chains"
         );
@@ -215,12 +224,12 @@ contract RegistryAggregateReadEquivalenceTest is Test {
         // Chain 10 collapses to suckerB (freshest); chain 8453 adds suckerC.
         assertEq(registry.remoteTotalSupplyOf(PROJECT_ID), 950e18, "same-chain dedupe keeps the freshest supply");
         assertEq(
-            registry.remoteBalanceOf({projectId: PROJECT_ID, decimals: ETH_DECIMALS, currency: ETH_CURRENCY}),
+            registry.remoteBalanceOf({projectId: PROJECT_ID, token: ETH_TOKEN, decimals: ETH_DECIMALS}),
             440e18,
             "same-chain dedupe keeps the freshest balance"
         );
         assertEq(
-            registry.remoteSurplusOf({projectId: PROJECT_ID, decimals: ETH_DECIMALS, currency: ETH_CURRENCY}),
+            registry.remoteSurplusOf({projectId: PROJECT_ID, token: ETH_TOKEN, decimals: ETH_DECIMALS}),
             220e18,
             "same-chain dedupe keeps the freshest surplus"
         );
@@ -238,12 +247,12 @@ contract RegistryAggregateReadEquivalenceTest is Test {
 
         assertEq(registry.remoteTotalSupplyOf(PROJECT_ID), 1050e18, "deprecated fallback keeps its supply");
         assertEq(
-            registry.remoteBalanceOf({projectId: PROJECT_ID, decimals: ETH_DECIMALS, currency: ETH_CURRENCY}),
+            registry.remoteBalanceOf({projectId: PROJECT_ID, token: ETH_TOKEN, decimals: ETH_DECIMALS}),
             440e18,
             "deprecated fallback keeps its balance"
         );
         assertEq(
-            registry.remoteSurplusOf({projectId: PROJECT_ID, decimals: ETH_DECIMALS, currency: ETH_CURRENCY}),
+            registry.remoteSurplusOf({projectId: PROJECT_ID, token: ETH_TOKEN, decimals: ETH_DECIMALS}),
             220e18,
             "deprecated fallback keeps its surplus"
         );
@@ -267,12 +276,12 @@ contract RegistryAggregateReadEquivalenceTest is Test {
         // Chain 10 = active suckerB (300/150/80); chain 8453 = suckerC (250/90/40).
         assertEq(registry.remoteTotalSupplyOf(PROJECT_ID), 550e18, "active sucker overrides deprecated supply");
         assertEq(
-            registry.remoteBalanceOf({projectId: PROJECT_ID, decimals: ETH_DECIMALS, currency: ETH_CURRENCY}),
+            registry.remoteBalanceOf({projectId: PROJECT_ID, token: ETH_TOKEN, decimals: ETH_DECIMALS}),
             240e18,
             "active sucker overrides deprecated balance"
         );
         assertEq(
-            registry.remoteSurplusOf({projectId: PROJECT_ID, decimals: ETH_DECIMALS, currency: ETH_CURRENCY}),
+            registry.remoteSurplusOf({projectId: PROJECT_ID, token: ETH_TOKEN, decimals: ETH_DECIMALS}),
             120e18,
             "active sucker overrides deprecated surplus"
         );
@@ -294,22 +303,22 @@ contract RegistryAggregateReadEquivalenceTest is Test {
         registry.remoteTotalSupplyOf(PROJECT_ID);
 
         vm.expectRevert(expectedRevert);
-        registry.remoteBalanceOf({projectId: PROJECT_ID, decimals: ETH_DECIMALS, currency: ETH_CURRENCY});
+        registry.remoteBalanceOf({projectId: PROJECT_ID, token: ETH_TOKEN, decimals: ETH_DECIMALS});
 
         vm.expectRevert(expectedRevert);
-        registry.remoteSurplusOf({projectId: PROJECT_ID, decimals: ETH_DECIMALS, currency: ETH_CURRENCY});
+        registry.remoteSurplusOf({projectId: PROJECT_ID, token: ETH_TOKEN, decimals: ETH_DECIMALS});
     }
 
     /// @notice With no snapshots populated, every aggregate view returns zero.
     function test_emptySnapshotsReturnZero() external view {
         assertEq(registry.remoteTotalSupplyOf(PROJECT_ID), 0, "no snapshot => zero supply");
         assertEq(
-            registry.remoteBalanceOf({projectId: PROJECT_ID, decimals: ETH_DECIMALS, currency: ETH_CURRENCY}),
+            registry.remoteBalanceOf({projectId: PROJECT_ID, token: ETH_TOKEN, decimals: ETH_DECIMALS}),
             0,
             "no snapshot => zero balance"
         );
         assertEq(
-            registry.remoteSurplusOf({projectId: PROJECT_ID, decimals: ETH_DECIMALS, currency: ETH_CURRENCY}),
+            registry.remoteSurplusOf({projectId: PROJECT_ID, token: ETH_TOKEN, decimals: ETH_DECIMALS}),
             0,
             "no snapshot => zero surplus"
         );

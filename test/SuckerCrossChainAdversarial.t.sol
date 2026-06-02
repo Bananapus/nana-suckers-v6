@@ -33,7 +33,11 @@ contract CrossChainTestSucker is JBSucker {
 
     bool public ambShouldRevert;
     uint256 public ambCallCount;
-    JBMessageRoot public lastSentRoot;
+
+    /// @notice The last JBMessageRoot passed to _sendRootOverAMB, abi-encoded (the struct's dynamic context array
+    /// can't be copied straight to storage without the IR pipeline).
+    bytes private _lastSentRoot;
+
     bool private _nextMerkleCheckPasses;
 
     constructor(
@@ -58,8 +62,12 @@ contract CrossChainTestSucker is JBSucker {
         override
     {
         ambCallCount++;
-        lastSentRoot = root;
+        _lastSentRoot = abi.encode(root);
         if (ambShouldRevert) revert("AMB_FAILURE");
+    }
+
+    function lastSentRoot() external view returns (JBMessageRoot memory) {
+        return abi.decode(_lastSentRoot, (JBMessageRoot));
     }
 
     function _isRemotePeer(address sender) internal view override returns (bool) {
@@ -159,6 +167,10 @@ contract SuckerCrossChainAdversarial is Test {
 
     uint256 constant PROJECT_ID = 1;
     address constant TOKEN = address(0x000000000000000000000000000000000000EEEe);
+
+    /// @dev An accounting context's currency is token-keyed: `uint32(uint160(token))`.
+    // forge-lint: disable-next-line(unsafe-typecast)
+    uint32 constant NATIVE_CURRENCY = uint32(uint160(TOKEN));
 
     CrossChainTestSucker sucker;
 
@@ -491,10 +503,7 @@ contract SuckerCrossChainAdversarial is Test {
                 amount: 0,
                 remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(111))}),
                 sourceTotalSupply: 1000,
-                sourceCurrency: 0,
-                sourceDecimals: 0,
-                sourceSurplus: 500,
-                sourceBalance: 800,
+                sourceContexts: _nativeContext({surplus: 500, balance: 800}),
                 sourceTimestamp: 1
             })
         );
@@ -509,10 +518,7 @@ contract SuckerCrossChainAdversarial is Test {
                 amount: 0,
                 remoteRoot: JBInboxTreeRoot({nonce: 2, root: bytes32(uint256(222))}),
                 sourceTotalSupply: 2000,
-                sourceCurrency: 0,
-                sourceDecimals: 0,
-                sourceSurplus: 300,
-                sourceBalance: 700,
+                sourceContexts: _nativeContext({surplus: 300, balance: 700}),
                 sourceTimestamp: 2
             })
         );
@@ -527,10 +533,7 @@ contract SuckerCrossChainAdversarial is Test {
                 amount: 0,
                 remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(111))}),
                 sourceTotalSupply: 1000,
-                sourceCurrency: 0,
-                sourceDecimals: 0,
-                sourceSurplus: 500,
-                sourceBalance: 800,
+                sourceContexts: _nativeContext({surplus: 500, balance: 800}),
                 sourceTimestamp: 1
             })
         );
@@ -550,10 +553,7 @@ contract SuckerCrossChainAdversarial is Test {
                 amount: 0,
                 remoteRoot: JBInboxTreeRoot({nonce: 3, root: bytes32(uint256(333))}),
                 sourceTotalSupply: 500,
-                sourceCurrency: 0,
-                sourceDecimals: 0,
-                sourceSurplus: 200,
-                sourceBalance: 400,
+                sourceContexts: _nativeContext({surplus: 200, balance: 400}),
                 sourceTimestamp: 2
             })
         );
@@ -569,10 +569,7 @@ contract SuckerCrossChainAdversarial is Test {
                 amount: 0,
                 remoteRoot: JBInboxTreeRoot({nonce: 5, root: bytes32(uint256(555))}),
                 sourceTotalSupply: 300,
-                sourceCurrency: 0,
-                sourceDecimals: 0,
-                sourceSurplus: 100,
-                sourceBalance: 200,
+                sourceContexts: _nativeContext({surplus: 100, balance: 200}),
                 sourceTimestamp: 1
             })
         );
@@ -710,5 +707,17 @@ contract SuckerCrossChainAdversarial is Test {
     function _toAddressArray(address addr) internal pure returns (address[] memory arr) {
         arr = new address[](1);
         arr[0] = addr;
+    }
+
+    /// @notice Build a single native-token source context with the given surplus and balance.
+    function _nativeContext(uint128 surplus, uint128 balance) internal pure returns (JBSourceContext[] memory ctxs) {
+        ctxs = new JBSourceContext[](1);
+        ctxs[0] = JBSourceContext({
+            token: bytes32(uint256(uint160(TOKEN))),
+            currency: NATIVE_CURRENCY,
+            decimals: 18,
+            surplus: surplus,
+            balance: balance
+        });
     }
 }

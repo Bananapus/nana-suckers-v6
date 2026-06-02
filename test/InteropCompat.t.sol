@@ -461,20 +461,21 @@ contract InteropCompat is Test {
     // Section 4: MessageRoot Encoding
     // =========================================================================
 
-    /// @notice Verify abi.encode(JBMessageRoot) layout matches SVM's expected field positions.
-    /// @dev SVM MessageRoot: { version: u8, token: [u8;32], amount: u128, nonce: u64, root: [u8;32] }
-    ///      EVM abi.encode packs each field into 32-byte slots (all static, no offset pointer):
-    ///      Slot 0 (offset 32): version (uint8, right-aligned in 32 bytes)
-    ///      Slot 1 (offset 64): token (bytes32)
-    ///      Slot 2 (offset 96): amount (uint256)
-    ///      Slot 3 (offset 128): remoteRoot.nonce (uint64, right-aligned in 32 bytes)
-    ///      Slot 4 (offset 160): remoteRoot.root (bytes32)
-    ///      Slot 5 (offset 192): sourceTotalSupply (uint256)
-    ///      Slot 6 (offset 224): sourceCurrency (uint256)
-    ///      Slot 7 (offset 256): sourceDecimals (uint8, right-aligned in 32 bytes)
-    ///      Slot 8 (offset 288): sourceSurplus (uint256)
-    ///      Slot 9 (offset 320): sourceBalance (uint256)
-    ///      Slot 10 (offset 352): sourceTimestamp (uint256)
+    /// @notice Verify abi.encode(JBMessageRoot) layout exposes the SVM header at deterministic positions.
+    /// @dev SVM MessageRoot header: { version: u8, token: [u8;32], amount: u128, nonce: u64, root: [u8;32] }. Because
+    ///      the struct now carries a dynamic `sourceContexts` array, `abi.encode(struct)` is itself dynamic: it leads
+    ///      with a 32-byte offset word, then the struct head, then the array tail. Every header field still sits at a
+    ///      fixed position (shifted by that leading word), so SVM reads the header positionally after skipping it.
+    ///      Offsets below are into the encoded bytes; the first +32 in each `mload` skips the Solidity length prefix:
+    ///      offset 32: struct offset pointer (0x20)
+    ///      offset 64: version (uint8, right-aligned in 32 bytes)
+    ///      offset 96: token (bytes32)
+    ///      offset 128: amount (uint256)
+    ///      offset 160: remoteRoot.nonce (uint64, right-aligned in 32 bytes)
+    ///      offset 192: remoteRoot.root (bytes32)
+    ///      offset 224: sourceTotalSupply (uint256)
+    ///      offset 256: sourceContexts (offset pointer into the tail)
+    ///      offset 288: sourceTimestamp (uint256)
     function test_messageRoot_encoding() public pure {
         JBMessageRoot memory msg_ = JBMessageRoot({
             version: 1,
@@ -488,40 +489,45 @@ contract InteropCompat is Test {
 
         bytes memory encoded = abi.encode(msg_);
 
-        // The struct is all-static (no dynamic arrays), so abi.encode produces a fixed-size tuple.
-        // Offset 32 accounts for the Solidity memory bytes length prefix.
-        // Slot 0 (offset 32): version
+        // offset 32: the leading struct offset pointer (0x20), since the struct is dynamic.
+        uint256 structOffset;
+        assembly {
+            structOffset := mload(add(encoded, 32))
+        }
+        assertEq(structOffset, 0x20, "Leading struct offset pointer");
+
+        // offset 64: version
         uint8 decodedVersion;
         assembly {
-            decodedVersion := mload(add(encoded, 32))
+            decodedVersion := mload(add(encoded, 64))
         }
         assertEq(decodedVersion, 1, "Version mismatch");
 
-        // Slot 1 (offset 64): token
+        // offset 96: token
         bytes32 decodedToken;
         assembly {
-            decodedToken := mload(add(encoded, 64))
+            decodedToken := mload(add(encoded, 96))
         }
         assertEq(decodedToken, bytes32(uint256(0xAABBCCDD)), "Token mismatch");
 
-        // Slot 2 (offset 96): amount
+        // offset 128: amount
         uint256 decodedAmount;
         assembly {
-            decodedAmount := mload(add(encoded, 96))
+            decodedAmount := mload(add(encoded, 128))
         }
         assertEq(decodedAmount, 1000e18, "Amount mismatch");
 
-        // Slot 3 (offset 128): nonce (part of JBInboxTreeRoot)
+        // offset 160: nonce (part of JBInboxTreeRoot)
         uint64 decodedNonce;
         assembly {
-            decodedNonce := mload(add(encoded, 128))
+            decodedNonce := mload(add(encoded, 160))
         }
         assertEq(decodedNonce, 42, "Nonce mismatch");
 
-        // Slot 4 (offset 160): root (part of JBInboxTreeRoot)
+        // offset 192: root (part of JBInboxTreeRoot)
         bytes32 decodedRoot;
         assembly {
-            decodedRoot := mload(add(encoded, 160))
+            decodedRoot := mload(add(encoded, 192))
         }
         assertEq(decodedRoot, bytes32(uint256(0x1234)), "Root mismatch");
     }
@@ -543,10 +549,11 @@ contract InteropCompat is Test {
         });
 
         bytes memory encoded = abi.encode(msg_);
-        // All-static tuple: slot 2 (amount) at offset 96 (32 length prefix + 2*32).
+        // The struct is dynamic (it carries `sourceContexts`), so `amount` sits at offset 128: the 32 length prefix,
+        // the leading struct offset word, then version and token.
         uint256 decodedAmount;
         assembly {
-            decodedAmount := mload(add(encoded, 96))
+            decodedAmount := mload(add(encoded, 128))
         }
         assertEq(decodedAmount, type(uint128).max, "u128 max amount encoding mismatch");
         // SVM reads this as u128 — the upper 128 bits must be zero

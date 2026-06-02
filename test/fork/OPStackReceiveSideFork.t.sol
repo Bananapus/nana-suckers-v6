@@ -13,6 +13,7 @@ import {IOPMessenger} from "../../src/interfaces/IOPMessenger.sol";
 import {IOPStandardBridge} from "../../src/interfaces/IOPStandardBridge.sol";
 import {JBInboxTreeRoot} from "../../src/structs/JBInboxTreeRoot.sol";
 import {JBMessageRoot} from "../../src/structs/JBMessageRoot.sol";
+import {JBSourceContext} from "../../src/structs/JBSourceContext.sol";
 import {JBConstants} from "@bananapus/core-v6/src/libraries/JBConstants.sol";
 
 /// @notice Receive-side fork coverage for the OP Stack sucker. Existing `ForkOPStack.t.sol` exercises the
@@ -85,10 +86,7 @@ contract OPStackReceiveSideFork is SuckerForkHelpers {
             amount: 0,
             remoteRoot: JBInboxTreeRoot({nonce: nonce, root: root}),
             sourceTotalSupply: 0,
-            sourceCurrency: 0,
-            sourceDecimals: 18,
-            sourceSurplus: 0,
-            sourceBalance: 0,
+            sourceContexts: new JBSourceContext[](0),
             sourceTimestamp: uint64(block.timestamp)
         });
     }

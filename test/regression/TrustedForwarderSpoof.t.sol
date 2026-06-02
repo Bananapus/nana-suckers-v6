@@ -104,7 +104,7 @@ contract TrustedForwarderSpoofTest is Test {
         address spoofedRemoteMessenger = AddressAliasHelper.applyL1ToL2Alias(address(sucker));
         bytes memory forwardedCalldata = bytes.concat(
             abi.encodeWithSignature(
-                "fromRemote((uint8,bytes32,uint256,(uint64,bytes32),uint256,uint256,uint8,uint256,uint256,uint256))",
+                "fromRemote((uint8,bytes32,uint256,(uint64,bytes32),uint256,(bytes32,uint32,uint8,uint128,uint128)[],uint256))",
                 root
             ),
             bytes20(spoofedRemoteMessenger)

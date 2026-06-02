@@ -44,21 +44,21 @@ contract MockAggregateSucker {
         return chainId;
     }
 
-    function peerChainSurplusOf(uint256 decimals, uint256 currency) external view returns (JBDenominatedAmount memory) {
+    function peerChainSurplusOf(address token, uint256 decimals) external view returns (JBDenominatedAmount memory) {
         // forge-lint: disable-next-line(unsafe-typecast)
-        return JBDenominatedAmount({value: surplus, currency: uint32(currency), decimals: uint8(decimals)});
+        return JBDenominatedAmount({value: surplus, currency: uint32(uint160(token)), decimals: uint8(decimals)});
     }
 
-    function peerChainBalanceOf(uint256 decimals, uint256 currency) external pure returns (JBDenominatedAmount memory) {
+    function peerChainBalanceOf(address token, uint256 decimals) external pure returns (JBDenominatedAmount memory) {
         // forge-lint: disable-next-line(unsafe-typecast)
-        return JBDenominatedAmount({value: 0, currency: uint32(currency), decimals: uint8(decimals)});
+        return JBDenominatedAmount({value: 0, currency: uint32(uint160(token)), decimals: uint8(decimals)});
     }
 
-    function peerChainSurplusValueOf(uint256, uint256) external view returns (JBPeerChainValue memory) {
+    function peerChainSurplusValueOf(address, uint256) external view returns (JBPeerChainValue memory) {
         return JBPeerChainValue({value: surplus, peerChainId: chainId, snapshotTimestamp: snapshotTimestamp});
     }
 
-    function peerChainBalanceValueOf(uint256, uint256) external view returns (JBPeerChainValue memory) {
+    function peerChainBalanceValueOf(address, uint256) external view returns (JBPeerChainValue memory) {
         return JBPeerChainValue({value: 0, peerChainId: chainId, snapshotTimestamp: snapshotTimestamp});
     }
 
@@ -98,7 +98,7 @@ contract RegistryStaleMaxAggregationTest is Test {
             "active supply should win even when a deprecated sucker reports more"
         );
         assertEq(
-            registry.remoteSurplusOf(PROJECT_ID, 18, uint256(uint160(address(0xEEE)))),
+            registry.remoteSurplusOf(PROJECT_ID, address(0xEEE), 18),
             50e18,
             "active surplus should win even when a deprecated sucker reports more"
         );
@@ -117,7 +117,7 @@ contract RegistryStaleMaxAggregationTest is Test {
             "fresh active supply should win even when stale active reports more"
         );
         assertEq(
-            registry.remoteSurplusOf(PROJECT_ID, 18, uint256(uint160(address(0xEEE)))),
+            registry.remoteSurplusOf(PROJECT_ID, address(0xEEE), 18),
             50e18,
             "fresh active surplus should win even when stale active reports more"
         );

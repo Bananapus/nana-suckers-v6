@@ -14,27 +14,22 @@ import {IJBCCIPSuckerDeployer} from "../../src/interfaces/IJBCCIPSuckerDeployer.
 import {IJBSuckerRegistry} from "../../src/interfaces/IJBSuckerRegistry.sol";
 import {JBInboxTreeRoot} from "../../src/structs/JBInboxTreeRoot.sol";
 import {JBMessageRoot} from "../../src/structs/JBMessageRoot.sol";
+import {JBSourceContext} from "../../src/structs/JBSourceContext.sol";
 
-contract RegressionCCIPLegacyFormatHarness is JBCCIPSucker {
+contract RegressionCCIPUntypedMessageHarness is JBCCIPSucker {
     constructor(
         JBCCIPSuckerDeployer deployer,
         IJBDirectory directory,
         IJBTokens tokens,
         IJBPermissions permissions
     )
-        JBCCIPSucker(
-            deployer,
-            directory,
-            permissions,
-            tokens,
-            1,
-            IJBSuckerRegistry(address(1)),
-            address(0)
-        )
+        JBCCIPSucker(deployer, directory, permissions, tokens, 1, IJBSuckerRegistry(address(1)), address(0))
     {}
 }
 
-contract RegressionCCIPLegacyFormatCompatibilityTest is Test {
+/// @notice `JBCCIPSucker.ccipReceive` only accepts the typed `(uint8 messageType, bytes payload)` envelope. A raw,
+/// untyped `abi.encode(root)` payload must be rejected so a malformed delivery can never reach `fromRemote`.
+contract RegressionCCIPUntypedMessageRejectedTest is Test {
     address internal constant DEPLOYER = address(0x1001);
     address internal constant DIRECTORY = address(0x1002);
     address internal constant TOKENS = address(0x1003);
@@ -45,7 +40,7 @@ contract RegressionCCIPLegacyFormatCompatibilityTest is Test {
     uint256 internal constant REMOTE_CHAIN_ID = 42_161;
     uint64 internal constant REMOTE_CHAIN_SELECTOR = 4_949_039_107_694_359_620;
 
-    RegressionCCIPLegacyFormatHarness internal sucker;
+    RegressionCCIPUntypedMessageHarness internal sucker;
 
     function setUp() external {
         vm.etch(ROUTER, hex"01");
@@ -59,30 +54,36 @@ contract RegressionCCIPLegacyFormatCompatibilityTest is Test {
         );
         vm.mockCall(DEPLOYER, abi.encodeCall(IJBCCIPSuckerDeployer.ccipRouter, ()), abi.encode(ICCIPRouter(ROUTER)));
 
-        sucker = new RegressionCCIPLegacyFormatHarness(
+        sucker = new RegressionCCIPUntypedMessageHarness(
             JBCCIPSuckerDeployer(DEPLOYER), IJBDirectory(DIRECTORY), IJBTokens(TOKENS), IJBPermissions(PERMISSIONS)
         );
     }
 
-    function test_ccipReceive_revertsOnLegacyUntypedRootMessage() external {
+    function test_ccipReceive_revertsOnUntypedRootMessage() external {
+        JBSourceContext[] memory contexts = new JBSourceContext[](1);
+        contexts[0] = JBSourceContext({
+            token: bytes32(uint256(uint160(address(0xBEEF)))),
+            currency: 1,
+            decimals: 18,
+            surplus: 1 ether,
+            balance: 1 ether
+        });
+
         JBMessageRoot memory root = JBMessageRoot({
             version: 1,
             token: bytes32(uint256(uint160(address(0xBEEF)))),
             amount: 1 ether,
             remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(1))}),
             sourceTotalSupply: 1 ether,
-            sourceCurrency: 1,
-            sourceDecimals: 18,
-            sourceSurplus: 1 ether,
-            sourceBalance: 1 ether,
+            sourceContexts: contexts,
             sourceTimestamp: 1
         });
 
         Client.Any2EVMMessage memory message = Client.Any2EVMMessage({
-            // forge-lint: disable-next-line(unsafe-typecast)
-            messageId: keccak256(bytes("legacy")),
+            messageId: keccak256(bytes("untyped")),
             sourceChainSelector: REMOTE_CHAIN_SELECTOR,
             sender: abi.encode(address(sucker)),
+            // A raw root encoding, not the typed (messageType, payload) envelope ccipReceive expects.
             data: abi.encode(root),
             destTokenAmounts: new Client.EVMTokenAmount[](0)
         });

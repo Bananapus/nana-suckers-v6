@@ -15,6 +15,7 @@ import {JBDenominatedAmount} from "../../src/structs/JBDenominatedAmount.sol";
 import {JBInboxTreeRoot} from "../../src/structs/JBInboxTreeRoot.sol";
 import {JBMessageRoot} from "../../src/structs/JBMessageRoot.sol";
 import {JBRemoteToken} from "../../src/structs/JBRemoteToken.sol";
+import {JBSourceContext} from "../../src/structs/JBSourceContext.sol";
 
 contract RegressionPeerSnapshotSucker is JBSucker {
     constructor(
@@ -54,7 +55,6 @@ contract RegressionPeerSnapshotDesyncTest is Test {
     address internal constant PROJECTS = address(1000);
 
     uint256 internal constant PROJECT_ID = 1;
-    uint256 internal constant ETH_CURRENCY = 1;
     uint8 internal constant ETH_DECIMALS = 18;
 
     address internal constant TOKEN_A = address(0xA11CE);
@@ -83,11 +83,11 @@ contract RegressionPeerSnapshotDesyncTest is Test {
         vm.prank(address(sucker));
         sucker.fromRemote(_messageRoot(TOKEN_A, 2, 2, 0, 50 ether, 75 ether));
 
-        // Fixed: zero supply is no longer skipped — phantom supply is cleared.
+        // A legitimate zero supply clears the phantom cached supply rather than being skipped.
         assertEq(sucker.peerChainTotalSupply(), 0, "zero supply correctly clears phantom cached supply");
 
-        JBDenominatedAmount memory balance = sucker.peerChainBalanceOf(ETH_DECIMALS, ETH_CURRENCY);
-        JBDenominatedAmount memory surplus = sucker.peerChainSurplusOf(ETH_DECIMALS, ETH_CURRENCY);
+        JBDenominatedAmount memory balance = sucker.peerChainBalanceOf(TOKEN_A, ETH_DECIMALS);
+        JBDenominatedAmount memory surplus = sucker.peerChainSurplusOf(TOKEN_A, ETH_DECIMALS);
         assertEq(balance.value, 75 ether, "balance updated");
         assertEq(surplus.value, 50 ether, "surplus updated");
     }
@@ -102,13 +102,13 @@ contract RegressionPeerSnapshotDesyncTest is Test {
         vm.prank(address(sucker));
         sucker.fromRemote(_messageRoot(TOKEN_B, 1, 1, 100 ether, 10 ether, 20 ether));
 
-        // Fixed: Token B's staler snapshot nonce (1 < 2) does NOT overwrite shared state.
+        // Token B's staler snapshot freshness key (1 < 2) does NOT overwrite shared state.
         assertEq(
             sucker.peerChainTotalSupply(), 900 ether, "fresher token-A supply preserved despite later token-B delivery"
         );
 
-        JBDenominatedAmount memory balance = sucker.peerChainBalanceOf(ETH_DECIMALS, ETH_CURRENCY);
-        JBDenominatedAmount memory surplus = sucker.peerChainSurplusOf(ETH_DECIMALS, ETH_CURRENCY);
+        JBDenominatedAmount memory balance = sucker.peerChainBalanceOf(TOKEN_A, ETH_DECIMALS);
+        JBDenominatedAmount memory surplus = sucker.peerChainSurplusOf(TOKEN_A, ETH_DECIMALS);
         assertEq(balance.value, 400 ether, "fresher token-A balance preserved");
         assertEq(surplus.value, 300 ether, "fresher token-A surplus preserved");
     }
@@ -146,16 +146,25 @@ contract RegressionPeerSnapshotDesyncTest is Test {
         pure
         returns (JBMessageRoot memory)
     {
+        JBSourceContext[] memory contexts = new JBSourceContext[](1);
+        contexts[0] = JBSourceContext({
+            token: bytes32(uint256(uint160(token))),
+            // forge-lint: disable-next-line(unsafe-typecast)
+            currency: uint32(uint160(token)),
+            decimals: ETH_DECIMALS,
+            // forge-lint: disable-next-line(unsafe-typecast)
+            surplus: uint128(surplus),
+            // forge-lint: disable-next-line(unsafe-typecast)
+            balance: uint128(balance)
+        });
+
         return JBMessageRoot({
             version: 1,
             token: bytes32(uint256(uint160(token))),
             amount: 0,
             remoteRoot: JBInboxTreeRoot({nonce: nonce, root: bytes32(uint256(nonce))}),
             sourceTotalSupply: totalSupply,
-            sourceCurrency: ETH_CURRENCY,
-            sourceDecimals: ETH_DECIMALS,
-            sourceSurplus: surplus,
-            sourceBalance: balance,
+            sourceContexts: contexts,
             sourceTimestamp: sourceTs
         });
     }

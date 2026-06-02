@@ -377,9 +377,48 @@ contract PeerChainStateTest is Test {
         vm.prank(address(sucker));
         sucker.fromRemote(_root({nonce: 1, totalSupply: 0, contexts: contexts}));
 
-        // Stored at 6 decimals; requested at 18 → scaled up by 10^12, no price conversion.
+        // Stored at 6 decimals; requested at 18 (->) scaled up by 10^12, no price conversion.
         assertEq(sucker.peerChainSurplusOf(usdc, 18).value, 5000 ether, "6->18 decimals scales surplus at par");
         assertEq(sucker.peerChainBalanceOf(usdc, 18).value, 9000 ether, "6->18 decimals scales balance at par");
+    }
+
+    /// @notice Fuzz: a stored context reads back at par across every decimal pair — only the decimals are adjusted,
+    /// never a price. Sweeps decimal combinations to catch any hardcoded precision assumption.
+    function testFuzz_peerChainReadsAtParAcrossDecimals(uint8 srcDecimals, uint8 dstDecimals, uint128 amount) public {
+        srcDecimals = uint8(bound(srcDecimals, 0, 24));
+        dstDecimals = uint8(bound(dstDecimals, 0, 24));
+
+        address token = makeAddr("FUZZ_TOKEN");
+        JBSourceContext[] memory contexts = new JBSourceContext[](1);
+        contexts[0] = _ctx({token: token, currency: 1, decimals: srcDecimals, surplus: amount, balance: amount});
+        vm.prank(address(sucker));
+        sucker.fromRemote(_root({nonce: 1, totalSupply: 0, contexts: contexts}));
+
+        // Expected is a pure decimal rescale of the raw amount (division rounds down, the bias-low direction).
+        uint256 expected;
+        if (dstDecimals >= srcDecimals) {
+            expected = uint256(amount) * 10 ** (uint256(dstDecimals) - srcDecimals);
+        } else {
+            expected = uint256(amount) / 10 ** (uint256(srcDecimals) - dstDecimals);
+        }
+
+        assertEq(sucker.peerChainSurplusOf(token, dstDecimals).value, expected, "surplus folds at par, decimals only");
+        assertEq(sucker.peerChainBalanceOf(token, dstDecimals).value, expected, "balance folds at par, decimals only");
+    }
+
+    /// @notice Fuzz: a zero-amount context reads back as zero for any decimal pair.
+    function testFuzz_peerChainZeroAmountReadsZero(uint8 srcDecimals, uint8 dstDecimals) public {
+        srcDecimals = uint8(bound(srcDecimals, 0, 24));
+        dstDecimals = uint8(bound(dstDecimals, 0, 24));
+
+        address token = makeAddr("FUZZ_ZERO");
+        JBSourceContext[] memory contexts = new JBSourceContext[](1);
+        contexts[0] = _ctx({token: token, currency: 1, decimals: srcDecimals, surplus: 0, balance: 0});
+        vm.prank(address(sucker));
+        sucker.fromRemote(_root({nonce: 1, totalSupply: 0, contexts: contexts}));
+
+        assertEq(sucker.peerChainSurplusOf(token, dstDecimals).value, 0, "zero input yields zero surplus");
+        assertEq(sucker.peerChainBalanceOf(token, dstDecimals).value, 0, "zero input yields zero balance");
     }
 
     // =========================================================================

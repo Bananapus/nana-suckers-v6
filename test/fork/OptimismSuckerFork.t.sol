@@ -142,7 +142,6 @@ contract OptimismSuckerForkTest is TestBaseWorkflow {
             deployer: suckerDeployer, // Deployer that provides bridge references.
             directory: jbDirectory(), // Core directory.
             permissions: jbPermissions(), // Core permissions.
-            prices: jbPrices(), // Core price feeds.
             tokens: jbTokens(), // Core token management.
             feeProjectId: 1, // Fee project ID.
             registry: IJBSuckerRegistry(address(0)), // No registry in test.

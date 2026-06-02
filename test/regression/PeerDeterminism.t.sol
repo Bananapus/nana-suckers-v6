@@ -53,7 +53,6 @@ contract RegressionPeerDeterminismTest is Test, TestBaseWorkflow, IERC721Receive
             deployer: deployer,
             directory: jbDirectory(),
             permissions: jbPermissions(),
-            prices: jbPrices(),
             tokens: jbTokens(),
             feeProjectId: 1,
             registry: registryA,

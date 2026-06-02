@@ -25,6 +25,7 @@ import {JBOptimismSuckerDeployer} from "../../src/deployers/JBOptimismSuckerDepl
 import {JBTokenMapping} from "../../src/structs/JBTokenMapping.sol";
 import {JBSuckerDeployerConfig} from "../../src/structs/JBSuckerDeployerConfig.sol";
 import {JBMessageRoot} from "../../src/structs/JBMessageRoot.sol";
+import {JBSourceContext} from "../../src/structs/JBSourceContext.sol";
 import {JBInboxTreeRoot} from "../../src/structs/JBInboxTreeRoot.sol";
 import {IOPMessenger} from "../../src/interfaces/IOPMessenger.sol";
 import {IOPStandardBridge} from "../../src/interfaces/IOPStandardBridge.sol";
@@ -97,10 +98,7 @@ contract RegressionRegistryPeerAuthBreakTest is Test, TestBaseWorkflow, IERC721R
                 amount: 0,
                 remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(1))}),
                 sourceTotalSupply: 0,
-                sourceCurrency: uint32(uint160(JBConstants.NATIVE_TOKEN)),
-                sourceDecimals: 18,
-                sourceSurplus: 0,
-                sourceBalance: 0,
+                sourceContexts: new JBSourceContext[](0),
                 sourceTimestamp: 1
             })
             );
@@ -134,10 +132,7 @@ contract RegressionRegistryPeerAuthBreakTest is Test, TestBaseWorkflow, IERC721R
                 amount: 0,
                 remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(1))}),
                 sourceTotalSupply: 0,
-                sourceCurrency: uint32(uint160(JBConstants.NATIVE_TOKEN)),
-                sourceDecimals: 18,
-                sourceSurplus: 0,
-                sourceBalance: 0,
+                sourceContexts: new JBSourceContext[](0),
                 sourceTimestamp: 1
             })
             );

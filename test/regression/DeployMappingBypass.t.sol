@@ -81,7 +81,6 @@ contract DeployMappingBypassTest is DeployerTests {
             deployer: opDeployer,
             directory: jbDirectory(),
             permissions: jbPermissions(),
-            prices: jbPrices(),
             tokens: jbTokens(),
             feeProjectId: 1,
             registry: IJBSuckerRegistry(address(registry)),

@@ -69,22 +69,21 @@ contract SameChainSuckerMock {
         return _chainId;
     }
 
-    function peerChainSurplusOf(uint256 decimals, uint256 currency) external view returns (JBDenominatedAmount memory) {
+    function peerChainSurplusOf(address token, uint256 decimals) external view returns (JBDenominatedAmount memory) {
         // forge-lint: disable-next-line(unsafe-typecast)
-        return JBDenominatedAmount({value: _surplus, currency: uint32(currency), decimals: uint8(decimals)});
+        return JBDenominatedAmount({value: _surplus, currency: uint32(uint160(token)), decimals: uint8(decimals)});
     }
 
     function peerChainTotalSupply() external view returns (uint256) {
         return _supply;
     }
 
-    // This mock exposes no snapshot freshness, so the combined reads report a zero freshness key — matching the
-    // prior behavior where the registry's snapshot-timestamp read fell back to zero for this mock.
-    function peerChainSurplusValueOf(uint256, uint256) external view returns (JBPeerChainValue memory) {
+    // This mock exposes no snapshot freshness, so the combined reads report a zero freshness key.
+    function peerChainSurplusValueOf(address, uint256) external view returns (JBPeerChainValue memory) {
         return JBPeerChainValue({value: _surplus, peerChainId: _chainId, snapshotTimestamp: 0});
     }
 
-    function peerChainBalanceValueOf(uint256, uint256) external view returns (JBPeerChainValue memory) {
+    function peerChainBalanceValueOf(address, uint256) external view returns (JBPeerChainValue memory) {
         return JBPeerChainValue({value: 0, peerChainId: _chainId, snapshotTimestamp: 0});
     }
 
@@ -111,7 +110,7 @@ contract RegistryStaleDeprecatedMaxSurplusTest is Test {
         registry.seedDeprecated(PROJECT_ID, address(deprecatedSucker));
         registry.seedActive(PROJECT_ID, address(activeSucker));
 
-        uint256 reportedRemoteSurplus = registry.remoteSurplusOf(PROJECT_ID, 18, uint256(uint160(address(0xEEE))));
+        uint256 reportedRemoteSurplus = registry.remoteSurplusOf(PROJECT_ID, address(0xEEE), 18);
         uint256 reportedRemoteSupply = registry.remoteTotalSupplyOf(PROJECT_ID);
 
         // The registry prefers the live active sucker over stale deprecated same-chain snapshots.

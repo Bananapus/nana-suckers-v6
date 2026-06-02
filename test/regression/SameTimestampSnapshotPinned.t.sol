@@ -15,6 +15,7 @@ import {JBDenominatedAmount} from "../../src/structs/JBDenominatedAmount.sol";
 import {JBInboxTreeRoot} from "../../src/structs/JBInboxTreeRoot.sol";
 import {JBMessageRoot} from "../../src/structs/JBMessageRoot.sol";
 import {JBRemoteToken} from "../../src/structs/JBRemoteToken.sol";
+import {JBSourceContext} from "../../src/structs/JBSourceContext.sol";
 
 contract SameTimestampSnapshotSucker is JBSucker {
     constructor(
@@ -53,7 +54,6 @@ contract SameTimestampSnapshotPinnedTest is Test {
     address internal constant TOKENS = address(0x1003);
     address internal constant PROJECTS = address(0x1004);
     uint256 internal constant PROJECT_ID = 1;
-    uint256 internal constant ETH_CURRENCY = 1;
     uint8 internal constant ETH_DECIMALS = 18;
     address internal constant TOKEN = address(0xBEEF);
 
@@ -85,8 +85,8 @@ contract SameTimestampSnapshotPinnedTest is Test {
             _messageRoot({nonce: 2, sourceTimestamp: 101, totalSupply: 100 ether, surplus: 50 ether, balance: 70 ether})
         );
 
-        JBDenominatedAmount memory balance = sucker.peerChainBalanceOf(ETH_DECIMALS, ETH_CURRENCY);
-        JBDenominatedAmount memory surplus = sucker.peerChainSurplusOf(ETH_DECIMALS, ETH_CURRENCY);
+        JBDenominatedAmount memory balance = sucker.peerChainBalanceOf(TOKEN, ETH_DECIMALS);
+        JBDenominatedAmount memory surplus = sucker.peerChainSurplusOf(TOKEN, ETH_DECIMALS);
 
         assertEq(sucker.snapshotTimestamp(), 101, "freshness key advances within the same block");
         assertEq(sucker.peerChainTotalSupply(), 100 ether, "later same-block supply update is applied");
@@ -105,16 +105,25 @@ contract SameTimestampSnapshotPinnedTest is Test {
         pure
         returns (JBMessageRoot memory)
     {
+        JBSourceContext[] memory contexts = new JBSourceContext[](1);
+        contexts[0] = JBSourceContext({
+            token: bytes32(uint256(uint160(TOKEN))),
+            // forge-lint: disable-next-line(unsafe-typecast)
+            currency: uint32(uint160(TOKEN)),
+            decimals: ETH_DECIMALS,
+            // forge-lint: disable-next-line(unsafe-typecast)
+            surplus: uint128(surplus),
+            // forge-lint: disable-next-line(unsafe-typecast)
+            balance: uint128(balance)
+        });
+
         return JBMessageRoot({
             version: 1,
             token: bytes32(uint256(uint160(TOKEN))),
             amount: 0,
             remoteRoot: JBInboxTreeRoot({nonce: nonce, root: bytes32(uint256(nonce))}),
             sourceTotalSupply: totalSupply,
-            sourceCurrency: ETH_CURRENCY,
-            sourceDecimals: ETH_DECIMALS,
-            sourceSurplus: surplus,
-            sourceBalance: balance,
+            sourceContexts: contexts,
             sourceTimestamp: sourceTimestamp
         });
     }
