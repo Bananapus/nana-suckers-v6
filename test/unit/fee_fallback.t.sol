@@ -7,7 +7,6 @@ import "forge-std/Test.sol";
 import {IJBController} from "@bananapus/core-v6/src/interfaces/IJBController.sol";
 import {IJBDirectory} from "@bananapus/core-v6/src/interfaces/IJBDirectory.sol";
 import {IJBPermissions} from "@bananapus/core-v6/src/interfaces/IJBPermissions.sol";
-import {IJBPrices} from "@bananapus/core-v6/src/interfaces/IJBPrices.sol";
 import {IJBTerminal} from "@bananapus/core-v6/src/interfaces/IJBTerminal.sol";
 import {IJBTokens} from "@bananapus/core-v6/src/interfaces/IJBTokens.sol";
 import {JBConstants} from "@bananapus/core-v6/src/libraries/JBConstants.sol";
@@ -43,7 +42,7 @@ contract ZeroCostBridgeSucker is JBSucker {
         IJBSuckerRegistry registry,
         address forwarder
     )
-        JBSucker(directory, permissions, IJBPrices(address(1)), tokens, feeProjectId, registry, forwarder)
+        JBSucker(directory, permissions, tokens, feeProjectId, registry, forwarder)
     {}
 
     // forge-lint: disable-next-line(mixed-case-function)
@@ -147,7 +146,7 @@ contract FeeFallbackTest is Test {
         // Mock the registry's toRemoteFee() to return a non-zero fee.
         vm.mockCall(REGISTRY, abi.encodeCall(IJBSuckerRegistry.toRemoteFee, ()), abi.encode(TO_REMOTE_FEE));
 
-        // Mock DIRECTORY.terminalsOf() so _buildETHAggregate() in _sendRoot() doesn't revert.
+        // Mock DIRECTORY.terminalsOf() so the per-context snapshot builder in _sendRoot() doesn't revert.
         vm.mockCall(DIRECTORY, abi.encodeCall(IJBDirectory.terminalsOf, (PROJECT_ID)), abi.encode(new IJBTerminal[](0)));
     }
 

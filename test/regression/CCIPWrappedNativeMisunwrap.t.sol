@@ -7,7 +7,6 @@ import {Client} from "@chainlink/contracts-ccip/contracts/libraries/Client.sol";
 import {IRouterClient} from "@chainlink/contracts-ccip/contracts/interfaces/IRouterClient.sol";
 import {IJBDirectory} from "@bananapus/core-v6/src/interfaces/IJBDirectory.sol";
 import {IJBPermissions} from "@bananapus/core-v6/src/interfaces/IJBPermissions.sol";
-import {IJBPrices} from "@bananapus/core-v6/src/interfaces/IJBPrices.sol";
 import {IJBTokens} from "@bananapus/core-v6/src/interfaces/IJBTokens.sol";
 import {JBConstants} from "@bananapus/core-v6/src/libraries/JBConstants.sol";
 import {LibClone} from "solady/src/utils/LibClone.sol";
@@ -20,6 +19,7 @@ import {JBClaim} from "../../src/structs/JBClaim.sol";
 import {JBInboxTreeRoot} from "../../src/structs/JBInboxTreeRoot.sol";
 import {JBLeaf} from "../../src/structs/JBLeaf.sol";
 import {JBMessageRoot} from "../../src/structs/JBMessageRoot.sol";
+import {JBSourceContext} from "../../src/structs/JBSourceContext.sol";
 
 contract RegressionMockWETH {
     mapping(address => uint256) public balanceOf;
@@ -69,7 +69,6 @@ contract RegressionCCIPHarness is JBCCIPSucker {
             deployer,
             directory,
             permissions,
-            IJBPrices(address(1)),
             tokens,
             1,
             IJBSuckerRegistry(address(1)),
@@ -179,10 +178,7 @@ contract RegressionCCIPWrappedNativeMisunwrapTest is Test {
                 })
             }),
             sourceTotalSupply: 0,
-            sourceCurrency: 0,
-            sourceDecimals: 0,
-            sourceSurplus: 0,
-            sourceBalance: 0,
+            sourceContexts: new JBSourceContext[](0),
             sourceTimestamp: 1
         });
 
@@ -217,10 +213,7 @@ contract RegressionCCIPWrappedNativeMisunwrapTest is Test {
             amount: amount,
             remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(1))}),
             sourceTotalSupply: 0,
-            sourceCurrency: 0,
-            sourceDecimals: 0,
-            sourceSurplus: 0,
-            sourceBalance: 0,
+            sourceContexts: new JBSourceContext[](0),
             sourceTimestamp: 1
         });
 

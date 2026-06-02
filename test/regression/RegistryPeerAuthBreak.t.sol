@@ -58,7 +58,6 @@ contract RegressionRegistryPeerAuthBreakTest is Test, TestBaseWorkflow, IERC721R
             deployer: deployer,
             directory: jbDirectory(),
             permissions: jbPermissions(),
-            prices: jbPrices(),
             tokens: jbTokens(),
             feeProjectId: 1,
             registry: registryA,

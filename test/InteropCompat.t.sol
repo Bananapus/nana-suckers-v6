@@ -6,7 +6,6 @@ import "forge-std/Test.sol";
 
 import {IJBDirectory} from "@bananapus/core-v6/src/interfaces/IJBDirectory.sol";
 import {IJBPermissions} from "@bananapus/core-v6/src/interfaces/IJBPermissions.sol";
-import {IJBPrices} from "@bananapus/core-v6/src/interfaces/IJBPrices.sol";
 import {IJBTokens} from "@bananapus/core-v6/src/interfaces/IJBTokens.sol";
 import {LibClone} from "solady/src/utils/LibClone.sol";
 
@@ -16,6 +15,7 @@ import "../src/JBSucker.sol";
 import {IJBSuckerRegistry} from "../src/interfaces/IJBSuckerRegistry.sol";
 import {JBInboxTreeRoot} from "../src/structs/JBInboxTreeRoot.sol";
 import {JBMessageRoot} from "../src/structs/JBMessageRoot.sol";
+import {JBSourceContext} from "../src/structs/JBSourceContext.sol";
 import {JBRemoteToken} from "../src/structs/JBRemoteToken.sol";
 import {MerkleLib} from "../src/utils/MerkleLib.sol";
 
@@ -31,7 +31,7 @@ contract InteropTestSucker is JBSucker {
         IJBTokens tokens,
         address forwarder
     )
-        JBSucker(directory, permissions, IJBPrices(address(1)), tokens, 1, IJBSuckerRegistry(address(1)), forwarder)
+        JBSucker(directory, permissions, tokens, 1, IJBSuckerRegistry(address(1)), forwarder)
     {}
 
     // forge-lint: disable-next-line(mixed-case-function)
@@ -482,10 +482,7 @@ contract InteropCompat is Test {
             amount: 1000e18,
             remoteRoot: JBInboxTreeRoot({nonce: 42, root: bytes32(uint256(0x1234))}),
             sourceTotalSupply: 0,
-            sourceCurrency: 0,
-            sourceDecimals: 0,
-            sourceSurplus: 0,
-            sourceBalance: 0,
+            sourceContexts: new JBSourceContext[](0),
             sourceTimestamp: 1
         });
 
@@ -541,10 +538,7 @@ contract InteropCompat is Test {
             amount: type(uint128).max,
             remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(0)}),
             sourceTotalSupply: 0,
-            sourceCurrency: 0,
-            sourceDecimals: 0,
-            sourceSurplus: 0,
-            sourceBalance: 0,
+            sourceContexts: new JBSourceContext[](0),
             sourceTimestamp: 1
         });
 

@@ -8,7 +8,6 @@ import {Client} from "@chainlink/contracts-ccip/contracts/libraries/Client.sol";
 import {IJBController} from "@bananapus/core-v6/src/interfaces/IJBController.sol";
 import {IJBDirectory} from "@bananapus/core-v6/src/interfaces/IJBDirectory.sol";
 import {IJBPermissions} from "@bananapus/core-v6/src/interfaces/IJBPermissions.sol";
-import {IJBPrices} from "@bananapus/core-v6/src/interfaces/IJBPrices.sol";
 import {IJBTokens} from "@bananapus/core-v6/src/interfaces/IJBTokens.sol";
 import {LibClone} from "solady/src/utils/LibClone.sol";
 
@@ -18,6 +17,7 @@ import {ICCIPRouter} from "../../src/interfaces/ICCIPRouter.sol";
 import {IJBSuckerRegistry} from "../../src/interfaces/IJBSuckerRegistry.sol";
 import {JBInboxTreeRoot} from "../../src/structs/JBInboxTreeRoot.sol";
 import {JBMessageRoot} from "../../src/structs/JBMessageRoot.sol";
+import {JBSourceContext} from "../../src/structs/JBSourceContext.sol";
 import {JBSucker} from "../../src/JBSucker.sol";
 import {MerkleLib} from "../../src/utils/MerkleLib.sol";
 
@@ -60,7 +60,6 @@ contract TrustedForwarderSpoofCCIPTest is Test {
             deployer: deployer,
             directory: IJBDirectory(DIRECTORY),
             permissions: IJBPermissions(PERMISSIONS),
-            prices: IJBPrices(address(1)),
             tokens: IJBTokens(TOKENS),
             feeProjectId: 1,
             registry: IJBSuckerRegistry(REGISTRY),
@@ -92,10 +91,7 @@ contract TrustedForwarderSpoofCCIPTest is Test {
             amount: 0,
             remoteRoot: JBInboxTreeRoot({nonce: 1, root: forgedRoot}),
             sourceTotalSupply: 0,
-            sourceCurrency: 0,
-            sourceDecimals: 0,
-            sourceSurplus: 0,
-            sourceBalance: 0,
+            sourceContexts: new JBSourceContext[](0),
             sourceTimestamp: 1
         });
 

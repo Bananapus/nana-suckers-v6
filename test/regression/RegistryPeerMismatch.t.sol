@@ -5,7 +5,6 @@ import {Test} from "forge-std/Test.sol";
 
 import {IJBDirectory} from "@bananapus/core-v6/src/interfaces/IJBDirectory.sol";
 import {IJBPermissions} from "@bananapus/core-v6/src/interfaces/IJBPermissions.sol";
-import {IJBPrices} from "@bananapus/core-v6/src/interfaces/IJBPrices.sol";
 import {IJBProjects} from "@bananapus/core-v6/src/interfaces/IJBProjects.sol";
 import {IJBTokens} from "@bananapus/core-v6/src/interfaces/IJBTokens.sol";
 
@@ -18,6 +17,7 @@ import {IOPStandardBridge} from "../../src/interfaces/IOPStandardBridge.sol";
 import {JBTokenMapping} from "../../src/structs/JBTokenMapping.sol";
 import {JBSuckerDeployerConfig} from "../../src/structs/JBSuckerDeployerConfig.sol";
 import {JBMessageRoot} from "../../src/structs/JBMessageRoot.sol";
+import {JBSourceContext} from "../../src/structs/JBSourceContext.sol";
 import {JBInboxTreeRoot} from "../../src/structs/JBInboxTreeRoot.sol";
 
 contract RegistryPeerMismatchTest is Test {
@@ -77,10 +77,7 @@ contract RegistryPeerMismatchTest is Test {
                 amount: 0,
                 remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(1))}),
                 sourceTotalSupply: 0,
-                sourceCurrency: 0,
-                sourceDecimals: 0,
-                sourceSurplus: 0,
-                sourceBalance: 0,
+                sourceContexts: new JBSourceContext[](0),
                 sourceTimestamp: 1
             })
             );
@@ -97,7 +94,6 @@ contract RegistryPeerMismatchTest is Test {
             deployer,
             IJBDirectory(DIRECTORY),
             IJBPermissions(PERMISSIONS),
-            IJBPrices(address(1)),
             IJBTokens(TOKENS),
             1,
             registry,

@@ -6,7 +6,6 @@ import "forge-std/Test.sol";
 
 import {IJBDirectory} from "@bananapus/core-v6/src/interfaces/IJBDirectory.sol";
 import {IJBPermissions} from "@bananapus/core-v6/src/interfaces/IJBPermissions.sol";
-import {IJBPrices} from "@bananapus/core-v6/src/interfaces/IJBPrices.sol";
 import {IJBTerminal} from "@bananapus/core-v6/src/interfaces/IJBTerminal.sol";
 import {IJBTokens} from "@bananapus/core-v6/src/interfaces/IJBTokens.sol";
 import {JBConstants} from "@bananapus/core-v6/src/libraries/JBConstants.sol";
@@ -34,7 +33,7 @@ contract ArbitrumL2FeeHarness is JBArbitrumSucker {
         IJBTokens tokens,
         IJBSuckerRegistry registry
     )
-        JBArbitrumSucker(deployer, directory, permissions, IJBPrices(address(1)), tokens, 1, registry, address(0))
+        JBArbitrumSucker(deployer, directory, permissions, tokens, 1, registry, address(0))
     {}
 
     function seedOutbox(address token, bytes32 remoteToken) external {
@@ -100,7 +99,7 @@ contract ArbitrumL2ToRemoteFeeDoSTest is Test {
         // Mock DIRECTORY.controllerOf() so the low-level call in _sendRoot() doesn't fail.
         vm.mockCall(DIRECTORY, abi.encodeCall(IJBDirectory.controllerOf, (uint256(1))), abi.encode(address(0)));
 
-        // Mock DIRECTORY.terminalsOf() so _buildETHAggregate() in _sendRoot() doesn't revert.
+        // Mock DIRECTORY.terminalsOf() so the per-context snapshot builder in _sendRoot() doesn't revert.
         vm.mockCall(DIRECTORY, abi.encodeCall(IJBDirectory.terminalsOf, (uint256(1))), abi.encode(new IJBTerminal[](0)));
 
         // Mock the registry fee and fee terminal.

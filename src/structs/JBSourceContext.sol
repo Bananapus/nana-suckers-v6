@@ -6,10 +6,10 @@ pragma solidity ^0.8.0;
 /// decimals — it performs no price-feed valuation. The destination chain folds each context into its same-asset local
 /// context at par (identity for same-address tokens, or via the sucker's token mapping for same-asset tokens at
 /// different addresses), so the only conversions ever performed are the ones a project already needs for its own local
-/// surplus. `token` is the destination-local token address (the sender translates its local token to the destination's
-/// token before sending), so the receiver keys this context by its own local token by identity.
-/// @custom:member token The destination-local token this context resolves to (sender-translated), padded to bytes32
-/// for cross-VM compatibility.
+/// surplus. `token` is the source-local token this context was read from; the receiver resolves it to its own local
+/// token via the sucker's remote-to-local token mapping (identity for same-address tokens).
+/// @custom:member token The source-local token this context was read from, resolved to a local token on receipt via
+/// the sucker's remote-to-local token mapping. Padded to bytes32 for cross-VM compatibility.
 /// @custom:member currency The context's native currency identifier (token-keyed or a standard id).
 /// @custom:member decimals The context's native decimal precision (e.g. 18 for ETH, 6 for USDC).
 /// @custom:member surplus The raw, un-valued surplus held in this context, in the context's own units. Capped to

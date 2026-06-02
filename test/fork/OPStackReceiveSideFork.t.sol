@@ -55,7 +55,6 @@ contract OPStackReceiveSideFork is SuckerForkHelpers {
             deployer: suckerDeployer,
             directory: jbDirectory(),
             permissions: jbPermissions(),
-            prices: jbPrices(),
             tokens: jbTokens(),
             feeProjectId: 1,
             registry: IJBSuckerRegistry(address(0)),

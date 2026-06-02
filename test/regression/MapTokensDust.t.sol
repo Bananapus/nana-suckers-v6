@@ -7,7 +7,6 @@ import "forge-std/Test.sol";
 // forge-lint: disable-next-line(unaliased-plain-import)
 import "../../src/JBSucker.sol";
 import {LibClone} from "solady/src/utils/LibClone.sol";
-import {IJBPrices} from "@bananapus/core-v6/src/interfaces/IJBPrices.sol";
 import {IJBTerminal} from "@bananapus/core-v6/src/interfaces/IJBTerminal.sol";
 import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import {IJBSuckerRegistry} from "../../src/interfaces/IJBSuckerRegistry.sol";
@@ -47,7 +46,7 @@ contract MapTokensDustTest is Test {
         // Allow any caller to pass the MAP_SUCKER_TOKEN permission check.
         vm.mockCall(PERMISSIONS, abi.encodeWithSelector(IJBPermissions.hasPermission.selector), abi.encode(true));
 
-        // Mock DIRECTORY.terminalsOf() so _buildETHAggregate() in _sendRoot() doesn't revert.
+        // Mock DIRECTORY.terminalsOf() so the per-context snapshot builder in _sendRoot() doesn't revert.
         vm.mockCall(DIRECTORY, abi.encodeCall(IJBDirectory.terminalsOf, (projectId)), abi.encode(new IJBTerminal[](0)));
     }
 
@@ -202,7 +201,7 @@ contract MapTokensDustSucker is JBSucker {
         IJBTokens tokens,
         address forwarder
     )
-        JBSucker(directory, permissions, IJBPrices(address(1)), tokens, 1, IJBSuckerRegistry(address(1)), forwarder)
+        JBSucker(directory, permissions, tokens, 1, IJBSuckerRegistry(address(1)), forwarder)
     {}
 
     // forge-lint: disable-next-line(mixed-case-function)

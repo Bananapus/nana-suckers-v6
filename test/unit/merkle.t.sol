@@ -5,7 +5,6 @@ pragma solidity ^0.8.13;
 import "forge-std/Test.sol";
 
 import {IJBController} from "@bananapus/core-v6/src/interfaces/IJBController.sol";
-import {IJBPrices} from "@bananapus/core-v6/src/interfaces/IJBPrices.sol";
 // forge-lint: disable-next-line(unaliased-plain-import)
 import "../../src/JBSucker.sol";
 // forge-lint: disable-next-line(unaliased-plain-import)
@@ -33,7 +32,6 @@ contract MerkleUnitTest is JBSucker, Test {
         JBSucker(
             IJBDirectory(address(new MockDirectory())),
             IJBPermissions(address(800)),
-            IJBPrices(address(1)),
             IJBTokens(address(700)),
             1,
             IJBSuckerRegistry(address(this)),
@@ -245,7 +243,6 @@ contract DeployerUnitTest is Test {
             _deployer,
             dir,
             IJBPermissions(address(0)),
-            IJBPrices(address(1)),
             IJBTokens(address(0)),
             1,
             IJBSuckerRegistry(address(this)),
