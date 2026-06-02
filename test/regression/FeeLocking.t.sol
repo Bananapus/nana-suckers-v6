@@ -154,9 +154,7 @@ contract CCIPSuckerHarness is JBCCIPSucker {
         IJBSuckerRegistry registry,
         address trustedForwarder
     )
-        JBCCIPSucker(
-            deployer, directory, permissions, tokens, feeProjectId, registry, trustedForwarder
-        )
+        JBCCIPSucker(deployer, directory, permissions, tokens, feeProjectId, registry, trustedForwarder)
     {}
 
     function test_setRemoteToken(address localToken, JBRemoteToken memory remoteToken) external {

@@ -76,11 +76,7 @@ contract SameChainSuckerMock {
         return _chainId;
     }
 
-    function peerChainContextsOf()
-        external
-        view
-        returns (JBPeerChainContext[] memory contexts, uint256, uint256)
-    {
+    function peerChainContextsOf() external view returns (JBPeerChainContext[] memory contexts, uint256, uint256) {
         contexts = new JBPeerChainContext[](1);
         contexts[0] = JBPeerChainContext({currency: _currency, decimals: 18, surplus: _surplus, balance: 0});
         return (contexts, _chainId, 0);
@@ -107,12 +103,14 @@ contract RegistryStaleDeprecatedMaxSurplusTest is Test {
         RegistryHarness registry = new RegistryHarness();
 
         // Old deprecated sucker: stale surplus snapshot from before the migration.
-        SameChainSuckerMock deprecatedSucker =
-            new SameChainSuckerMock({chainId: PEER_CHAIN_ID, surplus: 1000 ether, supply: 100 ether, currency: CURRENCY});
+        SameChainSuckerMock deprecatedSucker = new SameChainSuckerMock({
+            chainId: PEER_CHAIN_ID, surplus: 1000 ether, supply: 100 ether, currency: CURRENCY
+        });
 
         // New active sucker: fresh snapshot after the remote chain already spent most of its surplus.
-        SameChainSuckerMock activeSucker =
-            new SameChainSuckerMock({chainId: PEER_CHAIN_ID, surplus: 100 ether, supply: 100 ether, currency: CURRENCY});
+        SameChainSuckerMock activeSucker = new SameChainSuckerMock({
+            chainId: PEER_CHAIN_ID, surplus: 100 ether, supply: 100 ether, currency: CURRENCY
+        });
 
         registry.seedDeprecated(PROJECT_ID, address(deprecatedSucker));
         registry.seedActive(PROJECT_ID, address(activeSucker));

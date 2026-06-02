@@ -187,7 +187,9 @@ contract RegistryFirstTerminalSnapshotGapTest is Test {
 
         assertEq(message.sourceTotalSupply, 1000 ether, "control: snapshot still records controller supply");
         assertEq(message.sourceContexts.length, 1, "only the treasury terminal contributes a context");
-        assertEq(message.sourceContexts[0].token, bytes32(uint256(uint160(TOKEN))), "later terminal's token is snapshotted");
+        assertEq(
+            message.sourceContexts[0].token, bytes32(uint256(uint160(TOKEN))), "later terminal's token is snapshotted"
+        );
         assertEq(message.sourceContexts[0].surplus, 40 ether, "later terminal surplus is still snapshotted");
         assertEq(message.sourceContexts[0].balance, 70 ether, "later terminal balance is still snapshotted");
     }

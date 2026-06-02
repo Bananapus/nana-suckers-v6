@@ -146,15 +146,17 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
         return exists && (val == _SUCKER_EXISTS || val == _SUCKER_DEPRECATED);
     }
 
-    /// @notice Values one sucker's raw peer-chain balance into a currency, bundled with the peer chain ID and freshness.
-    /// @dev A registry self-call boundary so `totalRemoteBalanceOf` can `try` it and skip a sucker whose feed is missing. A
+    /// @notice Values one sucker's raw peer-chain balance into a currency, bundled with the peer chain ID and
+    /// freshness. @dev A registry self-call boundary so `totalRemoteBalanceOf` can `try` it and skip a sucker whose
+    /// feed is missing. A
     /// context whose currency matches `currency` folds in at par (no feed); a missing cross-currency feed reverts (and
     /// is caught by the caller, dropping just this sucker).
     /// @param sucker The sucker to read.
     /// @param projectId The project whose price feeds to use.
     /// @param currency The currency to value into.
     /// @param decimals The decimal precision for the returned value.
-    /// @return A `JBPeerChainValue` with the valued balance, the sucker's peer chain ID, and its snapshot freshness key.
+    /// @return A `JBPeerChainValue` with the valued balance, the sucker's peer chain ID, and its snapshot freshness
+    /// key.
     function remoteBalanceOf(
         address sucker,
         uint256 projectId,
@@ -185,15 +187,17 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
         return JBPeerChainValue({value: value, peerChainId: chainId, snapshotTimestamp: snapshot});
     }
 
-    /// @notice Values one sucker's raw peer-chain surplus into a currency, bundled with the peer chain ID and freshness.
-    /// @dev A registry self-call boundary so `totalRemoteSurplusOf` can `try` it and skip a sucker whose feed is missing. A
+    /// @notice Values one sucker's raw peer-chain surplus into a currency, bundled with the peer chain ID and
+    /// freshness. @dev A registry self-call boundary so `totalRemoteSurplusOf` can `try` it and skip a sucker whose
+    /// feed is missing. A
     /// context whose currency matches `currency` folds in at par (no feed); a missing cross-currency feed reverts (and
     /// is caught by the caller, dropping just this sucker).
     /// @param sucker The sucker to read.
     /// @param projectId The project whose price feeds to use.
     /// @param currency The currency to value into.
     /// @param decimals The decimal precision for the returned value.
-    /// @return A `JBPeerChainValue` with the valued surplus, the sucker's peer chain ID, and its snapshot freshness key.
+    /// @return A `JBPeerChainValue` with the valued surplus, the sucker's peer chain ID, and its snapshot freshness
+    /// key.
     function remoteSurplusOf(
         address sucker,
         uint256 projectId,
@@ -367,8 +371,11 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
             if (val == _SUCKER_EXISTS || val == _SUCKER_DEPRECATED) {
                 // A registry self-call values the sucker's raw contexts so a missing feed reverts only this sucker
                 // (caught here), and returns the value, peer chain ID, and snapshot freshness key together.
-                try this.remoteBalanceOf({sucker: allSuckers[i], projectId: projectId, currency: currency, decimals: decimals})
-                returns (JBPeerChainValue memory read) {
+                try this.remoteBalanceOf({
+                    sucker: allSuckers[i], projectId: projectId, currency: currency, decimals: decimals
+                }) returns (
+                    JBPeerChainValue memory read
+                ) {
                     scratch.chainCount = _recordPeerChainValue({
                         scratch: scratch, read: read, sucker: allSuckers[i], isActive: val == _SUCKER_EXISTS
                     });
@@ -421,8 +428,11 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
             if (val == _SUCKER_EXISTS || val == _SUCKER_DEPRECATED) {
                 // A registry self-call values the sucker's raw contexts so a missing feed reverts only this sucker
                 // (caught here), and returns the value, peer chain ID, and snapshot freshness key together.
-                try this.remoteSurplusOf({sucker: allSuckers[i], projectId: projectId, currency: currency, decimals: decimals})
-                returns (JBPeerChainValue memory read) {
+                try this.remoteSurplusOf({
+                    sucker: allSuckers[i], projectId: projectId, currency: currency, decimals: decimals
+                }) returns (
+                    JBPeerChainValue memory read
+                ) {
                     scratch.chainCount = _recordPeerChainValue({
                         scratch: scratch, read: read, sucker: allSuckers[i], isActive: val == _SUCKER_EXISTS
                     });
@@ -602,17 +612,14 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
             ? amount
             : JBFixedPointNumber.adjustDecimals({value: amount, decimals: fromDecimals, targetDecimals: toDecimals});
 
-        // Step 2: convert currency. The price is the denominator: pricePerUnitOf returns the `fromCurrency` price of one
-        // `toCurrency`, so dividing the amount by it yields the amount in `toCurrency`.
+        // Step 2: convert currency. The price is the denominator: pricePerUnitOf returns the `fromCurrency` price of
+        // one `toCurrency`, so dividing the amount by it yields the amount in `toCurrency`.
         if (value == 0 || fromCurrency == toCurrency) return value;
         return mulDiv({
             x: value,
             y: 10 ** _PRICE_FIDELITY,
             denominator: PRICES.pricePerUnitOf({
-                projectId: projectId,
-                pricingCurrency: fromCurrency,
-                unitCurrency: toCurrency,
-                decimals: _PRICE_FIDELITY
+                projectId: projectId, pricingCurrency: fromCurrency, unitCurrency: toCurrency, decimals: _PRICE_FIDELITY
             })
         });
     }

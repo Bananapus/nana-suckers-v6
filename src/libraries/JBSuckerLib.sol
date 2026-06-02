@@ -37,7 +37,8 @@ library JBSuckerLib {
 
     /// @notice Build the cross-chain snapshot message (total supply plus per-context surplus and balance).
     /// @dev Extracted from `JBSucker._buildSnapshotAndSend` to reduce child contract bytecode. Called via DELEGATECALL.
-    /// The snapshot performs no price-feed valuation — it carries surplus and balance per context in each context's own
+    /// The snapshot performs no price-feed valuation — it carries surplus and balance per context in each context's
+    /// own
     /// currency.
     /// @param directory The JB directory to look up controllers and terminals.
     /// @param projectId The project ID.
@@ -285,21 +286,19 @@ library JBSuckerLib {
         // Raw surplus for this one token, requested in its own currency so the terminal does not value it.
         uint256 surplus;
         try terminal.currentSurplusOf({
-            projectId: projectId,
-            tokens: oneToken,
-            decimals: context.decimals,
-            currency: context.currency
-        }) returns (uint256 contextSurplus) {
+            projectId: projectId, tokens: oneToken, decimals: context.decimals, currency: context.currency
+        }) returns (
+            uint256 contextSurplus
+        ) {
             surplus = contextSurplus;
         } catch {}
 
         // Raw recorded balance for this token.
         uint256 balance;
-        try IJBMultiTerminal(address(terminal)).STORE().balanceOf({
-            terminal: address(terminal),
-            projectId: projectId,
-            token: context.token
-        }) returns (uint256 contextBalance) {
+        try IJBMultiTerminal(address(terminal)).STORE()
+            .balanceOf({terminal: address(terminal), projectId: projectId, token: context.token}) returns (
+            uint256 contextBalance
+        ) {
             balance = contextBalance;
         } catch {}
 

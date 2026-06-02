@@ -273,8 +273,12 @@ contract MultiSuckerForkTest is Test {
 
         // Verify registry aggregate views before deprecation.
         assertEq(registry.remoteTotalSupplyOf(PROJECT_ID), 1000e18, "registry total supply before deprecation");
-        assertEq(registry.totalRemoteBalanceOf(PROJECT_ID, ETH_CURRENCY, 18), 2000e18, "registry balance before deprecation");
-        assertEq(registry.totalRemoteSurplusOf(PROJECT_ID, ETH_CURRENCY, 18), 500e18, "registry surplus before deprecation");
+        assertEq(
+            registry.totalRemoteBalanceOf(PROJECT_ID, ETH_CURRENCY, 18), 2000e18, "registry balance before deprecation"
+        );
+        assertEq(
+            registry.totalRemoteSurplusOf(PROJECT_ID, ETH_CURRENCY, 18), 500e18, "registry surplus before deprecation"
+        );
 
         // Deprecate sucker1 and remove from active listing.
         _deprecateAndRemove(sucker1);
@@ -412,7 +416,9 @@ contract MultiSuckerForkTest is Test {
         assertEq(
             registry.remoteTotalSupplyOf(PROJECT_ID), 1100e18, "dedup per chain + sum across: active 800 + 300 = 1100"
         );
-        assertEq(registry.totalRemoteBalanceOf(PROJECT_ID, ETH_CURRENCY, 18), 2300e18, "balance: active 1500 + 800 = 2300");
+        assertEq(
+            registry.totalRemoteBalanceOf(PROJECT_ID, ETH_CURRENCY, 18), 2300e18, "balance: active 1500 + 800 = 2300"
+        );
         assertEq(registry.totalRemoteSurplusOf(PROJECT_ID, ETH_CURRENCY, 18), 600e18, "surplus: active 400 + 200 = 600");
     }
 
@@ -458,7 +464,9 @@ contract MultiSuckerForkTest is Test {
         // State SHOULD update to the newer (lower) values.
         assertEq(sucker.peerChainTotalSupply(), 2000e18, "nonce=2 should overwrite nonce=1 even with lower values");
         assertEq(
-            registry.totalRemoteBalanceOf(PROJECT_ID, ETH_CURRENCY, 18), 4000e18, "registry should reflect updated balance"
+            registry.totalRemoteBalanceOf(PROJECT_ID, ETH_CURRENCY, 18),
+            4000e18,
+            "registry should reflect updated balance"
         );
     }
 

@@ -253,7 +253,8 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     bytes32 private _peer;
 
     /// @notice The peer chain's per-currency surplus and balance from the latest snapshot. Rebuilt in full each time a
-    /// fresher snapshot is received, so a context that dropped out of the new snapshot is simply absent — no per-entry
+    /// fresher snapshot is received, so a context that dropped out of the new snapshot is simply absent — no
+    /// per-entry
     /// versioning or clearing is needed. A read sums these and values them into the requested currency.
     JBPeerChainContext[] private _peerContexts;
 
@@ -540,7 +541,9 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
                 // Cache an authoritative currency so later snapshots reuse it instead of re-reading the terminal. The
                 // accounting-context currency is immutable, so the cache never goes stale; a not-yet-configured token
                 // is left uncached and re-read next time.
-                if (authoritative && _cachedCurrencyOf[contextToken] == 0) _cachedCurrencyOf[contextToken] = contextCurrency;
+                if (authoritative && _cachedCurrencyOf[contextToken] == 0) {
+                    _cachedCurrencyOf[contextToken] = contextCurrency;
+                }
 
                 // Accumulate into an existing same-currency entry, or append a new one. The context set is small
                 // (one entry per distinct local currency), so a linear scan is cheaper than a mapping.
@@ -1666,16 +1669,14 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         uint256 forProjectId = projectId();
 
         // Resolve the project's primary terminal for the token. An `address` return needs a full word.
-        (bool terminalOk, bytes memory terminalData) = address(DIRECTORY).staticcall(
-            abi.encodeCall(IJBDirectory.primaryTerminalOf, (forProjectId, token))
-        );
+        (bool terminalOk, bytes memory terminalData) =
+            address(DIRECTORY).staticcall(abi.encodeCall(IJBDirectory.primaryTerminalOf, (forProjectId, token)));
         if (terminalOk && terminalData.length >= 32) {
             address terminal = abi.decode(terminalData, (address));
             if (terminal != address(0)) {
                 // Read the token's accounting context. The struct encodes to three words.
-                (bool contextOk, bytes memory contextData) = terminal.staticcall(
-                    abi.encodeCall(IJBTerminal.accountingContextForTokenOf, (forProjectId, token))
-                );
+                (bool contextOk, bytes memory contextData) =
+                    terminal.staticcall(abi.encodeCall(IJBTerminal.accountingContextForTokenOf, (forProjectId, token)));
                 if (contextOk && contextData.length >= 96) {
                     JBAccountingContext memory accountingContext = abi.decode(contextData, (JBAccountingContext));
                     if (accountingContext.currency != 0) return (accountingContext.currency, true);

@@ -131,10 +131,7 @@ contract PeerChainAdjustedAccountsHookMock is IJBPeerChainAdjustedAccounts {
     {
         contexts = new JBSourceContext[](1);
         contexts[0] = JBSourceContext({
-            token: bytes32(uint256(uint160(_token))),
-            decimals: _decimals,
-            surplus: _surplus,
-            balance: _balance
+            token: bytes32(uint256(uint160(_token))), decimals: _decimals, surplus: _surplus, balance: _balance
         });
         return (_supply, contexts);
     }
@@ -425,11 +422,7 @@ contract PeerChainStateTest is Test {
         _mockSingleETHTerminal({ethBalance: 50 ether, ethSurplus: 30 ether});
 
         PeerChainAdjustedAccountsHookMock accountingHook = new PeerChainAdjustedAccountsHookMock({
-            supply: 12 ether,
-            surplus: 3 ether,
-            balance: 0,
-            token: TOKEN,
-            decimals: 18
+            supply: 12 ether, surplus: 3 ether, balance: 0, token: TOKEN, decimals: 18
         });
         vm.etch(CONTROLLER, hex"00");
         JBRulesetMetadata memory metadata;
@@ -551,7 +544,9 @@ contract PeerChainStateTest is Test {
 
         // Per-token recorded balance.
         vm.mockCall(
-            STORE, abi.encodeCall(IJBTerminalStore.balanceOf, (TERMINAL, PROJECT_ID, TOKEN)), abi.encode(uint256(10 ether))
+            STORE,
+            abi.encodeCall(IJBTerminalStore.balanceOf, (TERMINAL, PROJECT_ID, TOKEN)),
+            abi.encode(uint256(10 ether))
         );
         vm.mockCall(
             STORE,
@@ -645,10 +640,7 @@ contract PeerChainStateTest is Test {
         returns (JBSourceContext memory)
     {
         return JBSourceContext({
-            token: bytes32(uint256(uint160(token))),
-            decimals: decimals,
-            surplus: surplus,
-            balance: balance
+            token: bytes32(uint256(uint160(token))), decimals: decimals, surplus: surplus, balance: balance
         });
     }
 
@@ -687,10 +679,7 @@ contract PeerChainStateTest is Test {
     {
         JBSourceContext[] memory contexts = new JBSourceContext[](1);
         contexts[0] = JBSourceContext({
-            token: bytes32(uint256(uint160(TOKEN))),
-            decimals: ETH_DECIMALS,
-            surplus: surplus,
-            balance: balance
+            token: bytes32(uint256(uint160(TOKEN))), decimals: ETH_DECIMALS, surplus: surplus, balance: balance
         });
         return _root({nonce: nonce, totalSupply: totalSupply, contexts: contexts});
     }

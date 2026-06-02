@@ -168,9 +168,6 @@ contract SuckerCrossChainAdversarial is Test {
     uint256 constant PROJECT_ID = 1;
     address constant TOKEN = address(0x000000000000000000000000000000000000EEEe);
 
-    /// @dev An accounting context's currency is token-keyed: `uint32(uint160(token))`.
-    // forge-lint: disable-next-line(unsafe-typecast)
-
     CrossChainTestSucker sucker;
 
     function setUp() public {
@@ -712,10 +709,7 @@ contract SuckerCrossChainAdversarial is Test {
     function _nativeContext(uint128 surplus, uint128 balance) internal pure returns (JBSourceContext[] memory ctxs) {
         ctxs = new JBSourceContext[](1);
         ctxs[0] = JBSourceContext({
-            token: bytes32(uint256(uint160(TOKEN))),
-            decimals: 18,
-            surplus: surplus,
-            balance: balance
+            token: bytes32(uint256(uint160(TOKEN))), decimals: 18, surplus: surplus, balance: balance
         });
     }
 }

@@ -47,10 +47,12 @@ contract RegistryPeerMismatchTest is Test {
     }
 
     function test_registryDeployPathBreaksDefaultPeerSymmetry() public {
-        registryA =
-            new JBSuckerRegistry(IJBDirectory(DIRECTORY), IJBPermissions(PERMISSIONS), IJBPrices(PRICES), OWNER, address(0));
-        registryB =
-            new JBSuckerRegistry(IJBDirectory(DIRECTORY), IJBPermissions(PERMISSIONS), IJBPrices(PRICES), OWNER, address(0));
+        registryA = new JBSuckerRegistry(
+            IJBDirectory(DIRECTORY), IJBPermissions(PERMISSIONS), IJBPrices(PRICES), OWNER, address(0)
+        );
+        registryB = new JBSuckerRegistry(
+            IJBDirectory(DIRECTORY), IJBPermissions(PERMISSIONS), IJBPrices(PRICES), OWNER, address(0)
+        );
 
         JBOptimismSuckerDeployer deployerA = _deployOptimismDeployer(registryA);
         JBOptimismSuckerDeployer deployerB = _deployOptimismDeployer(registryB);
@@ -96,13 +98,7 @@ contract RegistryPeerMismatchTest is Test {
         deployer.setChainSpecificConstants(IOPMessenger(MESSENGER), IOPStandardBridge(BRIDGE));
 
         JBOptimismSucker singleton = new JBOptimismSucker(
-            deployer,
-            IJBDirectory(DIRECTORY),
-            IJBPermissions(PERMISSIONS),
-            IJBTokens(TOKENS),
-            1,
-            registry,
-            address(0)
+            deployer, IJBDirectory(DIRECTORY), IJBPermissions(PERMISSIONS), IJBTokens(TOKENS), 1, registry, address(0)
         );
         vm.prank(OWNER);
         deployer.configureSingleton(singleton);

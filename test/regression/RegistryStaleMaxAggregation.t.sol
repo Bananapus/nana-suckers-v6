@@ -21,7 +21,9 @@ contract RegistryHarness is JBSuckerRegistry {
         address permissions,
         address prices
     )
-        JBSuckerRegistry(IJBDirectory(directory), IJBPermissions(permissions), IJBPrices(prices), address(this), address(0))
+        JBSuckerRegistry(
+            IJBDirectory(directory), IJBPermissions(permissions), IJBPrices(prices), address(this), address(0)
+        )
     {}
 
     function forceSet(uint256 projectId, address sucker, uint256 status) external {
@@ -50,11 +52,7 @@ contract MockAggregateSucker {
         return chainId;
     }
 
-    function peerChainContextsOf()
-        external
-        view
-        returns (JBPeerChainContext[] memory contexts, uint256, uint256)
-    {
+    function peerChainContextsOf() external view returns (JBPeerChainContext[] memory contexts, uint256, uint256) {
         contexts = new JBPeerChainContext[](1);
         contexts[0] = JBPeerChainContext({currency: _currency, decimals: 18, surplus: _surplus, balance: 0});
         return (contexts, chainId, snapshotTimestamp);
