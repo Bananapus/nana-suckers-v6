@@ -557,19 +557,6 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         }
     }
 
-    /// @notice Adds two `uint128` amounts, saturating at `type(uint128).max` instead of overflowing.
-    /// @dev Saturation keeps a pathological peer snapshot from reverting the receive path; the cap can only
-    /// under-report a remote amount, the safe direction.
-    /// @param a The first amount.
-    /// @param b The second amount.
-    /// @return The saturated sum.
-    function _saturatingAddU128(uint128 a, uint128 b) internal pure returns (uint128) {
-        unchecked {
-            uint256 sum = uint256(a) + uint256(b);
-            return sum > type(uint128).max ? type(uint128).max : uint128(sum);
-        }
-    }
-
     /// @notice Configure which remote-chain tokens each local terminal token maps to, enabling (or disabling) those
     /// tokens for cross-chain bridging. Setting a remote token to `bytes32(0)` disables bridging and flushes any
     /// pending outbox entries. Requires `MAP_SUCKER_TOKEN` permission from the project owner (or called by the
@@ -1784,6 +1771,19 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         JBSuckerState deprecationState = state();
         if (deprecationState == JBSuckerState.DEPRECATED || deprecationState == JBSuckerState.SENDING_DISABLED) {
             revert JBSucker_Deprecated({state: deprecationState});
+        }
+    }
+
+    /// @notice Adds two `uint128` amounts, saturating at `type(uint128).max` instead of overflowing.
+    /// @dev Saturation keeps a pathological peer snapshot from reverting the receive path; the cap can only
+    /// under-report a remote amount, the safe direction.
+    /// @param a The first amount.
+    /// @param b The second amount.
+    /// @return The saturated sum.
+    function _saturatingAddU128(uint128 a, uint128 b) internal pure returns (uint128) {
+        unchecked {
+            uint256 sum = uint256(a) + uint256(b);
+            return sum > type(uint128).max ? type(uint128).max : uint128(sum);
         }
     }
 
