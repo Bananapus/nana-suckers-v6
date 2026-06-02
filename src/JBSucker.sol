@@ -39,6 +39,8 @@ import {JBClaim} from "./structs/JBClaim.sol";
 import {JBDenominatedAmount} from "./structs/JBDenominatedAmount.sol";
 import {JBInboxTreeRoot} from "./structs/JBInboxTreeRoot.sol";
 import {JBMessageRoot} from "./structs/JBMessageRoot.sol";
+import {JBPeerChainContext} from "./structs/JBPeerChainContext.sol";
+import {JBSourceContext} from "./structs/JBSourceContext.sol";
 import {JBOutboxTree} from "./structs/JBOutboxTree.sol";
 import {JBPeerChainValue} from "./structs/JBPeerChainValue.sol";
 import {JBRemoteToken} from "./structs/JBRemoteToken.sol";
@@ -233,17 +235,17 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     /// @notice The ID of the project (on the local chain) that this sucker is associated with.
     uint256 private _localProjectId;
 
-    /// @notice The last known project-wide surplus on the peer chain. Updated each time a bridge message is received.
-    /// @dev The `currency` and `decimals` fields describe the denomination; `value` is the surplus amount.
-    JBDenominatedAmount private _peerChainSurplus;
+    /// @notice The last known peer-chain surplus and balance for each local accounting context, keyed by the local
+    /// token a remote context resolves to. Updated each time a bridge message is received.
+    /// @dev Versioned by `snapshotTimestamp`: an entry whose `snapshotEpoch` differs from the current
+    /// `snapshotTimestamp` is treated as absent, so a context that dropped out of a fresher snapshot needs no explicit
+    /// clearing.
+    /// @custom:param localToken The local terminal token the context resolves to.
+    mapping(address localToken => JBPeerChainContext) private _peerContextOf;
 
     /// @notice Optional explicit peer sucker address on the remote chain.
     /// @dev A zero value preserves the default same-address deterministic peer.
     bytes32 private _peer;
-
-    /// @notice The last known total recorded balance on the peer chain. Updated each time a bridge message is received.
-    /// @dev The `currency` and `decimals` fields describe the denomination; `value` is the balance amount.
-    JBDenominatedAmount private _peerChainBalance;
 
     /// @notice The source chain freshness key for the most recent accepted peer snapshot.
     /// @dev Only snapshots with a strictly newer source freshness key are accepted, preventing stale rollbacks.
@@ -514,18 +516,57 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         // This prevents a staler per-token message from rolling back shared state (surplus, balance, supply)
         // that was already updated by a fresher message for a different token.
         if (root.sourceTimestamp > snapshotTimestamp) {
+            // Bump the snapshot epoch. Per-context entries are versioned against it, so entries written under an older
+            // epoch are implicitly stale without clearing the map.
             snapshotTimestamp = root.sourceTimestamp;
 
             // Update unconditionally — a legitimate zero supply must clear phantom cached supply.
             peerChainTotalSupply = root.sourceTotalSupply;
 
-            // Store the surplus and balance snapshots from the source chain.
-            _peerChainSurplus = JBDenominatedAmount({
-                value: root.sourceSurplus, currency: uint32(root.sourceCurrency), decimals: root.sourceDecimals
-            });
-            _peerChainBalance = JBDenominatedAmount({
-                value: root.sourceBalance, currency: uint32(root.sourceCurrency), decimals: root.sourceDecimals
-            });
+            // Store each source context under the local token it resolves to. Resolution prefers the token mapping (so
+            // a same-asset token at a different remote address binds to the right local context) and falls back to
+            // identity for same-address tokens. Multiple source contexts that resolve to the same local token (e.g. the
+            // same token across multiple terminals) are summed.
+            uint256 numContexts = root.sourceContexts.length;
+            for (uint256 i; i < numContexts;) {
+                JBSourceContext calldata ctx = root.sourceContexts[i];
+
+                address contextToken = _localTokenForRemoteToken[ctx.token];
+                if (contextToken == address(0)) contextToken = _toAddress(ctx.token);
+
+                JBPeerChainContext storage stored = _peerContextOf[contextToken];
+                if (stored.snapshotEpoch == root.sourceTimestamp) {
+                    // A prior context this epoch already wrote this local token; accumulate (saturating at uint128).
+                    stored.surplus = _saturatingAddU128(stored.surplus, ctx.surplus);
+                    stored.balance = _saturatingAddU128(stored.balance, ctx.balance);
+                } else {
+                    // First entry for this local token this epoch; overwrite any stale prior-epoch value.
+                    _peerContextOf[contextToken] = JBPeerChainContext({
+                        surplus: ctx.surplus,
+                        balance: ctx.balance,
+                        currency: ctx.currency,
+                        decimals: ctx.decimals,
+                        snapshotEpoch: root.sourceTimestamp
+                    });
+                }
+
+                unchecked {
+                    ++i;
+                }
+            }
+        }
+    }
+
+    /// @notice Adds two `uint128` amounts, saturating at `type(uint128).max` instead of overflowing.
+    /// @dev Saturation keeps a pathological peer snapshot from reverting the receive path; the cap can only
+    /// under-report a remote amount, the safe direction.
+    /// @param a The first amount.
+    /// @param b The second amount.
+    /// @return The saturated sum.
+    function _saturatingAddU128(uint128 a, uint128 b) internal pure returns (uint128) {
+        unchecked {
+            uint256 sum = uint256(a) + uint256(b);
+            return sum > type(uint128).max ? type(uint128).max : uint128(sum);
         }
     }
 

@@ -7,6 +7,7 @@ import {IJBMultiTerminal} from "@bananapus/core-v6/src/interfaces/IJBMultiTermin
 import {IJBPrices} from "@bananapus/core-v6/src/interfaces/IJBPrices.sol";
 import {IJBTerminal} from "@bananapus/core-v6/src/interfaces/IJBTerminal.sol";
 import {JBAccountingContext} from "@bananapus/core-v6/src/structs/JBAccountingContext.sol";
+import {JBConstants} from "@bananapus/core-v6/src/libraries/JBConstants.sol";
 import {JBCurrencyIds} from "@bananapus/core-v6/src/libraries/JBCurrencyIds.sol";
 import {JBFixedPointNumber} from "@bananapus/core-v6/src/libraries/JBFixedPointNumber.sol";
 import {JBRulesetMetadataResolver} from "@bananapus/core-v6/src/libraries/JBRulesetMetadataResolver.sol";
@@ -19,6 +20,7 @@ import {IJBPeerChainAdjustedAccounts} from "../interfaces/IJBPeerChainAdjustedAc
 import {JBDenominatedAmount} from "../structs/JBDenominatedAmount.sol";
 import {JBInboxTreeRoot} from "../structs/JBInboxTreeRoot.sol";
 import {JBMessageRoot} from "../structs/JBMessageRoot.sol";
+import {JBSourceContext} from "../structs/JBSourceContext.sol";
 import {MerkleLib} from "../utils/MerkleLib.sol";
 
 /// @notice Library with bytecode-heavy functions extracted from JBSucker to reduce child contract sizes.
@@ -57,7 +59,6 @@ library JBSuckerLib {
     /// @return message The constructed JBMessageRoot.
     function buildSnapshotMessage(
         IJBDirectory directory,
-        IJBPrices prices,
         uint256 projectId,
         bytes32 remoteToken,
         uint256 amount,
@@ -70,20 +71,18 @@ library JBSuckerLib {
         view
         returns (JBMessageRoot memory message)
     {
-        (uint256 localTotalSupply, uint256 ethSurplus, uint256 ethBalance) =
-            _snapshotAccountsOf({directory: directory, prices: prices, projectId: projectId});
+        // Snapshot the project's per-context surplus and balance, un-valued. No price oracle is consulted on send.
+        (uint256 localTotalSupply, JBSourceContext[] memory sourceContexts) =
+            _snapshotAccountsOf({directory: directory, projectId: projectId});
 
-        // Construct the cross-chain message with the snapshot data.
+        // Construct the cross-chain message with the per-context snapshot data.
         message = JBMessageRoot({
             version: messageVersion,
             token: remoteToken,
             amount: amount,
             remoteRoot: JBInboxTreeRoot({nonce: nonce, root: root}),
             sourceTotalSupply: localTotalSupply,
-            sourceCurrency: JBCurrencyIds.ETH,
-            sourceDecimals: _ETH_DECIMALS,
-            sourceSurplus: ethSurplus,
-            sourceBalance: ethBalance,
+            sourceContexts: sourceContexts,
             sourceTimestamp: sourceTimestamp
         });
     }
@@ -221,80 +220,79 @@ library JBSuckerLib {
     // ------------------------- internal views -------------------------- //
     //*********************************************************************//
 
-    /// @dev Shared implementation for ETH aggregate. Internal so it can be called from other
-    /// external library functions (libraries cannot call their own external functions).
-    // forge-lint: disable-next-line(mixed-case-function)
-    function _buildETHAggregateInternal(
+    /// @notice Builds the project's per-accounting-context surplus and balance, each in the context's own currency,
+    /// with no price-feed valuation.
+    /// @dev Loops every terminal and accounting context, reading the raw per-token surplus (requested in the token's
+    /// own currency, so the terminal performs no conversion) and the raw recorded balance. Each external call is
+    /// wrapped so a single broken terminal or context never bricks the snapshot. Amounts are capped to `uint128` for
+    /// cross-VM (SVM) compatibility, matching the leaf-amount cap; the cap can only under-report, the safe direction
+    /// for a remote surplus. The returned buffer is over-allocated by one slot so the caller can append an optional
+    /// data-hook context before trimming.
+    /// @param directory The JB directory to look up terminals.
+    /// @param projectId The project to snapshot.
+    /// @return buf An over-allocated buffer of per-context entries (length may exceed `count`).
+    /// @return count The number of populated entries in `buf`.
+    function _buildSourceContexts(
         IJBDirectory directory,
-        uint256 projectId,
-        IJBPrices prices
+        uint256 projectId
     )
         internal
         view
-        returns (uint256 ethSurplus, uint256 ethBalance)
+        returns (JBSourceContext[] memory buf, uint256 count)
     {
-        // Get all terminals registered for the project.
         IJBTerminal[] memory terminals = directory.terminalsOf(projectId);
-
-        // Get the number of terminals.
         uint256 numTerminals = terminals.length;
 
-        // If there are no terminals, return zeros.
-        if (numTerminals == 0) return (0, 0);
-
+        // First pass: count the accounting contexts so the buffer can be sized. The extra slot is headroom for an
+        // optional data-hook context the caller may append.
+        uint256 upperBound = 1;
         for (uint256 i; i < numTerminals;) {
-            try terminals[i].currentSurplusOf({
-                projectId: projectId, tokens: new address[](0), decimals: _ETH_DECIMALS, currency: JBCurrencyIds.ETH
-            }) returns (
-                uint256 surplus
-            ) {
-                ethSurplus += surplus;
+            try terminals[i].accountingContextsOf(projectId) returns (JBAccountingContext[] memory contexts) {
+                upperBound += contexts.length;
             } catch {}
-
             unchecked {
                 ++i;
             }
         }
 
-        // Aggregate balance from each terminal, converting each token to ETH.
+        buf = new JBSourceContext[](upperBound);
+
+        // Second pass: emit one entry per (terminal, context) keyed by the source-local token, carrying the raw surplus
+        // and raw balance in the context's own currency. The receiver aggregates entries that resolve to the same
+        // local token.
         for (uint256 i; i < numTerminals;) {
             try terminals[i].accountingContextsOf(projectId) returns (JBAccountingContext[] memory contexts) {
-                // Iterate over each accounting context (token) for this terminal.
                 for (uint256 j; j < contexts.length;) {
-                    // Get the token address for this context.
                     address tkn = contexts[j].token;
-
-                    // Get the decimal precision for this token.
                     uint8 dec = contexts[j].decimals;
+                    uint32 cur = contexts[j].currency;
 
-                    // Get the currency ID for this context.
-                    uint32 tokenCurrency = contexts[j].currency;
-
-                    try IJBMultiTerminal(address(terminals[i])).STORE()
-                        .balanceOf({terminal: address(terminals[i]), projectId: projectId, token: tkn}) returns (
-                        uint256 bal
-                    ) {
-                        if (bal != 0) {
-                            // If the token is already ETH-denominated, adjust decimals directly.
-                            if (tokenCurrency == JBCurrencyIds.ETH) {
-                                ethBalance += JBFixedPointNumber.adjustDecimals({
-                                    value: bal, decimals: dec, targetDecimals: _ETH_DECIMALS
-                                });
-                            } else {
-                                // Otherwise, convert the balance to ETH using the price oracle.
-                                try prices.pricePerUnitOf({
-                                    projectId: projectId,
-                                    pricingCurrency: tokenCurrency,
-                                    unitCurrency: JBCurrencyIds.ETH,
-                                    decimals: dec
-                                }) returns (
-                                    uint256 price
-                                ) {
-                                    ethBalance += mulDiv({x: bal, y: 10 ** _ETH_DECIMALS, denominator: price});
-                                } catch {}
-                            }
-                        }
+                    // Raw surplus for this one token, requested in its own currency so the terminal does not value it.
+                    uint256 surplus;
+                    address[] memory oneToken = new address[](1);
+                    oneToken[0] = tkn;
+                    try terminals[i].currentSurplusOf({projectId: projectId, tokens: oneToken, decimals: dec, currency: cur})
+                    returns (uint256 s) {
+                        surplus = s;
                     } catch {}
+
+                    // Raw recorded balance for this token.
+                    uint256 balance;
+                    try IJBMultiTerminal(address(terminals[i])).STORE().balanceOf({
+                        terminal: address(terminals[i]),
+                        projectId: projectId,
+                        token: tkn
+                    }) returns (uint256 b) {
+                        balance = b;
+                    } catch {}
+
+                    buf[count++] = JBSourceContext({
+                        token: bytes32(uint256(uint160(tkn))),
+                        currency: cur,
+                        decimals: dec,
+                        surplus: _toUint128(surplus),
+                        balance: _toUint128(balance)
+                    });
 
                     unchecked {
                         ++j;
@@ -305,6 +303,14 @@ library JBSuckerLib {
                 ++i;
             }
         }
+    }
+
+    /// @notice Caps a value to the `uint128` cross-VM amount ceiling. Capping can only under-report, the safe
+    /// direction for a remote surplus.
+    /// @param value The value to cap.
+    /// @return The value, or `type(uint128).max` if it exceeds the ceiling.
+    function _toUint128(uint256 value) internal pure returns (uint128) {
+        return value > type(uint128).max ? type(uint128).max : uint128(value);
     }
 
     /// @notice Return the project's controller if it exists and advertises the controller interface.
@@ -361,20 +367,21 @@ library JBSuckerLib {
     }
 
     /// @notice Builds the local accounting values used in outbound peer-chain snapshots.
+    /// @dev Project token supply stays a single currency-agnostic scalar. Surplus and balance are emitted per
+    /// accounting context in each context's own currency, with no price-feed valuation — the receiving chain folds each
+    /// context into its same-asset local context at par. A project data hook may contribute an additional supply plus a
+    /// native-denominated surplus/balance, folded as one extra native context.
     /// @param directory The JB directory to look up controllers and terminals.
-    /// @param prices The price oracle to use for non-ETH terminal-token balances.
     /// @param projectId The project to snapshot.
     /// @return localTotalSupply The total project token supply, including reserved tokens.
-    /// @return ethSurplus The terminal surplus denominated in ETH at 18 decimals.
-    /// @return ethBalance The terminal balance denominated in ETH at 18 decimals.
+    /// @return contexts The project's per-context surplus and balance, un-valued.
     function _snapshotAccountsOf(
         IJBDirectory directory,
-        IJBPrices prices,
         uint256 projectId
     )
         internal
         view
-        returns (uint256 localTotalSupply, uint256 ethSurplus, uint256 ethBalance)
+        returns (uint256 localTotalSupply, JBSourceContext[] memory contexts)
     {
         // Use the controller as the single source for project supply.
         IJBController controller = _controllerOf({directory: directory, projectId: projectId});
@@ -385,19 +392,38 @@ library JBSuckerLib {
             } catch {}
         }
 
-        // Inline ETH aggregate computation (libraries cannot call their own external functions).
-        (ethSurplus, ethBalance) =
-            _buildETHAggregateInternal({directory: directory, projectId: projectId, prices: prices});
+        // Per-context surplus and balance, raw and un-valued.
+        (JBSourceContext[] memory buf, uint256 count) =
+            _buildSourceContexts({directory: directory, projectId: projectId});
 
         if (address(controller) != address(0) && address(controller).code.length != 0) {
             (uint256 additionalSupply, uint256 additionalSurplus, uint256 additionalBalance) =
                 _peerChainAdjustedAccountsOf({controller: controller, projectId: projectId});
 
-            // Some projects keep supply, surplus, or balance out of the normal local terminal/controller accounting.
-            // Fold in only the data hook's explicit adjustment so peer-chain snapshots match that project model.
+            // Fold the data hook's project-wide supply adjustment in directly.
             localTotalSupply += additionalSupply;
-            ethSurplus += additionalSurplus;
-            ethBalance += additionalBalance;
+
+            // The hook reports any off-terminal surplus/balance in native (ETH) terms; carry it as one native context
+            // so the receiver folds it into a native reclaim at par (and conservatively ignores it for non-native
+            // reclaims, consistent with the oracle-free model). The buffer reserved a slot for this entry.
+            if (additionalSurplus != 0 || additionalBalance != 0) {
+                buf[count++] = JBSourceContext({
+                    token: bytes32(uint256(uint160(JBConstants.NATIVE_TOKEN))),
+                    currency: JBCurrencyIds.ETH,
+                    decimals: _ETH_DECIMALS,
+                    surplus: _toUint128(additionalSurplus),
+                    balance: _toUint128(additionalBalance)
+                });
+            }
+        }
+
+        // Trim the over-allocated buffer to the populated length.
+        contexts = new JBSourceContext[](count);
+        for (uint256 k; k < count;) {
+            contexts[k] = buf[k];
+            unchecked {
+                ++k;
+            }
         }
     }
 }
