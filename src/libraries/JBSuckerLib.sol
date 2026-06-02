@@ -4,18 +4,14 @@ pragma solidity 0.8.28;
 import {IJBController} from "@bananapus/core-v6/src/interfaces/IJBController.sol";
 import {IJBDirectory} from "@bananapus/core-v6/src/interfaces/IJBDirectory.sol";
 import {IJBMultiTerminal} from "@bananapus/core-v6/src/interfaces/IJBMultiTerminal.sol";
-import {IJBPrices} from "@bananapus/core-v6/src/interfaces/IJBPrices.sol";
 import {IJBTerminal} from "@bananapus/core-v6/src/interfaces/IJBTerminal.sol";
 import {JBAccountingContext} from "@bananapus/core-v6/src/structs/JBAccountingContext.sol";
-import {JBFixedPointNumber} from "@bananapus/core-v6/src/libraries/JBFixedPointNumber.sol";
 import {JBRulesetMetadataResolver} from "@bananapus/core-v6/src/libraries/JBRulesetMetadataResolver.sol";
 import {JBRuleset} from "@bananapus/core-v6/src/structs/JBRuleset.sol";
 import {JBRulesetMetadata} from "@bananapus/core-v6/src/structs/JBRulesetMetadata.sol";
-import {mulDiv} from "@prb/math/src/Common.sol";
 import {IERC165} from "@openzeppelin/contracts/utils/introspection/ERC165.sol";
 
 import {IJBPeerChainAdjustedAccounts} from "../interfaces/IJBPeerChainAdjustedAccounts.sol";
-import {JBDenominatedAmount} from "../structs/JBDenominatedAmount.sol";
 import {JBInboxTreeRoot} from "../structs/JBInboxTreeRoot.sol";
 import {JBMessageRoot} from "../structs/JBMessageRoot.sol";
 import {JBSourceContext} from "../structs/JBSourceContext.sol";
@@ -149,49 +145,6 @@ library JBSuckerLib {
         }
     }
 
-    /// @notice Convert a peer chain snapshot value to the requested currency and decimal precision.
-    /// @param prices The price oracle to use when currency conversion is needed.
-    /// @param projectId The project ID.
-    /// @param source The peer chain snapshot containing value, currency, and decimals.
-    /// @param decimals The target decimal precision.
-    /// @param currency The target currency.
-    /// @return converted The converted value.
-    function convertPeerValue(
-        IJBPrices prices,
-        uint256 projectId,
-        JBDenominatedAmount memory source,
-        uint256 decimals,
-        uint256 currency
-    )
-        external
-        view
-        returns (uint256 converted)
-    {
-        // Nothing to convert if the source value is zero.
-        if (source.value == 0) return 0;
-
-        // If the source currency matches the target, just adjust decimals.
-        // forge-lint: disable-next-line(unsafe-typecast)
-        if (source.currency == uint32(currency)) {
-            converted = JBFixedPointNumber.adjustDecimals({
-                value: source.value, decimals: source.decimals, targetDecimals: decimals
-            });
-        } else {
-            // Convert using the price oracle.
-            try prices.pricePerUnitOf({
-                projectId: projectId,
-                pricingCurrency: source.currency,
-                // forge-lint: disable-next-line(unsafe-typecast)
-                unitCurrency: uint32(currency),
-                decimals: source.decimals
-            }) returns (
-                uint256 price
-            ) {
-                converted = mulDiv({x: source.value, y: 10 ** decimals, denominator: price});
-            } catch {}
-        }
-    }
-
     //*********************************************************************//
     // ------------------------- internal views -------------------------- //
     //*********************************************************************//
@@ -241,39 +194,8 @@ library JBSuckerLib {
         for (uint256 i; i < numTerminals;) {
             try terminals[i].accountingContextsOf(projectId) returns (JBAccountingContext[] memory contexts) {
                 for (uint256 j; j < contexts.length;) {
-                    address tkn = contexts[j].token;
-                    uint8 dec = contexts[j].decimals;
-                    uint32 cur = contexts[j].currency;
-
-                    // Raw surplus for this one token, requested in its own currency so the terminal does not value it.
-                    uint256 surplus;
-                    address[] memory oneToken = new address[](1);
-                    oneToken[0] = tkn;
-                    try terminals[i].currentSurplusOf({
-                        projectId: projectId, tokens: oneToken, decimals: dec, currency: cur
-                    }) returns (
-                        uint256 s
-                    ) {
-                        surplus = s;
-                    } catch {}
-
-                    // Raw recorded balance for this token.
-                    uint256 balance;
-                    try IJBMultiTerminal(address(terminals[i])).STORE()
-                        .balanceOf({terminal: address(terminals[i]), projectId: projectId, token: tkn}) returns (
-                        uint256 b
-                    ) {
-                        balance = b;
-                    } catch {}
-
-                    buf[count++] = JBSourceContext({
-                        token: bytes32(uint256(uint160(tkn))),
-                        currency: cur,
-                        decimals: dec,
-                        surplus: _toUint128(surplus),
-                        balance: _toUint128(balance)
-                    });
-
+                    buf[count++] =
+                        _readSourceContext({terminal: terminals[i], projectId: projectId, context: contexts[j]});
                     unchecked {
                         ++j;
                     }
@@ -337,6 +259,57 @@ library JBSuckerLib {
         } catch {
             return (0, new JBSourceContext[](0));
         }
+    }
+
+    /// @notice Reads one accounting context's raw surplus and balance into a `JBSourceContext`, performing no price
+    /// valuation.
+    /// @dev Surplus is requested in the context's own currency so the terminal returns the raw token amount rather
+    /// than converting it. Both reads are wrapped so a broken terminal yields zero instead of reverting the whole
+    /// snapshot. Extracted from the snapshot loop to keep that loop's stack shallow.
+    /// @param terminal The terminal holding the context.
+    /// @param projectId The project to read.
+    /// @param context The accounting context (token, decimals, currency) to read.
+    /// @return The per-context entry keyed by the source-local token, with amounts capped to `uint128`.
+    function _readSourceContext(
+        IJBTerminal terminal,
+        uint256 projectId,
+        JBAccountingContext memory context
+    )
+        internal
+        view
+        returns (JBSourceContext memory)
+    {
+        address[] memory oneToken = new address[](1);
+        oneToken[0] = context.token;
+
+        // Raw surplus for this one token, requested in its own currency so the terminal does not value it.
+        uint256 surplus;
+        try terminal.currentSurplusOf({
+            projectId: projectId,
+            tokens: oneToken,
+            decimals: context.decimals,
+            currency: context.currency
+        }) returns (uint256 contextSurplus) {
+            surplus = contextSurplus;
+        } catch {}
+
+        // Raw recorded balance for this token.
+        uint256 balance;
+        try IJBMultiTerminal(address(terminal)).STORE().balanceOf({
+            terminal: address(terminal),
+            projectId: projectId,
+            token: context.token
+        }) returns (uint256 contextBalance) {
+            balance = contextBalance;
+        } catch {}
+
+        return JBSourceContext({
+            token: bytes32(uint256(uint160(context.token))),
+            currency: context.currency,
+            decimals: context.decimals,
+            surplus: _toUint128(surplus),
+            balance: _toUint128(balance)
+        });
     }
 
     /// @notice Builds the local accounting values used in outbound peer-chain snapshots.
@@ -404,6 +377,8 @@ library JBSuckerLib {
     /// @param value The value to cap.
     /// @return The value, or `type(uint128).max` if it exceeds the ceiling.
     function _toUint128(uint256 value) internal pure returns (uint128) {
+        // The cast only runs when `value <= type(uint128).max`, so it cannot truncate.
+        // forge-lint: disable-next-line(unsafe-typecast)
         return value > type(uint128).max ? type(uint128).max : uint128(value);
     }
 }

@@ -3,7 +3,6 @@ pragma solidity 0.8.28;
 
 import {IJBDirectory} from "@bananapus/core-v6/src/interfaces/IJBDirectory.sol";
 import {IJBPermissions} from "@bananapus/core-v6/src/interfaces/IJBPermissions.sol";
-import {IJBPrices} from "@bananapus/core-v6/src/interfaces/IJBPrices.sol";
 import {IJBTokens} from "@bananapus/core-v6/src/interfaces/IJBTokens.sol";
 
 import {JBOptimismSucker} from "./JBOptimismSucker.sol";
@@ -19,19 +18,17 @@ contract JBBaseSucker is JBOptimismSucker {
     /// @param deployer A contract that deploys clones of this contract.
     /// @param directory A contract storing directories of terminals and controllers for each project.
     /// @param permissions A contract storing permissions.
-    /// @param prices The price oracle used to convert peer-chain balances and surplus.
     /// @param tokens A contract that manages token minting and burning.
     constructor(
         JBOptimismSuckerDeployer deployer,
         IJBDirectory directory,
         IJBPermissions permissions,
-        IJBPrices prices,
         IJBTokens tokens,
         uint256 feeProjectId,
         IJBSuckerRegistry registry,
         address trustedForwarder
     )
-        JBOptimismSucker(deployer, directory, permissions, prices, tokens, feeProjectId, registry, trustedForwarder)
+        JBOptimismSucker(deployer, directory, permissions, tokens, feeProjectId, registry, trustedForwarder)
     {}
 
     //*********************************************************************//

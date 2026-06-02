@@ -153,37 +153,37 @@ interface IJBSucker is IERC165 {
     /// @return chainId The remote chain ID.
     function peerChainId() external view returns (uint256 chainId);
 
-    /// @notice The aggregate peer chain balance, normalized to a desired currency and decimal precision using JBPrices.
-    /// @dev The balance is stored as ETH-denominated (18 decimals) and converted to the requested currency/decimals
-    /// using the local JBPrices oracle.
+    /// @notice The peer chain balance for a local token, folded into a desired decimal precision at par.
+    /// @dev The remote amount is taken 1:1 (same asset, resolved on receipt) and only its decimals are adjusted — no
+    /// price oracle is consulted.
+    /// @param token The local terminal token whose peer-chain balance to read.
     /// @param decimals The decimal precision for the returned value.
-    /// @param currency The currency to normalize to.
-    /// @return A `JBDenominatedAmount` with the converted value.
-    function peerChainBalanceOf(uint256 decimals, uint256 currency) external view returns (JBDenominatedAmount memory);
+    /// @return A `JBDenominatedAmount` with the par value.
+    function peerChainBalanceOf(address token, uint256 decimals) external view returns (JBDenominatedAmount memory);
 
-    /// @notice The peer chain balance bundled with the peer chain ID and snapshot freshness key.
-    /// @dev Lets aggregators read the value, the peer chain it belongs to, and its freshness in one call. The
-    /// `value` matches `peerChainBalanceOf`.
+    /// @notice The peer chain balance for a token bundled with the peer chain ID and snapshot freshness key.
+    /// @dev Lets aggregators read the value, the peer chain it belongs to, and its freshness in one call. The `value`
+    /// matches `peerChainBalanceOf` and is taken at par.
+    /// @param token The local terminal token whose peer-chain balance to read.
     /// @param decimals The decimal precision for the returned value.
-    /// @param currency The currency to normalize to.
-    /// @return A `JBPeerChainValue` with the converted balance, peer chain ID, and snapshot freshness key.
-    function peerChainBalanceValueOf(uint256 decimals, uint256 currency) external view returns (JBPeerChainValue memory);
+    /// @return A `JBPeerChainValue` with the par balance, peer chain ID, and snapshot freshness key.
+    function peerChainBalanceValueOf(address token, uint256 decimals) external view returns (JBPeerChainValue memory);
 
-    /// @notice The aggregate peer chain surplus, normalized to a desired currency and decimal precision using JBPrices.
-    /// @dev The surplus is stored as ETH-denominated (18 decimals) and converted to the requested currency/decimals
-    /// using the local JBPrices oracle.
+    /// @notice The peer chain surplus for a local token, folded into a desired decimal precision at par.
+    /// @dev The remote amount is taken 1:1 (same asset, resolved on receipt) and only its decimals are adjusted — no
+    /// price oracle is consulted.
+    /// @param token The local terminal token whose peer-chain surplus to read.
     /// @param decimals The decimal precision for the returned value.
-    /// @param currency The currency to normalize to.
-    /// @return A `JBDenominatedAmount` with the converted value.
-    function peerChainSurplusOf(uint256 decimals, uint256 currency) external view returns (JBDenominatedAmount memory);
+    /// @return A `JBDenominatedAmount` with the par value.
+    function peerChainSurplusOf(address token, uint256 decimals) external view returns (JBDenominatedAmount memory);
 
-    /// @notice The peer chain surplus bundled with the peer chain ID and snapshot freshness key.
-    /// @dev Lets aggregators read the value, the peer chain it belongs to, and its freshness in one call. The
-    /// `value` matches `peerChainSurplusOf`.
+    /// @notice The peer chain surplus for a token bundled with the peer chain ID and snapshot freshness key.
+    /// @dev Lets aggregators read the value, the peer chain it belongs to, and its freshness in one call. The `value`
+    /// matches `peerChainSurplusOf` and is taken at par.
+    /// @param token The local terminal token whose peer-chain surplus to read.
     /// @param decimals The decimal precision for the returned value.
-    /// @param currency The currency to normalize to.
-    /// @return A `JBPeerChainValue` with the converted surplus, peer chain ID, and snapshot freshness key.
-    function peerChainSurplusValueOf(uint256 decimals, uint256 currency) external view returns (JBPeerChainValue memory);
+    /// @return A `JBPeerChainValue` with the par surplus, peer chain ID, and snapshot freshness key.
+    function peerChainSurplusValueOf(address token, uint256 decimals) external view returns (JBPeerChainValue memory);
 
     /// @notice The last known total token supply on the peer chain, updated each time a bridge message is received.
     /// @dev Used by data hooks to compute `effectiveTotalSupply = localSupply + sum(peerChainTotalSupply)` across all

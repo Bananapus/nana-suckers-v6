@@ -91,33 +91,34 @@ interface IJBSuckerRegistry {
     /// @return totalSupply The combined peer chain total supply.
     function remoteTotalSupplyOf(uint256 projectId) external view returns (uint256 totalSupply);
 
-    /// @notice The cumulative balance across all remote peer chains for a project, denominated in a given currency.
+    /// @notice The cumulative peer-chain balance for a token across all remote peer chains for a project, taken at par.
     /// @dev Dedupes same-peer active suckers by freshest snapshot, then sums peer-chain values. Silently skips suckers
-    /// that revert.
+    /// that revert. No price oracle is consulted — same-asset balances fold in 1:1.
     /// @param projectId The ID of the project.
+    /// @param token The local terminal token whose peer-chain balance to sum.
     /// @param decimals The decimal precision for the returned value.
-    /// @param currency The currency to normalize to.
     /// @return balance The combined peer chain balance.
     function remoteBalanceOf(
         uint256 projectId,
-        uint256 decimals,
-        uint256 currency
+        address token,
+        uint256 decimals
     )
         external
         view
         returns (uint256 balance);
 
-    /// @notice The cumulative surplus across all remote peer chains for a project, denominated in a given currency.
+    /// @notice The cumulative peer-chain surplus for a token across all remote peer chains for a project, taken at par.
     /// @dev Dedupes same-peer active suckers by freshest snapshot, then sums peer-chain values. Silently skips suckers
-    /// that revert.
+    /// that revert. No price oracle is consulted — same-asset surpluses fold in 1:1; surplus held in a different asset
+    /// than `token` is conservatively not counted.
     /// @param projectId The ID of the project.
+    /// @param token The local terminal token whose peer-chain surplus to sum.
     /// @param decimals The decimal precision for the returned value.
-    /// @param currency The currency to normalize to.
     /// @return surplus The combined peer chain surplus.
     function remoteSurplusOf(
         uint256 projectId,
-        uint256 decimals,
-        uint256 currency
+        address token,
+        uint256 decimals
     )
         external
         view

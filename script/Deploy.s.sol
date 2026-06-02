@@ -4,7 +4,6 @@ pragma solidity 0.8.28;
 import {IInbox} from "@arbitrum/nitro-contracts/src/bridge/IInbox.sol";
 import {IJBDirectory} from "@bananapus/core-v6/src/interfaces/IJBDirectory.sol";
 import {IJBPermissions} from "@bananapus/core-v6/src/interfaces/IJBPermissions.sol";
-import {IJBPrices} from "@bananapus/core-v6/src/interfaces/IJBPrices.sol";
 import {IJBTokens} from "@bananapus/core-v6/src/interfaces/IJBTokens.sol";
 import {CoreDeployment, CoreDeploymentLib} from "@bananapus/core-v6/script/helpers/CoreDeploymentLib.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
@@ -210,7 +209,6 @@ contract DeployScript is Script, Sphinx {
                     deployer: _opDeployer,
                     directory: core.directory,
                     permissions: core.permissions,
-                    prices: core.prices,
                     tokens: core.tokens,
                     feeProjectId: 1,
                     registry: registry,
@@ -262,7 +260,6 @@ contract DeployScript is Script, Sphinx {
                     deployer: _opDeployer,
                     directory: core.directory,
                     permissions: core.permissions,
-                    prices: core.prices,
                     tokens: core.tokens,
                     feeProjectId: 1,
                     registry: registry,
@@ -345,7 +342,6 @@ contract DeployScript is Script, Sphinx {
                     deployer: _baseDeployer,
                     directory: core.directory,
                     permissions: core.permissions,
-                    prices: core.prices,
                     tokens: core.tokens,
                     feeProjectId: 1,
                     registry: registry,
@@ -397,7 +393,6 @@ contract DeployScript is Script, Sphinx {
                     deployer: _baseDeployer,
                     directory: core.directory,
                     permissions: core.permissions,
-                    prices: core.prices,
                     tokens: core.tokens,
                     feeProjectId: 1,
                     registry: registry,
@@ -476,7 +471,6 @@ contract DeployScript is Script, Sphinx {
                     deployer: _arbDeployer,
                     directory: core.directory,
                     permissions: core.permissions,
-                    prices: core.prices,
                     tokens: core.tokens,
                     feeProjectId: 1,
                     registry: registry,
@@ -531,7 +525,6 @@ contract DeployScript is Script, Sphinx {
                     deployer: _arbDeployer,
                     directory: core.directory,
                     permissions: core.permissions,
-                    prices: core.prices,
                     tokens: core.tokens,
                     feeProjectId: 1,
                     registry: registry,
@@ -708,7 +701,6 @@ contract DeployScript is Script, Sphinx {
             salt: salt,
             directory: core.directory,
             permissions: core.permissions,
-            prices: core.prices,
             tokens: core.tokens,
             configurator: safeAddress(),
             forwarder: trustedForwarder,
@@ -725,7 +717,6 @@ contract DeployScript is Script, Sphinx {
         bytes32 salt,
         IJBDirectory directory,
         IJBPermissions permissions,
-        IJBPrices prices,
         IJBTokens tokens,
         address configurator,
         address forwarder,
@@ -781,7 +772,6 @@ contract DeployScript is Script, Sphinx {
                 directory: directory,
                 tokens: tokens,
                 permissions: permissions,
-                prices: prices,
                 feeProjectId: 1,
                 registry: registry,
                 trustedForwarder: forwarder

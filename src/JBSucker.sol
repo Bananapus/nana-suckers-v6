@@ -7,11 +7,11 @@ import {IJBController} from "@bananapus/core-v6/src/interfaces/IJBController.sol
 import {IJBDirectory} from "@bananapus/core-v6/src/interfaces/IJBDirectory.sol";
 import {IJBPermissioned} from "@bananapus/core-v6/src/interfaces/IJBPermissioned.sol";
 import {IJBPermissions} from "@bananapus/core-v6/src/interfaces/IJBPermissions.sol";
-import {IJBPrices} from "@bananapus/core-v6/src/interfaces/IJBPrices.sol";
 import {IJBProjects} from "@bananapus/core-v6/src/interfaces/IJBProjects.sol";
 import {IJBTerminal} from "@bananapus/core-v6/src/interfaces/IJBTerminal.sol";
 import {IJBTokens} from "@bananapus/core-v6/src/interfaces/IJBTokens.sol";
 import {JBConstants} from "@bananapus/core-v6/src/libraries/JBConstants.sol";
+import {JBFixedPointNumber} from "@bananapus/core-v6/src/libraries/JBFixedPointNumber.sol";
 import {JBPermissioned} from "@bananapus/core-v6/src/abstract/JBPermissioned.sol";
 import {JBPermissionIds} from "@bananapus/permission-ids-v6/src/JBPermissionIds.sol";
 import {BitMaps} from "@openzeppelin/contracts/utils/structs/BitMaps.sol";
@@ -133,9 +133,6 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
 
     /// @notice The project ID that receives the `toRemoteFee` payment. Typically the protocol project (ID 1).
     uint256 public immutable FEE_PROJECT_ID;
-
-    /// @notice The price oracle used to convert peer-chain balances and surplus.
-    IJBPrices public immutable PRICES;
 
     /// @notice The project registry (ERC-721 ownership).
     IJBProjects public immutable override PROJECTS;
@@ -262,7 +259,6 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
 
     /// @param directory A contract storing directories of terminals and controllers for each project.
     /// @param permissions A contract storing permissions.
-    /// @param prices The price oracle used to convert peer-chain balances and surplus.
     /// @param tokens A contract that manages token minting and burning.
     /// @param feeProjectId The project ID that receives the `toRemoteFee` payment (typically 1).
     /// @param registry The sucker registry that manages the global `toRemoteFee`.
@@ -270,7 +266,6 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     constructor(
         IJBDirectory directory,
         IJBPermissions permissions,
-        IJBPrices prices,
         IJBTokens tokens,
         uint256 feeProjectId,
         IJBSuckerRegistry registry,
@@ -281,7 +276,6 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     {
         DIRECTORY = directory;
         FEE_PROJECT_ID = feeProjectId;
-        PRICES = prices;
         PROJECTS = directory.PROJECTS();
         REGISTRY = registry;
         TOKENS = tokens;
@@ -802,75 +796,65 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         return _outboxOf[token];
     }
 
-    /// @notice The peer chain balance, converted from the source denomination to the requested currency and decimal
-    /// precision using the local JBPrices oracle.
+    /// @notice The peer chain balance for a token, folded into the requested decimal precision at par.
+    /// @dev "At par" means the remote amount is taken 1:1 (it is the same asset, resolved on receipt) and only its
+    /// decimals are adjusted — no price oracle is consulted. A context written under an older snapshot epoch is treated
+    /// as absent and returns zero.
+    /// @param token The local terminal token whose peer-chain balance to read.
     /// @param decimals The decimal precision for the returned value.
-    /// @param currency The currency to normalize to (e.g. `uint256(uint160(JBConstants.NATIVE_TOKEN))` for ETH).
-    /// @return A `JBDenominatedAmount` with the converted value.
-    function peerChainBalanceOf(uint256 decimals, uint256 currency) external view returns (JBDenominatedAmount memory) {
+    /// @return A `JBDenominatedAmount` with the par value.
+    function peerChainBalanceOf(address token, uint256 decimals) external view returns (JBDenominatedAmount memory) {
+        JBPeerChainContext memory ctx = _freshPeerContextOf(token);
         return JBDenominatedAmount({
-            value: _convertPeerValue({source: _peerChainBalance, decimals: decimals, currency: currency}),
-            // forge-lint: disable-next-line(unsafe-typecast)
-            currency: uint32(currency),
+            value: JBFixedPointNumber.adjustDecimals({value: ctx.balance, decimals: ctx.decimals, targetDecimals: decimals}),
+            currency: ctx.currency,
             // forge-lint: disable-next-line(unsafe-typecast)
             decimals: uint8(decimals)
         });
     }
 
-    /// @notice The peer chain balance bundled with the peer chain ID and snapshot freshness key.
-    /// @dev Lets aggregators (e.g. `JBSuckerRegistry`) read the value, the peer chain it belongs to, and its
-    /// freshness in one call instead of three separate staticcalls. The `value` is identical to
-    /// `peerChainBalanceOf`.
+    /// @notice The peer chain balance for a token bundled with the peer chain ID and snapshot freshness key.
+    /// @dev Lets aggregators (e.g. `JBSuckerRegistry`) read the value, the peer chain it belongs to, and its freshness
+    /// in one call. The `value` is identical to `peerChainBalanceOf` and is taken at par (no oracle).
+    /// @param token The local terminal token whose peer-chain balance to read.
     /// @param decimals The decimal precision for the returned value.
-    /// @param currency The currency to normalize to (e.g. `uint256(uint160(JBConstants.NATIVE_TOKEN))` for ETH).
-    /// @return A `JBPeerChainValue` with the converted balance, peer chain ID, and snapshot freshness key.
-    function peerChainBalanceValueOf(
-        uint256 decimals,
-        uint256 currency
-    )
-        external
-        view
-        returns (JBPeerChainValue memory)
-    {
+    /// @return A `JBPeerChainValue` with the par balance, peer chain ID, and snapshot freshness key.
+    function peerChainBalanceValueOf(address token, uint256 decimals) external view returns (JBPeerChainValue memory) {
+        JBPeerChainContext memory ctx = _freshPeerContextOf(token);
         return JBPeerChainValue({
-            value: _convertPeerValue({source: _peerChainBalance, decimals: decimals, currency: currency}),
+            value: JBFixedPointNumber.adjustDecimals({value: ctx.balance, decimals: ctx.decimals, targetDecimals: decimals}),
             peerChainId: peerChainId(),
             snapshotTimestamp: snapshotTimestamp
         });
     }
 
-    /// @notice The peer chain surplus, converted from the source denomination to the requested currency and decimal
-    /// precision using the local JBPrices oracle.
+    /// @notice The peer chain surplus for a token, folded into the requested decimal precision at par.
+    /// @dev "At par" means the remote amount is taken 1:1 (it is the same asset, resolved on receipt) and only its
+    /// decimals are adjusted — no price oracle is consulted. A context written under an older snapshot epoch is treated
+    /// as absent and returns zero.
+    /// @param token The local terminal token whose peer-chain surplus to read.
     /// @param decimals The decimal precision for the returned value.
-    /// @param currency The currency to normalize to (e.g. `uint256(uint160(JBConstants.NATIVE_TOKEN))` for ETH).
-    /// @return A `JBDenominatedAmount` with the converted value.
-    function peerChainSurplusOf(uint256 decimals, uint256 currency) external view returns (JBDenominatedAmount memory) {
+    /// @return A `JBDenominatedAmount` with the par value.
+    function peerChainSurplusOf(address token, uint256 decimals) external view returns (JBDenominatedAmount memory) {
+        JBPeerChainContext memory ctx = _freshPeerContextOf(token);
         return JBDenominatedAmount({
-            value: _convertPeerValue({source: _peerChainSurplus, decimals: decimals, currency: currency}),
-            // forge-lint: disable-next-line(unsafe-typecast)
-            currency: uint32(currency),
+            value: JBFixedPointNumber.adjustDecimals({value: ctx.surplus, decimals: ctx.decimals, targetDecimals: decimals}),
+            currency: ctx.currency,
             // forge-lint: disable-next-line(unsafe-typecast)
             decimals: uint8(decimals)
         });
     }
 
-    /// @notice The peer chain surplus bundled with the peer chain ID and snapshot freshness key.
-    /// @dev Lets aggregators (e.g. `JBSuckerRegistry`) read the value, the peer chain it belongs to, and its
-    /// freshness in one call instead of three separate staticcalls. The `value` is identical to
-    /// `peerChainSurplusOf`.
+    /// @notice The peer chain surplus for a token bundled with the peer chain ID and snapshot freshness key.
+    /// @dev Lets aggregators (e.g. `JBSuckerRegistry`) read the value, the peer chain it belongs to, and its freshness
+    /// in one call. The `value` is identical to `peerChainSurplusOf` and is taken at par (no oracle).
+    /// @param token The local terminal token whose peer-chain surplus to read.
     /// @param decimals The decimal precision for the returned value.
-    /// @param currency The currency to normalize to (e.g. `uint256(uint160(JBConstants.NATIVE_TOKEN))` for ETH).
-    /// @return A `JBPeerChainValue` with the converted surplus, peer chain ID, and snapshot freshness key.
-    function peerChainSurplusValueOf(
-        uint256 decimals,
-        uint256 currency
-    )
-        external
-        view
-        returns (JBPeerChainValue memory)
-    {
+    /// @return A `JBPeerChainValue` with the par surplus, peer chain ID, and snapshot freshness key.
+    function peerChainSurplusValueOf(address token, uint256 decimals) external view returns (JBPeerChainValue memory) {
+        JBPeerChainContext memory ctx = _freshPeerContextOf(token);
         return JBPeerChainValue({
-            value: _convertPeerValue({source: _peerChainSurplus, decimals: decimals, currency: currency}),
+            value: JBFixedPointNumber.adjustDecimals({value: ctx.surplus, decimals: ctx.decimals, targetDecimals: decimals}),
             peerChainId: peerChainId(),
             snapshotTimestamp: snapshotTimestamp
         });
@@ -1686,25 +1670,17 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         return ERC2771Context._contextSuffixLength();
     }
 
-    /// @notice Convert a peer chain snapshot value to the requested currency and decimal precision.
-    /// @dev Delegates to `JBSuckerLib.convertPeerValue` (deployed library, called via DELEGATECALL) to reduce
-    /// child contract bytecode.
-    /// @param source The peer chain snapshot containing value, currency, and decimals.
-    /// @param decimals The target decimal precision.
-    /// @param currency The target currency (e.g. `uint256(uint160(JBConstants.NATIVE_TOKEN))` for ETH).
-    /// @return converted The converted value.
-    function _convertPeerValue(
-        JBDenominatedAmount memory source,
-        uint256 decimals,
-        uint256 currency
-    )
-        internal
-        view
-        returns (uint256 converted)
-    {
-        converted = JBSuckerLib.convertPeerValue({
-            prices: PRICES, projectId: projectId(), source: source, decimals: decimals, currency: currency
-        });
+    /// @notice Returns the peer-chain context for a local token if it belongs to the current snapshot, or a zeroed
+    /// context otherwise.
+    /// @dev A context whose snapshot epoch is not the current `snapshotTimestamp` dropped out of a fresher snapshot and
+    /// is treated as absent — fail-closed, the safe direction.
+    /// @param token The local terminal token.
+    /// @return ctx The fresh context, or an all-zero context if stale or never set.
+    function _freshPeerContextOf(address token) internal view returns (JBPeerChainContext memory ctx) {
+        ctx = _peerContextOf[token];
+        if (ctx.snapshotEpoch != snapshotTimestamp) {
+            return JBPeerChainContext({surplus: 0, balance: 0, currency: 0, decimals: 0, snapshotEpoch: 0});
+        }
     }
 
     /// @notice The calldata. Preferred to use over `msg.data`.
@@ -1783,6 +1759,8 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     function _saturatingAddU128(uint128 a, uint128 b) internal pure returns (uint128) {
         unchecked {
             uint256 sum = uint256(a) + uint256(b);
+            // The cast only runs when `sum <= type(uint128).max`, so it cannot truncate.
+            // forge-lint: disable-next-line(unsafe-typecast)
             return sum > type(uint128).max ? type(uint128).max : uint128(sum);
         }
     }
@@ -1898,7 +1876,6 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
 
         JBMessageRoot memory message = JBSuckerLib.buildSnapshotMessage({
             directory: DIRECTORY,
-            prices: PRICES,
             projectId: projectId(),
             remoteToken: remoteToken.addr,
             amount: amount,

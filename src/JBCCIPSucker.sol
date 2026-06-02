@@ -4,7 +4,6 @@ pragma solidity 0.8.28;
 // External packages (alphabetized)
 import {IJBDirectory} from "@bananapus/core-v6/src/interfaces/IJBDirectory.sol";
 import {IJBPermissions} from "@bananapus/core-v6/src/interfaces/IJBPermissions.sol";
-import {IJBPrices} from "@bananapus/core-v6/src/interfaces/IJBPrices.sol";
 import {IJBTokens} from "@bananapus/core-v6/src/interfaces/IJBTokens.sol";
 import {JBConstants} from "@bananapus/core-v6/src/libraries/JBConstants.sol";
 import {IAny2EVMMessageReceiver} from "@chainlink/contracts-ccip/contracts/interfaces/IAny2EVMMessageReceiver.sol";
@@ -83,7 +82,6 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
     /// @param deployer A contract that deploys the clones for this contract.
     /// @param directory A contract storing directories of terminals and controllers for each project.
     /// @param permissions A contract storing permissions.
-    /// @param prices The price oracle used to convert peer-chain balances and surplus.
     /// @param tokens A contract that manages token minting and burning.
     /// @param feeProjectId The ID of the project that receives fees.
     /// @param registry The sucker registry that tracks deployed suckers.
@@ -92,13 +90,12 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
         JBCCIPSuckerDeployer deployer,
         IJBDirectory directory,
         IJBPermissions permissions,
-        IJBPrices prices,
         IJBTokens tokens,
         uint256 feeProjectId,
         IJBSuckerRegistry registry,
         address trustedForwarder
     )
-        JBSucker(directory, permissions, prices, tokens, feeProjectId, registry, trustedForwarder)
+        JBSucker(directory, permissions, tokens, feeProjectId, registry, trustedForwarder)
     {
         // Read the remote chain ID from the deployer.
         REMOTE_CHAIN_ID = IJBCCIPSuckerDeployer(deployer).ccipRemoteChainId();
