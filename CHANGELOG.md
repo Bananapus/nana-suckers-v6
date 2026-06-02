@@ -16,6 +16,19 @@ This file describes the verified change from `nana-suckers-v5` to the current `n
 
 Archived (reference only — not compiled or deployed): `JBSwapCCIPSucker` (+ its swap libs/structs `JBSwapPoolLib`, `JBSwapLib`, `JBPendingSwap`, `JBConversionRate`) and `JBCeloSucker`, along with their deployers and interfaces; see `src/archive/`.
 
+## 0.0.70 — Fix: key the peer-context merge on currency AND decimals
+
+`fromRemote` previously merged same-currency peer contexts by **currency only**, summing their raw,
+un-valued amounts even when the contexts carried **different decimals** (e.g. a 6-decimal and an 18-decimal
+representation of the same currency such as USD). The merged bucket kept one decimals value while adding
+amounts expressed in another precision, so the cross-chain surplus aggregate was corrupted whenever a
+project — or an `IJBPeerChainAdjustedAccounts` hook — emitted same-currency contexts at different decimals.
+
+The merge now keys on **both currency and decimals**: same-currency contexts that differ in decimals are
+kept as separate per-`(currency, decimals)` entries, and `JBSuckerRegistry` decimals-adjusts each
+independently before summing at read time (`remoteSurplusOf`/`_valued`). Same-asset contexts (the same token
+across terminals → same currency and decimals) still merge as before. No storage-layout change.
+
 ## 0.0.69 — Value cross-chain surplus in the registry; suckers carry raw per-context snapshots
 
 Reworks how a project's cross-chain surplus and balance are reported. Previously a sucker collapsed its

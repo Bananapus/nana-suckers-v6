@@ -64,7 +64,7 @@ That means every bridge path has two trust surfaces:
 - do not reason about suckers as if they were generic ERC-20 bridges
 - root ordering and message delivery semantics matter as much as proof format
 - token mapping is part of the economic invariant
-- same-currency peer contexts must use one decimal precision or explicit normalization; raw mixed-decimal values are not safe to merge
+- peer contexts are merged only when they share both currency and decimals; same-currency contexts with different decimals are kept separate and valued independently at read time, never summed across precisions
 - emergency and deprecation paths are part of normal operational safety
 
 ## Where State Lives

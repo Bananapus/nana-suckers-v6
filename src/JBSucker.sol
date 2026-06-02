@@ -545,12 +545,18 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
                     _cachedCurrencyOf[contextToken] = contextCurrency;
                 }
 
-                // Accumulate into an existing same-currency entry, or append a new one. The context set is small
-                // (one entry per distinct local currency), so a linear scan is cheaper than a mapping.
+                // Accumulate into an existing entry that matches on BOTH currency AND decimals, or append a new one.
+                // The decimals must match: `surplus`/`balance` are raw, un-valued token amounts, so two contexts that
+                // share a currency but carry different decimals (e.g. a 6-decimal and an 18-decimal representation of
+                // the same currency) are on different scales and CANNOT be summed directly — doing so would corrupt
+                // the
+                // aggregate. Keeping them as separate entries lets the read side (`remoteSurplusOf` -> `_valued`)
+                // decimal-adjust each one independently before summing. The context set is small (one entry per
+                // distinct local currency+decimals), so a linear scan is cheaper than a mapping.
                 uint256 numStored = _peerContexts.length;
                 bool merged;
                 for (uint256 j; j < numStored;) {
-                    if (_peerContexts[j].currency == contextCurrency) {
+                    if (_peerContexts[j].currency == contextCurrency && _peerContexts[j].decimals == ctx.decimals) {
                         _peerContexts[j].surplus = _saturatingAddU128(_peerContexts[j].surplus, ctx.surplus);
                         _peerContexts[j].balance = _saturatingAddU128(_peerContexts[j].balance, ctx.balance);
                         merged = true;
