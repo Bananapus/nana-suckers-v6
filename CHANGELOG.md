@@ -178,14 +178,8 @@ opaque to the sucker protocol itself.
 
 **Intended use**
 
-The original motivator is the cross-chain referral split hook (`nana-referral-split-hook-v6`): when a referrer
-on chain Y earns credit for fee-paying activity on chain X, the hook on X uses the fee project's sucker to
-bridge the entitled fee-project tokens. The leaf's `metadata` carries `(originChainId, referralProjectId)` so the
-sibling hook on chain Y can atomically claim, re-pay the fee project locally, and push to the local distributor
-for the right referrer — all under the merkle proof's authentication, no off-chain coordination needed.
-
-The field is generic: any future leaf consumer (NFT split hooks, buyback hooks, etc.) can use it for its own
-attribution scheme without further sucker changes. Pass `bytes32(0)` for ordinary bridges that don't need it.
+The field is generic: any future leaf consumer can use it for its own claim context without further sucker changes.
+Pass `bytes32(0)` for ordinary bridges that don't need it.
 
 **Risk surface**
 

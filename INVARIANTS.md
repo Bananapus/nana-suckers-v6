@@ -4,7 +4,7 @@ Scope: the cross-chain bridging primitives that move a Juicebox V6 project-token
 
 Trust model in one sentence: a **pair of suckers** lets a holder burn project tokens on the local chain into a Merkle-committed claim, ship the committing root + backing terminal-token value across an external AMB, and let any caller mint to the **leaf-encoded beneficiary** on the destination — front-run safe, double-spend safe, fee-bypass safe, and operator-driven only at the configuration boundary.
 
-This file documents the invariants the **runtime contracts in this repo** enforce. It does not document downstream consumers (data hooks, distributors, referral hooks); those have their own invariants documents. Cross-chain economic divergence between projects (the arbitrage model) lives in the canonical `INVARIANTS.md` at `/Users/jango/Documents/jb/v6/evm/INVARIANTS.md` Section D2.
+This file documents the invariants the **runtime contracts in this repo** enforce. It does not document downstream consumers (data hooks or distributors); those have their own invariants documents. Cross-chain economic divergence between projects (the arbitrage model) lives in the canonical `INVARIANTS.md` at `/Users/jango/Documents/jb/v6/evm/INVARIANTS.md` Section D2.
 
 ---
 
@@ -289,7 +289,7 @@ Ownable registry. Tracks per-project sucker inventory + deployer allowlist + sha
    - `MerkleLib.Tree.count` is append-only.
    - Inbox nonce monotonically non-decreasing.
 
-8. **Burn-on-strand vs park-and-retry is the consumer's call.** Whether bridged credit that lands on a chain with no recoverable settlement path is burned or deferred is decided by the **beneficiary** contract, not by the sucker. See `jb-referral-hook-deferral-vs-stranding` skill and the referral-split-hook docs.
+8. **Burn-on-strand vs park-and-retry is the consumer's call.** Whether bridged credit that lands on a chain with no recoverable settlement path is burned or deferred is decided by the **beneficiary** contract, not by the sucker.
 
 9. **`receive()` is intentionally unrestricted** — bridge contracts, wrapped-native unwrap, and terminal returns all need to deliver ETH. Any excess simply increases `amountToAddToBalanceOf` and benefits the project.
 
@@ -297,7 +297,7 @@ Ownable registry. Tracks per-project sucker inventory + deployer allowlist + sha
 
 11. **CCIP delivered-token and delivered-amount checks.** `JBCCIPSucker.ccipReceive` verifies `destTokenAmounts.length <= 1`, the delivered token identity (including router wrapped-native for native roots), and `delivered.amount >= root.amount`. A compromised peer cannot ship an inflated root that would let claims mint unbacked project tokens.
 
-12. **`_buildTreeHash` ↔ `abi.encodePacked` equivalence.** The leaf hash construction is exactly `keccak256(abi.encodePacked(projectTokenCount, terminalTokenAmount, beneficiary, metadata))` — downstream contracts (referral hook, project payers, distributors) can re-derive it without a library import.
+12. **`_buildTreeHash` ↔ `abi.encodePacked` equivalence.** The leaf hash construction is exactly `keccak256(abi.encodePacked(projectTokenCount, terminalTokenAmount, beneficiary, metadata))` — downstream contracts can re-derive it without a library import.
 
 ---
 
