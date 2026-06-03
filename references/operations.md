@@ -1,12 +1,12 @@
-# Suckers Operations
+# Suckers operations
 
-## Configuration Surface
+## Configuration surface
 
 - [`src/JBSuckerRegistry.sol`](../src/JBSuckerRegistry.sol) is the first stop for deployer allowlists, shared fees, project inventory, and deprecation helpers.
 - Transport-specific deployers in `src/deployers/` are where chain-specific constants and bridge addresses live.
 - [`script/Deploy.s.sol`](../script/Deploy.s.sol) is where deployment-time environment wiring belongs.
 
-## Change Checklist
+## Change checklist
 
 - If you edit base sucker accounting, verify claim flow across at least one chain-specific implementation.
 - If you edit token mapping logic, re-check the registry and deployer assumptions that feed it.
@@ -15,13 +15,13 @@
 - If you edit snapshot or claim-boundary logic, verify `numberOfClaimsSent`, peer snapshots, and emergency exit behavior together.
 - If you touch bridge-specific code, confirm whether the real bug is transport-side or shared accounting-side.
 
-## Common Failure Modes
+## Common failure modes
 
 - Cross-chain issue is blamed on transport when the root or token mapping was wrong before message delivery.
 - Registry configuration drifts from what a deployer or external operator expects.
 - Emergency hatches or deprecation paths are stale because nobody exercises them until stress conditions arrive.
 
-## Useful Proof Points
+## Useful proof points
 
 - [`test/SuckerAttacks.t.sol`](../test/SuckerAttacks.t.sol), [`test/SuckerDeepAttacks.t.sol`](../test/SuckerDeepAttacks.t.sol), and [`test/TestRegressionGaps.sol`](../test/TestRegressionGaps.sol) for security-sensitive assumptions.
 - [`test/InteropCompat.t.sol`](../test/InteropCompat.t.sol) when the problem is deployment wiring rather than runtime logic.

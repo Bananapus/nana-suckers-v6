@@ -24,6 +24,7 @@ interface IJBSucker is IERC165 {
     /// @param projectTokenCount The number of project tokens claimed.
     /// @param terminalTokenAmount The amount of terminal tokens involved.
     /// @param index The leaf index in the inbox tree.
+    /// @param metadata The opaque, caller-defined payload carried by the claimed leaf.
     /// @param caller The address that performed the claim.
     event Claimed(
         bytes32 beneficiary,
@@ -52,6 +53,7 @@ interface IJBSucker is IERC165 {
     /// @param root The new outbox tree root after insertion.
     /// @param projectTokenCount The number of project tokens cashed out.
     /// @param terminalTokenAmount The amount of terminal tokens reclaimed.
+    /// @param metadata The opaque, caller-defined payload carried by the outbox leaf.
     /// @param caller The address that performed the insertion.
     event InsertToOutboxTree(
         bytes32 indexed beneficiary,

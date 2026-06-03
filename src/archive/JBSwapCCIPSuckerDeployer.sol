@@ -22,7 +22,10 @@ contract JBSwapCCIPSuckerDeployer is JBCCIPSuckerDeployer, IJBSwapCCIPSuckerDepl
     // --------------------------- custom errors ------------------------- //
     //*********************************************************************//
 
+    /// @notice Thrown when the swap configuration is set with a zero-address bridge token.
     error JBSwapCCIPSuckerDeployer_InvalidSwapConfig(address bridgeToken);
+
+    /// @notice Thrown when the swap configuration is set after it has already been configured.
     error JBSwapCCIPSuckerDeployer_SwapAlreadyConfigured(address bridgeToken);
 
     //*********************************************************************//

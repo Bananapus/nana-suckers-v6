@@ -31,7 +31,7 @@ Use this repo when the requirement is canonical project-token movement across ch
 
 The main idea is not "bridge the token contract." The main idea is "bridge a Juicebox claim plus enough information to recreate the project-token position on the remote chain."
 
-## Key Contracts
+## Key contracts
 
 | Contract | Role |
 | --- | --- |
@@ -39,7 +39,7 @@ The main idea is not "bridge the token contract." The main idea is "bridge a Jui
 | `JBSuckerRegistry` | Registry for per-project sucker deployments, deployer allowlists, and shared bridge fee settings. |
 | Chain-specific suckers | Transport-specific implementations for OP Stack, Arbitrum, CCIP, and related environments. |
 
-## Mental Model
+## Mental model
 
 Each sucker pair has two jobs:
 
@@ -51,7 +51,7 @@ That means every bridge path has two trust surfaces:
 - the shared sucker accounting and Merkle logic
 - the bridge-specific transport implementation
 
-## Read These Files First
+## Read these files first
 
 1. `src/JBSucker.sol`
 2. `src/JBSuckerRegistry.sol`
@@ -59,7 +59,7 @@ That means every bridge path has two trust surfaces:
 4. the matching deployer under `src/deployers/`
 5. `src/utils/MerkleLib.sol`
 
-## Integration Traps
+## Integration traps
 
 - do not reason about suckers as if they were generic ERC-20 bridges
 - root ordering and message delivery semantics matter as much as proof format
@@ -67,13 +67,13 @@ That means every bridge path has two trust surfaces:
 - peer contexts are merged only when they share both currency and decimals; same-currency contexts with different decimals are kept separate and valued independently at read time, never summed across precisions
 - emergency and deprecation paths are part of normal operational safety
 
-## Where State Lives
+## Where state lives
 
 - per-claim and tree progression state: the sucker pair
 - deployment inventory and shared operational config: `JBSuckerRegistry`
 - bridge transport assumptions: the chain-specific implementation and its external counterparties
 
-## High-Signal Tests
+## High-signal tests
 
 1. `test/unit/registry.t.sol`
 2. `test/unit/multi_chain_evolution.t.sol`
@@ -101,11 +101,11 @@ Useful scripts:
 - `npm run deploy:testnets`
 - `npm run analyze`
 
-## Deployment Notes
+## Deployment notes
 
 This package supports multiple bridge families and is intentionally split into bridge-specific deployers. Operational support is narrower than "all theoretically bridgeable chains" and should be taken from the configured deployers, helper libraries, and deployment scripts in this repo.
 
-## Repository Layout
+## Repository layout
 
 ```text
 src/
@@ -125,14 +125,14 @@ script/
   helpers/
 ```
 
-## Risks And Notes
+## Risks and notes
 
 - out-of-order root delivery can make some claims unavailable until an operator uses an emergency path
 - bridge-specific transport assumptions matter as much as the shared sucker logic
 - token mapping and deprecation controls are governance-sensitive surfaces
 - a bridge that stays live operationally still may not be economically safe for every asset or chain pair
 
-## For AI Agents
+## For AI agents
 
 - Do not summarize this repo as a generic token bridge.
 - Always separate shared sucker logic from bridge-specific transport behavior.

@@ -36,11 +36,22 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
     // --------------------------- custom errors ------------------------- //
     //*********************************************************************//
 
+    /// @notice Thrown when the configured CCIP router address is the zero address.
     error JBCCIPSucker_InvalidRouter(address router);
+
+    /// @notice Thrown when an incoming root message claims a positive amount but no tokens were delivered with it.
     error JBCCIPSucker_PositiveRootWithoutDelivery(uint256 rootAmount);
+
+    /// @notice Thrown when the amount of tokens delivered is less than the amount declared in the root message.
     error JBCCIPSucker_UnderDeliveredAmount(uint256 delivered, uint256 rootAmount);
+
+    /// @notice Thrown when an incoming message delivers an unexpected number of token transfers.
     error JBCCIPSucker_UnexpectedDeliveredTokens(uint256 count);
+
+    /// @notice Thrown when an incoming message has an unrecognized message type prefix.
     error JBCCIPSucker_UnknownMessageType(uint8 messageType);
+
+    /// @notice Thrown when the token delivered with an incoming message does not match the expected token.
     error JBCCIPSucker_WrongDeliveredToken(address delivered, address expected);
 
     //*********************************************************************//

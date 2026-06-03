@@ -87,16 +87,37 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
     // --------------------------- custom errors ------------------------- //
     //*********************************************************************//
 
+    /// @notice Thrown when no received batch covers the claim's leaf index, so no conversion rate can be applied.
     error JBSwapCCIPSucker_BatchNotReceived(uint64 nonce);
+
+    /// @notice Thrown when the Uniswap V4 unlock callback is invoked by an address other than the pool manager.
     error JBSwapCCIPSucker_CallerNotPoolManager(address caller);
+
+    /// @notice Thrown when an incoming batch reuses a nonce that has already been received.
     error JBSwapCCIPSucker_DuplicateBatch(uint64 nonce);
+
+    /// @notice Thrown when the bridge token is the zero address or matches the wrapped native token.
     error JBSwapCCIPSucker_InvalidBridgeToken(address bridgeToken, address wrappedNativeToken);
+
+    /// @notice Thrown when a swap retry is attempted for a token and nonce that has no pending failed swap.
     error JBSwapCCIPSucker_NoPendingSwap(address localToken, uint64 nonce, bool retrySwapLocked);
+
+    /// @notice Thrown when the self-only swap entry point is called by an address other than this contract.
     error JBSwapCCIPSucker_OnlySelf(address caller, address expected);
+
+    /// @notice Thrown when an incoming root claims a positive amount but no bridge tokens were delivered with it.
     error JBSwapCCIPSucker_PositiveRootWithoutDelivery(uint256 rootAmount);
+
+    /// @notice Thrown when a swap produces no output tokens.
     error JBSwapCCIPSucker_SwapFailed(address tokenIn, address tokenOut, uint256 amountIn);
+
+    /// @notice Thrown when a claim or swap is attempted while another swap is already in progress.
     error JBSwapCCIPSucker_SwapPending(uint64 nonce);
+
+    /// @notice Thrown when an incoming message delivers an unexpected number of token transfers.
     error JBSwapCCIPSucker_UnexpectedDeliveredTokens(uint256 count);
+
+    /// @notice Thrown when the token delivered with an incoming message does not match the expected token.
     error JBSwapCCIPSucker_WrongDeliveredToken(address delivered, address expected);
 
     //*********************************************************************//

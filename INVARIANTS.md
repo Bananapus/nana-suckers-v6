@@ -4,11 +4,11 @@ Scope: the cross-chain bridging primitives that move a Juicebox V6 project-token
 
 Trust model in one sentence: a **pair of suckers** lets a holder burn project tokens on the local chain into a Merkle-committed claim, ship the committing root + backing terminal-token value across an external AMB, and let any caller mint to the **leaf-encoded beneficiary** on the destination — front-run safe, double-spend safe, fee-bypass safe, and operator-driven only at the configuration boundary.
 
-This file documents the invariants the **runtime contracts in this repo** enforce. It does not document downstream consumers (data hooks or distributors); those have their own invariants documents. Cross-chain economic divergence between projects (the arbitrage model) lives in the canonical `INVARIANTS.md` at `/Users/jango/Documents/jb/v6/evm/INVARIANTS.md` Section D2.
+This file documents the invariants the **runtime contracts in this repo** enforce. It does not document downstream consumers (data hooks or distributors); those have their own invariants documents. Cross-chain economic divergence between projects (the arbitrage model) lives in the canonical `INVARIANTS.md` at `../INVARIANTS.md` Section D2.
 
 ---
 
-# Section A — Guarantees to Token Holders Bridging
+## Section A — Guarantees to token holders bridging
 
 ## A.1 Prepare — burn local, commit to a leaf
 
@@ -69,7 +69,7 @@ This file documents the invariants the **runtime contracts in this repo** enforc
 
 ---
 
-# Section B — Guarantees to Operators / Project Owners
+## Section B — Guarantees to operators / project owners
 
 ## B.1 Token mapping is immutable once committed
 
@@ -118,7 +118,7 @@ DEPRECATED           block.timestamp >= deprecatedAfter
 
 ---
 
-# Section C — Per-Contract Operation Inventory
+## Section C — Per-contract operation inventory
 
 ## C.1 JBSucker — `src/JBSucker.sol` (1717 lines)
 
@@ -268,7 +268,7 @@ Ownable registry. Tracks per-project sucker inventory + deployer allowlist + sha
 
 ---
 
-# Section D — Cross-Cutting Invariants
+## Section D — Cross-cutting invariants
 
 1. **Per-leaf executed-hash defense.** `executedLeafHashOf[token][index]` stores the keccak256 of the leaf content after `_validate` succeeds. Downstream beneficiary contracts (notably `JBReferralSplitHook`) re-derive the hash via `abi.encodePacked(projectTokenCount, terminalTokenAmount, beneficiary, metadata)` (same shape as `_buildTreeHash`) and authenticate that a front-runner did not pre-empt their claim with a different leaf shape. The naive "just check the executed bitmap" defense is **insufficient**; see `jb-sucker-claim-front-run-defense` skill.
 
@@ -301,7 +301,7 @@ Ownable registry. Tracks per-project sucker inventory + deployer allowlist + sha
 
 ---
 
-# Section E — Out-of-Scope Centralization Caveats
+## Section E — Out-of-scope centralization caveats
 
 - **`JBSuckerRegistry` is Ownable.** The owner can:
   - add/remove sucker deployers from the allowlist (controls who can deploy a sucker against the project);
@@ -322,7 +322,7 @@ Ownable registry. Tracks per-project sucker inventory + deployer allowlist + sha
 
 ---
 
-# Section F — Key Code References
+## Section F — Key code references
 
 - Per-leaf hash store (front-run defense): `src/JBSucker.sol:151` (mapping), `src/JBSucker.sol:1346` (write).
 - Leaf hash construction: `src/JBSucker.sol:1514-1538` (`_buildTreeHash`).
@@ -341,6 +341,6 @@ Ownable registry. Tracks per-project sucker inventory + deployer allowlist + sha
 - Registry deployment auth + salt mixing: `src/JBSuckerRegistry.sol:516-584`.
 - Registry aggregate-view dedup logic: `src/JBSuckerRegistry.sol:213-365`.
 
-For the cross-chain economic-divergence (arbitrage) model that frames *why* sucker `prepare` uses `cashOutTaxRate=0` and the normal cashout path uses the aggregated rate, see Section D2 of `/Users/jango/Documents/jb/v6/evm/INVARIANTS.md`.
+For the cross-chain economic-divergence (arbitrage) model that frames *why* sucker `prepare` uses `cashOutTaxRate=0` and the normal cashout path uses the aggregated rate, see Section D2 of `../INVARIANTS.md`.
 
 For audit / risk register treatment of bridge-specific failure modes, see `RISKS.md` in this repo. For change-management posture and Safe-controlled surfaces, see `ADMINISTRATION.md`.

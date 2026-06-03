@@ -1,10 +1,10 @@
 # User Journeys
 
-## Repo Purpose
+## Repo purpose
 
 This repo lets a Juicebox project move a claimable project-token position from one chain to another. It owns the bridge-facing lifecycle around prepare, relay, claim, deprecation, and emergency recovery; it does not make bridge counterparties trustless.
 
-## Primary Actors
+## Primary actors
 
 - holders bridging project-token positions
 - relayers sending accepted roots to peer chains
@@ -12,14 +12,14 @@ This repo lets a Juicebox project move a claimable project-token position from o
 - registry operators managing deployer allowlists and shared fees
 - auditors checking Merkle progression, peer authentication, and bridge-specific delivery
 
-## Key Surfaces
+## Key surfaces
 
 - `JBSucker`: shared bridge lifecycle and project accounting
 - `JBSuckerRegistry`: deployment inventory, fees, and aggregate remote-state views
 - chain-specific suckers and deployers: transport authentication, gas, fee, and peer wiring
 - `MerkleLib` and `JBSuckerLib`: proof and snapshot helpers used by runtime paths
 
-## Journey 1: Prepare A Cross-Chain Claim
+## Journey 1: Prepare a cross-chain claim
 
 **Actor:** holder.
 
@@ -43,7 +43,7 @@ This repo lets a Juicebox project move a claimable project-token position from o
 **Postconditions**
 - the position is queued in the local outbox and can be included in the next root sent to the peer
 
-## Journey 2: Relay A Root To The Peer Chain
+## Journey 2: Relay a root to the peer chain
 
 **Actor:** relayer or any account willing to pay transport costs.
 
@@ -67,7 +67,7 @@ This repo lets a Juicebox project move a claimable project-token position from o
 **Postconditions**
 - the remote chain can verify claims against the accepted inbox root
 
-## Journey 3: Claim On The Destination Chain
+## Journey 3: Claim on the destination chain
 
 **Actor:** claimant or integration acting for a claimant.
 
@@ -91,7 +91,7 @@ This repo lets a Juicebox project move a claimable project-token position from o
 **Postconditions**
 - the claim is consumed exactly once and the remote position is recreated for the beneficiary
 
-## Journey 4: Recover From A Bad Or Deprecated Bridge Path
+## Journey 4: Recover from a bad or deprecated bridge path
 
 **Actor:** project authority, registry operator, or affected claimant.
 
@@ -115,13 +115,13 @@ This repo lets a Juicebox project move a claimable project-token position from o
 **Postconditions**
 - new sends use a safer lane, while historical claims remain recoverable through the allowed path
 
-## Trust Boundaries
+## Trust boundaries
 
 - shared sucker logic and bridge-specific transport behavior are separate review surfaces
 - non-atomic cross-chain delivery is normal and must be modeled explicitly
 - registry aggregate views are estimates for discovery and dashboards, not settlement guarantees
 
-## Hand-Offs
+## Hand-offs
 
 - Use [nana-core-v6](../nana-core-v6/USER_JOURNEYS.md) for local terminal, token, and cash-out accounting.
 - Use [nana-omnichain-deployers-v6](../nana-omnichain-deployers-v6/USER_JOURNEYS.md) for higher-level multi-chain deployment orchestration.

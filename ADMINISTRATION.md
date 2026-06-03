@@ -1,6 +1,6 @@
 # Administration
 
-## At A Glance
+## At a glance
 
 | Item | Details |
 | --- | --- |
@@ -13,7 +13,7 @@
 
 `nana-suckers-v6` splits authority across the registry, project owners or delegates, and the selected bridge. Admin review should focus on whether a control can change economic equivalence between the local position and the remote claim.
 
-## Control Model
+## Control model
 
 - registry owner controls deployer allowlists and the shared `toRemoteFee`
 - project permissions control token mapping, sucker deployment through the registry, deprecation, and emergency paths
@@ -30,7 +30,7 @@
 | Relayer | Permissionless caller | Per send | Pays transport costs and triggers root delivery |
 | Bridge counterparty | External protocol | Per transport | Authenticates and delivers messages/assets |
 
-## Privileged Surfaces
+## Privileged surfaces
 
 - `JBSuckerRegistry.allowSuckerDeployer(...)`
 - `JBSuckerRegistry.setToRemoteFee(...)`
@@ -40,14 +40,14 @@
 - `JBSucker.enableEmergencyHatchFor(...)`
 - `JBSuckerRegistry.removeDeprecatedSucker(...)`
 
-## Immutable And One-Way
+## Immutable and one-way
 
 - Token mappings become hard to change safely after outbox activity exists.
 - Sucker peer addresses and bridge configuration are deployment-time assumptions.
 - Deprecation is designed to stop new sends without blocking historical claims.
 - Removing a deprecated sucker from active listings does not erase its historical aggregate relevance.
 
-## Operational Notes
+## Operational notes
 
 - Map tokens only after checking both local and remote token semantics, decimals, and terminal behavior.
 - Deprecate both sides of a pair with matching timestamps and enough messaging-delay margin.
@@ -55,7 +55,7 @@
 - Verify bridge-specific gas and calldata sizing against the real transport API.
 - Do not treat `totalRemoteBalanceOf`, `totalRemoteSurplusOf`, or `remoteTotalSupplyOf` as exact settlement data unless every active peer lane is independently healthy and fresh.
 
-## Machine Notes
+## Machine notes
 
 - Start with `JBSuckerRegistry` for inventory, deployer, fee, and aggregate-view questions.
 - Start with `JBSucker` for prepare, claim, token mapping, deprecation, and emergency behavior.
@@ -68,13 +68,13 @@
 - Deprecation stops new outbound sends after the delay boundary while preserving claims already sent.
 - Broken deployment wiring usually requires a new sucker pair and registry migration, not in-place repair.
 
-## Admin Boundaries
+## Admin boundaries
 
 - Registry controls cannot make an external bridge honest or live.
 - Project permissions cannot rewrite already-consumed claims.
 - Bridge-specific deployers do not prove a lane is operationally supported for every chain the external bridge can theoretically reach.
 
-## Source Map
+## Source map
 
 - `src/JBSuckerRegistry.sol`
 - `src/JBSucker.sol`
