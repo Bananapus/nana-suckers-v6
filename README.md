@@ -13,7 +13,7 @@
 - [AUDIT_INSTRUCTIONS.md](./AUDIT_INSTRUCTIONS.md) — scope, entrypoints, and reading order for security review.
 - [SKILLS.md](./SKILLS.md) — reusable patterns and gotchas distilled from this codebase.
 - [STYLE_GUIDE.md](./STYLE_GUIDE.md) — Solidity conventions used across this repo.
-- [CHANGELOG.md](./CHANGELOG.md) — versioned change history.
+- [CHANGELOG.md](./CHANGELOG.md) - V5 to V6 migration changelog.
 
 The codebase includes multiple bridge variants, but the canonical deployment and discovery tooling in this repo is narrower than the full runtime surface. Treat the deployment scripts and helper libraries as the source of truth for what is operationally supported today.
 
