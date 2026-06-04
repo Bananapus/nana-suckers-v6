@@ -37,9 +37,7 @@ library JBSuckerLib {
 
     /// @notice Build the cross-chain snapshot message (total supply plus per-context surplus and balance).
     /// @dev Extracted from `JBSucker._buildSnapshotAndSend` to reduce child contract bytecode. Called via DELEGATECALL.
-    /// The snapshot performs no price-feed valuation — it carries surplus and balance per context in each context's
-    /// own
-    /// currency.
+    /// The snapshot carries each context's surplus and balance in its own currency, without price-feed valuation.
     /// @param directory The JB directory to look up controllers and terminals.
     /// @param projectId The project ID.
     /// @param remoteToken The remote token bytes32 address.
@@ -311,11 +309,10 @@ library JBSuckerLib {
     }
 
     /// @notice Builds the local accounting values used in outbound peer-chain snapshots.
-    /// @dev Project token supply stays a single currency-agnostic scalar. Surplus and balance are emitted per
-    /// accounting context in each context's own currency, with no price-feed valuation — the receiving chain folds
-    /// each
-    /// context into its same-asset local context at par. A project data hook may contribute additional supply plus its
-    /// own per-context surplus/balance, appended to the terminal contexts.
+    /// @dev Project token supply stays a single currency-agnostic scalar. Surplus and balance are emitted per context
+    /// in that context's currency, with no price-feed valuation. The receiving chain folds each context into its
+    /// same-asset local context at par. A project data hook may contribute additional supply plus its own per-context
+    /// surplus/balance, appended to the terminal contexts.
     /// @param directory The JB directory to look up controllers and terminals.
     /// @param projectId The project to snapshot.
     /// @return localTotalSupply The total project token supply, including reserved tokens.
