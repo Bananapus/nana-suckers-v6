@@ -311,10 +311,9 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     /// @dev A zero value preserves the default same-address deterministic peer.
     bytes32 private _peer;
 
-    /// @notice The peer chain's per-currency surplus and balance from the latest snapshot. Rebuilt in full each time a
-    /// fresher snapshot is received, so a context that dropped out of the new snapshot is simply absent — no
-    /// per-entry
-    /// versioning or clearing is needed. A read sums these and values them into the requested currency.
+    /// @notice The peer chain's per-currency surplus and balance from the latest snapshot.
+    /// @dev Rebuilt from each fresher snapshot; dropped contexts are absent without per-entry versioning or clearing.
+    /// A read sums these and values them into the requested currency.
     JBPeerChainContext[] private _peerContexts;
 
     //*********************************************************************//
@@ -645,8 +644,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
 
     /// @notice Configure which remote-chain tokens each local terminal token maps to, enabling (or disabling) those
     /// tokens for cross-chain bridging. Setting a remote token to `bytes32(0)` disables bridging and flushes any
-    /// pending outbox entries. Requires `MAP_SUCKER_TOKEN` permission from the project owner (or called by the
-    /// registry during deployment).
+    /// pending outbox entries. Requires `MAP_SUCKER_TOKEN` permission from the project owner or deployment registry.
     /// @param maps A list of local and remote terminal token addresses to map, and minimum amount/gas limits for
     /// bridging them.
     function mapTokens(JBTokenMapping[] calldata maps) external payable override {
@@ -705,8 +703,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     ///   For EVM peers: the EVM address left-padded to 32 bytes via `_toBytes32`.
     ///   For SVM peers: the full 32-byte Solana public key.
     /// @param minTokensReclaimed The minimum amount of terminal tokens to cash out for. If the amount cashed out is
-    /// less
-    /// than this, the transaction will revert.
+    /// less than this, the transaction will revert.
     /// @param token The address of the terminal token to cash out for.
     function prepare(
         uint256 projectTokenCount,
@@ -904,9 +901,8 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     }
 
     /// @notice The peer chain total supply bundled with the peer chain ID and snapshot freshness key.
-    /// @dev Lets aggregators (e.g. `JBSuckerRegistry`) read the value, the peer chain it belongs to, and its
-    /// freshness in one call instead of three separate staticcalls. The `value` is identical to
-    /// `peerChainTotalSupply`.
+    /// @dev Lets aggregators (e.g. `JBSuckerRegistry`) read the value, peer chain, and freshness in one call instead
+    /// of three separate staticcalls. The `value` is identical to `peerChainTotalSupply`.
     /// @return A `JBPeerChainValue` with the total supply, peer chain ID, and snapshot freshness key.
     function peerChainTotalSupplyValue() external view returns (JBPeerChainValue memory) {
         return JBPeerChainValue({
@@ -1074,8 +1070,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         deployer = _msgSender();
     }
 
-    /// @notice Map an ERC-20 token on the local chain to an ERC-20 token on the remote chain, allowing that token to be
-    /// bridged.
+    /// @notice Map an ERC-20 token on the local chain to a remote-chain ERC-20 token for bridging.
     /// @param map The local and remote terminal token addresses to map, and minimum amount/gas limits for bridging
     /// them.
     function mapToken(JBTokenMapping calldata map) public payable override {
@@ -1220,8 +1215,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     /// @return valid Whether the sender is the remote peer.
     function _isRemotePeer(address sender) internal virtual returns (bool valid);
 
-    /// @notice Map an ERC-20 token on the local chain to an ERC-20 token on the remote chain, allowing that token to be
-    /// bridged or disabled.
+    /// @notice Map an ERC-20 token on the local chain to a remote-chain ERC-20 token, or disable bridging.
     /// @dev Once a token has outbox tree entries (`_outboxOf[token].tree.count != 0`), it cannot be remapped to a
     /// different remote token -- it can only be disabled by mapping to `address(0)`, which triggers a final root
     /// flush to settle outstanding claims. This permanence prevents double-spending: if a remapping were allowed

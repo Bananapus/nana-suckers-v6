@@ -222,8 +222,7 @@ interface IJBSucker is IERC165 {
     /// @param token The terminal token to cash out into.
     /// @param metadata Opaque caller-defined attribution payload included in the leaf hash. The sucker protocol does
     /// not inspect this value — it's covered by the merkle root, so the destination contract that consumes the claim
-    /// can
-    /// trust it once the proof verifies. Pass `bytes32(0)` for an ordinary bridge with no attribution context.
+    /// can trust it once the proof verifies. Pass `bytes32(0)` for an ordinary bridge with no attribution context.
     function prepare(
         uint256 projectTokenCount,
         bytes32 beneficiary,

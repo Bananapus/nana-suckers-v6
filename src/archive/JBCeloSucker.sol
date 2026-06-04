@@ -73,8 +73,7 @@ contract JBCeloSucker is JBOptimismSucker {
     /// @notice Unwraps wrapped native tokens before adding to the project's balance.
     /// @dev When tokens are bridged from Celo → L1 via the OP bridge, wrapped native tokens (ERC-20) are released to
     /// the sucker. But the L1 project's terminal accepts native ETH (NATIVE_TOKEN), not the wrapped form. This override
-    /// unwraps
-    /// and adds native ETH to the project's balance.
+    /// unwraps and adds native ETH to the project's balance.
     /// @param token The terminal token to add to the project's balance.
     /// @param amount The amount of terminal tokens to add to the project's balance.
     /// @param cachedProjectId The cached project ID to avoid redundant storage reads.

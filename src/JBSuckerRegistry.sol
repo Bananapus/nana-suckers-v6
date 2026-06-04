@@ -156,8 +156,7 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
         return exists && (val == _SUCKER_EXISTS || val == _SUCKER_DEPRECATED);
     }
 
-    /// @notice Values one sucker's raw peer-chain balance into a currency, bundled with the peer chain ID and
-    /// freshness.
+    /// @notice Values one sucker's raw peer-chain balance into a currency with peer chain ID and freshness.
     /// @dev Exposed as an external self-call boundary so `totalRemoteBalanceOf` can `try` it and drop a single sucker
     /// whose price feed is missing. A context whose currency already matches `currency` folds in at par (no feed read);
     /// a missing cross-currency feed reverts, and the aggregator catches it and skips just this sucker.
@@ -206,8 +205,7 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
         return JBPeerChainValue({value: value, peerChainId: chainId, snapshotTimestamp: snapshot});
     }
 
-    /// @notice Values one sucker's raw peer-chain surplus into a currency, bundled with the peer chain ID and
-    /// freshness.
+    /// @notice Values one sucker's raw peer-chain surplus into a currency with peer chain ID and freshness.
     /// @dev Exposed as an external self-call boundary so `totalRemoteSurplusOf` can `try` it and drop a single sucker
     /// whose price feed is missing. A context whose currency already matches `currency` folds in at par (no feed read);
     /// a missing cross-currency feed reverts, and the aggregator catches it and skips just this sucker.

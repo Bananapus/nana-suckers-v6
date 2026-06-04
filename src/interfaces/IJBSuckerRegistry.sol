@@ -62,8 +62,7 @@ interface IJBSuckerRegistry {
     /// @return The addresses of every sucker ever registered for `projectId`.
     function allSuckersOf(uint256 projectId) external view returns (address[] memory);
 
-    /// @notice Returns true if the specified sucker belongs to the specified project and was deployed through this
-    /// registry.
+    /// @notice Returns true if the specified sucker belongs to the project and was deployed through this registry.
     /// @param projectId The ID of the project to check for.
     /// @param addr The address of the sucker to check.
     /// @return Whether the sucker belongs to the project.
