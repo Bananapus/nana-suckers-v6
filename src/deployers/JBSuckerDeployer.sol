@@ -26,11 +26,23 @@ abstract contract JBSuckerDeployer is ERC2771Context, JBPermissioned, IJBSuckerD
     // --------------------------- custom errors ------------------------- //
     //*********************************************************************//
 
+    /// @notice Thrown when configuration is attempted but the deployer (singleton or layer-specific config) has already
+    /// been configured.
     error JBSuckerDeployer_AlreadyConfigured(address singleton, bool layerSpecificConfigurationIsSet);
+
+    /// @notice Thrown when a sucker is deployed before the deployer's singleton implementation has been set.
     error JBSuckerDeployer_DeployerIsNotConfigured(address singleton);
+
+    /// @notice Thrown when the layer-specific configuration is not properly set after configuration.
     error JBSuckerDeployer_InvalidLayerSpecificConfiguration(address configurator);
+
+    /// @notice Thrown when a sucker is deployed before the layer-specific configuration has been set.
     error JBSuckerDeployer_LayerSpecificNotConfigured(address configurator);
+
+    /// @notice Thrown when the caller is not the address authorized to configure this deployer.
     error JBSuckerDeployer_Unauthorized(address caller, address expected);
+
+    /// @notice Thrown when the configurator address provided is the zero address.
     error JBSuckerDeployer_ZeroConfiguratorAddress(address configurator);
 
     //*********************************************************************//
@@ -51,9 +63,11 @@ abstract contract JBSuckerDeployer is ERC2771Context, JBPermissioned, IJBSuckerD
     //*********************************************************************//
 
     /// @notice Whether a given address was deployed by this deployer.
-    mapping(address => bool) public override isSucker;
+    /// @custom:param sucker The address to check.
+    mapping(address sucker => bool) public override isSucker;
 
     /// @notice The singleton used to clone suckers.
+    /// @dev Write-once via `configureSingleton`; the clone implementation for every sucker this deployer produces.
     JBSucker public singleton;
 
     //*********************************************************************//

@@ -109,9 +109,9 @@ root cannot replay an already-executed leaf.
 
 ## Unreleased — `executedLeafHashOf` + `allSuckersOf` for hook hardening
 
-Two surgical additions to support `JBReferralSplitHook`'s hardening pass against the front-run and
-deprecated-sucker findings in `AUDIT_REPORT_4`. Both extend the read surface without changing any
-existing behavior on the write side.
+Two surgical additions to support `JBReferralSplitHook`'s hardening pass against direct-caller
+front-running of `sucker.claim` and settlement against deprecated suckers. Both extend the read surface
+without changing any existing behavior on the write side.
 
 **What changed**
 

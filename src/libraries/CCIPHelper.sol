@@ -3,6 +3,7 @@ pragma solidity 0.8.28;
 
 /// @notice CCIP chain-specific constants used across Juicebox sucker contracts.
 library CCIPHelper {
+    /// @notice Thrown when a lookup is requested for a chain ID that has no configured CCIP constants.
     error CCIPHelper_UnsupportedChain(uint256 chainId);
     /// @notice The CCIP router address for Ethereum mainnet.
     address public constant ETH_ROUTER = 0x80226fc0Ee2b096224EeAc085Bb9a8cba1146f7D;

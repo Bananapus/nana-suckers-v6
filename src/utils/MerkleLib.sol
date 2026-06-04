@@ -5,6 +5,7 @@ pragma solidity 0.8.28;
  * @title MerkleLib
  * @author Illusory Systems Inc.
  * @notice An incremental merkle tree modeled on the eth2 deposit contract.
+ * @dev Vendored upstream library; its Doxygen-style NatSpec deviates from the repo's `///` house style.
  *
  */
 library MerkleLib {
@@ -12,6 +13,7 @@ library MerkleLib {
     // --------------------------- custom errors ------------------------- //
     //*********************************************************************//
 
+    /// @notice Thrown when a leaf is inserted into a merkle tree that has already reached its maximum number of leaves.
     error MerkleLib_InsertTreeIsFull(uint256 size, uint256 maxLeaves);
 
     //*********************************************************************//
@@ -82,7 +84,7 @@ library MerkleLib {
     /**
      * @notice Inserts a given node (leaf) into the merkle tree in storage.
      * @dev Operates directly on storage, writing only the single branch entry that changes (plus count).
-     * This avoids the 33-slot memory round-trip of the previous memory-based approach.
+     * This writes only the changed branch slot instead of round-tripping all 33 slots through memory.
      * @dev Reverts if the tree is already full.
      * @param tree The storage reference to the tree.
      * @param node Element to insert into tree.

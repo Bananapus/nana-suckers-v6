@@ -46,12 +46,25 @@ library JBSwapPoolLib {
     // --------------------------- custom errors ------------------------- //
     //*********************************************************************//
 
+    /// @notice Thrown when a swap amount exceeds the `uint128` range required by the pool interface.
     error JBSwapPoolLib_AmountOverflow(uint256 amount);
+
+    /// @notice Thrown when a swap callback is invoked by an address other than the expected pool.
     error JBSwapPoolLib_CallerNotPool(address caller);
+
+    /// @notice Thrown when a pool's oracle history is too short to serve the required TWAP window.
     error JBSwapPoolLib_InsufficientTwapHistory(address pool, uint256 availableWindow, uint256 requiredWindow);
+
+    /// @notice Thrown when the selected pool has no liquidity to swap against.
     error JBSwapPoolLib_NoLiquidity(address pool, PoolId poolId);
+
+    /// @notice Thrown when no eligible V3 or V4 pool can be found for the given token pair.
     error JBSwapPoolLib_NoPool(address tokenIn, address tokenOut);
+
+    /// @notice Thrown when a swap consumes less than the full requested input amount.
     error JBSwapPoolLib_PartialFill(uint256 consumed, uint256 requested);
+
+    /// @notice Thrown when a swap's output is below the minimum acceptable amount after slippage.
     error JBSwapPoolLib_SlippageExceeded(uint256 amountOut, uint256 minAmountOut);
 
     //*********************************************************************//

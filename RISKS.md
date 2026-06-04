@@ -1,4 +1,4 @@
-# Suckers Risk Register
+# Suckers risk register
 
 This file focuses on the bridge-like risks in the sucker system: merkle-root progression, token mapping, cross-chain consistency, and the explicit non-atomicity of source burn and destination mint.
 
@@ -16,7 +16,7 @@ This file focuses on the bridge-like risks in the sucker system: merkle-root pro
 | P0 | Bad token mapping or registry trust | Incorrect local or remote token mapping can mint or route the wrong asset across chains. | Strict mapping controls, deploy-time review, and registry or operator scrutiny. |
 | P1 | Non-atomic bridge semantics | Users can experience delays, skipped roots, or recovery flows because burn and mint are not one atomic operation. | Explicit user and operator docs, emergency procedures, and monitoring of bridge liveness. |
 
-## 1. Trust Assumptions
+## 1. Trust assumptions
 
 - **Bridge liveness.** Each implementation delegates message authentication to an external AMB (Optimism `CrossDomainMessenger`, Arbitrum `Bridge`/`Outbox`/`ArbSys`, Chainlink CCIP `Router`). A compromised or censoring AMB can forge roots, withhold messages, or permanently block claims.
 - **OP Stack (Optimism, Base):** trusts `OPMESSENGER.xDomainMessageSender()` for peer identity. A vulnerability in the OP messenger (or a malicious upgrade behind a proxy) would bypass all access control.
@@ -32,7 +32,7 @@ This file focuses on the bridge-like risks in the sucker system: merkle-root pro
 - **No reentrancy guard.** The contract relies on state ordering (mark-executed-before-external-call) rather than explicit ReentrancyGuard. Correct today, but fragile to future refactors.
 - **Archived (reference only — not compiled or deployed):** `JBSwapCCIPSucker` (with its swap libraries/structs `JBSwapPoolLib`, `JBSwapLib`, `JBPendingSwap`, `JBConversionRate`) and `JBCeloSucker`, plus their deployers (`JBSwapCCIPSuckerDeployer`, `JBCeloSuckerDeployer`). These live under `src/archive/` and are excluded from compilation and deployment; the active suckers are `JBSucker`, `JBOptimismSucker`, `JBBaseSucker`, `JBArbitrumSucker`, and `JBCCIPSucker`, plus `JBSuckerRegistry`. The archived analyses below are flagged `[ARCHIVED]`.
 
-## 2. Merkle Tree Risks
+## 2. Merkle tree risks
 
 - **Append-only guarantee is structural, not enforced by storage.** The outbox tree's `MerkleLib.Tree` struct stores `branch[32]` and `count`. Nothing prevents a privileged test helper or a storage-corrupting bug from mutating the branch array directly, which would silently invalidate all existing proofs.
 - **Root divergence on nonce skip.** `fromRemote` accepts any nonce strictly greater than the current inbox nonce (not sequential). If nonce 3 arrives before nonce 2, the inbox jumps to nonce 3's root. Leaves from nonce 2's batch are still provable against nonce 3's root (append-only), but proofs generated against nonce 2's root are invalid -- off-chain systems must regenerate proofs against the current root.
@@ -41,7 +41,7 @@ This file focuses on the bridge-like risks in the sucker system: merkle-root pro
 - **Proof invalidation on new root.** When a new root is delivered via `fromRemote`, all existing proofs computed against the old root become invalid. Users must regenerate proofs against the latest inbox root. No on-chain mechanism exists to signal this -- it depends entirely on off-chain indexers.
 - **Z_HASH compatibility.** The MerkleLib uses hardcoded Z_0 through Z_32 constants. These must match the SVM implementation exactly for cross-VM suckers. A mismatch would produce different roots from identical leaf sets.
 
-## 3. Cross-Chain Atomicity
+## 3. Cross-chain atomicity
 
 - **Arbitrum non-atomic token+message delivery.** `_toL2` creates two independent retryable tickets: one for the ERC-20 bridge transfer and one for the `fromRemote` merkle root message. These are redeemed independently on L2 with no ordering guarantee. `_addToBalance` checks actual token balance to prevent unbacked minting when message arrives before tokens.
 - **CCIP: no guaranteed delivery order.** CCIP does not guarantee in-order delivery. The contract handles this by accepting any nonce > current, but concurrent `toRemote` calls for the same token could result in a later root arriving first, skipping an intermediate root.
@@ -53,7 +53,7 @@ This file focuses on the bridge-like risks in the sucker system: merkle-root pro
 - **Aggregate balance accounting.** `amountToAddToBalanceOf(token)` computes `balanceOf(this) - outbox.balance`, making all contract-held tokens fungible claim backing. This is intentional: all funds serve the same project, so refunded ETH (from failed Arbitrum retryable tickets) and stale native deliveries correctly become project-claimable. The tradeoff is that later roots can consume liquidity from earlier failed batches, but the project is the ultimate beneficiary in all cases.
 - **`fromRemote` does not revert on stale nonce.** By design, stale/duplicate messages are silently ignored (emitting `StaleRootRejected`). This prevents fund loss on native token transfers where reverting would lose the ETH, but means monitoring must watch for this event to detect bridge issues.
 
-## 4. Token Mapping Risks
+## 4. Token mapping risks
 
 - **Immutable after first use.** Once `_outboxOf[token].tree.count != 0` (first `prepare`), the remote token address cannot be changed to a different address -- only disabled (set to `bytes32(0)`). A wrong initial mapping is catastrophic: requires deploying a new sucker.
 - **Per-sucker remote token uniqueness.** Within one sucker, each non-zero remote token address can be reserved by only one local terminal token. The source chain tracks outboxes and nonces by local token, but the destination chain stores received roots by `root.token` (the remote token address converted to its local address). Sharing one remote token across two local tokens inside the same sucker would merge their destination inboxes and make roots reject as stale or overwrite each other. Separate suckers have separate inbox/outbox storage, so a project can run multiple bridge lanes for the same asset pair (for example native bridge and CCIP ETH/USDC lanes) and let users choose the risk profile.
@@ -67,7 +67,7 @@ This file focuses on the bridge-like risks in the sucker system: merkle-root pro
 - **minGas too low = permanent fund loss.** If `minGas` is below the actual gas needed for the remote call, the bridge message will fail on the remote chain. The OP/CCIP implementations enforce `MESSENGER_ERC20_MIN_GAS_LIMIT` (200k), but the actual gas needed could be higher depending on the remote token implementation.
 - **Cross-reference: omnichain deployer token mapping.** When suckers are deployed through `JBOmnichainDeployer`, the `MAP_SUCKER_TOKEN` permission is granted to the sucker registry with `projectId=0` (wildcard). This means the registry can map tokens for ALL projects, not just the one being deployed. See [nana-omnichain-deployers-v6 RISKS.md](../nana-omnichain-deployers-v6/RISKS.md) section 3 for the permission escalation analysis.
 
-## 5. Fee Collection Risks
+## 5. Fee collection risks
 
 - **Best-effort fee collection.** `toRemoteFee` is a centralized storage variable on `JBSuckerRegistry` (ETH, in wei) — uniform across all suckers and all tokens, non-bypassable by integrators. It is paid into `FEE_PROJECT_ID` (typically project ID 1) via `terminal.pay()`. If the fee project has no primary terminal for `NATIVE_TOKEN`, or if `terminal.pay()` reverts for any reason, `toRemote()` still proceeds, but the fee ETH is retained as a refundable balance for the original caller and excluded from native add-to-balance accounting. Fee collection is therefore best-effort at the protocol-fee destination even though users still supply the fee amount.
 - **Renounced registry ownership risk.** If the registry owner calls `renounceOwnership()`, `setToRemoteFee()` becomes permanently uncallable and the fee is frozen at its current value across all suckers. This is a deliberate trade-off: it allows the registry owner to credibly commit to a fee level, but eliminates the ability to respond to future ETH price changes. The fee is still capped at `MAX_TO_REMOTE_FEE`, so the maximum downside is bounded.
@@ -75,7 +75,7 @@ This file focuses on the bridge-like risks in the sucker system: merkle-root pro
 - **Cross-reference: sucker registration path.** Suckers are deployed via `JBSuckerRegistry.deploySuckersFor`, which requires `DEPLOY_SUCKERS` permission from the project owner. The registry's `deploy` function uses `CREATE2` with a deployer-specific salt. The sucker's `peer()` address is deterministic — a misconfigured peer means the sucker accepts messages from the wrong remote address. See [nana-omnichain-deployers-v6 RISKS.md](../nana-omnichain-deployers-v6/RISKS.md) for deployer-level risks.
 - **Registry aggregate views fail open.** `JBSuckerRegistry.totalRemoteBalanceOf`, `totalRemoteSurplusOf`, and `remoteTotalSupplyOf` dedupe same-peer active suckers by the freshest accepted snapshot because each sucker caches the entire remote chain's state — multiple active suckers for the same chain report redundant snapshots, not additive shares. MAX is only a same-freshness tie-breaker and a deprecated-sucker fallback when no active sucker answers for that peer chain. The views silently skip any sucker that reverts — including a sucker whose cross-currency price feed is missing, since the registry values raw contexts at read time and a missing feed reverts only that sucker. This preserves liveness for dashboards and cross-chain estimates, but it means the returned aggregate can understate remote state whenever one peer is broken, censored, missing a feed, or simply expensive to query.
 
-## 6. Deprecation Lifecycle
+## 6. Deprecation lifecycle
 
 - **State machine: ENABLED -> DEPRECATION_PENDING -> SENDING_DISABLED -> DEPRECATED.**
   - `DEPRECATION_PENDING`: fully functional, warning only. `block.timestamp < deprecatedAfter - _maxMessagingDelay()`.
@@ -86,7 +86,7 @@ This file focuses on the bridge-like risks in the sucker system: merkle-root pro
 - **Stuck tokens during deprecation.** Tokens that were `prepare()`d but not yet `toRemote()`d before SENDING_DISABLED cannot be sent to the remote chain. They can only be recovered via emergency exit after the sucker reaches DEPRECATED state.
 - **Both sides must deprecate.** The deprecation must be called on both the local and remote sucker with matching timestamps. If only one side deprecates, the other side continues accepting roots while the deprecated side blocks outbound sends. The deprecated side still accepts incoming roots, so tokens sent before deprecation can be claimed.
 
-## 7. Emergency Hatch
+## 7. Emergency hatch
 
 - **Two independent activation paths:**
   1. Per-token: `enableEmergencyHatchFor(tokens)` -- requires `SUCKER_SAFETY` permission from project owner. Allows emergency exit for specific tokens while the sucker is still ENABLED.
@@ -98,7 +98,7 @@ This file focuses on the bridge-like risks in the sucker system: merkle-root pro
 - **`numberOfClaimsSent` advancement timing.** `_sendRoot()` sets `numberOfClaimsSent` before `_sendRootOverAMB()` completes. If the L1 transaction succeeds but L2 delivery fails, those leaves are blocked from emergency exit. Mitigations: Arbitrum retryable tickets can be manually re-executed on L2; Optimism messages can be re-relayed by anyone. If delivery permanently fails, `enableEmergencyHatchFor()` combined with project owner intervention can recover. Adding a rollback mechanism would introduce double-spend risk (leaf claimable on both chains). Current design is conservative: locked funds are preferable to double-spent funds.
 - **Emergency hatch + minting.** Emergency exit calls `_handleClaim`, which mints project tokens via the controller. If the controller or token contract is broken/missing, emergency exits also revert -- there is no "raw withdrawal" of terminal tokens without minting.
 
-## 8. DoS Vectors
+## 8. DoS vectors
 
 - **Large proof calldata.** Each claim requires a 32-element `bytes32[32]` proof array (1024 bytes). Batch claims (`claim(JBClaim[])`) scale linearly. A batch of 100 claims is ~100KB of calldata, approaching some L2 calldata limits.
 - **Bridge gas limits.** `MESSENGER_BASE_GAS_LIMIT` is 300k and `MESSENGER_ERC20_MIN_GAS_LIMIT` is 200k. If the remote chain's gas costs increase (e.g., after an EVM upgrade), these hardcoded limits may become insufficient, causing all bridge messages to fail.
@@ -110,7 +110,7 @@ This file focuses on the bridge-like risks in the sucker system: merkle-root pro
 - **Unbounded sucker count per project.** `JBSuckerRegistry._suckersOf` uses an EnumerableMap with no cap. `suckerPairsOf` iterates all suckers with external calls per iteration. Extremely large sucker counts could cause view functions to exceed gas limits.
 - **Unrestricted `receive()`.** Anyone can send ETH to the sucker, inflating `amountToAddToBalanceOf`. This is by design (needed for bridge/terminal returns) but means the project can receive unexpected balance additions.
 
-## 9. Invariants to Verify
+## 9. Invariants to verify
 
 - **Nonce monotonicity.** Outbox nonce increments exactly once per `_sendRoot` call. Inbox nonce only increases (never decreases or replays). Tested in `invariant_nonceMonotonicallyIncreases`.
 - **No double-claim.** `_executedFor[token].get(index)` is checked before and set before any external call. Each leaf index can be claimed exactly once. Tested in `invariant_eachLeafClaimedOnce`.
@@ -123,7 +123,7 @@ This file focuses on the bridge-like risks in the sucker system: merkle-root pro
 - **Tree count monotonically increases.** `MerkleLib.Tree.count` only increments (append-only). No operation decreases the count. Tested in `invariant_treeCountMonotonicallyIncreases`.
 - **Message version gate.** `fromRemote` rejects any message where `root.version != MESSAGE_VERSION`. Tested in `test_merkleTree_messageVersionValidation`.
 
-## 10. Accepted Behaviors
+## 10. Accepted behaviors
 
 ### 10.1 Stale nonce messages silently ignored (not reverted)
 

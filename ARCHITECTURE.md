@@ -4,11 +4,11 @@
 
 `nana-suckers-v6` bridges Juicebox project positions across chains by turning a local cash-out into a claimable remote mint. It does not behave like a generic ERC-20 bridge: the bridged object is a Juicebox claim plus the backing terminal-token value needed to honor it on the peer chain.
 
-## System Overview
+## System overview
 
 `JBSucker` owns shared project-token burn, outbox, inbox, claim, token-mapping, deprecation, and emergency-exit logic. `JBSuckerRegistry` owns project-to-sucker inventory, deployer allowlists, shared bridge fees, and best-effort aggregate remote-state views. Chain-specific suckers handle transport authentication and asset delivery for OP Stack, Arbitrum, CCIP, and related environments. Deployers bind those implementations to the external bridge addresses and peer-chain configuration used at runtime. Archived (reference only — not compiled or deployed): `JBSwapCCIPSucker` (+ its swap libs/structs) and `JBCeloSucker`; see `src/archive/`.
 
-## Core Invariants
+## Core invariants
 
 - Merkle trees remain append-only and claims cannot be replayed.
 - Source freshness keys only move forward, so stale peer snapshots cannot roll back remote state.
@@ -30,7 +30,7 @@
 | `MerkleLib` / `JBSuckerLib` | Merkle and bytecode-heavy accounting helpers | Shared by runtime paths |
 | `JBSwapCCIPSucker` (+ swap libs/structs) / `JBCeloSucker` | Swap-assisted CCIP bridging / Celo-oriented native-token handling | Archived (reference only — not compiled or deployed); see `src/archive/` |
 
-## Trust Boundaries
+## Trust boundaries
 
 - Core terminal accounting, project ownership, prices, and token supply come from `nana-core-v6`.
 - Transport authentication comes from the selected bridge or CCIP router, not from `JBSucker`.
@@ -38,9 +38,9 @@
 - Registry owner decisions affect which deployers can create suckers and what shared fee is charged.
 - Data-hook peer adjustments are optional and must fail closed into the baseline project snapshot.
 
-## Critical Flows
+## Critical flows
 
-### Prepare And Send
+### Prepare and send
 
 ```text
 holder cashes out locally
@@ -59,7 +59,7 @@ claimant provides leaf and proof
   -> project tokens are minted or funds are delivered according to the mapped token
 ```
 
-### Migration Or Recovery
+### Migration or recovery
 
 ```text
 project authority schedules deprecation or enables emergency hatch
@@ -68,25 +68,25 @@ project authority schedules deprecation or enables emergency hatch
   -> operators can remove deprecated suckers from active registry listings without erasing aggregate visibility
 ```
 
-## Accounting Model
+## Accounting model
 
 The local sucker snapshots project supply plus a per-currency set of raw surplus and balance amounts before sending roots. The peer sucker stores these as oracle-free contexts and never prices them itself; valuation happens at read time in `JBSuckerRegistry`, which holds the prices reference and converts each context into a requested currency exactly as the terminal store values local surplus — taking a context already in the requested currency at par with no feed, and valuing a different-currency context through the project's price feed. Registry aggregate views are intentionally best-effort: they skip reverting suckers (including any whose cross-currency feed is missing) and dedupe active same-peer lanes by the freshest accepted snapshot, with deprecated lanes used only when no active lane answers for that peer chain.
 
-## Security Model
+## Security model
 
 - Shared sucker bugs can affect every bridge family.
 - Bridge-specific bugs can strand or misdeliver value even when shared accounting is correct.
 - `prepare`, `toRemote`, `claim`, `mapToken`, `setDeprecation`, and registry deploy/remove paths are the primary review targets.
 - Low-level fee, gas, and calldata sizing details are security-critical because sends are cross-chain and non-atomic.
 
-## Safe Change Guide
+## Safe change guide
 
 - Review `JBSucker` and the matching chain-specific implementation together when changing send or receive behavior.
 - Re-check token mapping, outbox balance, source snapshot, and emergency-exit behavior together.
 - Treat registry aggregate changes as user-facing estimator changes, not harmless view refactors.
 - If a change touches bridge fees or gas limits, verify the real transport API rather than only local mocks.
 
-## Canonical Checks
+## Canonical checks
 
 - Registry and aggregate behavior:
   `test/unit/registry.t.sol`
@@ -105,7 +105,7 @@ The local sucker snapshots project supply plus a per-currency set of raw surplus
   `test/SuckerDeepAttacks.t.sol`
   `test/regression/PeerSnapshotDesync.t.sol`
 
-## Source Map
+## Source map
 
 - `src/JBSucker.sol`
 - `src/JBSuckerRegistry.sol`

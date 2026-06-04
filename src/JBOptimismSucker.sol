@@ -76,6 +76,7 @@ contract JBOptimismSucker is JBSucker, IJBOptimismSucker {
 
     /// @notice Checks if the `sender` (`_msgSender()`) is a valid representative of the remote peer.
     /// @param sender The message's sender.
+    /// @return valid A flag if the sender is a valid representative of the remote peer.
     function _isRemotePeer(address sender) internal override returns (bool valid) {
         return sender == address(OPMESSENGER) && _toBytes32(OPMESSENGER.xDomainMessageSender()) == peer();
     }

@@ -68,31 +68,88 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     // --------------------------- custom errors ------------------------- //
     //*********************************************************************//
 
+    /// @notice Thrown when a terminal-token or project-token amount being bridged exceeds the `uint128` cap enforced
+    /// for cross-VM compatibility.
     error JBSucker_AmountExceedsUint128(uint256 amount);
+
+    /// @notice Thrown when a token mapping specifies a bridging gas limit below the minimum required to safely deliver
+    /// an ERC-20 on the remote chain.
     error JBSucker_BelowMinGas(uint256 minGas, uint256 minGasLimit);
+
+    /// @notice Thrown when an outbound action is attempted while the sucker is deprecated (or no longer accepting
+    /// sends).
     error JBSucker_Deprecated(JBSuckerState state);
+
+    /// @notice Thrown when a deprecation is scheduled for a time sooner than the minimum allowed delay.
     error JBSucker_DeprecationTimestampTooSoon(uint256 givenTime, uint256 minimumTime);
+
+    /// @notice Thrown when a native token transport payment is required but no `msg.value` was sent.
     error JBSucker_ExpectedMsgValue(uint256 msgValue);
+
+    /// @notice Thrown when a merkle leaf index is greater than or equal to the maximum number of leaves the tree can
+    /// hold.
     error JBSucker_IndexOutOfRange(uint256 index);
+
+    /// @notice Thrown when the amount to add to the project's balance exceeds the funds available to the sucker.
     error JBSucker_InsufficientBalance(uint256 amount, uint256 balance);
+
+    /// @notice Thrown when the `msg.value` sent is less than the required `toRemoteFee`.
     error JBSucker_InsufficientMsgValue(uint256 received, uint256 expected);
+
+    /// @notice Thrown when an incoming bridge message has a format version that does not match the expected version.
     error JBSucker_InvalidMessageVersion(uint8 received, uint8 expected);
+
+    /// @notice Thrown when the native token is mapped to a remote token that is neither the native token nor the zero
+    /// address.
     error JBSucker_InvalidNativeRemoteAddress(bytes32 remoteToken);
+
+    /// @notice Thrown when a claim's merkle proof does not validate against the stored inbox root.
     error JBSucker_InvalidProof(bytes32 root, bytes32 inboxRoot);
+
+    /// @notice Thrown when a leaf at the given index has already been executed for the given token.
     error JBSucker_LeafAlreadyExecuted(address token, uint256 index);
+
+    /// @notice Thrown when no terminal can be found for the given project and token.
     error JBSucker_NoTerminalForToken(uint256 projectId, address token);
+
+    /// @notice Thrown when the caller is not a valid representative of the remote peer sucker.
     error JBSucker_NotPeer(bytes32 caller);
+
+    /// @notice Thrown when a send is attempted but there is nothing new in the outbox to bridge.
     error JBSucker_NothingToSend(address token, uint256 outboxBalance, uint256 treeCount, uint256 numberOfClaimsSent);
+
+    /// @notice Thrown when an account attempts to claim a retained failed-fee refund but is owed nothing.
     error JBSucker_NoRetainedToRemoteFee(address account);
+
+    /// @notice Thrown when an account attempts to claim a retained failed transport-payment refund but is owed nothing.
     error JBSucker_NoRetainedTransportPaymentRefund(address account);
+
+    /// @notice Thrown when a native token refund transfer to the beneficiary fails.
     error JBSucker_RefundFailed(address beneficiary, uint256 amount);
+
+    /// @notice Thrown when a token mapping targets a remote token that another local token has already reserved.
     error JBSucker_RemoteTokenAlreadyMapped(bytes32 remoteToken, address localToken);
+
+    /// @notice Thrown when remapping a local token whose outbox tree already has entries, which is no longer permitted.
     error JBSucker_TokenAlreadyMapped(address localToken, bytes32 mappedTo);
+
+    /// @notice Thrown when an emergency-hatch action is attempted for a token whose emergency hatch state does not
+    /// allow it.
     error JBSucker_TokenHasInvalidEmergencyHatchState(address token);
+
+    /// @notice Thrown when an action references a token that has not been mapped to a remote token.
     error JBSucker_TokenNotMapped(address token);
+
+    /// @notice Thrown when `msg.value` is sent for an action that expects none.
     error JBSucker_UnexpectedMsgValue(uint256 value);
+
+    /// @notice Thrown when a required beneficiary address is the zero address.
     error JBSucker_ZeroBeneficiary(bytes32 beneficiary);
+
+    /// @notice Thrown when bridging is attempted for a project that has no ERC-20 token deployed.
     error JBSucker_ZeroERC20Token(uint256 projectId);
+
+    /// @notice Thrown when a bridge is queued with zero project tokens.
     error JBSucker_ZeroProjectTokenCount();
 
     //*********************************************************************//
@@ -171,14 +228,16 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     uint256 public retainedTransportPaymentRefundBalance;
 
     /// @notice The retained failed-fee ETH owed to each original `toRemote` caller.
+    /// @custom:param account The address owed the retained ETH.
     mapping(address account => uint256 amount) public retainedToRemoteFeeOf;
 
     /// @notice The retained failed transport-payment refund ETH owed to each original bridge caller.
+    /// @custom:param account The address owed the retained ETH.
     mapping(address account => uint256 amount) public retainedTransportPaymentRefundOf;
 
     /// @notice The source chain freshness key for the most recent accepted peer snapshot.
     /// @dev Only snapshots with a strictly newer source freshness key are accepted, preventing stale rollbacks.
-    /// The historical name is retained for ABI compatibility with the `JBMessageRoot.sourceTimestamp` field.
+    /// Named to align with the `JBMessageRoot.sourceTimestamp` field it tracks.
     /// Returns 0 if no snapshot has been received yet.
     uint256 public snapshotTimestamp;
 
@@ -401,7 +460,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     }
 
     /// @notice Emergency escape hatch: lets a user reclaim their project tokens and terminal tokens on the chain they
-    /// originally deposited from, when the bridge has become permanently non-functional. Must be enabled by the project
+    /// deposited from, when the bridge has become permanently non-functional. Must be enabled by the project
     /// owner via `enableEmergencyHatchFor`.
     /// @param claimData The terminal token, merkle tree leaf, and proof for the claim.
     function exitThroughEmergencyHatch(JBClaim calldata claimData) external override {
@@ -683,7 +742,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
             revert JBSucker_TokenNotMapped({token: token});
         }
 
-        // Make sure that the sucker still allows sending new messaged.
+        // Make sure that the sucker still allows sending new messages.
         _requireSendingEnabled();
 
         // Transfer the tokens to this contract.
@@ -711,7 +770,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     /// 14-day buffer ensures in-flight messages have time to arrive before the sucker fully shuts down.
     /// @param timestamp The time after which the sucker will be deprecated. Or `0` to remove the upcoming deprecation.
     function setDeprecation(uint40 timestamp) external override {
-        // As long as the sucker has not started letting users withdrawal, its deprecation time can be
+        // As long as the sucker has not started letting users withdraw, its deprecation time can be
         // extended/shortened.
         _requireSendingEnabled();
 
@@ -930,14 +989,14 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
             return JBSuckerState.DEPRECATION_PENDING;
         }
 
-        // The sucker will no longer send new roots to the pair, but it will accept new incoming roots.
-        // Additionally it will let users exit here now that we can no longer send roots/tokens.
+        // The sucker no longer sends new roots to the pair, but it accepts new incoming roots.
+        // Additionally it lets users exit here, since the sucker can no longer send roots/tokens.
         // forge-lint: disable-next-line(block-timestamp)
         if (block.timestamp < _deprecatedAfter) {
             return JBSuckerState.SENDING_DISABLED;
         }
 
-        // The sucker is now in the final state of deprecation. It will no longer allow new roots.
+        // The sucker is in the final state of deprecation. It does not allow new roots.
         return JBSuckerState.DEPRECATED;
     }
 
@@ -1027,7 +1086,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     // --------------------- internal transactions ----------------------- //
     //*********************************************************************//
 
-    /// @notice Adds funds to the projects balance.
+    /// @notice Adds funds to the project's balance.
     /// @param token The terminal token to add to the project's balance.
     /// @param amount The amount of terminal tokens to add to the project's balance.
     /// @param cachedProjectId The cached project ID to avoid redundant storage reads.
@@ -1125,7 +1184,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     )
         internal
     {
-        // Guard against amounts that would overflow uint128 on SVM (INTEROP-5).
+        // Guard against amounts that would overflow uint128 on SVM, which caps bridged amounts at uint128.
         if (terminalTokenAmount > type(uint128).max) revert JBSucker_AmountExceedsUint128(terminalTokenAmount);
         if (projectTokenCount > type(uint128).max) revert JBSucker_AmountExceedsUint128(projectTokenCount);
         // Build a hash based on the token amounts, the beneficiary, and the attribution metadata.
@@ -1167,7 +1226,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     /// different remote token -- it can only be disabled by mapping to `address(0)`, which triggers a final root
     /// flush to settle outstanding claims. This permanence prevents double-spending: if a remapping were allowed
     /// after outbox activity, the same local funds could be claimed against two different remote tokens. A
-    /// misconfigured mapping therefore requires deploying a new sucker. Re-enabling a previously disabled mapping
+    /// misconfigured mapping therefore requires deploying a new sucker. Re-enabling a disabled mapping
     /// (back to the same remote token) is supported.
     /// @dev Remote tokens are also unique per local token within this sucker. The source side keeps separate
     /// outboxes/nonces per local token, but the destination side stores roots under the remote token address. Sharing
@@ -1324,7 +1383,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         // Ensure the token is mapped to an address on the remote chain.
         if (remoteToken.addr == bytes32(0)) revert JBSucker_TokenNotMapped(token);
 
-        // Make sure that the sucker still allows sending new messaged.
+        // Make sure that the sucker still allows sending new messages.
         _requireSendingEnabled();
 
         // Drain the outbox: read balance/nonce/root, clear balance, advance nonce and numberOfClaimsSent.
@@ -1464,7 +1523,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     }
 
     /// @notice Validates a branch root against the expected root.
-    /// @dev This is a virtual function to allow a tests to override the behavior, it should never be overwritten
+    /// @dev This is a virtual function to allow tests to override the behavior; it should never be overridden
     /// otherwise.
     /// @param expectedRoot The expected merkle root to validate against.
     /// @param leafHash The precomputed leaf hash (`_buildTreeHash` output) for the leaf being validated.
@@ -1489,8 +1548,8 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         }
     }
 
-    /// @notice Validates a leaf as being in the outbox merkle tree and not being send over the amb, and registers the
-    /// leaf as executed (to prevent double-spending).
+    /// @notice Validates a leaf as being in the outbox merkle tree and not having been sent over the amb, and registers
+    /// the leaf as executed (to prevent double-spending).
     /// @dev Reverts if the leaf is invalid.
     /// @dev IMPORTANT: Emergency exit safety depends on `numberOfClaimsSent` being accurately tracked.
     /// `numberOfClaimsSent` is updated in `_sendRoot` to equal `outbox.tree.count` at the time the root is sent
@@ -1513,7 +1572,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     /// @param terminalToken The terminal token that the project tokens were cashed out for.
     /// @param terminalTokenAmount The amount of terminal tokens reclaimed by the cash out.
     /// @param beneficiary The beneficiary of the project tokens (bytes32 for cross-VM compatibility).
-    /// @param index The index of the leaf to prove in the terminal token's inbox tree.
+    /// @param index The index of the leaf to prove in the terminal token's outbox tree.
     /// @param leaves The leaves that prove that the leaf at the `index` is in the tree (i.e. the merkle branch that the
     /// leaf is on).
     function _validateForEmergencyExit(
@@ -1540,10 +1599,10 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         }
 
         // Check that this claim is within the bounds of who can claim.
-        // If the root that this leaf is in was already send then we can not let the user claim here.
+        // If the root that this leaf is in was already sent then we can not let the user claim here.
         // As it could have also been received by the peer sucker, which would then let the user claim on each side.
         // NOTE: We are comparing the *count* and the *index*, so `count - 1` is the last index that was sent.
-        // A count of 0 means that no root has ever been send for this token, so everyone can claim.
+        // A count of 0 means that no root has ever been sent for this token, so everyone can claim.
         JBOutboxTree storage outboxOfToken = _outboxOf[terminalToken];
         if (outboxOfToken.numberOfClaimsSent != 0 && outboxOfToken.numberOfClaimsSent - 1 >= index) {
             revert JBSucker_LeafAlreadyExecuted({token: terminalToken, index: index});
@@ -1551,8 +1610,8 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
 
         {
             // We re-use the same `_executedFor` mapping but we use a different slot.
-            // We can not use the regular mapping, since this claim is done for tokens being send from here to the pair.
-            // where the regular mapping is for tokens that were send on the pair to here. Even though these may seem
+            // We can not use the regular mapping, since this claim is done for tokens being sent from here to the pair.
+            // where the regular mapping is for tokens that were sent on the pair to here. Even though these may seem
             // similar they are actually completely unrelated.
             address emergencyExitAddress = address(bytes20(keccak256(abi.encode(terminalToken))));
 
@@ -1832,7 +1891,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         return bytes32(uint256(uint160(addr)));
     }
 
-    /// @notice Allow sucker implementations to add/override mapping rules to suite their specific needs.
+    /// @notice Allow sucker implementations to add/override mapping rules to suit their specific needs.
     /// @param map The token mapping to validate.
     function _validateTokenMapping(JBTokenMapping calldata map) internal pure virtual {
         bool isNative = map.localToken == JBConstants.NATIVE_TOKEN;

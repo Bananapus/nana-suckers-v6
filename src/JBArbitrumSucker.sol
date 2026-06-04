@@ -34,6 +34,8 @@ contract JBArbitrumSucker is JBSucker, IJBArbitrumSucker {
     // --------------------------- custom errors ------------------------- //
     //*********************************************************************//
 
+    /// @notice Thrown when the provided transport payment is insufficient to cover the cost of the Arbitrum retryable
+    /// ticket.
     error JBArbitrumSucker_NotEnoughGas(uint256 payment, uint256 cost);
 
     //*********************************************************************//

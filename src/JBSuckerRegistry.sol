@@ -35,10 +35,19 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
     // --------------------------- custom errors ------------------------- //
     //*********************************************************************//
 
+    /// @notice Thrown when the owner attempts to set a `toRemoteFee` greater than the maximum allowed fee.
     error JBSuckerRegistry_FeeExceedsMax(uint256 fee, uint256 max);
+
+    /// @notice Thrown when a sucker deployment references a deployer that is not approved by this registry.
     error JBSuckerRegistry_InvalidDeployer(IJBSuckerDeployer deployer);
+
+    /// @notice Thrown when an action references a sucker that is not registered to the given project.
     error JBSuckerRegistry_SuckerDoesNotBelongToProject(uint256 projectId, address sucker);
+
+    /// @notice Thrown when a sucker is being removed from active listings but is not deprecated.
     error JBSuckerRegistry_SuckerIsNotDeprecated(address sucker, JBSuckerState suckerState);
+
+    /// @notice Thrown when a sucker reports a zero peer chain ID and cannot identify a real peer chain.
     error JBSuckerRegistry_ZeroPeerChainId(address sucker);
 
     //*********************************************************************//
@@ -82,7 +91,7 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
     //*********************************************************************//
 
     /// @notice Tracks whether the specified sucker deployer is approved by this registry.
-    /// @custom:member deployer The address of the deployer to check.
+    /// @custom:param deployer The address of the deployer to check.
     mapping(address deployer => bool) public override suckerDeployerIsAllowed;
 
     /// @notice The ETH fee (in wei) paid into the fee project via terminal.pay() on each toRemote() call.
@@ -93,7 +102,8 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
     //*********************************************************************//
 
     /// @notice Tracks the suckers for the specified project.
-    mapping(uint256 => EnumerableMap.AddressToUintMap) internal _suckersOf;
+    /// @custom:param projectId The ID of the project whose suckers are tracked.
+    mapping(uint256 projectId => EnumerableMap.AddressToUintMap) internal _suckersOf;
 
     //*********************************************************************//
     // -------------------------- constructor ---------------------------- //
@@ -654,9 +664,9 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
         emit SuckerDeployerAllowed({deployer: deployer, caller: _msgSender()});
     }
 
-    /// @notice Adds multiple suckers deployer to the allowlist.
+    /// @notice Adds multiple sucker deployers to the allowlist.
     /// @dev Can only be called by this contract's owner (initially project ID 1, or JuiceboxDAO).
-    /// @param deployers The address of the deployer to add.
+    /// @param deployers The addresses of the deployers to add.
     function allowSuckerDeployers(address[] calldata deployers) public override onlyOwner {
         // Cache _msgSender() to avoid redundant calls in the loop.
         address sender = _msgSender();
