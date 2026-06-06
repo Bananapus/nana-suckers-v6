@@ -13,8 +13,9 @@ import {MerkleLib} from "../../src/utils/MerkleLib.sol";
 /// `test/InteropCompat.t.sol`'s spirit) is NOT re-run here, but the mirror is byte-for-byte identical to
 /// `JBSucker.sol:1691-1697`, and `check_buildTreeHashEqualsEncodePacked` proves the mirror equals the canonical
 /// `keccak256(abi.encodePacked(...))` pre-image that downstream consumers (e.g. `JBReferralSplitHook.claimAndPush`)
-/// re-derive. This is the load-bearing front-run-defense equivalence documented in the `jb-sucker-claim-front-run-defense`
-/// skill: the per-leaf hash must equal exactly `keccak256(abi.encodePacked(projectTokenCount, terminalTokenAmount,
+/// re-derive. This is the load-bearing front-run-defense equivalence documented in the
+/// `jb-sucker-claim-front-run-defense` skill: the per-leaf hash must equal exactly
+/// `keccak256(abi.encodePacked(projectTokenCount, terminalTokenAmount,
 /// beneficiary, metadata))` so a beneficiary contract can authenticate a (possibly front-run) settlement.
 library LeafHashMirror {
     /// @notice Mirror of `JBSucker._buildTreeHash` (production assembly copied verbatim).
@@ -71,8 +72,7 @@ contract SuckerLeafHashProperties is Test {
             metadata: metadata
         });
 
-        bytes32 canonical =
-            keccak256(abi.encodePacked(projectTokenCount, terminalTokenAmount, beneficiary, metadata));
+        bytes32 canonical = keccak256(abi.encodePacked(projectTokenCount, terminalTokenAmount, beneficiary, metadata));
 
         assert(produced == canonical);
     }
@@ -94,8 +94,7 @@ contract SuckerLeafHashProperties is Test {
             metadata: metadata
         });
 
-        bytes32 canonical =
-            keccak256(abi.encodePacked(projectTokenCount, terminalTokenAmount, beneficiary, metadata));
+        bytes32 canonical = keccak256(abi.encodePacked(projectTokenCount, terminalTokenAmount, beneficiary, metadata));
 
         assertEq(produced, canonical, "leaf hash must equal keccak256(abi.encodePacked(...))");
     }
@@ -219,14 +218,7 @@ contract SuckerLeafHashProperties is Test {
     // branch.
 
     /// @notice [FUZZ] `computeBranchRoot` matches a readable reference implementation for arbitrary index.
-    function testFuzz_branchRootMatchesReference(
-        bytes32 item,
-        bytes32[32] memory branch,
-        uint256 index
-    )
-        public
-        pure
-    {
+    function testFuzz_branchRootMatchesReference(bytes32 item, bytes32[32] memory branch, uint256 index) public pure {
         bytes32 optimized = JBSuckerLib.computeBranchRoot({item: item, branch: branch, index: index});
         bytes32 expected = _referenceBranchRoot({item: item, branch: branch, index: index});
         assertEq(optimized, expected, "branchRoot mismatch vs reference");
@@ -234,7 +226,8 @@ contract SuckerLeafHashProperties is Test {
 
     /// @notice [FUZZ] `computeBranchRoot` ignores index bits at or above the tree depth (only the low 32 bits matter).
     /// @dev The 32-level proof only consults bits 0..31 of `index`; setting any higher bit must not change the root.
-    /// This is what makes the `_validate` index-bounds check (`index < 2^32`) the sole gate against out-of-range leaves.
+    /// This is what makes the `_validate` index-bounds check (`index < 2^32`) the sole gate against out-of-range
+    /// leaves.
     function testFuzz_branchRootIgnoresHighIndexBits(
         bytes32 item,
         bytes32[32] memory branch,

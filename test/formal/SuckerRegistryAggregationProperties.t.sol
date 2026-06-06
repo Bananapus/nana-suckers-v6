@@ -44,11 +44,7 @@ contract RegistryAggHarness is JBSuckerRegistry {
         returns (PeerValueScratch memory, uint256)
     {
         uint256 newCount = _recordPeerValue({
-            scratch: s,
-            chainId: chainId,
-            value: value,
-            snapshotTimestamp: snapshotTimestamp,
-            isActive: isActive
+            scratch: s, chainId: chainId, value: value, snapshotTimestamp: snapshotTimestamp, isActive: isActive
         });
         s.chainCount = newCount;
         return (s, newCount);
@@ -233,15 +229,7 @@ contract SuckerRegistryAggregationProperties is Test {
     }
 
     /// @notice [FUZZ] On equal freshness, the LARGER value wins (MAX tie-break).
-    function testFuzz_sameFreshnessMaxWins(
-        uint256 chainId,
-        uint256 v1,
-        uint256 v2,
-        uint256 ts
-    )
-        public
-        view
-    {
+    function testFuzz_sameFreshnessMaxWins(uint256 chainId, uint256 v1, uint256 v2, uint256 ts) public view {
         PeerValueScratch memory s = _reg.scratch(2);
         uint256 c;
         (s, c) = _reg.record(s, chainId, v1, ts, true);
