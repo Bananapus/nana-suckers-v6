@@ -286,7 +286,8 @@ contract SwapCCIPScalingTest is Test {
     // =========================================================================
 
     /// @notice Two overlapping batches with different rates — each claim gets its own rate.
-    /// This was the cross-batch rate mixing bug (NM-002 / SI-002 / FF-002).
+    /// Guards against the cross-batch exchange-rate mixing bug where overlapping roots arriving at different swap
+    /// rates would blend into a single averaged rate instead of each leaf keeping its own batch's rate.
     function test_scaling_overlappingBatches_rateIsolation() public {
         address token = address(usdc);
 

@@ -26,7 +26,7 @@ import {JBSourceContext} from "../../src/structs/JBSourceContext.sol";
 import {JBSuckerDeployerConfig} from "../../src/structs/JBSuckerDeployerConfig.sol";
 import {JBTokenMapping} from "../../src/structs/JBTokenMapping.sol";
 
-contract CodexNemesisSuckerHarness is JBSucker {
+contract RemoteSurplusSuckerHarness is JBSucker {
     uint256 internal _peerChainId = 10;
 
     constructor(
@@ -76,7 +76,7 @@ contract CodexNemesisSuckerHarness is JBSucker {
     {}
 }
 
-contract CodexNemesisMockDeployer is IJBSuckerDeployer {
+contract StubDeployer is IJBSuckerDeployer {
     IJBSucker internal _sucker;
 
     function setSucker(IJBSucker sucker) external {
@@ -104,13 +104,13 @@ contract CodexNemesisMockDeployer is IJBSuckerDeployer {
     }
 }
 
-contract CodexNemesisRevertingPrices {
+contract RevertingPrices {
     function pricePerUnitOf(uint256, uint256, uint256, uint256) external pure returns (uint256) {
         revert("NO_FEED");
     }
 }
 
-contract CodexNemesisFindingsTest is Test {
+contract RemoteSurplusDecimalAndMissingFeedTest is Test {
     address internal constant DIRECTORY = address(0xD1);
     address internal constant PERMISSIONS = address(0xD2);
     address internal constant PROJECTS = address(0xD3);
@@ -121,7 +121,7 @@ contract CodexNemesisFindingsTest is Test {
     uint32 internal constant USD = 2;
 
     JBSuckerRegistry internal registry;
-    CodexNemesisSuckerHarness internal singleton;
+    RemoteSurplusSuckerHarness internal singleton;
 
     function setUp() public {
         vm.mockCall(DIRECTORY, abi.encodeCall(IJBDirectory.PROJECTS, ()), abi.encode(PROJECTS));
@@ -131,20 +131,20 @@ contract CodexNemesisFindingsTest is Test {
         registry = new JBSuckerRegistry({
             directory: IJBDirectory(DIRECTORY),
             permissions: IJBPermissions(PERMISSIONS),
-            prices: IJBPrices(address(new CodexNemesisRevertingPrices())),
+            prices: IJBPrices(address(new RevertingPrices())),
             initialOwner: address(this),
             trustedForwarder: address(0)
         });
 
         singleton =
-            new CodexNemesisSuckerHarness(IJBDirectory(DIRECTORY), IJBPermissions(PERMISSIONS), IJBTokens(TOKENS));
+            new RemoteSurplusSuckerHarness(IJBDirectory(DIRECTORY), IJBPermissions(PERMISSIONS), IJBTokens(TOKENS));
     }
 
     // Regression for the mixed-decimal merge fix: same-currency source contexts that carry DIFFERENT decimals must
     // NOT be summed under one decimal scale (their raw amounts are on different scales). They are kept as separate
     // per-(currency, decimals) entries so the registry can decimal-adjust each independently before summing.
-    function test_codexNemesis_mixedDecimalsSameCurrencyAreKeptSeparateAndValuedCorrectly() external {
-        CodexNemesisSuckerHarness sucker = _clone("mixed-decimals");
+    function test_mixedDecimalsSameCurrencyAreKeptSeparateAndValuedCorrectly() external {
+        RemoteSurplusSuckerHarness sucker = _clone("mixed-decimals");
 
         address usdc = makeAddr("USDC");
         address dai = makeAddr("DAI");
@@ -173,8 +173,8 @@ contract CodexNemesisFindingsTest is Test {
         assertEq(valued.value, _normalizedTwoUsd(), "matches the correct normalized 2 USD at 6 decimals");
     }
 
-    function test_codexNemesis_missingPriceFeedDropsSurplusButKeepsSupply() external {
-        CodexNemesisSuckerHarness sucker = _clone("missing-feed");
+    function test_missingPriceFeedDropsSurplusButKeepsSupply() external {
+        RemoteSurplusSuckerHarness sucker = _clone("missing-feed");
         sucker.test_setPeerChainId(42_161);
 
         address foreignToken = makeAddr("FOREIGN_TOKEN");
@@ -190,7 +190,7 @@ contract CodexNemesisFindingsTest is Test {
         contexts[0] = _ctx(foreignToken, 18, 500 ether, 0);
         sucker.test_acceptSnapshot({supply: 1000 ether, contexts: contexts, freshness: 1});
 
-        CodexNemesisMockDeployer deployer = new CodexNemesisMockDeployer();
+        StubDeployer deployer = new StubDeployer();
         deployer.setSucker(IJBSucker(address(sucker)));
         registry.allowSuckerDeployer(address(deployer));
 
@@ -207,8 +207,8 @@ contract CodexNemesisFindingsTest is Test {
         assertTrue(foreignCurrency != USD, "test must force a price lookup");
     }
 
-    function _clone(bytes memory salt) internal returns (CodexNemesisSuckerHarness clone) {
-        clone = CodexNemesisSuckerHarness(
+    function _clone(bytes memory salt) internal returns (RemoteSurplusSuckerHarness clone) {
+        clone = RemoteSurplusSuckerHarness(
             payable(address(LibClone.cloneDeterministic(address(singleton), keccak256(salt))))
         );
         clone.initialize(PROJECT_ID);
