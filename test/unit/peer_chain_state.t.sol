@@ -137,6 +137,16 @@ contract PeerChainAdjustedAccountsHookMock is IJBPeerChainAdjustedAccounts {
     }
 }
 
+/// @notice A hook with the peer-chain accounting selector that returns malformed successful data.
+contract MalformedPeerChainAdjustedAccountsHookMock {
+    function peerChainAdjustedAccountsOf(uint256) external pure {
+        assembly ("memory-safe") {
+            mstore(0, 1)
+            return(0, 32)
+        }
+    }
+}
+
 /// @title PeerChainStateTest
 /// @notice Tests the sucker as a raw cross-chain data carrier: fromRemote rebuilds the per-currency context set
 /// (deriving and caching each token's authoritative currency), peerChainContextsOf exposes it un-valued, and toRemote
@@ -424,23 +434,7 @@ contract PeerChainStateTest is Test {
         PeerChainAdjustedAccountsHookMock accountingHook = new PeerChainAdjustedAccountsHookMock({
             supply: 12 ether, surplus: 3 ether, balance: 0, token: TOKEN, decimals: 18
         });
-        vm.etch(CONTROLLER, hex"00");
-        JBRulesetMetadata memory metadata;
-        metadata.dataHook = address(accountingHook);
-        JBRuleset memory ruleset = JBRuleset({
-            cycleNumber: 0,
-            id: 1,
-            basedOnId: 0,
-            start: 0,
-            duration: 0,
-            weight: 0,
-            weightCutPercent: 0,
-            approvalHook: IJBRulesetApprovalHook(address(0)),
-            metadata: JBRulesetMetadataResolver.packRulesetMetadata(metadata)
-        });
-        vm.mockCall(
-            CONTROLLER, abi.encodeCall(IJBController.currentRulesetOf, (PROJECT_ID)), abi.encode(ruleset, metadata)
-        );
+        _mockCurrentRulesetDataHook(address(accountingHook));
 
         sucker.test_resetSendRootOverAMBCalled();
         sucker.toRemote(TOKEN);
@@ -457,6 +451,34 @@ contract PeerChainStateTest is Test {
         assertEq(m.sourceContexts[1].token, bytes32(uint256(uint160(TOKEN))), "hook context token");
         assertEq(m.sourceContexts[1].surplus, 3 ether, "hook surplus appended");
         assertEq(m.sourceContexts[1].balance, 0, "hook balance appended");
+    }
+
+    /// @notice toRemote ignores malformed successful data-hook peer accounting returns and still sends the baseline
+    /// terminal snapshot.
+    function test_toRemoteIgnoresMalformedDataHookPeerChainAdjustedAccounts() public {
+        _setRemoteTokenMapping();
+
+        vm.deal(address(sucker), 1 ether);
+        sucker.test_insertIntoTree(1 ether, TOKEN, 1 ether, bytes32(uint256(uint160(address(0xBEEF)))));
+
+        vm.mockCall(
+            CONTROLLER,
+            abi.encodeCall(IJBController.totalTokenSupplyWithReservedTokensOf, (PROJECT_ID)),
+            abi.encode(uint256(1000 ether))
+        );
+        _mockSingleETHTerminal({ethBalance: 50 ether, ethSurplus: 30 ether});
+
+        MalformedPeerChainAdjustedAccountsHookMock malformedHook = new MalformedPeerChainAdjustedAccountsHookMock();
+        _mockCurrentRulesetDataHook(address(malformedHook));
+
+        sucker.test_resetSendRootOverAMBCalled();
+        sucker.toRemote(TOKEN);
+
+        JBMessageRoot memory m = sucker.test_getLastSentMessage();
+        assertEq(m.sourceTotalSupply, 1000 ether, "malformed hook supply should be ignored");
+        assertEq(m.sourceContexts.length, 1, "malformed hook contexts should be ignored");
+        assertEq(m.sourceContexts[0].surplus, 30 ether, "terminal surplus remains");
+        assertEq(m.sourceContexts[0].balance, 50 ether, "terminal balance remains");
     }
 
     /// @notice toRemote assigns a monotonic source freshness key even when multiple roots are sent in one block.
@@ -642,6 +664,29 @@ contract PeerChainStateTest is Test {
         return JBSourceContext({
             token: bytes32(uint256(uint160(token))), decimals: decimals, surplus: surplus, balance: balance
         });
+    }
+
+    /// @notice Mock the controller's current ruleset with the given data hook.
+    function _mockCurrentRulesetDataHook(address dataHook) internal {
+        vm.etch(CONTROLLER, hex"00");
+
+        JBRulesetMetadata memory metadata;
+        metadata.dataHook = dataHook;
+        JBRuleset memory ruleset = JBRuleset({
+            cycleNumber: 0,
+            id: 1,
+            basedOnId: 0,
+            start: 0,
+            duration: 0,
+            weight: 0,
+            weightCutPercent: 0,
+            approvalHook: IJBRulesetApprovalHook(address(0)),
+            metadata: JBRulesetMetadataResolver.packRulesetMetadata(metadata)
+        });
+
+        vm.mockCall(
+            CONTROLLER, abi.encodeCall(IJBController.currentRulesetOf, (PROJECT_ID)), abi.encode(ruleset, metadata)
+        );
     }
 
     /// @notice Build a JBMessageRoot carrying the given contexts, using `nonce` as both the inbox nonce and the

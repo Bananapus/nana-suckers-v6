@@ -27,7 +27,7 @@
 | `JBArbitrumSucker` | Arbitrum retryable-ticket and gateway flow | Transport-specific fee sizing matters |
 | `JBCCIPSucker` | Chainlink CCIP delivery and optional LINK fee mode | Higher external dependency surface |
 | `JBSuckerDeployer` variants | Clone and configure chain-specific suckers | Deployment wiring is part of correctness |
-| `MerkleLib` / `JBSuckerLib` | Merkle and bytecode-heavy accounting helpers | Shared by runtime paths |
+| `MerkleLib` / `JBSuckerLib` / `JBPeerChainAdjustedAccountsLib` | Merkle and bytecode-heavy accounting helpers, plus defensive optional-hook return decoding | Shared by runtime paths |
 | `JBSwapCCIPSucker` (+ swap libs/structs) / `JBCeloSucker` | Swap-assisted CCIP bridging / Celo-oriented native-token handling | Archived (reference only — not compiled or deployed); see `src/archive/` |
 
 ## Trust boundaries
@@ -36,7 +36,8 @@
 - Transport authentication comes from the selected bridge or CCIP router, not from `JBSucker`.
 - Token mapping is permissioned project configuration and becomes economically sticky after sends.
 - Registry owner decisions affect which deployers can create suckers and what shared fee is charged.
-- Data-hook peer adjustments are optional and must fail closed into the baseline project snapshot.
+- Data-hook peer adjustments are optional and must fail closed into the baseline project snapshot, including malformed
+  successful return data.
 
 ## Critical flows
 

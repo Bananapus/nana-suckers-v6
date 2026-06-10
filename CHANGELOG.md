@@ -64,8 +64,8 @@ This is a V5-to-V6 migration changelog, not a package release log or commit hist
 Generated from Foundry `out/**/*.json` artifacts, filtered to this repo's own runtime source roots and excluding tests, scripts, and dependencies.
 
 - V5 comparison package: `nana-suckers-v5`.
-- Own-source ABI artifacts compared: V6 `52`, V5 `31`.
-- Contract/interface coverage: `21` added, `0` removed, `17` shared names with ABI changes, `14` shared names ABI-identical.
+- Own-source ABI artifacts compared: V6 `53`, V5 `31`.
+- Contract/interface coverage: `22` added, `0` removed, `17` shared names with ABI changes, `14` shared names ABI-identical.
 - Shared-name ABI item deltas: `342` added, `160` removed, `19` modified.
 
 Added V6 ABI artifacts:
@@ -79,6 +79,7 @@ Added V6 ABI artifacts:
 - `JBLeaf` from `src/structs/JBLeaf.sol`: `0` functions, `0` events, `0` errors.
 - `JBMessageRoot` from `src/structs/JBMessageRoot.sol`: `0` functions, `0` events, `0` errors.
 - `JBOutboxTree` from `src/structs/JBOutboxTree.sol`: `0` functions, `0` events, `0` errors.
+- `JBPeerChainAdjustedAccountsLib` from `src/libraries/JBPeerChainAdjustedAccountsLib.sol`: `0` functions, `0` events, `0` errors.
 - `JBPeerChainContext` from `src/structs/JBPeerChainContext.sol`: `0` functions, `0` events, `0` errors.
 - `JBPeerChainValue` from `src/structs/JBPeerChainValue.sol`: `0` functions, `0` events, `0` errors.
 - `JBRelayBeneficiary` from `src/libraries/JBRelayBeneficiary.sol`: `0` functions, `0` events, `0` errors.
