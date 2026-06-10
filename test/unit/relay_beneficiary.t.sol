@@ -96,6 +96,19 @@ contract RelayBeneficiaryTest is Test {
         assertEq(result, beneficiary, "Should return original beneficiary when relay address is zero");
     }
 
+    function test_resolve_returnsOriginalIfRelayBeneficiaryHasDirtyUpperBits() public {
+        _mockIsSucker(true);
+
+        bytes memory metadata = JBMetadataResolver.addToMetadata({
+            originalMetadata: bytes(""),
+            idToAdd: JBRelayBeneficiary.ID,
+            dataToAdd: abi.encode(uint256(type(uint160).max) + 1)
+        });
+
+        address result = harness.resolve(payer, beneficiary, projectId, metadata, registry);
+        assertEq(result, beneficiary, "Should return original beneficiary when relay address word is dirty");
+    }
+
     function test_resolve_returnsRelayBeneficiary() public {
         _mockIsSucker(true);
 
@@ -103,6 +116,19 @@ contract RelayBeneficiaryTest is Test {
 
         address result = harness.resolve(payer, beneficiary, projectId, metadata, registry);
         assertEq(result, relayAddress, "Should return relay beneficiary from metadata");
+    }
+
+    function test_resolve_returnsRelayBeneficiaryWithTrailingData() public {
+        _mockIsSucker(true);
+
+        bytes memory metadata = JBMetadataResolver.addToMetadata({
+            originalMetadata: bytes(""),
+            idToAdd: JBRelayBeneficiary.ID,
+            dataToAdd: abi.encodePacked(uint256(uint160(relayAddress)), bytes1(0xAA))
+        });
+
+        address result = harness.resolve(payer, beneficiary, projectId, metadata, registry);
+        assertEq(result, relayAddress, "Should return relay beneficiary from first metadata word");
     }
 
     function test_resolve_returnsOriginalIfDataTooShort() public {

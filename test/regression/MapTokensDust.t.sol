@@ -136,6 +136,35 @@ contract MapTokensDustTest is Test {
         assertEq(callerBalanceAfter, callerBalanceBefore - msgValue, "Balance should decrease by exact msgValue");
     }
 
+    /// @notice Duplicate disables in one batch only flush the outbox once, so the unused duplicate share is refunded.
+    function test_mapTokensDuplicateDisableRefundsUnusedShare() external {
+        MapTokensDustSucker sucker = _createTestSucker(projectId, "");
+
+        sucker.test_setRemoteToken(
+            tokenA, JBRemoteToken({enabled: true, emergencyHatch: false, minGas: 200_000, addr: remoteA})
+        );
+        sucker.test_setOutboxTreeCount(tokenA, 1);
+
+        JBTokenMapping[] memory maps = new JBTokenMapping[](2);
+        maps[0] = JBTokenMapping({localToken: tokenA, minGas: 200_000, remoteToken: bytes32(0)});
+        maps[1] = JBTokenMapping({localToken: tokenA, minGas: 200_000, remoteToken: bytes32(0)});
+
+        uint256 msgValue = 10;
+        uint256 expectedSpent = msgValue / 2;
+
+        address caller = makeAddr("caller");
+        vm.deal(caller, msgValue);
+
+        uint256 callerBalanceBefore = caller.balance;
+
+        vm.prank(caller);
+        sucker.mapTokens{value: msgValue}(maps);
+
+        uint256 callerBalanceAfter = caller.balance;
+
+        assertEq(callerBalanceAfter, callerBalanceBefore - expectedSpent, "unused duplicate share not refunded");
+    }
+
     /// @notice Fuzz test: for any msg.value and any numberToDisable (1-10), dust is always refunded.
     function test_mapTokensDustFuzz(uint256 msgValue) external {
         // Bound to avoid overflow and keep test tractable. Use 3 tokens to disable.

@@ -45,8 +45,19 @@ library JBRelayBeneficiary {
             return beneficiary;
         }
 
-        // Decode the relay beneficiary address.
-        address relayBeneficiary = abi.decode(data, (address));
+        // Load the first metadata word directly so malformed trailing bytes still fall back instead of reverting the
+        // surrounding payment.
+        uint256 relayBeneficiaryWord;
+        assembly ("memory-safe") {
+            relayBeneficiaryWord := mload(add(data, 32))
+        }
+        if (relayBeneficiaryWord > type(uint160).max) {
+            return beneficiary;
+        }
+
+        // The range guard above ensures the address cast cannot truncate.
+        // forge-lint: disable-next-line(unsafe-typecast)
+        address relayBeneficiary = address(uint160(relayBeneficiaryWord));
         if (relayBeneficiary == address(0)) {
             return beneficiary;
         }

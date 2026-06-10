@@ -119,7 +119,7 @@ Generated event/error name deltas:
 - Error names added:
   - `JBCCIPSucker_PositiveRootWithoutDelivery`, `JBCCIPSucker_UnderDeliveredAmount`, `JBCCIPSucker_UnexpectedDeliveredTokens`, `JBCCIPSucker_UnknownMessageType`, `JBCCIPSucker_WrongDeliveredToken`, `JBSuckerDeployer_AlreadyConfigured`, `JBSuckerDeployer_DeployerIsNotConfigured`, `JBSuckerDeployer_InvalidLayerSpecificConfiguration`.
   - `JBSuckerDeployer_LayerSpecificNotConfigured`, `JBSuckerDeployer_ZeroConfiguratorAddress`, `JBSuckerRegistry_FeeExceedsMax`, `JBSuckerRegistry_ZeroPeerChainId`, `JBSucker_Deprecated`, `JBSucker_ExpectedMsgValue`, `JBSucker_IndexOutOfRange`, `JBSucker_NoRetainedToRemoteFee`.
-  - `JBSucker_NoRetainedTransportPaymentRefund`, `JBSucker_NothingToSend`, `JBSucker_RefundFailed`, `JBSucker_RemoteTokenAlreadyMapped`, `JBSucker_ZeroBeneficiary`, `JBSucker_ZeroERC20Token`, `JBSucker_ZeroProjectTokenCount`, `MerkleLib_InsertTreeIsFull`.
+  - `JBSucker_NoRetainedTransportPaymentRefund`, `JBSucker_NothingToSend`, `JBSucker_RefundFailed`, `JBSucker_RemoteTokenAlreadyMapped`, `JBSucker_UnexpectedTokenBalance`, `JBSucker_ZeroBeneficiary`, `JBSucker_ZeroERC20Token`, `JBSucker_ZeroProjectTokenCount`, `MerkleLib_InsertTreeIsFull`.
   - `PRBMath_MulDiv_Overflow`, `SafeERC20FailedOperation`.
 - Error names removed or replaced:
   - `JBCCIPSuckerDeployer_InvalidCCIPRouter`, `JBSuckerDeployer_AlreadyConfigured`, `JBSuckerDeployer_DeployerIsNotConfigured`, `JBSuckerDeployer_InvalidLayerSpecificConfiguration`, `JBSuckerDeployer_LayerSpecificNotConfigured`, `JBSuckerDeployer_Unauthorized`, `JBSuckerDeployer_ZeroConfiguratorAddress`, `JBSucker_Deprecated`.

@@ -80,7 +80,8 @@ This file documents the invariants the **runtime contracts in this repo** enforc
   - OP / Arb (base class): `NATIVE_TOKEN` may only map to `NATIVE_TOKEN` or `bytes32(0)`.
   - CCIP: `NATIVE_TOKEN` may map to an arbitrary remote ERC-20 (the remote chain might denominate ETH as a wrapped token).
 - All variants enforce `map.minGas >= MESSENGER_ERC20_MIN_GAS_LIMIT` so a too-low gas limit cannot strand bridged tokens.
-- `mapTokens` refunds `msg.value` on enable-only batches and refunds dust on mixed batches (best-effort).
+- `mapTokens` refunds all `msg.value` not used by an actual final root send, including enable-only value,
+  duplicate/no-op disable value, and integer-division dust.
 
 ## B.2 Deprecation has a 14-day delay
 
