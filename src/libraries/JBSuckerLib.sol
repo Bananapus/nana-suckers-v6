@@ -12,6 +12,7 @@ import {JBRulesetMetadata} from "@bananapus/core-v6/src/structs/JBRulesetMetadat
 import {IERC165} from "@openzeppelin/contracts/utils/introspection/ERC165.sol";
 
 import {IJBPeerChainAdjustedAccounts} from "../interfaces/IJBPeerChainAdjustedAccounts.sol";
+import {JBPeerChainAdjustedAccountsLib} from "./JBPeerChainAdjustedAccountsLib.sol";
 import {JBInboxTreeRoot} from "../structs/JBInboxTreeRoot.sol";
 import {JBMessageRoot} from "../structs/JBMessageRoot.sol";
 import {JBSourceContext} from "../structs/JBSourceContext.sol";
@@ -249,15 +250,13 @@ library JBSuckerLib {
         address dataHook = ruleset.dataHook();
         if (dataHook == address(0) || dataHook.code.length == 0) return (0, new JBSourceContext[](0));
 
-        // Ask the hook for any off-terminal supply and per-context surplus/balance. A non-supporting or broken hook is
-        // caught and ignored so the baseline snapshot still goes out.
-        try IJBPeerChainAdjustedAccounts(dataHook).peerChainAdjustedAccountsOf(projectId) returns (
-            uint256 supply, JBSourceContext[] memory contexts
-        ) {
-            return (supply, contexts);
-        } catch {
-            return (0, new JBSourceContext[](0));
-        }
+        // Ask the hook for any off-terminal supply and per-context surplus/balance. Non-supporting, broken, or
+        // malformed hooks are ignored so the baseline snapshot still goes out.
+        (bool hookCallSucceeded, bytes memory hookData) =
+            dataHook.staticcall(abi.encodeCall(IJBPeerChainAdjustedAccounts.peerChainAdjustedAccountsOf, (projectId)));
+        if (!hookCallSucceeded) return (0, new JBSourceContext[](0));
+
+        return JBPeerChainAdjustedAccountsLib.decode(hookData);
     }
 
     /// @notice Reads one accounting context's raw surplus and balance into a `JBSourceContext`, performing no price
