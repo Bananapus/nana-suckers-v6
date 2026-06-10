@@ -157,9 +157,9 @@ Archived (src/archive/, not compiled or deployed) — retained for reference.
 
 When no TWAP-capable route is available for a cross-denomination swap, a hookless V4 pool can be used as a last-resort spot-priced fallback. `_getV4Quote` then uses the instantaneous spot tick from `POOL_MANAGER.getSlot0()` instead of a TWAP oracle. This tick is manipulable via sandwich attacks, allowing an attacker to skew the `minAmountOut` and extract value from the swap. The sigmoid slippage model limits the damage but operates on a corrupted baseline. This is an accepted liveness tradeoff for the no-TWAP-route case: reverting when no TWAP is available would cause the CCIP message to fail, leaving bridged tokens stuck until manual retry. Hooked V4 pools must serve the configured TWAP window; if the hook's `observe()` reverts or lacks history, that pool is not eligible to beat a V3 TWAP route or degrade silently to spot.
 
-### 10.8 `mapTokens` refunds ETH on enable-only batches
+### 10.8 `mapTokens` refunds unused ETH
 
-`mapTokens()` only uses `msg.value` when one or more mappings are being disabled and need transport payment for the final root flush. If every mapping in the batch is enable-only (`numberToDisable == 0`), the full `msg.value` is refunded to `_msgSender()`. If the refund transfer fails (e.g., the caller is a non-payable contract), the call reverts with `JBSucker_RefundFailed`. When disables are present, any dust remainder from integer division (`msg.value % numberToDisable`) is also refunded on a best-effort basis.
+`mapTokens()` only uses `msg.value` when one or more mappings are being disabled and need transport payment for the final root flush. The value is split across disable candidates, but each `_mapToken` call reports whether it actually sent a root. Any ETH that was not used by a root send is refunded to `_msgSender()`, including enable-only value, duplicate/no-op disable value, and integer-division dust. If the refund transfer fails (e.g., the caller is a non-payable contract), the call reverts with `JBSucker_RefundFailed`.
 
 ### [ARCHIVED] 10.9 Zero-value `prepare()` is rejected (layered with zero-leaf inbox skip)
 

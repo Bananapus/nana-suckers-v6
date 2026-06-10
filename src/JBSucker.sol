@@ -143,6 +143,9 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     /// @notice Thrown when `msg.value` is sent for an action that expects none.
     error JBSucker_UnexpectedMsgValue(uint256 value);
 
+    /// @notice Thrown when an ERC-20 terminal balance does not decrease by the amount added to the project balance.
+    error JBSucker_UnexpectedTokenBalance(address token, uint256 expectedBalance, uint256 actualBalance);
+
     /// @notice Thrown when a required beneficiary address is the zero address.
     error JBSucker_ZeroBeneficiary(bytes32 beneficiary);
 
@@ -648,42 +651,34 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     /// @param maps A list of local and remote terminal token addresses to map, and minimum amount/gas limits for
     /// bridging them.
     function mapTokens(JBTokenMapping[] calldata maps) external payable override {
-        uint256 numberToDisable;
+        uint256 disableCandidates;
 
-        // Loop over the number of mappings and increase numberToDisable to correctly set transportPaymentValue.
-        // Note: if all mappings are enable-only (no disables), `numberToDisable` stays 0 and `transportPaymentValue`
-        // is set to 0 for each call. Any ETH sent with the transaction is refunded after the second loop.
+        // Count mappings that currently need a final outbox flush. This is an upper bound because duplicated disables
+        // in the same batch can become no-ops after the first one updates `numberOfClaimsSent`.
         for (uint256 h; h < maps.length;) {
             JBOutboxTree storage _outbox = _outboxOf[maps[h].localToken];
             if (maps[h].remoteToken == bytes32(0) && _outbox.numberOfClaimsSent != _outbox.tree.count) {
-                numberToDisable++;
+                ++disableCandidates;
             }
             unchecked {
                 ++h;
             }
         }
 
-        // Perform each token mapping.
+        // Split the attached value across disable candidates, then refund any value not actually used by a final
+        // outbox flush. Enable-only and duplicate/no-op disable entries do not consume transport payment.
+        uint256 transportPaymentValue = disableCandidates == 0 ? 0 : msg.value / disableCandidates;
+        uint256 transportPaymentSpent;
         for (uint256 i; i < maps.length;) {
-            _mapToken({map: maps[i], transportPaymentValue: numberToDisable > 0 ? msg.value / numberToDisable : 0});
+            transportPaymentSpent += _mapToken({map: maps[i], transportPaymentValue: transportPaymentValue});
             unchecked {
                 ++i;
             }
         }
 
-        // If no tokens were disabled, the full `msg.value` is unused — refund it.
-        if (numberToDisable == 0) {
-            if (msg.value > 0) {
-                _sendNativeTo({beneficiary: payable(_msgSender()), amount: msg.value});
-            }
-        } else {
-            // Refund any remainder from integer division so dust wei isn't stuck in the contract.
-            uint256 remainder = msg.value % numberToDisable;
-            if (remainder > 0) {
-                // Best-effort refund — don't revert if caller can't accept ETH.
-                (bool _ok,) = _msgSender().call{value: remainder}("");
-                _ok; // Silence unused-variable warning; failure is intentionally ignored.
-            }
+        // Return enable-only value, duplicate/no-op disable value, and integer-division dust to the caller.
+        if (msg.value > transportPaymentSpent) {
+            _sendNativeTo({beneficiary: payable(_msgSender()), amount: msg.value - transportPaymentSpent});
         }
     }
 
@@ -1123,8 +1118,14 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         });
 
         if (isErc20) {
-            // Sanity check: catches fee-on-transfer / non-conforming ERC-20s that move less than `amount`.
-            assert(IERC20(token).balanceOf(address(this)) == balanceBefore - amount);
+            // The terminal must pull exactly `amount`; fee-on-transfer or non-conforming tokens are unsupported.
+            uint256 expectedBalance = balanceBefore - amount;
+            uint256 actualBalance = IERC20(token).balanceOf(address(this));
+            if (actualBalance != expectedBalance) {
+                revert JBSucker_UnexpectedTokenBalance({
+                    token: token, expectedBalance: expectedBalance, actualBalance: actualBalance
+                });
+            }
         }
     }
 
@@ -1229,7 +1230,14 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     /// @param map The local and remote terminal token addresses to map, and minimum amount/gas limits for bridging
     /// them.
     /// @param transportPaymentValue The amount of `msg.value` to send for the token mapping.
-    function _mapToken(JBTokenMapping calldata map, uint256 transportPaymentValue) internal {
+    /// @return transportPaymentSpent The amount of transport payment used by a final outbox flush.
+    function _mapToken(
+        JBTokenMapping calldata map,
+        uint256 transportPaymentValue
+    )
+        internal
+        returns (uint256 transportPaymentSpent)
+    {
         address token = map.localToken;
         JBRemoteToken memory currentMapping = _remoteTokenFor[token];
 
@@ -1288,6 +1296,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
             // _sendRoot uses the `currentMapping` parameter, not storage, so this is safe.
             _remoteTokenFor[token].enabled = false;
             _sendRoot({transportPayment: transportPaymentValue, token: token, remoteToken: currentMapping});
+            transportPaymentSpent = transportPaymentValue;
         }
 
         // Update the reverse reservation if an unused local token is being remapped to a new remote token.
