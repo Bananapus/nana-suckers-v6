@@ -13,6 +13,7 @@ import {IERC165} from "@openzeppelin/contracts/utils/introspection/ERC165.sol";
 
 import {IJBPeerChainAdjustedAccounts} from "../interfaces/IJBPeerChainAdjustedAccounts.sol";
 import {JBPeerChainAdjustedAccountsLib} from "./JBPeerChainAdjustedAccountsLib.sol";
+import {JBAccountingSnapshot} from "../structs/JBAccountingSnapshot.sol";
 import {JBInboxTreeRoot} from "../structs/JBInboxTreeRoot.sol";
 import {JBMessageRoot} from "../structs/JBMessageRoot.sol";
 import {JBSourceContext} from "../structs/JBSourceContext.sol";
@@ -35,6 +36,37 @@ library JBSuckerLib {
     //*********************************************************************//
     // ---------------------- external transactions ---------------------- //
     //*********************************************************************//
+
+    /// @notice Build the cross-chain accounting snapshot (total supply plus per-context surplus and balance).
+    /// @dev Extracted from `JBSucker.syncAccountingData` to reduce child contract bytecode. Called via DELEGATECALL.
+    /// The snapshot carries each context's surplus and balance in its own currency, without price-feed valuation.
+    /// @param directory The JB directory to look up controllers and terminals.
+    /// @param projectId The project ID.
+    /// @param messageVersion The message format version.
+    /// @param sourceTimestamp The monotonic source freshness key for this snapshot.
+    /// @return snapshot The constructed accounting snapshot.
+    function buildAccountingSnapshot(
+        IJBDirectory directory,
+        uint256 projectId,
+        uint8 messageVersion,
+        uint256 sourceTimestamp
+    )
+        external
+        view
+        returns (JBAccountingSnapshot memory snapshot)
+    {
+        // Snapshot the project's per-context surplus and balance, un-valued. No price oracle is consulted on send.
+        (uint256 localTotalSupply, JBSourceContext[] memory sourceContexts) =
+            _snapshotAccountsOf({directory: directory, projectId: projectId});
+
+        // Construct the accounting-only message without any token-local merkle root.
+        snapshot = JBAccountingSnapshot({
+            version: messageVersion,
+            sourceTotalSupply: localTotalSupply,
+            sourceContexts: sourceContexts,
+            sourceTimestamp: sourceTimestamp
+        });
+    }
 
     /// @notice Build the cross-chain snapshot message (total supply plus per-context surplus and balance).
     /// @dev Extracted from `JBSucker._buildSnapshotAndSend` to reduce child contract bytecode. Called via DELEGATECALL.

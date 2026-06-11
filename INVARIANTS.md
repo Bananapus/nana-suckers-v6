@@ -26,6 +26,7 @@ This file documents the invariants the **runtime contracts in this repo** enforc
 - Reverts on emergency-hatched tokens; reverts in `SENDING_DISABLED` / `DEPRECATED`; reverts when nothing has changed since the last relay (`outbox.balance == 0 && tree.count == numberOfClaimsSent`).
 - Fee payment is **best-effort**: a `try/catch` around the fee project's `terminal.pay(...)`. On failure the fee ETH is retained as **refundable caller credit** (not silently rebated to `transportPayment`), which is critical for zero-cost bridges (OP/Base/Arb L2→L1) that revert if any value is forwarded to the AMB call.
 - `transportPayment = msg.value - toRemoteFee` is exactly what flows to `_sendRootOverAMB`. The implementation does not silently re-route ETH between accounts.
+- `syncAccountingData()` is also permissionless, but it sends only the project-wide accounting snapshot. It pays no registry `toRemoteFee`, allows retrying unchanged accounting data, and forwards `msg.value` only as bridge transport payment.
 
 ## A.3 Claim — mint to leaf beneficiary, never to caller
 
@@ -37,12 +38,13 @@ This file documents the invariants the **runtime contracts in this repo** enforc
   - the leaf hash `keccak256(abi.encodePacked(projectTokenCount, terminalTokenAmount, beneficiary, metadata))` (via `_buildTreeHash`) verifies against the per-token inbox root.
 - **Per-leaf hash defense (Section D, F-REF-D class).** After validation, `executedLeafHashOf[terminalToken][index] = leafHash` (`JBSucker.sol:151, 1346`). The bare executed bitmap proves "some leaf at index I was executed"; the stored hash proves *which* leaf — binding the index to the actual `(amount, beneficiary, metadata)` content. Downstream hooks whose address is the beneficiary (notably `JBReferralSplitHook.claimAndPush`) re-derive the leaf hash from caller-supplied claim data and reject any forged data — the naive bitmap-only check is **not** sufficient and is exploitable by a front-running attacker that pre-empts the legitimate `claim` with a self-serving leaf shape. See `jb-sucker-claim-front-run-defense` skill.
 
-## A.4 Cross-chain message ingress — `fromRemote`
+## A.4 Cross-chain message ingress — `fromRemote` and `fromRemoteAccounting`
 
 - `fromRemote(JBMessageRoot)` is auth-gated to the messenger (`JBSucker.sol:415-480`). Critically, it uses **raw `msg.sender`**, never `_msgSender()`, to authenticate the AMB (`JBSucker.sol:417-419`). This defeats ERC-2771 forwarder spoofing — a trusted forwarder cannot append a calldata suffix to impersonate the bridge messenger.
 - `MESSAGE_VERSION` mismatches revert.
 - Per-token inbox state advances on any **strictly-greater** `root.remoteRoot.nonce` (not strictly sequential). Stale nonces emit `StaleRootRejected` and return silently (intentional — reverting would lose bridged native ETH).
-- The **project-wide snapshot** (`peerChainTotalSupply` plus the enumerable per-currency context set `_peerContexts`) advances only when `root.sourceTimestamp > snapshotTimestamp` — fresher source-timestamp wins, regardless of which token's message carried it. A fresher snapshot rebuilds the whole `_peerContexts` set, so contexts dropped by the new snapshot simply vanish. Each remote context resolves to its local token, whose authoritative accounting-context currency is read once from the terminal (`accountingContextForTokenOf(token).currency`) and cached; contexts within a snapshot are summed only when they match on **both currency and decimals**. Same-currency contexts that carry different decimals (including ones appended by `IJBPeerChainAdjustedAccounts` hooks) are kept as separate per-`(currency, decimals)` entries and decimals-adjusted independently at read time, so raw amounts on different scales are never summed across precisions. Optional data-hook peer adjustments are read through `staticcall` and defensively decoded; reverting, non-supporting, or malformed successful returns contribute no extra supply or contexts. Stale per-token messages cannot roll back shared state.
+- `fromRemoteAccounting(JBAccountingSnapshot)` is auth-gated to the same messenger path and applies the same message-version gate, but it has no token-local root, amount, or inbox state to update.
+- The **project-wide snapshot** (`peerChainTotalSupply` plus the enumerable per-currency context set `_peerContexts`) advances only when `sourceTimestamp > snapshotTimestamp` — fresher source-timestamp wins, regardless of whether the snapshot arrived with a root or through `fromRemoteAccounting`. A fresher snapshot rebuilds the whole `_peerContexts` set, so contexts dropped by the new snapshot simply vanish. Each remote context resolves to its local token, whose authoritative accounting-context currency is read once from the terminal (`accountingContextForTokenOf(token).currency`) and cached; contexts within a snapshot are summed only when they match on **both currency and decimals**. Same-currency contexts that carry different decimals (including ones appended by `IJBPeerChainAdjustedAccounts` hooks) are kept as separate per-`(currency, decimals)` entries and decimals-adjusted independently at read time, so raw amounts on different scales are never summed across precisions. Optional data-hook peer adjustments are read through `staticcall` and defensively decoded; reverting, non-supporting, or malformed successful returns contribute no extra supply or contexts. Stale messages cannot roll back shared state.
 - Roots are accepted in `DEPRECATED` state to prevent stranding tokens already sent before deprecation — outbound sends are blocked in `SENDING_DISABLED`/`DEPRECATED` so double-spend is impossible.
 - Unmapped tokens are accepted (claims later fail at mapping lookup) — rejecting at ingress time would permanently lose bridged tokens for a token that becomes mappable later.
 
@@ -141,11 +143,15 @@ Base contract. All cross-chain variants inherit. ERC-2771–aware for app-layer 
 
 - **`fromRemote(JBMessageRoot calldata root) payable`** — `JBSucker.sol:415-480`. Only the messenger via `_isRemotePeer(msg.sender)`. Uses raw `msg.sender`, never `_msgSender()`.
   - **Invariant:** per-token inbox advances on strictly-greater nonce; project-wide snapshot advances on strictly-greater `sourceTimestamp`; stale nonces silently ignored (event-emitting); accepted even in `DEPRECATED`.
+- **`fromRemoteAccounting(JBAccountingSnapshot calldata snapshot)`** — only the messenger via `_isRemotePeer(msg.sender)`. Uses raw `msg.sender`, never `_msgSender()`.
+  - **Invariant:** project-wide snapshot advances on strictly-greater `sourceTimestamp`; token-local inbox roots and claimable balances are unchanged.
 
 ### Permissionless relay
 
 - **`toRemote(address token) payable`** — `JBSucker.sol:646-700`. Ships outbox root + locked terminal-token funds across the bridge.
   - **Invariant:** registry fee paid best-effort (retained on failure for caller pull); `transportPayment` preserved as `msg.value - fee`; reverts on emergency-hatched tokens; reverts if nothing changed since last relay.
+- **`syncAccountingData() payable`** — ships only the current accounting snapshot across the bridge.
+  - **Invariant:** no registry `toRemoteFee`; root/inbox state and `numberOfClaimsSent` unchanged, including on duplicate accounting snapshots.
 
 ### Operator / permissioned configuration
 
@@ -186,6 +192,7 @@ OP-Stack transport. Used for Optimism mainnet and similarly-shaped chains.
 - **`peerChainId()` view** — hardcoded `1 ↔ 10`, `11_155_111 ↔ 11_155_420` mapping (mainnet/sepolia symmetry).
 - **`_isRemotePeer(address sender)`** — verifies `sender == OPMESSENGER && xDomainMessageSender == peer()` (`JBOptimismSucker.sol:82-84`).
 - **`_sendRootOverAMB(...)`** — bridges ERC-20 via `OPBRIDGE.bridgeERC20To` (allowance granted, then revoked to zero); forwards root via `OPMESSENGER.sendMessage{value: nativeValue}` calling `JBSucker.fromRemote(root)` on peer. Reverts on non-zero `transportPayment` (OP bridge is zero-cost).
+- **`_sendAccountingSnapshotOverAMB(...)`** — forwards an OP messenger call to `JBSucker.fromRemoteAccounting(snapshot)` with no token bridge and rejects non-zero `transportPayment`.
 
 ## C.3 JBBaseSucker — `src/JBBaseSucker.sol`
 
@@ -204,6 +211,7 @@ Arbitrum transport. Splits behavior by `LAYER == L1 | L2`.
 - **`peerChainId()`** — `1 ↔ 42161`, `11_155_111 ↔ 421_614`.
 - **`_isRemotePeer(address sender)`** — L1: `sender == ARBINBOX.bridge() && peer == IOutbox(bridge.activeOutbox()).l2ToL1Sender()`. L2: `sender == AddressAliasHelper.applyL1ToL2Alias(peer)` (`JBArbitrumSucker.sol:100-113`).
 - **`_sendRootOverAMB(...)`** — L1→L2 via `_toL2` (creates two retryable tickets: one for the ERC-20 token bridge, one for the root message — these are redeemed *independently* on L2 with no ordering guarantee; `_addToBalance` defends via `amountToAddToBalanceOf` balance check). L2→L1 via `_toL1` using `ArbSys.sendTxToL1`. L2→L1 is zero-cost (reverts on non-zero `transportPayment`); L1→L2 requires `transportPayment > 0` for retryable tickets.
+- **`_sendAccountingSnapshotOverAMB(...)`** — sends only `JBSucker.fromRemoteAccounting(snapshot)`. L1→L2 still requires retryable-ticket payment; L2→L1 remains zero-cost and rejects non-zero `transportPayment`.
 
 ## C.6 JBCCIPSucker — `src/JBCCIPSucker.sol`
 
@@ -211,11 +219,13 @@ Chainlink CCIP transport. Adds inbound `ccipReceive`.
 
 - **`peerChainId()`** — returns `REMOTE_CHAIN_ID` set at construction.
 - **`getRouter()`** view — returns `CCIP_ROUTER` address.
-- **`ccipReceive(Client.Any2EVMMessage)`** — `JBCCIPSucker.sol:160-230`. Only the immutable `CCIP_ROUTER` (raw `msg.sender` check). Verifies decoded `origin == _peerAddress()` and `sourceChainSelector == REMOTE_CHAIN_SELECTOR`. Discriminates message type via `JBCCIPLib.decodeTypedMessage`; only `_CCIP_MSG_TYPE_ROOT` accepted.
+- **`ccipReceive(Client.Any2EVMMessage)`** — `JBCCIPSucker.sol:160-230`. Only the immutable `CCIP_ROUTER` (raw `msg.sender` check). Verifies decoded `origin == _peerAddress()` and `sourceChainSelector == REMOTE_CHAIN_SELECTOR`. Discriminates message type via `JBCCIPLib.decodeTypedMessage`; accepts `_CCIP_MSG_TYPE_ROOT` and `_CCIP_MSG_TYPE_ACCOUNTING`.
   - **Delivered-amount invariants** (`JBCCIPSucker.sol:190-216`): `destTokenAmounts.length <= 1`; if length 0 then `root.amount == 0`; if length 1 then `delivered.token` equals the local mapped token for ERC-20 roots or the router-reported wrapped-native token for native roots, and `delivered.amount >= root.amount`. These bind the advertised root to the actually-bridged tokens — a compromised peer that ships an inflated root cannot mint unbacked project tokens.
   - Native-token roots are unwrapped only after the delivered token is confirmed to be the router's wrapped-native token.
   - Forwards to `this.fromRemote(root)` after delivery validation.
+- **Accounting-message invariants:** `_CCIP_MSG_TYPE_ACCOUNTING` must deliver zero token amounts and forwards to `this.fromRemoteAccounting(snapshot)`, so a malformed accounting delivery cannot create claim backing.
 - **`_sendRootOverAMB(...)`** — supports two fee modes: native-ETH (`transportPayment > 0`) or LINK pulled from `_msgSender()` (`transportPayment == 0`, for chains like Tempo with no meaningful native). Failed refunds retained as caller credit via `_retainTransportPaymentRefund`.
+- **`_sendAccountingSnapshotOverAMB(...)`** — uses the same native-ETH/LINK fee modes as root sends with an empty token-amount list and a typed accounting payload.
 - **`_isRemotePeer(address)`** — returns `sender == address(this)` because `ccipReceive` (not the AMB callback) is the authoritative ingress point.
 - **`_validateTokenMapping(...)`** — removes the OP/Arb native-only restriction; still enforces `minGas >= MESSENGER_ERC20_MIN_GAS_LIMIT`.
 
@@ -273,9 +283,9 @@ Ownable registry. Tracks per-project sucker inventory + deployer allowlist + sha
 
 1. **Per-leaf executed-hash defense.** `executedLeafHashOf[token][index]` stores the keccak256 of the leaf content after `_validate` succeeds. Downstream beneficiary contracts (notably `JBReferralSplitHook`) re-derive the hash via `abi.encodePacked(projectTokenCount, terminalTokenAmount, beneficiary, metadata)` (same shape as `_buildTreeHash`) and authenticate that a front-runner did not pre-empt their claim with a different leaf shape. The naive "just check the executed bitmap" defense is **insufficient**; see `jb-sucker-claim-front-run-defense` skill.
 
-2. **AMB ingress uses raw `msg.sender`.** `fromRemote` (`JBSucker.sol:415-480`) and `ccipReceive` (`JBCCIPSucker.sol:160-230`) **never** use `_msgSender()` for caller authentication. ERC-2771 forwarder spoofing is structurally impossible.
+2. **AMB ingress uses raw `msg.sender`.** `fromRemote`, `fromRemoteAccounting`, and `ccipReceive` **never** use `_msgSender()` for caller authentication. ERC-2771 forwarder spoofing is structurally impossible.
 
-3. **Snapshot freshness key.** `peerChainTotalSupply` and the per-currency context set `_peerContexts` are gated by `snapshotTimestamp` (strictly greater source-timestamp wins, regardless of which token's message carried it; a fresher snapshot rebuilds the whole context set). Per-token inbox roots are gated by per-token nonce (strictly greater). Two independent gates — neither can roll the other back.
+3. **Snapshot freshness key.** `peerChainTotalSupply` and the per-currency context set `_peerContexts` are gated by `snapshotTimestamp` (strictly greater source-timestamp wins, regardless of whether the snapshot arrived with a root or through `fromRemoteAccounting`; a fresher snapshot rebuilds the whole context set). Per-token inbox roots are gated by per-token nonce (strictly greater). Two independent gates — neither can roll the other back.
 
 4. **OZ BitMaps `_executedFor`** — one bit per leaf per token. Claim path uses key `terminalToken`; emergency-exit path uses key `address(bytes20(keccak256(abi.encode(terminalToken))))`. The two paths are slot-disjoint, but both are append-only (`set` only, never cleared).
 
@@ -327,7 +337,7 @@ Ownable registry. Tracks per-project sucker inventory + deployer allowlist + sha
 
 - Per-leaf hash store (front-run defense): `src/JBSucker.sol:151` (mapping), `src/JBSucker.sol:1346` (write).
 - Leaf hash construction: `src/JBSucker.sol:1514-1538` (`_buildTreeHash`).
-- Raw `msg.sender` for AMB: `src/JBSucker.sol:417-419` (`fromRemote`), `src/JBCCIPSucker.sol:161-164` (`ccipReceive`).
+- Raw `msg.sender` for AMB: `src/JBSucker.sol` (`fromRemote`, `fromRemoteAccounting`), `src/JBCCIPSucker.sol` (`ccipReceive`).
 - Inbox nonce gate: `src/JBSucker.sol:447-460`.
 - Snapshot freshness gate: `src/JBSucker.sol:466-479`.
 - State machine: `src/JBSucker.sol:815-839`.

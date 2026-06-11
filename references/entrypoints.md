@@ -49,6 +49,15 @@ A sucker bridges a Juicebox project's token economy between two chains. Cashed-o
 | `terminalTokenAmount` | `uint256` | The amount of terminal tokens to claim. |
 | `metadata` | `bytes32` | Opaque, caller-defined payload covered by the leaf hash. `bytes32(0)` when no extra context. |
 
+### `JBAccountingSnapshot` (argument to `fromRemoteAccounting`)
+
+| Field | Type | Meaning |
+|-------|------|---------|
+| `version` | `uint8` | Message format version. Must match `MESSAGE_VERSION`. |
+| `sourceTotalSupply` | `uint256` | Source-chain project-token supply, including reserved tokens. |
+| `sourceContexts` | `JBSourceContext[]` | Raw source-chain surplus and balance contexts, un-valued. |
+| `sourceTimestamp` | `uint256` | Monotonic freshness key used to reject stale accounting updates. |
+
 ## Key functions
 
 ### JBSucker — bridge flow (`IJBSucker`)
@@ -57,6 +66,8 @@ A sucker bridges a Juicebox project's token economy between two chains. Cashed-o
 |----------|--------------|
 | `prepare(uint256 projectTokenCount, bytes32 beneficiary, uint256 minTokensReclaimed, address token, bytes32 metadata)` | Cash out `projectTokenCount` project tokens into `token` and insert a leaf for `beneficiary` into the outbox tree for bridging. `minTokensReclaimed` bounds slippage; `metadata` is an opaque attribution payload carried in the leaf hash (`bytes32(0)` for a plain bridge). |
 | `toRemote(address token) payable` | Send the current outbox tree root and bridged assets for `token` to the remote peer through the chain-specific transport. `payable` to fund the transport message and the registry's `toRemoteFee`. |
+| `syncAccountingData() payable` | Send the latest total supply, surplus, and balance snapshot without sending an outbox root or paying the registry `toRemoteFee`. Can be retried with unchanged accounting data; `payable` only funds bridge transport. |
+| `fromRemoteAccounting(JBAccountingSnapshot calldata snapshot)` | Authenticated receive path for accounting-only snapshots. Updates peer accounting if the snapshot is fresher, without touching any token-local inbox root. |
 | `claim(JBClaim calldata claimData)` | Claim bridged project tokens for the leaf's beneficiary by proving inclusion against the inbox root. |
 | `claim(JBClaim[] calldata claims)` | Claim multiple leaves in one call. Each leaf is routed through an external `this.claim` sub-call, so one failing leaf emits `ClaimFailed` and is reverted in isolation while the rest of the batch proceeds; the failed leaf stays claimable later. |
 | `mapToken(JBTokenMapping calldata map) payable` | Map a single local token to a remote token for bridging. Mappings are immutable once the outbox tree has entries (can only be disabled, not remapped). Requires `MAP_SUCKER_TOKEN` permission (initial mappings are applied at deploy under `DEPLOY_SUCKERS`). |

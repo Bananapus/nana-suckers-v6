@@ -7,7 +7,7 @@ This repo lets a Juicebox project move a claimable project-token position from o
 ## Primary actors
 
 - holders bridging project-token positions
-- relayers sending accepted roots to peer chains
+- relayers sending accepted roots or accounting snapshots to peer chains
 - project owners and delegates managing token mappings and recovery paths
 - registry operators managing deployer allowlists and shared fees
 - auditors checking Merkle progression, peer authentication, and bridge-specific delivery
@@ -67,7 +67,31 @@ This repo lets a Juicebox project move a claimable project-token position from o
 **Postconditions**
 - the remote chain can verify claims against the accepted inbox root
 
-## Journey 3: Claim on the destination chain
+## Journey 3: Refresh peer accounting
+
+**Actor:** relayer, integration, or any account willing to pay transport costs.
+
+**Intent:** update the peer chain's cached total supply, surplus, and balance without sending a new claim root.
+
+**Preconditions**
+- the sucker is still allowed to send outbound messages
+- transport-specific fee and gas requirements are satisfied
+
+**Main Flow**
+1. A caller invokes `syncAccountingData()`.
+2. The sucker snapshots current project supply plus raw per-context surplus and balance.
+3. The chain-specific implementation sends only the accounting snapshot to the peer.
+4. The peer authenticates the sender and records the snapshot if its freshness key is newer.
+
+**Failure Modes**
+- the bridge message is delayed, underfunded, or malformed
+- a stale accounting snapshot arrives after a fresher root or accounting snapshot and is ignored
+
+**Postconditions**
+- registry aggregate views can use the fresher peer snapshot
+- token-local inbox roots and claimable value are unchanged
+
+## Journey 4: Claim on the destination chain
 
 **Actor:** claimant or integration acting for a claimant.
 
@@ -91,7 +115,7 @@ This repo lets a Juicebox project move a claimable project-token position from o
 **Postconditions**
 - the claim is consumed exactly once and the remote position is recreated for the beneficiary
 
-## Journey 4: Recover from a bad or deprecated bridge path
+## Journey 5: Recover from a bad or deprecated bridge path
 
 **Actor:** project authority, registry operator, or affected claimant.
 

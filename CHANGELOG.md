@@ -17,6 +17,7 @@ This is a V5-to-V6 migration changelog, not a package release log or commit hist
 - Remote identifiers moved from `address` to `bytes32` for cross-VM compatibility. This affects peer addresses, beneficiaries, and remote-token data.
 - Cross-chain message payloads are versioned and carry explicit metadata. Leaf hashes and event payloads are not V5-compatible.
 - Remote surplus and balance aggregation moved toward registry-level, per-context reads. Suckers expose raw peer-chain contexts; the registry values and deduplicates them.
+- Peer accounting can be refreshed without sending a root or paying the registry `toRemoteFee`.
 - The registry adds a global `toRemoteFee`, all-sucker lookup, and remote total balance/surplus helpers.
 - Claim batching is more resilient. A failed leaf can emit `ClaimFailed` while other leaves continue.
 - Explicit sucker peer configuration is permission-sensitive in V6.
@@ -32,6 +33,8 @@ This is a V5-to-V6 migration changelog, not a package release log or commit hist
   - `allSuckersOf(uint256)`
   - `peerChainContextsOf()`
   - `peerChainTotalSupplyValue()`
+  - `fromRemoteAccounting(JBAccountingSnapshot)`
+  - `syncAccountingData()`
   - `snapshotTimestamp()`
   - `toRemoteFee()`
   - `setToRemoteFee(uint256)`
@@ -45,11 +48,13 @@ This is a V5-to-V6 migration changelog, not a package release log or commit hist
   - `InsertToOutboxTree` uses `bytes32 beneficiary` and adds `bytes32 metadata`.
   - registry deployment/fee events include current V6 config and caller fields.
 - Added events:
+  - `AccountingDataSynced`
   - `ClaimFailed`
   - `StaleRootRejected`
   - `ToRemoteFeeChanged`
 - Structs to regenerate:
   - `JBClaim`
+  - `JBAccountingSnapshot`
   - `JBLeaf`
   - `JBMessageRoot`
   - `JBRemoteToken`

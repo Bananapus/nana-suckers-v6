@@ -6,12 +6,13 @@
 
 ## System overview
 
-`JBSucker` owns shared project-token burn, outbox, inbox, claim, token-mapping, deprecation, and emergency-exit logic. `JBSuckerRegistry` owns project-to-sucker inventory, deployer allowlists, shared bridge fees, and best-effort aggregate remote-state views. Chain-specific suckers handle transport authentication and asset delivery for OP Stack, Arbitrum, CCIP, and related environments. Deployers bind those implementations to the external bridge addresses and peer-chain configuration used at runtime. Archived (reference only — not compiled or deployed): `JBSwapCCIPSucker` (+ its swap libs/structs) and `JBCeloSucker`; see `src/archive/`.
+`JBSucker` owns shared project-token burn, outbox, inbox, claim, peer-accounting sync, token-mapping, deprecation, and emergency-exit logic. `JBSuckerRegistry` owns project-to-sucker inventory, deployer allowlists, shared bridge fees, and best-effort aggregate remote-state views. Chain-specific suckers handle transport authentication and asset delivery for OP Stack, Arbitrum, CCIP, and related environments. Deployers bind those implementations to the external bridge addresses and peer-chain configuration used at runtime. Archived (reference only — not compiled or deployed): `JBSwapCCIPSucker` (+ its swap libs/structs) and `JBCeloSucker`; see `src/archive/`.
 
 ## Core invariants
 
 - Merkle trees remain append-only and claims cannot be replayed.
 - Source freshness keys only move forward, so stale peer snapshots cannot roll back remote state.
+- Accounting-only messages can update peer supply/context state but cannot update token-local inbox roots.
 - Token mappings stay coherent once outbox activity depends on them.
 - The transported terminal-token value matches the claimable project-token position.
 - Emergency exits and deprecation paths recover value without enabling double claims.
@@ -51,6 +52,15 @@ holder cashes out locally
   -> peer sucker records the root and latest source snapshot
 ```
 
+### Accounting sync
+
+```text
+project accounting should be refreshed or retried without a new root send
+  -> any caller invokes syncAccountingData to refresh or retry the latest accounting snapshot
+  -> the selected bridge transports only supply, surplus, balance, and freshness data
+  -> peer sucker records the snapshot if it is fresher, without changing any inbox root
+```
+
 ### Claim
 
 ```text
@@ -71,13 +81,13 @@ project authority schedules deprecation or enables emergency hatch
 
 ## Accounting model
 
-The local sucker snapshots project supply plus a per-currency set of raw surplus and balance amounts before sending roots. The peer sucker stores these as oracle-free contexts and never prices them itself; valuation happens at read time in `JBSuckerRegistry`, which holds the prices reference and converts each context into a requested currency exactly as the terminal store values local surplus — taking a context already in the requested currency at par with no feed, and valuing a different-currency context through the project's price feed. Registry aggregate views are intentionally best-effort: they skip reverting suckers (including any whose cross-currency feed is missing) and dedupe active same-peer lanes by the freshest accepted snapshot, with deprecated lanes used only when no active lane answers for that peer chain.
+The local sucker snapshots project supply plus a per-currency set of raw surplus and balance amounts before sending roots or accounting-only messages. The peer sucker stores these as oracle-free contexts and never prices them itself; valuation happens at read time in `JBSuckerRegistry`, which holds the prices reference and converts each context into a requested currency exactly as the terminal store values local surplus — taking a context already in the requested currency at par with no feed, and valuing a different-currency context through the project's price feed. `syncAccountingData` sends only this accounting snapshot, pays no registry `toRemoteFee`, and can be retried with the same accounting values if an operator wants a fresh transport attempt. Registry aggregate views are intentionally best-effort: they skip reverting suckers (including any whose cross-currency feed is missing) and dedupe active same-peer lanes by the freshest accepted snapshot, with deprecated lanes used only when no active lane answers for that peer chain.
 
 ## Security model
 
 - Shared sucker bugs can affect every bridge family.
 - Bridge-specific bugs can strand or misdeliver value even when shared accounting is correct.
-- `prepare`, `toRemote`, `claim`, `mapToken`, `setDeprecation`, and registry deploy/remove paths are the primary review targets.
+- `prepare`, `toRemote`, `syncAccountingData`, `claim`, `mapToken`, `setDeprecation`, and registry deploy/remove paths are the primary review targets.
 - Low-level fee, gas, and calldata sizing details are security-critical because sends are cross-chain and non-atomic.
 
 ## Safe change guide

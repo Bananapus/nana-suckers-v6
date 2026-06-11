@@ -23,6 +23,7 @@ import {IArbL2GatewayRouter} from "./interfaces/IArbL2GatewayRouter.sol";
 import {IL1ArbitrumGateway} from "./interfaces/IL1ArbitrumGateway.sol";
 import {IJBArbitrumSucker} from "./interfaces/IJBArbitrumSucker.sol";
 import {ARBChains} from "./libraries/ARBChains.sol";
+import {JBAccountingSnapshot} from "./structs/JBAccountingSnapshot.sol";
 import {JBMessageRoot} from "./structs/JBMessageRoot.sol";
 import {JBRemoteToken} from "./structs/JBRemoteToken.sol";
 
@@ -145,6 +146,39 @@ contract JBArbitrumSucker is JBSucker, IJBArbitrumSucker {
     function _approveGateway(address token, uint256 amount) internal returns (address gateway) {
         gateway = GATEWAYROUTER.getGateway(token);
         SafeERC20.forceApprove({token: IERC20(token), spender: gateway, value: amount});
+    }
+
+    /// @notice Uses the L1/L2 message bridge to send accounting data over the bridge to the peer.
+    /// @param transportPayment The amount of `msg.value` that is going to get paid for sending this message.
+    /// @param snapshot The accounting snapshot to send to the remote peer.
+    // forge-lint: disable-next-line(mixed-case-function)
+    function _sendAccountingSnapshotOverAMB(
+        uint256 transportPayment,
+        JBAccountingSnapshot memory snapshot
+    )
+        internal
+        override
+    {
+        // Build the calldata that will be sent to the peer. This calls `JBSucker.fromRemoteAccounting` remotely.
+        bytes memory data = abi.encodeCall(JBSucker.fromRemoteAccounting, (snapshot));
+        JBRemoteToken memory remoteToken;
+
+        // Depending on which layer we are on, send the call to the other layer.
+        if (LAYER == JBLayer.L1) {
+            // L1→L2 requires transport payment for retryable tickets.
+            if (transportPayment == 0) revert JBSucker_ExpectedMsgValue({msgValue: transportPayment});
+            _toL2({
+                token: JBConstants.NATIVE_TOKEN,
+                transportPayment: transportPayment,
+                amount: 0,
+                data: data,
+                remoteToken: remoteToken
+            });
+        } else {
+            // L2→L1 via ArbSys is free — reject any transport payment.
+            if (transportPayment != 0) revert JBSucker_UnexpectedMsgValue(transportPayment);
+            _toL1({token: JBConstants.NATIVE_TOKEN, amount: 0, data: data, remoteToken: remoteToken});
+        }
     }
 
     /// @notice Uses the L1/L2 gateway to send the root and assets over the bridge to the peer.

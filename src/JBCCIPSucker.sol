@@ -24,6 +24,7 @@ import {CCIPHelper} from "./libraries/CCIPHelper.sol";
 import {JBCCIPLib} from "./libraries/JBCCIPLib.sol";
 
 // Local: structs (alphabetized)
+import {JBAccountingSnapshot} from "./structs/JBAccountingSnapshot.sol";
 import {JBMessageRoot} from "./structs/JBMessageRoot.sol";
 import {JBRemoteToken} from "./structs/JBRemoteToken.sol";
 import {JBTokenMapping} from "./structs/JBTokenMapping.sol";
@@ -70,8 +71,14 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
     // ----------------------- internal constants ------------------------ //
     //*********************************************************************//
 
+    /// @notice Message type prefix for accounting-only messages (fromRemoteAccounting).
+    uint8 internal constant _CCIP_MSG_TYPE_ACCOUNTING = 1;
+
     /// @notice Message type prefix for root messages (fromRemote).
     uint8 internal constant _CCIP_MSG_TYPE_ROOT = 0;
+
+    /// @notice Extra destination gas budgeted for each source accounting context carried in a CCIP message.
+    uint256 internal constant _CCIP_SOURCE_CONTEXT_GAS_LIMIT = 75_000;
 
     //*********************************************************************//
     // --------------- public immutable stored properties ---------------- //
@@ -231,6 +238,17 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
 
             // Forward the root message to this contract's fromRemote handler.
             this.fromRemote(root);
+        } else if (messageType == _CCIP_MSG_TYPE_ACCOUNTING) {
+            // Accounting-only messages must not carry tokens; transported value belongs exclusively to root messages.
+            uint256 deliveryCount = any2EvmMessage.destTokenAmounts.length;
+            if (deliveryCount != 0) {
+                revert JBCCIPSucker_UnexpectedDeliveredTokens(deliveryCount);
+            }
+
+            JBAccountingSnapshot memory snapshot = abi.decode(payload, (JBAccountingSnapshot));
+
+            // Forward the accounting message to this contract's authenticated accounting handler.
+            this.fromRemoteAccounting(snapshot);
         } else {
             revert JBCCIPSucker_UnknownMessageType({messageType: messageType});
         }
@@ -239,6 +257,45 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
     //*********************************************************************//
     // --------------------- internal transactions ----------------------- //
     //*********************************************************************//
+
+    /// @notice Uses CCIP to send accounting data over the bridge to the peer.
+    /// @dev Supports the same native/LINK fee modes as root messages, but never transports token amounts.
+    /// @param transportPayment The amount of `msg.value` that is going to get paid for sending this message.
+    /// @param snapshot The accounting snapshot to send to the remote peer.
+    // forge-lint: disable-next-line(mixed-case-function)
+    function _sendAccountingSnapshotOverAMB(
+        uint256 transportPayment,
+        JBAccountingSnapshot memory snapshot
+    )
+        internal
+        virtual
+        override
+    {
+        Client.EVMTokenAmount[] memory tokenAmounts = new Client.EVMTokenAmount[](0);
+
+        // Determine fee payment mode: native ETH or LINK token.
+        address feeToken = transportPayment == 0 ? CCIPHelper.linkOfChain(block.chainid) : address(0);
+
+        // Build and send the CCIP message with only the accounting payload.
+        (bool refundFailed, uint256 refundAmount) = JBCCIPLib.sendCCIPMessage({
+            ccipRouter: CCIP_ROUTER,
+            remoteChainSelector: REMOTE_CHAIN_SELECTOR,
+            peerAddress: _peerAddress(),
+            transportPayment: transportPayment,
+            feeToken: feeToken,
+            feeTokenPayer: feeToken != address(0) ? _msgSender() : address(0),
+            gasLimit: _ccipGasLimitFor({sourceContextCount: snapshot.sourceContexts.length}),
+            encodedPayload: abi.encode(_CCIP_MSG_TYPE_ACCOUNTING, abi.encode(snapshot)),
+            tokenAmounts: tokenAmounts,
+            refundRecipient: _msgSender()
+        });
+
+        // Retain failed refunds as caller credit instead of leaving them project-addable or stranded.
+        if (refundFailed) {
+            _retainTransportPaymentRefund({account: _msgSender(), amount: refundAmount});
+            emit TransportPaymentRefundFailed({recipient: _msgSender(), amount: refundAmount, caller: _msgSender()});
+        }
+    }
 
     /// @notice Uses CCIP to send the root and assets over the bridge to the peer.
     /// @dev Delegates CCIP message construction and sending to JBCCIPLib (via DELEGATECALL) to reduce bytecode.
@@ -264,8 +321,8 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
         virtual
         override
     {
-        // Start with the base gas limit for cross-chain calls.
-        uint256 gasLimit = MESSENGER_BASE_GAS_LIMIT;
+        // Budget for the root receiver plus the accounting contexts carried in the root message.
+        uint256 gasLimit = _ccipGasLimitFor({sourceContextCount: suckerMessage.sourceContexts.length});
         Client.EVMTokenAmount[] memory tokenAmounts;
 
         if (amount != 0) {
@@ -310,6 +367,13 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
     //*********************************************************************//
     // ------------------------ internal views --------------------------- //
     //*********************************************************************//
+
+    /// @notice The CCIP destination gas limit for a message carrying `sourceContextCount` accounting contexts.
+    /// @param sourceContextCount The number of source accounting contexts in the message.
+    /// @return gasLimit The destination gas limit to ask CCIP to provide.
+    function _ccipGasLimitFor(uint256 sourceContextCount) internal pure returns (uint256 gasLimit) {
+        return MESSENGER_BASE_GAS_LIMIT + (sourceContextCount * _CCIP_SOURCE_CONTEXT_GAS_LIMIT);
+    }
 
     /// @notice Checks whether the given sender is a remote peer. Unused in this context.
     /// @param sender The address to check.
