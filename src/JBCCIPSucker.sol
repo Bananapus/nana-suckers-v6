@@ -129,39 +129,6 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
     }
 
     //*********************************************************************//
-    // ------------------------ external views --------------------------- //
-    //*********************************************************************//
-
-    /// @notice Returns the chain on which the peer is located.
-    /// @return chainId The chain ID of the peer.
-    function peerChainId() public view virtual override returns (uint256 chainId) {
-        return REMOTE_CHAIN_ID;
-    }
-
-    //*********************************************************************//
-    // ------------------------- public views ---------------------------- //
-    //*********************************************************************//
-
-    /// @notice Returns the address of the current CCIP router.
-    /// @return router The CCIP router address.
-    function getRouter() public view returns (address router) {
-        return address(CCIP_ROUTER);
-    }
-
-    /// @notice Checks whether this contract supports a given interface.
-    /// @param interfaceId The interface ID to check.
-    /// @return supported Whether the interface is supported.
-    /// @dev Should indicate whether the contract implements IAny2EVMMessageReceiver.
-    /// This allows CCIP to check if ccipReceive is available before calling it.
-    /// If this returns false or reverts, only tokens are transferred to the receiver.
-    /// If this returns true, tokens are transferred and ccipReceive is called atomically.
-    /// Additionally, if the receiver address does not have code associated with
-    /// it at the time of execution (EXTCODESIZE returns 0), only tokens will be transferred.
-    function supportsInterface(bytes4 interfaceId) public view virtual override returns (bool supported) {
-        return interfaceId == type(IAny2EVMMessageReceiver).interfaceId || super.supportsInterface(interfaceId);
-    }
-
-    //*********************************************************************//
     // --------------------- external transactions ----------------------- //
     //*********************************************************************//
 
@@ -252,6 +219,35 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
         } else {
             revert JBCCIPSucker_UnknownMessageType({messageType: messageType});
         }
+    }
+
+    //*********************************************************************//
+    // ------------------------- public views ---------------------------- //
+    //*********************************************************************//
+
+    /// @notice Returns the address of the current CCIP router.
+    /// @return router The CCIP router address.
+    function getRouter() public view returns (address router) {
+        return address(CCIP_ROUTER);
+    }
+
+    /// @notice Returns the chain on which the peer is located.
+    /// @return chainId The chain ID of the peer.
+    function peerChainId() public view virtual override returns (uint256 chainId) {
+        return REMOTE_CHAIN_ID;
+    }
+
+    /// @notice Checks whether this contract supports a given interface.
+    /// @param interfaceId The interface ID to check.
+    /// @return supported Whether the interface is supported.
+    /// @dev Should indicate whether the contract implements IAny2EVMMessageReceiver.
+    /// This allows CCIP to check if ccipReceive is available before calling it.
+    /// If this returns false or reverts, only tokens are transferred to the receiver.
+    /// If this returns true, tokens are transferred and ccipReceive is called atomically.
+    /// Additionally, if the receiver address does not have code associated with
+    /// it at the time of execution (EXTCODESIZE returns 0), only tokens will be transferred.
+    function supportsInterface(bytes4 interfaceId) public view virtual override returns (bool supported) {
+        return interfaceId == type(IAny2EVMMessageReceiver).interfaceId || super.supportsInterface(interfaceId);
     }
 
     //*********************************************************************//

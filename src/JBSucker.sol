@@ -405,39 +405,43 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         }
     }
 
-    /// @notice Claim a single bridged entry: verifies the merkle proof against the inbox root, mints the specified
-    /// project tokens for the beneficiary, and deposits the terminal tokens into the project's local balance.
-    /// @param claimData The terminal token, merkle tree leaf, and proof for the claim.
-    function claim(JBClaim calldata claimData) public virtual override {
-        // Attempt to validate the proof against the inbox tree for the terminal token. The leaf hash includes
-        // `claimData.leaf.metadata` so the proof is only valid for the exact (amount, beneficiary, metadata) tuple the
-        // origin committed to.
-        _validate({
-            projectTokenCount: claimData.leaf.projectTokenCount,
-            terminalToken: claimData.token,
-            terminalTokenAmount: claimData.leaf.terminalTokenAmount,
-            beneficiary: claimData.leaf.beneficiary,
-            metadata: claimData.leaf.metadata,
-            index: claimData.leaf.index,
-            leaves: claimData.proof
-        });
+    /// @notice Claim retained failed-fee ETH.
+    /// @param beneficiary The address that should receive the retained ETH.
+    function claimRetainedToRemoteFee(address payable beneficiary) external override {
+        if (beneficiary == address(0)) revert JBSucker_ZeroBeneficiary({beneficiary: bytes32(0)});
 
-        emit Claimed({
-            beneficiary: claimData.leaf.beneficiary,
-            token: claimData.token,
-            projectTokenCount: claimData.leaf.projectTokenCount,
-            terminalTokenAmount: claimData.leaf.terminalTokenAmount,
-            index: claimData.leaf.index,
-            metadata: claimData.leaf.metadata,
-            caller: _msgSender()
-        });
+        address account = _msgSender();
+        uint256 amount = retainedToRemoteFeeOf[account];
+        if (amount == 0) revert JBSucker_NoRetainedToRemoteFee(account);
 
-        // Give the user their project tokens, send the project its funds.
-        _handleClaim({
-            terminalToken: claimData.token,
-            terminalTokenAmount: claimData.leaf.terminalTokenAmount,
-            projectTokenAmount: claimData.leaf.projectTokenCount,
-            beneficiary: claimData.leaf.beneficiary
+        retainedToRemoteFeeOf[account] = 0;
+        retainedToRemoteFeeBalance -= amount;
+
+        _sendNativeTo({beneficiary: beneficiary, amount: amount});
+
+        // State was cleared before sending ETH; the event is emitted after the transfer so failed sends do not log.
+        emit RetainedToRemoteFeeClaimed({
+            account: account, beneficiary: beneficiary, amount: amount, caller: _msgSender()
+        });
+    }
+
+    /// @notice Claim retained failed transport-payment refund ETH.
+    /// @param beneficiary The address that should receive the retained ETH.
+    function claimRetainedTransportPaymentRefund(address payable beneficiary) external override {
+        if (beneficiary == address(0)) revert JBSucker_ZeroBeneficiary({beneficiary: bytes32(0)});
+
+        address account = _msgSender();
+        uint256 amount = retainedTransportPaymentRefundOf[account];
+        if (amount == 0) revert JBSucker_NoRetainedTransportPaymentRefund(account);
+
+        retainedTransportPaymentRefundOf[account] = 0;
+        retainedTransportPaymentRefundBalance -= amount;
+
+        _sendNativeTo({beneficiary: beneficiary, amount: amount});
+
+        // State was cleared before sending ETH; the event is emitted after the transfer so failed sends do not log.
+        emit RetainedTransportPaymentRefundClaimed({
+            account: account, beneficiary: beneficiary, amount: amount, caller: _msgSender()
         });
     }
 
@@ -923,12 +927,6 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         return amount;
     }
 
-    /// @notice Returns the chain on which the peer is located.
-    /// @dev `public` (not `external`) so the combined peer-chain views in this contract can read it internally
-    /// without a self-call; subclasses implement the bridge-specific chain ID.
-    /// @return chain ID of the peer.
-    function peerChainId() public view virtual returns (uint256);
-
     /// @notice The peer sucker on the remote chain, as a bytes32 for cross-VM compatibility.
     /// @dev Defaults to `_toBytes32(address(this))`, assuming deterministic cross-chain deployment via CREATE2. The
     /// deployer (`JBSuckerDeployer`) uses `salt = keccak256(abi.encodePacked(_msgSender(), salt))` to ensure
@@ -940,6 +938,12 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         if (configuredPeer != bytes32(0)) return configuredPeer;
         return _toBytes32(address(this));
     }
+
+    /// @notice Returns the chain on which the peer is located.
+    /// @dev `public` (not `external`) so the combined peer-chain views in this contract can read it internally
+    /// without a self-call; subclasses implement the bridge-specific chain ID.
+    /// @return chain ID of the peer.
+    function peerChainId() public view virtual returns (uint256);
 
     /// @notice The ID of the project (on the local chain) that this sucker is associated with.
     /// @return The local project ID.
@@ -987,43 +991,39 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     // ----------------------- public transactions ----------------------- //
     //*********************************************************************//
 
-    /// @notice Claim retained failed-fee ETH.
-    /// @param beneficiary The address that should receive the retained ETH.
-    function claimRetainedToRemoteFee(address payable beneficiary) external override {
-        if (beneficiary == address(0)) revert JBSucker_ZeroBeneficiary({beneficiary: bytes32(0)});
-
-        address account = _msgSender();
-        uint256 amount = retainedToRemoteFeeOf[account];
-        if (amount == 0) revert JBSucker_NoRetainedToRemoteFee(account);
-
-        retainedToRemoteFeeOf[account] = 0;
-        retainedToRemoteFeeBalance -= amount;
-
-        _sendNativeTo({beneficiary: beneficiary, amount: amount});
-
-        // State was cleared before sending ETH; the event is emitted after the transfer so failed sends do not log.
-        emit RetainedToRemoteFeeClaimed({
-            account: account, beneficiary: beneficiary, amount: amount, caller: _msgSender()
+    /// @notice Claim a single bridged entry: verifies the merkle proof against the inbox root, mints the specified
+    /// project tokens for the beneficiary, and deposits the terminal tokens into the project's local balance.
+    /// @param claimData The terminal token, merkle tree leaf, and proof for the claim.
+    function claim(JBClaim calldata claimData) public virtual override {
+        // Attempt to validate the proof against the inbox tree for the terminal token. The leaf hash includes
+        // `claimData.leaf.metadata` so the proof is only valid for the exact (amount, beneficiary, metadata) tuple the
+        // origin committed to.
+        _validate({
+            projectTokenCount: claimData.leaf.projectTokenCount,
+            terminalToken: claimData.token,
+            terminalTokenAmount: claimData.leaf.terminalTokenAmount,
+            beneficiary: claimData.leaf.beneficiary,
+            metadata: claimData.leaf.metadata,
+            index: claimData.leaf.index,
+            leaves: claimData.proof
         });
-    }
 
-    /// @notice Claim retained failed transport-payment refund ETH.
-    /// @param beneficiary The address that should receive the retained ETH.
-    function claimRetainedTransportPaymentRefund(address payable beneficiary) external override {
-        if (beneficiary == address(0)) revert JBSucker_ZeroBeneficiary({beneficiary: bytes32(0)});
+        emit Claimed({
+            beneficiary: claimData.leaf.beneficiary,
+            token: claimData.token,
+            projectTokenCount: claimData.leaf.projectTokenCount,
+            terminalTokenAmount: claimData.leaf.terminalTokenAmount,
+            index: claimData.leaf.index,
+            metadata: claimData.leaf.metadata,
+            caller: _msgSender()
+        });
 
-        address account = _msgSender();
-        uint256 amount = retainedTransportPaymentRefundOf[account];
-        if (amount == 0) revert JBSucker_NoRetainedTransportPaymentRefund(account);
-
-        retainedTransportPaymentRefundOf[account] = 0;
-        retainedTransportPaymentRefundBalance -= amount;
-
-        _sendNativeTo({beneficiary: beneficiary, amount: amount});
-
-        // State was cleared before sending ETH; the event is emitted after the transfer so failed sends do not log.
-        emit RetainedTransportPaymentRefundClaimed({
-            account: account, beneficiary: beneficiary, amount: amount, caller: _msgSender()
+        // Give the user their project tokens, send the project its funds.
+        _handleClaim({
+            terminalToken: claimData.token,
+            terminalTokenAmount: claimData.leaf.terminalTokenAmount,
+            projectTokenAmount: claimData.leaf.projectTokenCount,
+            beneficiary: claimData.leaf.beneficiary
         });
     }
 
@@ -1038,15 +1038,6 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     /// @param remotePeer The remote peer address. Leave zero to use the default deterministic same-address peer.
     function initialize(uint256 localProjectId, bytes32 remotePeer) public initializer {
         _initialize({initialProjectId: localProjectId, remotePeer: remotePeer});
-    }
-
-    /// @notice Initializes the sucker's project and optional peer address.
-    /// @param initialProjectId The ID of the project (on the local chain) that this sucker is associated with.
-    /// @param remotePeer The remote peer address. Leave zero to use the default deterministic same-address peer.
-    function _initialize(uint256 initialProjectId, bytes32 remotePeer) internal {
-        _localProjectId = initialProjectId;
-        _peer = remotePeer;
-        deployer = _msgSender();
     }
 
     /// @notice Map an ERC-20 token on the local chain to a remote-chain ERC-20 token for bridging.
@@ -1147,6 +1138,15 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
             memo: "",
             useReservedPercent: false
         });
+    }
+
+    /// @notice Initializes the sucker's project and optional peer address.
+    /// @param initialProjectId The ID of the project (on the local chain) that this sucker is associated with.
+    /// @param remotePeer The remote peer address. Leave zero to use the default deterministic same-address peer.
+    function _initialize(uint256 initialProjectId, bytes32 remotePeer) internal {
+        _localProjectId = initialProjectId;
+        _peer = remotePeer;
+        deployer = _msgSender();
     }
 
     /// @notice Inserts a new leaf into the outbox merkle tree for the specified `token`.
@@ -1361,6 +1361,49 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         assert(reclaimedAmount == _balanceOf({token: token, addr: address(this)}) - balanceBefore);
     }
 
+    /// @notice Retain a failed `toRemoteFee` payment for later caller refund.
+    /// @param account The account that can reclaim the retained fee.
+    /// @param amount The retained fee amount.
+    function _retainToRemoteFee(address account, uint256 amount) internal {
+        retainedToRemoteFeeOf[account] += amount;
+        retainedToRemoteFeeBalance += amount;
+        emit RetainedToRemoteFee({account: account, amount: amount, caller: _msgSender()});
+    }
+
+    /// @notice Retains a failed transport-payment refund as account-scoped native credit.
+    /// @param account The account that can reclaim the retained refund.
+    /// @param amount The retained refund amount.
+    function _retainTransportPaymentRefund(address account, uint256 amount) internal {
+        retainedTransportPaymentRefundOf[account] += amount;
+        retainedTransportPaymentRefundBalance += amount;
+        emit RetainedTransportPaymentRefund({account: account, amount: amount, caller: _msgSender()});
+    }
+
+    /// @notice Performs the logic to send an accounting-only message to the peer over the AMB.
+    /// @dev Bridge-specific implementations override this for supported transports.
+    /// @param transportPayment The amount of `msg.value` paid to the transport for this message.
+    /// @param snapshot The accounting snapshot to send to the remote chain.
+    // forge-lint: disable-next-line(mixed-case-function)
+    function _sendAccountingSnapshotOverAMB(
+        uint256 transportPayment,
+        JBAccountingSnapshot memory snapshot
+    )
+        internal
+        virtual
+    {
+        transportPayment;
+        snapshot;
+        revert JBSucker_AccountingSyncUnsupported();
+    }
+
+    /// @notice Send native tokens, reverting if the recipient rejects them.
+    /// @param beneficiary The recipient.
+    /// @param amount The amount to send.
+    function _sendNativeTo(address payable beneficiary, uint256 amount) internal {
+        (bool success,) = beneficiary.call{value: amount}("");
+        if (!success) revert JBSucker_RefundFailed({beneficiary: beneficiary, amount: amount});
+    }
+
     /// @notice Send the outbox root for the specified token to the remote peer.
     /// @dev Some bridges require a nonzero `transportPayment`; zero-cost bridges must reject nonzero values.
     /// @param transportPayment The amount of `msg.value` paid to the transport for this message.
@@ -1418,31 +1461,6 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
             root: root,
             index: index
         });
-    }
-
-    /// @notice Send native tokens, reverting if the recipient rejects them.
-    /// @param beneficiary The recipient.
-    /// @param amount The amount to send.
-    function _sendNativeTo(address payable beneficiary, uint256 amount) internal {
-        (bool success,) = beneficiary.call{value: amount}("");
-        if (!success) revert JBSucker_RefundFailed({beneficiary: beneficiary, amount: amount});
-    }
-
-    /// @notice Performs the logic to send an accounting-only message to the peer over the AMB.
-    /// @dev Bridge-specific implementations override this for supported transports.
-    /// @param transportPayment The amount of `msg.value` paid to the transport for this message.
-    /// @param snapshot The accounting snapshot to send to the remote chain.
-    // forge-lint: disable-next-line(mixed-case-function)
-    function _sendAccountingSnapshotOverAMB(
-        uint256 transportPayment,
-        JBAccountingSnapshot memory snapshot
-    )
-        internal
-        virtual
-    {
-        transportPayment;
-        snapshot;
-        revert JBSucker_AccountingSyncUnsupported();
     }
 
     /// @notice Performs the logic to send a message to the peer over the AMB.
@@ -1733,28 +1751,6 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         return IERC20(token).balanceOf(addr);
     }
 
-    /// @notice Compute the merkle root of an outbox tree by reading its branch into memory and delegating
-    /// to JBSuckerLib.computeTreeRoot (via DELEGATECALL). Replaces inlined MerkleLib.root() to save ~3KB.
-    /// @param tree The storage-backed merkle tree.
-    /// @return The merkle root.
-    function _computeOutboxRoot(MerkleLib.Tree storage tree) internal view returns (bytes32) {
-        uint256 count = tree.count;
-        // An empty tree has a known zero root.
-        if (count == 0) return MerkleLib.Z_32;
-
-        // Copy only the non-zero branch slots from storage into memory for the root computation.
-        bytes32[_TREE_DEPTH] memory branch;
-        for (uint256 i; i < _TREE_DEPTH;) {
-            if (count & (uint256(1) << i) != 0) {
-                branch[i] = tree.branch[i];
-            }
-            unchecked {
-                ++i;
-            }
-        }
-        return JBSuckerLib.computeTreeRoot({branch: branch, count: count});
-    }
-
     /// @notice Builds a hash as they are stored in the merkle tree.
     /// @param projectTokenCount The number of project tokens to cash out.
     /// @param terminalTokenAmount The amount of terminal tokens to reclaim from the cash out.
@@ -1781,6 +1777,28 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
             mstore(add(ptr, 0x60), metadata)
             hash := keccak256(ptr, 0x80)
         }
+    }
+
+    /// @notice Compute the merkle root of an outbox tree by reading its branch into memory and delegating
+    /// to JBSuckerLib.computeTreeRoot (via DELEGATECALL). Replaces inlined MerkleLib.root() to save ~3KB.
+    /// @param tree The storage-backed merkle tree.
+    /// @return The merkle root.
+    function _computeOutboxRoot(MerkleLib.Tree storage tree) internal view returns (bytes32) {
+        uint256 count = tree.count;
+        // An empty tree has a known zero root.
+        if (count == 0) return MerkleLib.Z_32;
+
+        // Copy only the non-zero branch slots from storage into memory for the root computation.
+        bytes32[_TREE_DEPTH] memory branch;
+        for (uint256 i; i < _TREE_DEPTH;) {
+            if (count & (uint256(1) << i) != 0) {
+                branch[i] = tree.branch[i];
+            }
+            unchecked {
+                ++i;
+            }
+        }
+        return JBSuckerLib.computeTreeRoot({branch: branch, count: count});
     }
 
     /// @notice The length of the context suffix for ERC-2771 meta-transactions.
@@ -1853,24 +1871,6 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     /// @return owner The address currently registered as the project's ERC-721 holder.
     function _ownerOf(uint256 forProjectId) internal view returns (address owner) {
         return PROJECTS.ownerOf(forProjectId);
-    }
-
-    /// @notice Retain a failed `toRemoteFee` payment for later caller refund.
-    /// @param account The account that can reclaim the retained fee.
-    /// @param amount The retained fee amount.
-    function _retainToRemoteFee(address account, uint256 amount) internal {
-        retainedToRemoteFeeOf[account] += amount;
-        retainedToRemoteFeeBalance += amount;
-        emit RetainedToRemoteFee({account: account, amount: amount, caller: _msgSender()});
-    }
-
-    /// @notice Retains a failed transport-payment refund as account-scoped native credit.
-    /// @param account The account that can reclaim the retained refund.
-    /// @param amount The retained refund amount.
-    function _retainTransportPaymentRefund(address account, uint256 amount) internal {
-        retainedTransportPaymentRefundOf[account] += amount;
-        retainedTransportPaymentRefundBalance += amount;
-        emit RetainedTransportPaymentRefund({account: account, amount: amount, caller: _msgSender()});
     }
 
     /// @notice Returns the peer address as an EVM address.
