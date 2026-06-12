@@ -219,7 +219,7 @@ Chainlink CCIP transport. Adds inbound `ccipReceive`.
 
 - **`peerChainId()`** — returns `REMOTE_CHAIN_ID` set at construction.
 - **`getRouter()`** view — returns `CCIP_ROUTER` address.
-- **`ccipReceive(Client.Any2EVMMessage)`** — `JBCCIPSucker.sol:160-230`. Only the immutable `CCIP_ROUTER` (raw `msg.sender` check). Verifies decoded `origin == _peerAddress()` and `sourceChainSelector == REMOTE_CHAIN_SELECTOR`. Discriminates message type via `JBCCIPLib.decodeTypedMessage`; accepts `_CCIP_MSG_TYPE_ROOT` and `_CCIP_MSG_TYPE_ACCOUNTING`.
+- **`ccipReceive(Client.Any2EVMMessage)`** — `JBCCIPSucker.sol:160-230`. Only the immutable `CCIP_ROUTER` (raw `msg.sender` check). Verifies decoded `origin == _peerAddress()` and `sourceChainSelector == REMOTE_CHAIN_SELECTOR`. Discriminates the `abi.encode(uint8 messageType, bytes payload)` message data directly; accepts `_CCIP_MSG_TYPE_ROOT` and `_CCIP_MSG_TYPE_ACCOUNTING`.
   - **Delivered-amount invariants** (`JBCCIPSucker.sol:190-216`): `destTokenAmounts.length <= 1`; if length 0 then `root.amount == 0`; if length 1 then `delivered.token` equals the local mapped token for ERC-20 roots or the router-reported wrapped-native token for native roots, and `delivered.amount >= root.amount`. These bind the advertised root to the actually-bridged tokens — a compromised peer that ships an inflated root cannot mint unbacked project tokens.
   - Native-token roots are unwrapped only after the delivered token is confirmed to be the router's wrapped-native token.
   - Forwards to `this.fromRemote(root)` after delivery validation.

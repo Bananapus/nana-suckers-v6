@@ -187,7 +187,7 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
         }
 
         // Discriminate message type: abi.encode(uint8 type, bytes payload).
-        (uint8 messageType, bytes memory payload) = JBCCIPLib.decodeTypedMessage(any2EvmMessage.data);
+        (uint8 messageType, bytes memory payload) = abi.decode(any2EvmMessage.data, (uint8, bytes));
 
         // Handle root messages (merkle tree updates with bridged assets).
         if (messageType == _CCIP_MSG_TYPE_ROOT) {
@@ -271,29 +271,54 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
         virtual
         override
     {
-        Client.EVMTokenAmount[] memory tokenAmounts = new Client.EVMTokenAmount[](0);
+        _sendCcipMessage({
+            transportPayment: transportPayment,
+            gasLimit: _ccipGasLimitFor({sourceContextCount: snapshot.sourceContexts.length}),
+            encodedPayload: abi.encode(_CCIP_MSG_TYPE_ACCOUNTING, abi.encode(snapshot)),
+            tokenAmounts: new Client.EVMTokenAmount[](0)
+        });
+    }
+
+    /// @notice Sends a CCIP message and records failed native-fee refunds as caller credit.
+    /// @param transportPayment The amount of `msg.value` available to pay native CCIP fees.
+    /// @param gasLimit The destination gas limit to ask CCIP to provide.
+    /// @param encodedPayload The typed CCIP payload to send to the peer sucker.
+    /// @param tokenAmounts The token amounts to bridge with the message.
+    function _sendCcipMessage(
+        uint256 transportPayment,
+        uint256 gasLimit,
+        bytes memory encodedPayload,
+        Client.EVMTokenAmount[] memory tokenAmounts
+    )
+        internal
+    {
+        // Cache the caller so refund accounting and LINK fee pulls are charged to the same account.
+        address sender = _msgSender();
 
         // Determine fee payment mode: native ETH or LINK token.
+        // When transportPayment == 0, we pay in LINK pulled from the caller via transferFrom.
+        // This enables chains with no meaningful native token (e.g. Tempo) while keeping
+        // toRemote permissionless — the caller provides LINK inline with their bridge intent.
         address feeToken = transportPayment == 0 ? CCIPHelper.linkOfChain(block.chainid) : address(0);
 
-        // Build and send the CCIP message with only the accounting payload.
+        // Build and send the CCIP message with the provided typed payload.
         (bool refundFailed, uint256 refundAmount) = JBCCIPLib.sendCCIPMessage({
             ccipRouter: CCIP_ROUTER,
             remoteChainSelector: REMOTE_CHAIN_SELECTOR,
             peerAddress: _peerAddress(),
             transportPayment: transportPayment,
             feeToken: feeToken,
-            feeTokenPayer: feeToken != address(0) ? _msgSender() : address(0),
-            gasLimit: _ccipGasLimitFor({sourceContextCount: snapshot.sourceContexts.length}),
-            encodedPayload: abi.encode(_CCIP_MSG_TYPE_ACCOUNTING, abi.encode(snapshot)),
+            feeTokenPayer: feeToken != address(0) ? sender : address(0),
+            gasLimit: gasLimit,
+            encodedPayload: encodedPayload,
             tokenAmounts: tokenAmounts,
-            refundRecipient: _msgSender()
+            refundRecipient: sender
         });
 
         // Retain failed refunds as caller credit instead of leaving them project-addable or stranded.
         if (refundFailed) {
-            _retainTransportPaymentRefund({account: _msgSender(), amount: refundAmount});
-            emit TransportPaymentRefundFailed({recipient: _msgSender(), amount: refundAmount, caller: _msgSender()});
+            _retainTransportPaymentRefund({account: sender, amount: refundAmount});
+            emit TransportPaymentRefundFailed({recipient: sender, amount: refundAmount, caller: sender});
         }
     }
 
@@ -336,32 +361,12 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
             tokenAmounts = new Client.EVMTokenAmount[](0);
         }
 
-        // Determine fee payment mode: native ETH or LINK token.
-        // When transportPayment == 0, we pay in LINK pulled from the caller via transferFrom.
-        // This enables chains with no meaningful native token (e.g. Tempo) while keeping
-        // toRemote permissionless — the caller provides LINK inline with their bridge intent.
-        address feeToken = transportPayment == 0 ? CCIPHelper.linkOfChain(block.chainid) : address(0);
-
-        // Build and send the CCIP message with the root payload.
-        (bool refundFailed, uint256 refundAmount) = JBCCIPLib.sendCCIPMessage({
-            ccipRouter: CCIP_ROUTER,
-            remoteChainSelector: REMOTE_CHAIN_SELECTOR,
-            peerAddress: _peerAddress(),
+        _sendCcipMessage({
             transportPayment: transportPayment,
-            feeToken: feeToken,
-            feeTokenPayer: feeToken != address(0) ? _msgSender() : address(0),
             gasLimit: gasLimit,
             encodedPayload: abi.encode(_CCIP_MSG_TYPE_ROOT, abi.encode(suckerMessage)),
-            tokenAmounts: tokenAmounts,
-            refundRecipient: _msgSender()
+            tokenAmounts: tokenAmounts
         });
-
-        // Retain failed refunds as caller credit instead of leaving them project-addable or stranded.
-        if (refundFailed) {
-            // Refund accounting is isolated per caller; reentry cannot increase the retained credit.
-            _retainTransportPaymentRefund({account: _msgSender(), amount: refundAmount});
-            emit TransportPaymentRefundFailed({recipient: _msgSender(), amount: refundAmount, caller: _msgSender()});
-        }
     }
 
     //*********************************************************************//
