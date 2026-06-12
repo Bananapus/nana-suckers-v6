@@ -1044,7 +1044,10 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     /// @param map The local and remote terminal token addresses to map, and minimum amount/gas limits for bridging
     /// them.
     function mapToken(JBTokenMapping calldata map) public payable override {
-        _mapToken({map: map, transportPaymentValue: msg.value});
+        uint256 transportPaymentSpent = _mapToken({map: map, transportPaymentValue: msg.value});
+        if (msg.value > transportPaymentSpent) {
+            _sendNativeTo({beneficiary: payable(_msgSender()), amount: msg.value - transportPaymentSpent});
+        }
     }
 
     //*********************************************************************//

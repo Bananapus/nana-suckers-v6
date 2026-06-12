@@ -54,6 +54,34 @@ contract RegressionMapTokensEnableOnlyValueStuckTest is Test {
 
     uint256 internal constant PROJECT_ID = 1;
 
+    function test_mapTokenEnableOnlyRefundsMsgValue() external {
+        vm.mockCall(DIRECTORY, abi.encodeCall(IJBDirectory.PROJECTS, ()), abi.encode(PROJECT));
+        vm.mockCall(PROJECT, abi.encodeCall(IERC721.ownerOf, (PROJECT_ID)), abi.encode(address(this)));
+        vm.mockCall(PERMISSIONS, abi.encodeWithSelector(IJBPermissions.hasPermission.selector), abi.encode(true));
+
+        RegressionMapTokensHarness singleton =
+            new RegressionMapTokensHarness(IJBDirectory(DIRECTORY), IJBPermissions(PERMISSIONS), IJBTokens(TOKENS));
+        RegressionMapTokensHarness sucker = RegressionMapTokensHarness(
+            // forge-lint: disable-next-line(unsafe-typecast)
+            payable(address(
+                    LibClone.cloneDeterministic(address(singleton), keccak256(bytes("regression-map-token-refund")))
+                ))
+        );
+        sucker.initialize(PROJECT_ID);
+
+        JBTokenMapping memory map = JBTokenMapping({
+            localToken: address(0xBEEF),
+            minGas: sucker.MESSENGER_ERC20_MIN_GAS_LIMIT(),
+            remoteToken: bytes32(uint256(uint160(address(0xCAFE))))
+        });
+
+        uint256 balanceBefore = address(this).balance;
+        sucker.mapToken{value: 1 ether}(map);
+
+        assertEq(address(sucker).balance, 0, "enable-only msg.value should not stay in the sucker");
+        assertEq(address(this).balance, balanceBefore, "enable-only msg.value should be refunded to caller");
+    }
+
     function test_mapTokensEnableOnlyBatchRefundsMsgValue() external {
         vm.mockCall(DIRECTORY, abi.encodeCall(IJBDirectory.PROJECTS, ()), abi.encode(PROJECT));
         vm.mockCall(PROJECT, abi.encodeCall(IERC721.ownerOf, (PROJECT_ID)), abi.encode(address(this)));

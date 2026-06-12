@@ -43,14 +43,22 @@ This file focuses on the bridge-like risks in the sucker system: merkle-root pro
 
 ## 3. Cross-chain atomicity
 
-- **Arbitrum non-atomic token+message delivery.** `_toL2` creates two independent retryable tickets: one for the ERC-20 bridge transfer and one for the `fromRemote` merkle root message. These are redeemed independently on L2 with no ordering guarantee. `_addToBalance` checks actual token balance to prevent unbacked minting when message arrives before tokens.
+- **Arbitrum non-atomic token+message delivery.** Arbitrum ERC-20 sends split the token bridge leg from the
+  `fromRemote` merkle root message (`_toL2` creates independent retryables; `_toL1` uses the gateway plus
+  `ArbSys.sendTxToL1`). These are processed independently with no ordering guarantee. `_addToBalance` checks actual
+  token balance to prevent unbacked minting when a root arrives before tokens.
 - **CCIP: no guaranteed delivery order.** CCIP does not guarantee in-order delivery. The contract handles this by accepting any nonce > current, but concurrent `toRemote` calls for the same token could result in a later root arriving first, skipping an intermediate root.
 - **CCIP delivered tokens must match the received root.** Inbound CCIP root messages bind `destTokenAmounts` to the
   advertised token and amount before recording the inbox root. For native-token roots, the delivered ERC-20 must be
   the router-reported wrapped-native token so it can be unwrapped into the local native token.
 - **OP Stack: generally ordered** but the L1-to-L2 message must be relayed by an off-chain actor. A delayed or dropped relay permanently blocks claims until someone retries the relay.
 - **Message loss.** If an AMB silently fails (accepts the message on L1 but never delivers to L2), `numberOfClaimsSent` is incremented but the remote peer never receives the root. Those leaves are blocked from both remote claim and local emergency exit (conservative: locked, not double-spent). Recovery requires enabling the emergency hatch.
-- **Aggregate balance accounting.** `amountToAddToBalanceOf(token)` computes `balanceOf(this) - outbox.balance`, making all contract-held tokens fungible claim backing. This is intentional: all funds serve the same project, so refunded ETH (from failed Arbitrum retryable tickets) and stale native deliveries correctly become project-claimable. The tradeoff is that later roots can consume liquidity from earlier failed batches, but the project is the ultimate beneficiary in all cases.
+- **Aggregate balance accounting.** `amountToAddToBalanceOf(token)` computes `balanceOf(this) - outbox.balance`, making
+  all contract-held tokens fungible claim backing. This is intentional: all funds serve the same project, so refunded
+  ETH (from failed Arbitrum retryable tickets) and stale native deliveries correctly become project-claimable. The
+  tradeoff is that an Arbitrum root whose own ERC-20 leg is delayed can become claimable once another batch's ERC-20
+  leg lands, shifting claim timing between beneficiaries. The project is still the ultimate beneficiary and unbacked
+  minting is blocked by the balance check.
 - **`fromRemote` does not revert on stale nonce.** By design, stale/duplicate messages are silently ignored (emitting `StaleRootRejected`). This prevents fund loss on native token transfers where reverting would lose the ETH, but means monitoring must watch for this event to detect bridge issues.
 
 ## 4. Token mapping risks
@@ -159,9 +167,12 @@ Archived (src/archive/, not compiled or deployed) — retained for reference.
 
 When no TWAP-capable route is available for a cross-denomination swap, a hookless V4 pool can be used as a last-resort spot-priced fallback. `_getV4Quote` then uses the instantaneous spot tick from `POOL_MANAGER.getSlot0()` instead of a TWAP oracle. This tick is manipulable via sandwich attacks, allowing an attacker to skew the `minAmountOut` and extract value from the swap. The sigmoid slippage model limits the damage but operates on a corrupted baseline. This is an accepted liveness tradeoff for the no-TWAP-route case: reverting when no TWAP is available would cause the CCIP message to fail, leaving bridged tokens stuck until manual retry. Hooked V4 pools must serve the configured TWAP window; if the hook's `observe()` reverts or lacks history, that pool is not eligible to beat a V3 TWAP route or degrade silently to spot.
 
-### 10.8 `mapTokens` refunds unused ETH
+### 10.8 `mapToken` and `mapTokens` refund unused ETH
 
-`mapTokens()` only uses `msg.value` when one or more mappings are being disabled and need transport payment for the final root flush. The value is split across disable candidates, but each `_mapToken` call reports whether it actually sent a root. Any ETH that was not used by a root send is refunded to `_msgSender()`, including enable-only value, duplicate/no-op disable value, and integer-division dust. If the refund transfer fails (e.g., the caller is a non-payable contract), the call reverts with `JBSucker_RefundFailed`.
+`mapToken()` and `mapTokens()` only use `msg.value` when mappings are being disabled and need transport payment for the
+final root flush. `_mapToken` reports whether it actually sent a root. Any ETH that was not used by a root send is
+refunded to `_msgSender()`, including enable-only value, duplicate/no-op disable value, and integer-division dust. If
+the refund transfer fails (e.g., the caller is a non-payable contract), the call reverts with `JBSucker_RefundFailed`.
 
 ### [ARCHIVED] 10.9 Zero-value `prepare()` is rejected (layered with zero-leaf inbox skip)
 

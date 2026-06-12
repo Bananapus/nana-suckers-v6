@@ -94,13 +94,21 @@ contract JBArbitrumSucker is JBSucker, IJBArbitrumSucker {
     // --------------------- internal transactions ----------------------- //
     //*********************************************************************//
 
-    /// @notice Approves the Arbitrum gateway to spend `amount` of `token`.
-    /// @param token The ERC-20 token to approve.
+    /// @notice Approves the Arbitrum gateway to spend `amount` of `approvalToken`.
+    /// @param approvalToken The ERC-20 token to approve.
+    /// @param gatewayLookupToken The token key used by the gateway router to resolve the spender.
     /// @param amount The amount to approve.
     /// @return gateway The gateway that was approved.
-    function _approveGateway(address token, uint256 amount) internal returns (address gateway) {
-        gateway = GATEWAYROUTER.getGateway(token);
-        SafeERC20.forceApprove({token: IERC20(token), spender: gateway, value: amount});
+    function _approveGateway(
+        address approvalToken,
+        address gatewayLookupToken,
+        uint256 amount
+    )
+        internal
+        returns (address gateway)
+    {
+        gateway = GATEWAYROUTER.getGateway(gatewayLookupToken);
+        SafeERC20.forceApprove({token: IERC20(approvalToken), spender: gateway, value: amount});
     }
 
     /// @notice Helper to create the retryable ticket, avoiding stack-too-deep.
@@ -214,7 +222,9 @@ contract JBArbitrumSucker is JBSucker, IJBArbitrumSucker {
         // If the token is an ERC-20, bridge it to the peer.
         // If the amount is `0` then we do not need to bridge any ERC20.
         if (token != JBConstants.NATIVE_TOKEN && amount != 0) {
-            address gateway = _approveGateway({token: token, amount: amount});
+            address gateway = _approveGateway({
+                approvalToken: token, gatewayLookupToken: _toAddress(remoteToken.addr), amount: amount
+            });
 
             // Convert bytes32 types to address at the Arbitrum bridge API boundary.
             IArbL2GatewayRouter(address(GATEWAYROUTER))
@@ -303,7 +313,7 @@ contract JBArbitrumSucker is JBSucker, IJBArbitrumSucker {
             }
 
             // Approve the tokens to be bridged.
-            _approveGateway({token: token, amount: amount});
+            _approveGateway({approvalToken: token, gatewayLookupToken: token, amount: amount});
 
             // Perform the ERC-20 bridge transfer. Convert bytes32 peer to address at the Arbitrum bridge API boundary.
             IArbL1GatewayRouter(address(GATEWAYROUTER)).outboundTransferCustomRefund{value: tokenTransportCost}({

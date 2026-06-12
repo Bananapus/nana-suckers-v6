@@ -82,7 +82,7 @@ This file documents the invariants the **runtime contracts in this repo** enforc
   - OP / Arb (base class): `NATIVE_TOKEN` may only map to `NATIVE_TOKEN` or `bytes32(0)`.
   - CCIP: `NATIVE_TOKEN` may map to an arbitrary remote ERC-20 (the remote chain might denominate ETH as a wrapped token).
 - All variants enforce `map.minGas >= MESSENGER_ERC20_MIN_GAS_LIMIT` so a too-low gas limit cannot strand bridged tokens.
-- `mapTokens` refunds all `msg.value` not used by an actual final root send, including enable-only value,
+- `mapToken` and `mapTokens` refund all `msg.value` not used by an actual final root send, including enable-only value,
   duplicate/no-op disable value, and integer-division dust.
 
 ## B.2 Deprecation has a 14-day delay
@@ -210,7 +210,7 @@ Arbitrum transport. Splits behavior by `LAYER == L1 | L2`.
 
 - **`peerChainId()`** — `1 ↔ 42161`, `11_155_111 ↔ 421_614`.
 - **`_isRemotePeer(address sender)`** — L1: `sender == ARBINBOX.bridge() && peer == IOutbox(bridge.activeOutbox()).l2ToL1Sender()`. L2: `sender == AddressAliasHelper.applyL1ToL2Alias(peer)` (`JBArbitrumSucker.sol:100-113`).
-- **`_sendRootOverAMB(...)`** — L1→L2 via `_toL2` (creates two retryable tickets: one for the ERC-20 token bridge, one for the root message — these are redeemed *independently* on L2 with no ordering guarantee; `_addToBalance` defends via `amountToAddToBalanceOf` balance check). L2→L1 via `_toL1` using `ArbSys.sendTxToL1`. L2→L1 is zero-cost (reverts on non-zero `transportPayment`); L1→L2 requires `transportPayment > 0` for retryable tickets.
+- **`_sendRootOverAMB(...)`** — L1→L2 via `_toL2` (creates two retryable tickets: one for the ERC-20 token bridge, one for the root message — these are redeemed *independently* on L2 with no ordering guarantee; `_addToBalance` defends via `amountToAddToBalanceOf` balance check). L2→L1 via `_toL1` using `ArbSys.sendTxToL1`. L2→L1 ERC-20 sends approve the local token to the gateway selected by the remote L1 token, matching the router transfer key. L2→L1 is zero-cost (reverts on non-zero `transportPayment`); L1→L2 requires `transportPayment > 0` for retryable tickets.
 - **`_sendAccountingSnapshotOverAMB(...)`** — sends only `JBSucker.fromRemoteAccounting(snapshot)`. L1→L2 still requires retryable-ticket payment; L2→L1 remains zero-cost and rejects non-zero `transportPayment`.
 
 ## C.6 JBCCIPSucker — `src/JBCCIPSucker.sol`
