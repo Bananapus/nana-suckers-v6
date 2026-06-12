@@ -9,6 +9,7 @@ There is a billion dollars of well-meaning projects' money in the Juicebox Money
 Suggestions of where to look:
 
 - break Merkle-root or nonce progression
+- make accounting-only sync mutate claim state or bypass freshness
 - allow bad token mapping or peer assumptions
 - permit double-claim or bad emergency exit behavior
 - make non-atomic bridge semantics unsafe

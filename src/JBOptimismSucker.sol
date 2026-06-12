@@ -14,6 +14,7 @@ import {IJBSuckerRegistry} from "./interfaces/IJBSuckerRegistry.sol";
 import {IJBOptimismSucker} from "./interfaces/IJBOptimismSucker.sol";
 import {IOPMessenger} from "./interfaces/IOPMessenger.sol";
 import {IOPStandardBridge} from "./interfaces/IOPStandardBridge.sol";
+import {JBAccountingSnapshot} from "./structs/JBAccountingSnapshot.sol";
 import {JBMessageRoot} from "./structs/JBMessageRoot.sol";
 import {JBRemoteToken} from "./structs/JBRemoteToken.sol";
 
@@ -56,7 +57,7 @@ contract JBOptimismSucker is JBSucker, IJBOptimismSucker {
     }
 
     //*********************************************************************//
-    // ------------------------ external views --------------------------- //
+    // ------------------------- public views ---------------------------- //
     //*********************************************************************//
 
     /// @notice Returns the chain on which the peer is located.
@@ -79,6 +80,30 @@ contract JBOptimismSucker is JBSucker, IJBOptimismSucker {
     /// @return valid A flag if the sender is a valid representative of the remote peer.
     function _isRemotePeer(address sender) internal override returns (bool valid) {
         return sender == address(OPMESSENGER) && _toBytes32(OPMESSENGER.xDomainMessageSender()) == peer();
+    }
+
+    /// @notice Uses the OP messenger to send accounting data over the bridge to the peer.
+    /// @param transportPayment The amount of `msg.value` that is going to get paid for sending this message.
+    /// @param snapshot The accounting snapshot to send to the remote peer.
+    // forge-lint: disable-next-line(mixed-case-function)
+    function _sendAccountingSnapshotOverAMB(
+        uint256 transportPayment,
+        JBAccountingSnapshot memory snapshot
+    )
+        internal
+        virtual
+        override
+    {
+        // The OP messenger does not expect native transport payment for accounting-only messages.
+        if (transportPayment != 0) {
+            revert JBSucker_UnexpectedMsgValue({value: transportPayment});
+        }
+
+        OPMESSENGER.sendMessage({
+            target: _toAddress(peer()),
+            message: abi.encodeCall(JBSucker.fromRemoteAccounting, (snapshot)),
+            gasLimit: MESSENGER_BASE_GAS_LIMIT
+        });
     }
 
     /// @notice Use the `OPMESSENGER` to send the outbox tree for the `token` and the corresponding funds to the peer

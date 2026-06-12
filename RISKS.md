@@ -70,6 +70,7 @@ This file focuses on the bridge-like risks in the sucker system: merkle-root pro
 ## 5. Fee collection risks
 
 - **Best-effort fee collection.** `toRemoteFee` is a centralized storage variable on `JBSuckerRegistry` (ETH, in wei) — uniform across all suckers and all tokens, non-bypassable by integrators. It is paid into `FEE_PROJECT_ID` (typically project ID 1) via `terminal.pay()`. If the fee project has no primary terminal for `NATIVE_TOKEN`, or if `terminal.pay()` reverts for any reason, `toRemote()` still proceeds, but the fee ETH is retained as a refundable balance for the original caller and excluded from native add-to-balance accounting. Fee collection is therefore best-effort at the protocol-fee destination even though users still supply the fee amount.
+- **Accounting sync has no registry fee.** `syncAccountingData()` is not a value/root relay and does not read or charge `toRemoteFee`. The caller still supplies any bridge transport payment required by the chain-specific implementation. Duplicate accounting snapshots are allowed so operators can retry delivery, but they can still consume bridge and indexer resources even when the underlying supply/surplus/balance values are unchanged.
 - **Renounced registry ownership risk.** If the registry owner calls `renounceOwnership()`, `setToRemoteFee()` becomes permanently uncallable and the fee is frozen at its current value across all suckers. This is a deliberate trade-off: it allows the registry owner to credibly commit to a fee level, but eliminates the ability to respond to future ETH price changes. The fee is still capped at `MAX_TO_REMOTE_FEE`, so the maximum downside is bounded.
 - **Immutable fee project.** `FEE_PROJECT_ID` is set at construction and cannot be changed. If the fee project is abandoned or its terminal removed, there is no way to redirect fees without deploying new suckers.
 - **Cross-reference: sucker registration path.** Suckers are deployed via `JBSuckerRegistry.deploySuckersFor`, which requires `DEPLOY_SUCKERS` permission from the project owner. The registry's `deploy` function uses `CREATE2` with a deployer-specific salt. The sucker's `peer()` address is deterministic — a misconfigured peer means the sucker accepts messages from the wrong remote address. See [nana-omnichain-deployers-v6 RISKS.md](../nana-omnichain-deployers-v6/RISKS.md) for deployer-level risks.
@@ -105,6 +106,7 @@ This file focuses on the bridge-like risks in the sucker system: merkle-root pro
 - **uint128 cap for SVM compatibility.** `_insertIntoTree` reverts if `projectTokenCount` or `terminalTokenAmount` exceeds `type(uint128).max`. This is enforced for cross-VM compatibility but limits EVM-only use cases to ~3.4e38 wei per leaf.
 - **Arbitrum retryable ticket pricing.** `_toL2` uses `block.basefee` as `maxFeePerGas`. If L2 gas prices spike above L1's `block.basefee`, the retryable ticket may not auto-redeem and requires manual retry.
 - **CCIP fee volatility.** `_sendRootOverAMB` checks `CCIP_ROUTER.getFee()` at call time. If fees spike between estimation and execution, the transaction reverts with `JBSucker_InsufficientMsgValue`. No retry mechanism exists.
+- **Accounting-only message fee volatility.** `syncAccountingData()` uses the same bridge-specific transport fee machinery as root messages, without transporting tokens. OP/Base and Arbitrum L2->L1 reject nonzero transport payment, Arbitrum L1->L2 requires retryable-ticket payment, and CCIP may use native ETH or LINK depending on the supplied value. CCIP destination gas scales with the number of source accounting contexts carried by the message, but very large context sets can still make fees expensive or hit chain-specific CCIP gas caps.
 - **`toRemote` fee fallback retains refundable ETH.** If the fee project's terminal is missing or `terminal.pay()` reverts, `toRemote()` keeps the fee ETH in the sucker so zero-cost bridges can still proceed with `transportPayment = msg.value - fee`. The retained fee is credited to the original caller, excluded from `amountToAddToBalanceOf(NATIVE_TOKEN)`, and can be reclaimed with `claimRetainedToRemoteFee(...)`. The retained amount per affected call is bounded by `MAX_TO_REMOTE_FEE` (currently `0.001 ether`).
 - **CCIP transport payment refund failure.** If `_msgSender()` is a non-payable contract, the refund `call` fails silently. The excess ETH (transportPayment - fees) is permanently stuck in the sucker. The contract emits `TransportPaymentRefundFailed` but has no sweep mechanism.
 - **Unbounded sucker count per project.** `JBSuckerRegistry._suckersOf` uses an EnumerableMap with no cap. `suckerPairsOf` iterates all suckers with external calls per iteration. Extremely large sucker counts could cause view functions to exceed gas limits.
@@ -121,7 +123,7 @@ This file focuses on the bridge-like risks in the sucker system: merkle-root pro
 - **Cross-token execution isolation.** Claiming index N on token A does not mark index N as executed for token B. The `_executedFor` bitmap is keyed by terminal token address. Tested in `test_concurrentClaim_crossTokenExecutionIsolation`.
 - **Claim and emergency exit slot independence.** A regular claim (inbox path) and an emergency exit (outbox path) for the same index on the same token use different bitmap keys and do not interfere. Tested in `test_merkleTree_claimAndEmergencyExitSlotIndependence`.
 - **Tree count monotonically increases.** `MerkleLib.Tree.count` only increments (append-only). No operation decreases the count. Tested in `invariant_treeCountMonotonicallyIncreases`.
-- **Message version gate.** `fromRemote` rejects any message where `root.version != MESSAGE_VERSION`. Tested in `test_merkleTree_messageVersionValidation`.
+- **Message version gate.** `fromRemote` rejects any message where `root.version != MESSAGE_VERSION`, and `fromRemoteAccounting` applies the same gate to accounting-only snapshots. Tested in `test_merkleTree_messageVersionValidation` and peer-accounting unit coverage.
 
 ## 10. Accepted behaviors
 
@@ -180,7 +182,13 @@ The `IJBPrices` reference lives on `JBSuckerRegistry`, which does the valuation 
 
 Projects that need cross-currency remote surplus and balance accounting (peer state denominated in a currency different from the one being read) should register the relevant price feed via `JBPrices`, the same feed the local terminal store would use. Same-currency remote state needs no feed at all.
 
-### [ARCHIVED] 10.11 Claim nonce lookup is bounded by received batches, not sparse nonce gaps
+### 10.11 Accounting-only sync updates peer state, not claim state
+
+`syncAccountingData()` lets any caller send the current total supply plus raw surplus/balance contexts without sending a Merkle root or transported value. The receiver handles this through `fromRemoteAccounting(JBAccountingSnapshot)`, which shares the same peer authentication, message-version gate, and strict freshness rule as the accounting portion of `fromRemote`. A fresh accounting-only snapshot can update `peerChainTotalSupply`, `_peerContexts`, and `snapshotTimestamp`; it cannot update any token's inbox nonce/root and cannot make claims available.
+
+Duplicate accounting snapshots are allowed: the sender assigns a fresh source timestamp every time, even if the underlying supply, surplus, and balance are unchanged. This keeps accounting syncs retryable and avoids coupling them to root sends, but accepts a spam tradeoff on bridge delivery and off-chain indexing. The receiver's strict freshness gate means an older duplicate cannot roll state back, and even a fresher duplicate only rewrites project-wide accounting fields; root, nonce, claimability, and transported value stay untouched.
+
+### [ARCHIVED] 10.12 Claim nonce lookup is bounded by received batches, not sparse nonce gaps
 
 Archived (src/archive/, not compiled or deployed) — retained for reference.
 

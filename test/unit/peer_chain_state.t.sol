@@ -25,6 +25,7 @@ import "../../src/JBSucker.sol";
 
 import {IJBPeerChainAdjustedAccounts} from "../../src/interfaces/IJBPeerChainAdjustedAccounts.sol";
 import {IJBSuckerRegistry} from "../../src/interfaces/IJBSuckerRegistry.sol";
+import {JBAccountingSnapshot} from "../../src/structs/JBAccountingSnapshot.sol";
 import {JBInboxTreeRoot} from "../../src/structs/JBInboxTreeRoot.sol";
 import {JBMessageRoot} from "../../src/structs/JBMessageRoot.sol";
 import {JBPeerChainContext} from "../../src/structs/JBPeerChainContext.sol";
@@ -41,6 +42,16 @@ contract PeerChainStateSucker is JBSucker {
     /// can't be copied straight to storage without the IR pipeline).
     bytes private _lastSentMessage;
 
+    /// @notice The last JBAccountingSnapshot passed to _sendAccountingSnapshotOverAMB, abi-encoded.
+    bytes private _lastSentAccountingSnapshot;
+
+    /// @notice The transport payment passed to _sendAccountingSnapshotOverAMB.
+    uint256 public lastAccountingTransportPayment;
+
+    /// @notice Whether _sendAccountingSnapshotOverAMB was called.
+    // forge-lint: disable-next-line(mixed-case-variable)
+    bool public sendAccountingSnapshotOverAMBCalled;
+
     /// @notice Whether _sendRootOverAMB was called.
     // forge-lint: disable-next-line(mixed-case-variable)
     bool public sendRootOverAMBCalled;
@@ -53,6 +64,19 @@ contract PeerChainStateSucker is JBSucker {
     )
         JBSucker(directory, permissions, tokens, 1, IJBSuckerRegistry(address(1)), forwarder)
     {}
+
+    // forge-lint: disable-next-line(mixed-case-function)
+    function _sendAccountingSnapshotOverAMB(
+        uint256 transportPayment,
+        JBAccountingSnapshot memory snapshot
+    )
+        internal
+        override
+    {
+        _lastSentAccountingSnapshot = abi.encode(snapshot);
+        lastAccountingTransportPayment = transportPayment;
+        sendAccountingSnapshotOverAMBCalled = true;
+    }
 
     // forge-lint: disable-next-line(mixed-case-function)
     function _sendRootOverAMB(
@@ -101,6 +125,10 @@ contract PeerChainStateSucker is JBSucker {
 
     function test_resetSendRootOverAMBCalled() external {
         sendRootOverAMBCalled = false;
+    }
+
+    function test_getLastSentAccountingSnapshot() external view returns (JBAccountingSnapshot memory) {
+        return abi.decode(_lastSentAccountingSnapshot, (JBAccountingSnapshot));
     }
 
     function test_getLastSentMessage() external view returns (JBMessageRoot memory) {
@@ -598,6 +626,125 @@ contract PeerChainStateTest is Test {
     }
 
     // =========================================================================
+    // Group 3: accounting-only sync
+    // =========================================================================
+
+    /// @notice fromRemoteAccounting stores peer-chain accounting without touching token-local inbox roots.
+    function test_fromRemoteAccountingUpdatesAccountingWithoutTouchingInbox() public {
+        bytes32 inboxRoot = bytes32(uint256(0xDEAD));
+
+        vm.prank(address(sucker));
+        sucker.fromRemote(
+            _root({
+                nonce: 7, totalSupply: 500 ether, contexts: _singleContext({surplus: 100 ether, balance: 200 ether})
+            })
+        );
+
+        JBAccountingSnapshot memory snapshot =
+            _accountingSnapshot({sourceTimestamp: 8, totalSupply: 900 ether, surplus: 300 ether, balance: 400 ether});
+        snapshot.sourceContexts[0].token = bytes32(uint256(uint160(TOKEN)));
+
+        vm.prank(address(sucker));
+        sucker.fromRemoteAccounting(snapshot);
+
+        JBInboxTreeRoot memory inbox = sucker.inboxOf(TOKEN);
+        assertEq(inbox.nonce, 7, "accounting sync must not alter inbox nonce");
+        assertEq(inbox.root, inboxRoot, "accounting sync must not alter inbox root");
+        assertEq(sucker.peerChainTotalSupply(), 900 ether, "accounting supply updated");
+        assertEq(_contextFor(NATIVE_CURRENCY).surplus, 300 ether, "accounting surplus updated");
+        assertEq(_contextFor(NATIVE_CURRENCY).balance, 400 ether, "accounting balance updated");
+    }
+
+    /// @notice fromRemoteAccounting ignores stale snapshots, preserving fresher root-delivered accounting.
+    function test_fromRemoteAccountingDoesNotRollbackFresherRootSnapshot() public {
+        vm.prank(address(sucker));
+        sucker.fromRemote(
+            _root({
+                nonce: 5, totalSupply: 500 ether, contexts: _singleContext({surplus: 100 ether, balance: 200 ether})
+            })
+        );
+
+        vm.prank(address(sucker));
+        sucker.fromRemoteAccounting(
+            _accountingSnapshot({sourceTimestamp: 4, totalSupply: 999 ether, surplus: 999 ether, balance: 999 ether})
+        );
+
+        assertEq(sucker.peerChainTotalSupply(), 500 ether, "stale accounting supply ignored");
+        assertEq(_contextFor(NATIVE_CURRENCY).surplus, 100 ether, "stale accounting surplus ignored");
+        assertEq(_contextFor(NATIVE_CURRENCY).balance, 200 ether, "stale accounting balance ignored");
+    }
+
+    /// @notice syncAccountingData sends accounting data without consulting or collecting the registry fee.
+    function test_syncAccountingDataSendsChangedSnapshotWithoutToRemoteFee() public {
+        vm.mockCall(
+            CONTROLLER,
+            abi.encodeCall(IJBController.totalTokenSupplyWithReservedTokensOf, (PROJECT_ID)),
+            abi.encode(uint256(1000 ether))
+        );
+        _mockSingleETHTerminal({ethBalance: 50 ether, ethSurplus: 30 ether});
+
+        vm.expectCall(address(1), abi.encodeCall(IJBSuckerRegistry.toRemoteFee, ()), 0);
+        sucker.syncAccountingData();
+
+        assertTrue(sucker.sendAccountingSnapshotOverAMBCalled(), "accounting message sent");
+        assertEq(sucker.lastAccountingTransportPayment(), 0, "no transport payment passed");
+
+        JBAccountingSnapshot memory snapshot = sucker.test_getLastSentAccountingSnapshot();
+        assertEq(snapshot.version, 1, "message version");
+        assertEq(snapshot.sourceTotalSupply, 1000 ether, "source supply");
+        assertEq(snapshot.sourceContexts.length, 1, "one context");
+        assertEq(snapshot.sourceContexts[0].surplus, 30 ether, "source surplus");
+        assertEq(snapshot.sourceContexts[0].balance, 50 ether, "source balance");
+        assertEq(snapshot.sourceTimestamp >> 128, block.timestamp, "timestamp high bits");
+        assertEq(uint128(snapshot.sourceTimestamp), 1, "timestamp sequence");
+    }
+
+    /// @notice syncAccountingData can retry an unchanged accounting snapshot with a fresh source timestamp.
+    function test_syncAccountingDataCanResendUnchangedAccountingData() public {
+        vm.mockCall(
+            CONTROLLER,
+            abi.encodeCall(IJBController.totalTokenSupplyWithReservedTokensOf, (PROJECT_ID)),
+            abi.encode(uint256(1000 ether))
+        );
+        _mockSingleETHTerminal({ethBalance: 50 ether, ethSurplus: 30 ether});
+
+        sucker.syncAccountingData();
+        sucker.syncAccountingData();
+
+        JBAccountingSnapshot memory snapshot = sucker.test_getLastSentAccountingSnapshot();
+        assertEq(snapshot.sourceTotalSupply, 1000 ether, "source supply");
+        assertEq(snapshot.sourceContexts[0].surplus, 30 ether, "source surplus");
+        assertEq(snapshot.sourceContexts[0].balance, 50 ether, "source balance");
+        assertEq(uint128(snapshot.sourceTimestamp), 2, "timestamp sequence advanced");
+    }
+
+    /// @notice A root send does not block a later accounting-only retry of the same data.
+    function test_toRemoteDoesNotBlockAccountingDataResend() public {
+        _setRemoteTokenMapping();
+
+        vm.deal(address(sucker), 1 ether);
+        sucker.test_insertIntoTree(1 ether, TOKEN, 1 ether, bytes32(uint256(uint160(address(0xBEEF)))));
+
+        vm.mockCall(
+            CONTROLLER,
+            abi.encodeCall(IJBController.totalTokenSupplyWithReservedTokensOf, (PROJECT_ID)),
+            abi.encode(uint256(1000 ether))
+        );
+        _mockSingleETHTerminal({ethBalance: 50 ether, ethSurplus: 30 ether});
+
+        sucker.toRemote(TOKEN);
+        sucker.syncAccountingData();
+
+        assertTrue(sucker.sendAccountingSnapshotOverAMBCalled(), "accounting message sent");
+
+        JBAccountingSnapshot memory snapshot = sucker.test_getLastSentAccountingSnapshot();
+        assertEq(snapshot.sourceTotalSupply, 1000 ether, "source supply");
+        assertEq(snapshot.sourceContexts[0].surplus, 30 ether, "source surplus");
+        assertEq(snapshot.sourceContexts[0].balance, 50 ether, "source balance");
+        assertEq(uint128(snapshot.sourceTimestamp), 2, "timestamp sequence advanced");
+    }
+
+    // =========================================================================
     // Helpers
     // =========================================================================
 
@@ -729,6 +876,25 @@ contract PeerChainStateTest is Test {
         return _root({nonce: nonce, totalSupply: totalSupply, contexts: contexts});
     }
 
+    /// @notice Build an accounting-only snapshot carrying a single native context.
+    function _accountingSnapshot(
+        uint256 sourceTimestamp,
+        uint256 totalSupply,
+        uint128 surplus,
+        uint128 balance
+    )
+        internal
+        pure
+        returns (JBAccountingSnapshot memory)
+    {
+        return JBAccountingSnapshot({
+            version: 1,
+            sourceTotalSupply: totalSupply,
+            sourceContexts: _singleContext({surplus: surplus, balance: balance}),
+            sourceTimestamp: sourceTimestamp
+        });
+    }
+
     /// @notice Mock a single native-token terminal with a known recorded balance and per-token surplus.
     function _mockSingleETHTerminal(uint256 ethBalance, uint256 ethSurplus) internal {
         IJBTerminal[] memory terminals = new IJBTerminal[](1);
@@ -754,5 +920,17 @@ contract PeerChainStateTest is Test {
         vm.mockCall(
             STORE, abi.encodeCall(IJBTerminalStore.balanceOf, (TERMINAL, PROJECT_ID, TOKEN)), abi.encode(ethBalance)
         );
+    }
+
+    /// @notice Build a single native source context.
+    function _singleContext(uint128 surplus, uint128 balance)
+        internal
+        pure
+        returns (JBSourceContext[] memory contexts)
+    {
+        contexts = new JBSourceContext[](1);
+        contexts[0] = JBSourceContext({
+            token: bytes32(uint256(uint160(TOKEN))), decimals: ETH_DECIMALS, surplus: surplus, balance: balance
+        });
     }
 }

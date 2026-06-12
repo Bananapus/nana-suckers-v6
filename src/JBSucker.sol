@@ -36,14 +36,15 @@ import {JBSuckerLib} from "./libraries/JBSuckerLib.sol";
 import {MerkleLib} from "./utils/MerkleLib.sol";
 
 // Local: structs (alphabetized)
+import {JBAccountingSnapshot} from "./structs/JBAccountingSnapshot.sol";
 import {JBClaim} from "./structs/JBClaim.sol";
 import {JBInboxTreeRoot} from "./structs/JBInboxTreeRoot.sol";
 import {JBMessageRoot} from "./structs/JBMessageRoot.sol";
-import {JBPeerChainContext} from "./structs/JBPeerChainContext.sol";
-import {JBSourceContext} from "./structs/JBSourceContext.sol";
 import {JBOutboxTree} from "./structs/JBOutboxTree.sol";
+import {JBPeerChainContext} from "./structs/JBPeerChainContext.sol";
 import {JBPeerChainValue} from "./structs/JBPeerChainValue.sol";
 import {JBRemoteToken} from "./structs/JBRemoteToken.sol";
+import {JBSourceContext} from "./structs/JBSourceContext.sol";
 import {JBTokenMapping} from "./structs/JBTokenMapping.sol";
 
 /// @notice Bridges a Juicebox project's tokens and their backing terminal-token funds between two chains. Token
@@ -67,6 +68,9 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     //*********************************************************************//
     // --------------------------- custom errors ------------------------- //
     //*********************************************************************//
+
+    /// @notice Thrown when a bridge-specific implementation does not support accounting-only messages.
+    error JBSucker_AccountingSyncUnsupported();
 
     /// @notice Thrown when a terminal-token or project-token amount being bridged exceeds the `uint128` cap enforced
     /// for cross-VM compatibility.
@@ -401,39 +405,43 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         }
     }
 
-    /// @notice Claim a single bridged entry: verifies the merkle proof against the inbox root, mints the specified
-    /// project tokens for the beneficiary, and deposits the terminal tokens into the project's local balance.
-    /// @param claimData The terminal token, merkle tree leaf, and proof for the claim.
-    function claim(JBClaim calldata claimData) public virtual override {
-        // Attempt to validate the proof against the inbox tree for the terminal token. The leaf hash includes
-        // `claimData.leaf.metadata` so the proof is only valid for the exact (amount, beneficiary, metadata) tuple the
-        // origin committed to.
-        _validate({
-            projectTokenCount: claimData.leaf.projectTokenCount,
-            terminalToken: claimData.token,
-            terminalTokenAmount: claimData.leaf.terminalTokenAmount,
-            beneficiary: claimData.leaf.beneficiary,
-            metadata: claimData.leaf.metadata,
-            index: claimData.leaf.index,
-            leaves: claimData.proof
-        });
+    /// @notice Claim retained failed-fee ETH.
+    /// @param beneficiary The address that should receive the retained ETH.
+    function claimRetainedToRemoteFee(address payable beneficiary) external override {
+        if (beneficiary == address(0)) revert JBSucker_ZeroBeneficiary({beneficiary: bytes32(0)});
 
-        emit Claimed({
-            beneficiary: claimData.leaf.beneficiary,
-            token: claimData.token,
-            projectTokenCount: claimData.leaf.projectTokenCount,
-            terminalTokenAmount: claimData.leaf.terminalTokenAmount,
-            index: claimData.leaf.index,
-            metadata: claimData.leaf.metadata,
-            caller: _msgSender()
-        });
+        address account = _msgSender();
+        uint256 amount = retainedToRemoteFeeOf[account];
+        if (amount == 0) revert JBSucker_NoRetainedToRemoteFee(account);
 
-        // Give the user their project tokens, send the project its funds.
-        _handleClaim({
-            terminalToken: claimData.token,
-            terminalTokenAmount: claimData.leaf.terminalTokenAmount,
-            projectTokenAmount: claimData.leaf.projectTokenCount,
-            beneficiary: claimData.leaf.beneficiary
+        retainedToRemoteFeeOf[account] = 0;
+        retainedToRemoteFeeBalance -= amount;
+
+        _sendNativeTo({beneficiary: beneficiary, amount: amount});
+
+        // State was cleared before sending ETH; the event is emitted after the transfer so failed sends do not log.
+        emit RetainedToRemoteFeeClaimed({
+            account: account, beneficiary: beneficiary, amount: amount, caller: _msgSender()
+        });
+    }
+
+    /// @notice Claim retained failed transport-payment refund ETH.
+    /// @param beneficiary The address that should receive the retained ETH.
+    function claimRetainedTransportPaymentRefund(address payable beneficiary) external override {
+        if (beneficiary == address(0)) revert JBSucker_ZeroBeneficiary({beneficiary: bytes32(0)});
+
+        address account = _msgSender();
+        uint256 amount = retainedTransportPaymentRefundOf[account];
+        if (amount == 0) revert JBSucker_NoRetainedTransportPaymentRefund(account);
+
+        retainedTransportPaymentRefundOf[account] = 0;
+        retainedTransportPaymentRefundBalance -= amount;
+
+        _sendNativeTo({beneficiary: beneficiary, amount: amount});
+
+        // State was cleared before sending ETH; the event is emitted after the transfer so failed sends do not log.
+        emit RetainedTransportPaymentRefundClaimed({
+            account: account, beneficiary: beneficiary, amount: amount, caller: _msgSender()
         });
     }
 
@@ -571,78 +579,38 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
             });
         }
 
-        // --- Project-wide shared state update (gated by source freshness key) ---
-        // Only accept snapshots whose source freshness key is strictly newer than the last accepted one.
-        // This prevents a staler per-token message from rolling back shared state (surplus, balance, supply)
-        // that was already updated by a fresher message for a different token.
-        if (root.sourceTimestamp > snapshotTimestamp) {
-            // Advance the snapshot freshness key (used by the registry to dedup same-peer suckers).
-            snapshotTimestamp = root.sourceTimestamp;
+        _storePeerChainAccounting({
+            sourceTimestamp: root.sourceTimestamp,
+            sourceTotalSupply: root.sourceTotalSupply,
+            sourceContexts: root.sourceContexts
+        });
+    }
 
-            // Update unconditionally — a legitimate zero supply must clear phantom cached supply.
-            peerChainTotalSupply = root.sourceTotalSupply;
-
-            // Rebuild the per-currency context set from scratch. A context that dropped out of this fresher snapshot is
-            // simply absent from the new set, so no per-entry clearing is needed.
-            delete _peerContexts;
-
-            // Fold each source context into the local currency it resolves to. Resolution prefers the token mapping (so
-            // a same-asset token at a different remote address binds to the right local context) and falls back to
-            // identity for same-address tokens; the local currency is then derived from that resolved local token's
-            // authoritative accounting context, NOT trusted from the wire, so a same-asset token at a different address
-            // still folds under the receiver's own currency. Multiple source contexts that resolve to the same local
-            // currency (e.g. the same token across multiple terminals) are summed.
-            uint256 numContexts = root.sourceContexts.length;
-            for (uint256 i; i < numContexts;) {
-                JBSourceContext calldata ctx = root.sourceContexts[i];
-
-                address contextToken = _localTokenForRemoteToken[ctx.token];
-                if (contextToken == address(0)) contextToken = _toAddress(ctx.token);
-                (uint32 contextCurrency, bool authoritative) = _localCurrencyOf(contextToken);
-                // Cache an authoritative currency so later snapshots reuse it instead of re-reading the terminal. The
-                // accounting-context currency is immutable, so the cache never goes stale; a not-yet-configured token
-                // is left uncached and re-read next time.
-                if (authoritative && _cachedCurrencyOf[contextToken] == 0) {
-                    _cachedCurrencyOf[contextToken] = contextCurrency;
-                }
-
-                // Accumulate into an existing entry that matches on BOTH currency AND decimals, or append a new one.
-                // The decimals must match: `surplus`/`balance` are raw, un-valued token amounts, so two contexts that
-                // share a currency but carry different decimals (e.g. a 6-decimal and an 18-decimal representation of
-                // the same currency) are on different scales and CANNOT be summed directly — doing so would corrupt
-                // the
-                // aggregate. Keeping them as separate entries lets the read side (`remoteSurplusOf` -> `_valued`)
-                // decimal-adjust each one independently before summing. The context set is small (one entry per
-                // distinct local currency+decimals), so a linear scan is cheaper than a mapping.
-                uint256 numStored = _peerContexts.length;
-                bool merged;
-                for (uint256 j; j < numStored;) {
-                    if (_peerContexts[j].currency == contextCurrency && _peerContexts[j].decimals == ctx.decimals) {
-                        _peerContexts[j].surplus = _saturatingAddU128(_peerContexts[j].surplus, ctx.surplus);
-                        _peerContexts[j].balance = _saturatingAddU128(_peerContexts[j].balance, ctx.balance);
-                        merged = true;
-                        break;
-                    }
-                    unchecked {
-                        ++j;
-                    }
-                }
-                if (!merged) {
-                    _peerContexts.push(
-                        JBPeerChainContext({
-                            currency: contextCurrency,
-                            decimals: ctx.decimals,
-                            surplus: ctx.surplus,
-                            balance: ctx.balance
-                        })
-                    );
-                }
-
-                unchecked {
-                    ++i;
-                }
-            }
+    /// @notice Receive a peer-chain accounting snapshot from the remote sucker without updating any token-local inbox
+    /// root.
+    /// @dev This can only be called by the messenger contract on the local chain, with a message from the remote peer.
+    /// It shares the same freshness gate as `fromRemote`, so stale accounting-only messages cannot roll back fresher
+    /// state delivered by a root message.
+    /// @param snapshot The peer-chain accounting snapshot to receive.
+    function fromRemoteAccounting(JBAccountingSnapshot calldata snapshot) external override {
+        // Make sure that the message came from our peer.
+        // Use msg.sender (not _msgSender()) because bridge messengers never use ERC2771 meta-transactions.
+        // Using _msgSender() would allow a trusted forwarder to spoof the bridge messenger address via the
+        // ERC-2771 calldata suffix.
+        if (!_isRemotePeer(msg.sender)) {
+            revert JBSucker_NotPeer({caller: _toBytes32(msg.sender)});
         }
+
+        // Validate the message version to reject incompatible messages.
+        if (snapshot.version != MESSAGE_VERSION) {
+            revert JBSucker_InvalidMessageVersion({received: snapshot.version, expected: MESSAGE_VERSION});
+        }
+
+        _storePeerChainAccounting({
+            sourceTimestamp: snapshot.sourceTimestamp,
+            sourceTotalSupply: snapshot.sourceTotalSupply,
+            sourceContexts: snapshot.sourceContexts
+        });
     }
 
     /// @notice Configure which remote-chain tokens each local terminal token maps to, enabling (or disabling) those
@@ -787,6 +755,26 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
 
         deprecatedAfter = timestamp;
         emit DeprecationTimeUpdated({timestamp: timestamp, caller: _msgSender()});
+    }
+
+    /// @notice Send the latest peer-chain accounting data without sending an outbox root or paying the registry
+    /// `toRemoteFee`.
+    /// @dev The caller still provides any bridge transport payment through `msg.value`.
+    function syncAccountingData() external payable override {
+        // Accounting-only messages are outbound bridge messages and follow the same deprecation boundary as roots.
+        _requireSendingEnabled();
+
+        uint256 sourceTimestamp = _nextSourceTimestamp();
+        JBAccountingSnapshot memory snapshot = JBSuckerLib.buildAccountingSnapshot({
+            directory: DIRECTORY,
+            projectId: projectId(),
+            messageVersion: MESSAGE_VERSION,
+            sourceTimestamp: sourceTimestamp
+        });
+
+        emit AccountingDataSynced({sourceTimestamp: sourceTimestamp, caller: _msgSender()});
+
+        _sendAccountingSnapshotOverAMB({transportPayment: msg.value, snapshot: snapshot});
     }
 
     /// @notice Send the accumulated outbox merkle root and locked terminal-token funds for a given `token` across the
@@ -939,12 +927,6 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         return amount;
     }
 
-    /// @notice Returns the chain on which the peer is located.
-    /// @dev `public` (not `external`) so the combined peer-chain views in this contract can read it internally
-    /// without a self-call; subclasses implement the bridge-specific chain ID.
-    /// @return chain ID of the peer.
-    function peerChainId() public view virtual returns (uint256);
-
     /// @notice The peer sucker on the remote chain, as a bytes32 for cross-VM compatibility.
     /// @dev Defaults to `_toBytes32(address(this))`, assuming deterministic cross-chain deployment via CREATE2. The
     /// deployer (`JBSuckerDeployer`) uses `salt = keccak256(abi.encodePacked(_msgSender(), salt))` to ensure
@@ -956,6 +938,12 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         if (configuredPeer != bytes32(0)) return configuredPeer;
         return _toBytes32(address(this));
     }
+
+    /// @notice Returns the chain on which the peer is located.
+    /// @dev `public` (not `external`) so the combined peer-chain views in this contract can read it internally
+    /// without a self-call; subclasses implement the bridge-specific chain ID.
+    /// @return chain ID of the peer.
+    function peerChainId() public view virtual returns (uint256);
 
     /// @notice The ID of the project (on the local chain) that this sucker is associated with.
     /// @return The local project ID.
@@ -1003,43 +991,39 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     // ----------------------- public transactions ----------------------- //
     //*********************************************************************//
 
-    /// @notice Claim retained failed-fee ETH.
-    /// @param beneficiary The address that should receive the retained ETH.
-    function claimRetainedToRemoteFee(address payable beneficiary) external override {
-        if (beneficiary == address(0)) revert JBSucker_ZeroBeneficiary({beneficiary: bytes32(0)});
-
-        address account = _msgSender();
-        uint256 amount = retainedToRemoteFeeOf[account];
-        if (amount == 0) revert JBSucker_NoRetainedToRemoteFee(account);
-
-        retainedToRemoteFeeOf[account] = 0;
-        retainedToRemoteFeeBalance -= amount;
-
-        _sendNativeTo({beneficiary: beneficiary, amount: amount});
-
-        // State was cleared before sending ETH; the event is emitted after the transfer so failed sends do not log.
-        emit RetainedToRemoteFeeClaimed({
-            account: account, beneficiary: beneficiary, amount: amount, caller: _msgSender()
+    /// @notice Claim a single bridged entry: verifies the merkle proof against the inbox root, mints the specified
+    /// project tokens for the beneficiary, and deposits the terminal tokens into the project's local balance.
+    /// @param claimData The terminal token, merkle tree leaf, and proof for the claim.
+    function claim(JBClaim calldata claimData) public virtual override {
+        // Attempt to validate the proof against the inbox tree for the terminal token. The leaf hash includes
+        // `claimData.leaf.metadata` so the proof is only valid for the exact (amount, beneficiary, metadata) tuple the
+        // origin committed to.
+        _validate({
+            projectTokenCount: claimData.leaf.projectTokenCount,
+            terminalToken: claimData.token,
+            terminalTokenAmount: claimData.leaf.terminalTokenAmount,
+            beneficiary: claimData.leaf.beneficiary,
+            metadata: claimData.leaf.metadata,
+            index: claimData.leaf.index,
+            leaves: claimData.proof
         });
-    }
 
-    /// @notice Claim retained failed transport-payment refund ETH.
-    /// @param beneficiary The address that should receive the retained ETH.
-    function claimRetainedTransportPaymentRefund(address payable beneficiary) external override {
-        if (beneficiary == address(0)) revert JBSucker_ZeroBeneficiary({beneficiary: bytes32(0)});
+        emit Claimed({
+            beneficiary: claimData.leaf.beneficiary,
+            token: claimData.token,
+            projectTokenCount: claimData.leaf.projectTokenCount,
+            terminalTokenAmount: claimData.leaf.terminalTokenAmount,
+            index: claimData.leaf.index,
+            metadata: claimData.leaf.metadata,
+            caller: _msgSender()
+        });
 
-        address account = _msgSender();
-        uint256 amount = retainedTransportPaymentRefundOf[account];
-        if (amount == 0) revert JBSucker_NoRetainedTransportPaymentRefund(account);
-
-        retainedTransportPaymentRefundOf[account] = 0;
-        retainedTransportPaymentRefundBalance -= amount;
-
-        _sendNativeTo({beneficiary: beneficiary, amount: amount});
-
-        // State was cleared before sending ETH; the event is emitted after the transfer so failed sends do not log.
-        emit RetainedTransportPaymentRefundClaimed({
-            account: account, beneficiary: beneficiary, amount: amount, caller: _msgSender()
+        // Give the user their project tokens, send the project its funds.
+        _handleClaim({
+            terminalToken: claimData.token,
+            terminalTokenAmount: claimData.leaf.terminalTokenAmount,
+            projectTokenAmount: claimData.leaf.projectTokenCount,
+            beneficiary: claimData.leaf.beneficiary
         });
     }
 
@@ -1054,15 +1038,6 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     /// @param remotePeer The remote peer address. Leave zero to use the default deterministic same-address peer.
     function initialize(uint256 localProjectId, bytes32 remotePeer) public initializer {
         _initialize({initialProjectId: localProjectId, remotePeer: remotePeer});
-    }
-
-    /// @notice Initializes the sucker's project and optional peer address.
-    /// @param initialProjectId The ID of the project (on the local chain) that this sucker is associated with.
-    /// @param remotePeer The remote peer address. Leave zero to use the default deterministic same-address peer.
-    function _initialize(uint256 initialProjectId, bytes32 remotePeer) internal {
-        _localProjectId = initialProjectId;
-        _peer = remotePeer;
-        deployer = _msgSender();
     }
 
     /// @notice Map an ERC-20 token on the local chain to a remote-chain ERC-20 token for bridging.
@@ -1163,6 +1138,15 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
             memo: "",
             useReservedPercent: false
         });
+    }
+
+    /// @notice Initializes the sucker's project and optional peer address.
+    /// @param initialProjectId The ID of the project (on the local chain) that this sucker is associated with.
+    /// @param remotePeer The remote peer address. Leave zero to use the default deterministic same-address peer.
+    function _initialize(uint256 initialProjectId, bytes32 remotePeer) internal {
+        _localProjectId = initialProjectId;
+        _peer = remotePeer;
+        deployer = _msgSender();
     }
 
     /// @notice Inserts a new leaf into the outbox merkle tree for the specified `token`.
@@ -1377,6 +1361,49 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         assert(reclaimedAmount == _balanceOf({token: token, addr: address(this)}) - balanceBefore);
     }
 
+    /// @notice Retain a failed `toRemoteFee` payment for later caller refund.
+    /// @param account The account that can reclaim the retained fee.
+    /// @param amount The retained fee amount.
+    function _retainToRemoteFee(address account, uint256 amount) internal {
+        retainedToRemoteFeeOf[account] += amount;
+        retainedToRemoteFeeBalance += amount;
+        emit RetainedToRemoteFee({account: account, amount: amount, caller: _msgSender()});
+    }
+
+    /// @notice Retains a failed transport-payment refund as account-scoped native credit.
+    /// @param account The account that can reclaim the retained refund.
+    /// @param amount The retained refund amount.
+    function _retainTransportPaymentRefund(address account, uint256 amount) internal {
+        retainedTransportPaymentRefundOf[account] += amount;
+        retainedTransportPaymentRefundBalance += amount;
+        emit RetainedTransportPaymentRefund({account: account, amount: amount, caller: _msgSender()});
+    }
+
+    /// @notice Performs the logic to send an accounting-only message to the peer over the AMB.
+    /// @dev Bridge-specific implementations override this for supported transports.
+    /// @param transportPayment The amount of `msg.value` paid to the transport for this message.
+    /// @param snapshot The accounting snapshot to send to the remote chain.
+    // forge-lint: disable-next-line(mixed-case-function)
+    function _sendAccountingSnapshotOverAMB(
+        uint256 transportPayment,
+        JBAccountingSnapshot memory snapshot
+    )
+        internal
+        virtual
+    {
+        transportPayment;
+        snapshot;
+        revert JBSucker_AccountingSyncUnsupported();
+    }
+
+    /// @notice Send native tokens, reverting if the recipient rejects them.
+    /// @param beneficiary The recipient.
+    /// @param amount The amount to send.
+    function _sendNativeTo(address payable beneficiary, uint256 amount) internal {
+        (bool success,) = beneficiary.call{value: amount}("");
+        if (!success) revert JBSucker_RefundFailed({beneficiary: beneficiary, amount: amount});
+    }
+
     /// @notice Send the outbox root for the specified token to the remote peer.
     /// @dev Some bridges require a nonzero `transportPayment`; zero-cost bridges must reject nonzero values.
     /// @param transportPayment The amount of `msg.value` paid to the transport for this message.
@@ -1436,14 +1463,6 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         });
     }
 
-    /// @notice Send native tokens, reverting if the recipient rejects them.
-    /// @param beneficiary The recipient.
-    /// @param amount The amount to send.
-    function _sendNativeTo(address payable beneficiary, uint256 amount) internal {
-        (bool success,) = beneficiary.call{value: amount}("");
-        if (!success) revert JBSucker_RefundFailed({beneficiary: beneficiary, amount: amount});
-    }
-
     /// @notice Performs the logic to send a message to the peer over the AMB.
     /// @dev This is chain/sucker/bridge specific logic.
     /// @param transportPayment The amount of `msg.value` that is going to get paid for sending this message.
@@ -1463,6 +1482,81 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     )
         internal
         virtual;
+
+    /// @notice Store the latest peer-chain accounting snapshot if it is fresher than the cached one.
+    /// @dev The context set is rebuilt from scratch for each fresher snapshot. A stale snapshot is ignored instead of
+    /// reverting so bridge delivery order cannot roll back supply, surplus, or balance.
+    /// @param sourceTimestamp The source-chain freshness key.
+    /// @param sourceTotalSupply The source-chain total project-token supply.
+    /// @param sourceContexts The source-chain per-context surplus and balance.
+    function _storePeerChainAccounting(
+        uint256 sourceTimestamp,
+        uint256 sourceTotalSupply,
+        JBSourceContext[] calldata sourceContexts
+    )
+        internal
+    {
+        // Only accept snapshots whose source freshness key is strictly newer than the last accepted one.
+        if (sourceTimestamp <= snapshotTimestamp) return;
+
+        // Advance the snapshot freshness key used by the registry to dedup same-peer suckers.
+        snapshotTimestamp = sourceTimestamp;
+
+        // Update unconditionally — a legitimate zero supply must clear phantom cached supply.
+        peerChainTotalSupply = sourceTotalSupply;
+
+        // Rebuild the per-currency context set from scratch. A context that dropped out of this fresher snapshot is
+        // simply absent from the new set, so no per-entry clearing is needed.
+        delete _peerContexts;
+
+        // Fold each source context into the local currency it resolves to. Resolution prefers the token mapping (so a
+        // same-asset token at a different remote address binds to the right local context) and falls back to identity
+        // for same-address tokens; the local currency is then derived from that resolved local token's authoritative
+        // accounting context, NOT trusted from the wire.
+        uint256 numContexts = sourceContexts.length;
+        for (uint256 i; i < numContexts;) {
+            JBSourceContext calldata ctx = sourceContexts[i];
+
+            address contextToken = _localTokenForRemoteToken[ctx.token];
+            if (contextToken == address(0)) contextToken = _toAddress(ctx.token);
+            (uint32 contextCurrency, bool authoritative) = _localCurrencyOf(contextToken);
+
+            // Cache an authoritative currency so later snapshots reuse it instead of re-reading the terminal. The
+            // accounting-context currency is immutable, so the cache never goes stale; a not-yet-configured token is
+            // left uncached and re-read next time.
+            if (authoritative && _cachedCurrencyOf[contextToken] == 0) {
+                _cachedCurrencyOf[contextToken] = contextCurrency;
+            }
+
+            // Accumulate into an existing entry that matches on BOTH currency AND decimals, or append a new one. The
+            // decimals must match: `surplus`/`balance` are raw, un-valued token amounts, so two contexts that share a
+            // currency but carry different decimals are on different scales and cannot be summed directly.
+            uint256 numStored = _peerContexts.length;
+            bool merged;
+            for (uint256 j; j < numStored;) {
+                if (_peerContexts[j].currency == contextCurrency && _peerContexts[j].decimals == ctx.decimals) {
+                    _peerContexts[j].surplus = _saturatingAddU128(_peerContexts[j].surplus, ctx.surplus);
+                    _peerContexts[j].balance = _saturatingAddU128(_peerContexts[j].balance, ctx.balance);
+                    merged = true;
+                    break;
+                }
+                unchecked {
+                    ++j;
+                }
+            }
+            if (!merged) {
+                _peerContexts.push(
+                    JBPeerChainContext({
+                        currency: contextCurrency, decimals: ctx.decimals, surplus: ctx.surplus, balance: ctx.balance
+                    })
+                );
+            }
+
+            unchecked {
+                ++i;
+            }
+        }
+    }
 
     /// @notice Validates a leaf as being in the inbox merkle tree and registers the leaf as executed (to prevent
     /// double-spending).
@@ -1657,28 +1751,6 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         return IERC20(token).balanceOf(addr);
     }
 
-    /// @notice Compute the merkle root of an outbox tree by reading its branch into memory and delegating
-    /// to JBSuckerLib.computeTreeRoot (via DELEGATECALL). Replaces inlined MerkleLib.root() to save ~3KB.
-    /// @param tree The storage-backed merkle tree.
-    /// @return The merkle root.
-    function _computeOutboxRoot(MerkleLib.Tree storage tree) internal view returns (bytes32) {
-        uint256 count = tree.count;
-        // An empty tree has a known zero root.
-        if (count == 0) return MerkleLib.Z_32;
-
-        // Copy only the non-zero branch slots from storage into memory for the root computation.
-        bytes32[_TREE_DEPTH] memory branch;
-        for (uint256 i; i < _TREE_DEPTH;) {
-            if (count & (uint256(1) << i) != 0) {
-                branch[i] = tree.branch[i];
-            }
-            unchecked {
-                ++i;
-            }
-        }
-        return JBSuckerLib.computeTreeRoot({branch: branch, count: count});
-    }
-
     /// @notice Builds a hash as they are stored in the merkle tree.
     /// @param projectTokenCount The number of project tokens to cash out.
     /// @param terminalTokenAmount The amount of terminal tokens to reclaim from the cash out.
@@ -1705,6 +1777,28 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
             mstore(add(ptr, 0x60), metadata)
             hash := keccak256(ptr, 0x80)
         }
+    }
+
+    /// @notice Compute the merkle root of an outbox tree by reading its branch into memory and delegating
+    /// to JBSuckerLib.computeTreeRoot (via DELEGATECALL). Replaces inlined MerkleLib.root() to save ~3KB.
+    /// @param tree The storage-backed merkle tree.
+    /// @return The merkle root.
+    function _computeOutboxRoot(MerkleLib.Tree storage tree) internal view returns (bytes32) {
+        uint256 count = tree.count;
+        // An empty tree has a known zero root.
+        if (count == 0) return MerkleLib.Z_32;
+
+        // Copy only the non-zero branch slots from storage into memory for the root computation.
+        bytes32[_TREE_DEPTH] memory branch;
+        for (uint256 i; i < _TREE_DEPTH;) {
+            if (count & (uint256(1) << i) != 0) {
+                branch[i] = tree.branch[i];
+            }
+            unchecked {
+                ++i;
+            }
+        }
+        return JBSuckerLib.computeTreeRoot({branch: branch, count: count});
     }
 
     /// @notice The length of the context suffix for ERC-2771 meta-transactions.
@@ -1777,24 +1871,6 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     /// @return owner The address currently registered as the project's ERC-721 holder.
     function _ownerOf(uint256 forProjectId) internal view returns (address owner) {
         return PROJECTS.ownerOf(forProjectId);
-    }
-
-    /// @notice Retain a failed `toRemoteFee` payment for later caller refund.
-    /// @param account The account that can reclaim the retained fee.
-    /// @param amount The retained fee amount.
-    function _retainToRemoteFee(address account, uint256 amount) internal {
-        retainedToRemoteFeeOf[account] += amount;
-        retainedToRemoteFeeBalance += amount;
-        emit RetainedToRemoteFee({account: account, amount: amount, caller: _msgSender()});
-    }
-
-    /// @notice Retains a failed transport-payment refund as account-scoped native credit.
-    /// @param account The account that can reclaim the retained refund.
-    /// @param amount The retained refund amount.
-    function _retainTransportPaymentRefund(address account, uint256 amount) internal {
-        retainedTransportPaymentRefundOf[account] += amount;
-        retainedTransportPaymentRefundBalance += amount;
-        emit RetainedTransportPaymentRefund({account: account, amount: amount, caller: _msgSender()});
     }
 
     /// @notice Returns the peer address as an EVM address.
@@ -1937,12 +2013,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     )
         private
     {
-        uint256 sourceTimestamp;
-        unchecked {
-            // High bits preserve the source-chain timestamp for operators/indexers. Low bits make same-timestamp
-            // roots distinct so the receiver can still reject stale project-wide snapshots with a strict `>`.
-            sourceTimestamp = (block.timestamp << 128) | ++_outboundSnapshotSequence;
-        }
+        uint256 sourceTimestamp = _nextSourceTimestamp();
 
         JBMessageRoot memory message = JBSuckerLib.buildSnapshotMessage({
             directory: DIRECTORY,
@@ -1964,5 +2035,15 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
             remoteToken: remoteToken,
             message: message
         });
+    }
+
+    /// @notice Build the next source-chain freshness key.
+    /// @dev High bits preserve the source-chain timestamp for operators/indexers. Low bits make same-timestamp
+    /// snapshots distinct so the receiver can reject stale project-wide snapshots with a strict `>`.
+    /// @return sourceTimestamp The next freshness key.
+    function _nextSourceTimestamp() private returns (uint256 sourceTimestamp) {
+        unchecked {
+            sourceTimestamp = (block.timestamp << 128) | ++_outboundSnapshotSequence;
+        }
     }
 }

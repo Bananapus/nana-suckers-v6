@@ -12,7 +12,7 @@
 - If you edit token mapping logic, re-check the registry and deployer assumptions that feed it.
 - If you edit token mapping semantics, verify that remapping is still impossible once outbox activity has made economic equivalence depend on permanence.
 - If you edit deprecation or emergency paths, verify the intended operator workflow still works end to end.
-- If you edit snapshot or claim-boundary logic, verify `numberOfClaimsSent`, peer snapshots, and emergency exit behavior together.
+- If you edit snapshot or claim-boundary logic, verify `numberOfClaimsSent`, peer snapshots, `syncAccountingData`, and emergency exit behavior together.
 - If you touch bridge-specific code, confirm whether the real bug is transport-side or shared accounting-side.
 
 ## Common failure modes

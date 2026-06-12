@@ -5,6 +5,7 @@ import {IERC165} from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
 import {IJBDirectory} from "@bananapus/core-v6/src/interfaces/IJBDirectory.sol";
 import {IJBProjects} from "@bananapus/core-v6/src/interfaces/IJBProjects.sol";
 import {IJBTokens} from "@bananapus/core-v6/src/interfaces/IJBTokens.sol";
+import {JBAccountingSnapshot} from "../structs/JBAccountingSnapshot.sol";
 import {JBClaim} from "../structs/JBClaim.sol";
 import {JBInboxTreeRoot} from "../structs/JBInboxTreeRoot.sol";
 import {JBOutboxTree} from "../structs/JBOutboxTree.sol";
@@ -17,6 +18,11 @@ import {JBTokenMapping} from "../structs/JBTokenMapping.sol";
 /// @notice The minimal interface for a sucker contract.
 interface IJBSucker is IERC165 {
     // Events
+
+    /// @notice Emitted when peer-chain accounting data is sent without a merkle-root update.
+    /// @param sourceTimestamp The source freshness key assigned to the snapshot.
+    /// @param caller The address that initiated the send.
+    event AccountingDataSynced(uint256 sourceTimestamp, address caller);
 
     /// @notice Emitted when a beneficiary claims bridged tokens from the inbox tree.
     /// @param beneficiary The beneficiary receiving the tokens.
@@ -207,6 +213,10 @@ interface IJBSucker is IERC165 {
     /// @param claimData The claim data including token, leaf, and proof.
     function claim(JBClaim calldata claimData) external;
 
+    /// @notice Receive peer-chain accounting data from the remote sucker without a merkle-root update.
+    /// @param snapshot The accounting snapshot to store.
+    function fromRemoteAccounting(JBAccountingSnapshot calldata snapshot) external;
+
     /// @notice Map a local token to a remote token for bridging.
     /// @param map The token mapping to add.
     function mapToken(JBTokenMapping calldata map) external payable;
@@ -231,6 +241,10 @@ interface IJBSucker is IERC165 {
         bytes32 metadata
     )
         external;
+
+    /// @notice Send peer-chain accounting data without sending an outbox root or paying the registry `toRemoteFee`.
+    /// @dev The caller still provides bridge transport payment through `msg.value` when the bridge requires it.
+    function syncAccountingData() external payable;
 
     /// @notice Send the outbox tree root and bridged assets to the remote peer.
     /// @param token The terminal token to bridge.

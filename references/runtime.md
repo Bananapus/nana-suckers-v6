@@ -11,8 +11,9 @@
 
 1. Local state is prepared into a claimable Merkle leaf.
 2. A root is relayed to the peer chain through the bridge-specific transport.
-3. The remote side records the root in its inbox state.
-4. Claimants prove inclusion and recreate their position on the destination chain.
+3. The remote side records the root in its inbox state and stores the latest peer accounting snapshot.
+4. Accounting-only snapshots can also be relayed or retried with `syncAccountingData` without sending a new root.
+5. Claimants prove inclusion and recreate their position on the destination chain.
 
 ## High-risk areas
 
@@ -21,10 +22,11 @@
 - Emergency and deprecation paths: these are operational safety surfaces that must remain reliable.
 - Shared accounting vs transport logic: many incidents stem from confusing these layers.
 - Peer snapshots and `numberOfClaimsSent`: these guard against double-spend at the cost of conservative locking when timing goes wrong.
+- Accounting-only messages: these must never mutate token-local inbox roots or claimable value.
 
 ## Tests to trust first
 
 - [`test/ForkMainnet.t.sol`](../test/ForkMainnet.t.sol), [`test/ForkArbitrum.t.sol`](../test/ForkArbitrum.t.sol), [`test/ForkCelo.t.sol`](../test/ForkCelo.t.sol), and [`test/ForkOPStack.t.sol`](../test/ForkOPStack.t.sol) for real transport assumptions.
 - [`test/ForkSwap.t.sol`](../test/ForkSwap.t.sol), [`test/ForkClaimMainnet.t.sol`](../test/ForkClaimMainnet.t.sol), and [`test/SuckerRegressions.t.sol`](../test/SuckerRegressions.t.sol) for pinned cross-chain edge cases.
 - [`test/unit/invariants.t.sol`](../test/unit/invariants.t.sol), [`test/unit/peer_chain_state.t.sol`](../test/unit/peer_chain_state.t.sol), and [`test/unit/registry.t.sol`](../test/unit/registry.t.sol) for shared-accounting invariants.
-- [`test/SuckerAttacks.t.sol`](../test/SuckerAttacks.t.sol), [`test/SuckerDeepAttacks.t.sol`](../test/SuckerDeepAttacks.t.sol), [`test/regression/PeerSnapshotDesync.t.sol`](../test/regression/PeerSnapshotDesync.t.sol), and [`test/regression/PeerDeterminism.t.sol`](../test/regression/PeerDeterminism.t.sol) when the bug could involve base logic, registry behavior, or a specific bridge implementation.
+- [`test/SuckerAttacks.t.sol`](../test/SuckerAttacks.t.sol), [`test/SuckerDeepAttacks.t.sol`](../test/SuckerDeepAttacks.t.sol), [`test/regression/PeerSnapshotDesync.t.sol`](../test/regression/PeerSnapshotDesync.t.sol), [`test/regression/CCIPUntypedMessageRejected.t.sol`](../test/regression/CCIPUntypedMessageRejected.t.sol), and [`test/regression/PeerDeterminism.t.sol`](../test/regression/PeerDeterminism.t.sol) when the bug could involve base logic, registry behavior, or a specific bridge implementation.

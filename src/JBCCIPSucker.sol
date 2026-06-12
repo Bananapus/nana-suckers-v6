@@ -24,6 +24,7 @@ import {CCIPHelper} from "./libraries/CCIPHelper.sol";
 import {JBCCIPLib} from "./libraries/JBCCIPLib.sol";
 
 // Local: structs (alphabetized)
+import {JBAccountingSnapshot} from "./structs/JBAccountingSnapshot.sol";
 import {JBMessageRoot} from "./structs/JBMessageRoot.sol";
 import {JBRemoteToken} from "./structs/JBRemoteToken.sol";
 import {JBTokenMapping} from "./structs/JBTokenMapping.sol";
@@ -70,8 +71,14 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
     // ----------------------- internal constants ------------------------ //
     //*********************************************************************//
 
+    /// @notice Message type prefix for accounting-only messages (fromRemoteAccounting).
+    uint8 internal constant _CCIP_MSG_TYPE_ACCOUNTING = 1;
+
     /// @notice Message type prefix for root messages (fromRemote).
     uint8 internal constant _CCIP_MSG_TYPE_ROOT = 0;
+
+    /// @notice Extra destination gas budgeted for each source accounting context carried in a CCIP message.
+    uint256 internal constant _CCIP_SOURCE_CONTEXT_GAS_LIMIT = 75_000;
 
     //*********************************************************************//
     // --------------- public immutable stored properties ---------------- //
@@ -122,39 +129,6 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
     }
 
     //*********************************************************************//
-    // ------------------------ external views --------------------------- //
-    //*********************************************************************//
-
-    /// @notice Returns the chain on which the peer is located.
-    /// @return chainId The chain ID of the peer.
-    function peerChainId() public view virtual override returns (uint256 chainId) {
-        return REMOTE_CHAIN_ID;
-    }
-
-    //*********************************************************************//
-    // ------------------------- public views ---------------------------- //
-    //*********************************************************************//
-
-    /// @notice Returns the address of the current CCIP router.
-    /// @return router The CCIP router address.
-    function getRouter() public view returns (address router) {
-        return address(CCIP_ROUTER);
-    }
-
-    /// @notice Checks whether this contract supports a given interface.
-    /// @param interfaceId The interface ID to check.
-    /// @return supported Whether the interface is supported.
-    /// @dev Should indicate whether the contract implements IAny2EVMMessageReceiver.
-    /// This allows CCIP to check if ccipReceive is available before calling it.
-    /// If this returns false or reverts, only tokens are transferred to the receiver.
-    /// If this returns true, tokens are transferred and ccipReceive is called atomically.
-    /// Additionally, if the receiver address does not have code associated with
-    /// it at the time of execution (EXTCODESIZE returns 0), only tokens will be transferred.
-    function supportsInterface(bytes4 interfaceId) public view virtual override returns (bool supported) {
-        return interfaceId == type(IAny2EVMMessageReceiver).interfaceId || super.supportsInterface(interfaceId);
-    }
-
-    //*********************************************************************//
     // --------------------- external transactions ----------------------- //
     //*********************************************************************//
 
@@ -180,7 +154,7 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
         }
 
         // Discriminate message type: abi.encode(uint8 type, bytes payload).
-        (uint8 messageType, bytes memory payload) = JBCCIPLib.decodeTypedMessage(any2EvmMessage.data);
+        (uint8 messageType, bytes memory payload) = abi.decode(any2EvmMessage.data, (uint8, bytes));
 
         // Handle root messages (merkle tree updates with bridged assets).
         if (messageType == _CCIP_MSG_TYPE_ROOT) {
@@ -231,14 +205,118 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
 
             // Forward the root message to this contract's fromRemote handler.
             this.fromRemote(root);
+        } else if (messageType == _CCIP_MSG_TYPE_ACCOUNTING) {
+            // Accounting-only messages must not carry tokens; transported value belongs exclusively to root messages.
+            uint256 deliveryCount = any2EvmMessage.destTokenAmounts.length;
+            if (deliveryCount != 0) {
+                revert JBCCIPSucker_UnexpectedDeliveredTokens(deliveryCount);
+            }
+
+            JBAccountingSnapshot memory snapshot = abi.decode(payload, (JBAccountingSnapshot));
+
+            // Forward the accounting message to this contract's authenticated accounting handler.
+            this.fromRemoteAccounting(snapshot);
         } else {
             revert JBCCIPSucker_UnknownMessageType({messageType: messageType});
         }
     }
 
     //*********************************************************************//
+    // ------------------------- public views ---------------------------- //
+    //*********************************************************************//
+
+    /// @notice Returns the address of the current CCIP router.
+    /// @return router The CCIP router address.
+    function getRouter() public view returns (address router) {
+        return address(CCIP_ROUTER);
+    }
+
+    /// @notice Returns the chain on which the peer is located.
+    /// @return chainId The chain ID of the peer.
+    function peerChainId() public view virtual override returns (uint256 chainId) {
+        return REMOTE_CHAIN_ID;
+    }
+
+    /// @notice Checks whether this contract supports a given interface.
+    /// @param interfaceId The interface ID to check.
+    /// @return supported Whether the interface is supported.
+    /// @dev Should indicate whether the contract implements IAny2EVMMessageReceiver.
+    /// This allows CCIP to check if ccipReceive is available before calling it.
+    /// If this returns false or reverts, only tokens are transferred to the receiver.
+    /// If this returns true, tokens are transferred and ccipReceive is called atomically.
+    /// Additionally, if the receiver address does not have code associated with
+    /// it at the time of execution (EXTCODESIZE returns 0), only tokens will be transferred.
+    function supportsInterface(bytes4 interfaceId) public view virtual override returns (bool supported) {
+        return interfaceId == type(IAny2EVMMessageReceiver).interfaceId || super.supportsInterface(interfaceId);
+    }
+
+    //*********************************************************************//
     // --------------------- internal transactions ----------------------- //
     //*********************************************************************//
+
+    /// @notice Uses CCIP to send accounting data over the bridge to the peer.
+    /// @dev Supports the same native/LINK fee modes as root messages, but never transports token amounts.
+    /// @param transportPayment The amount of `msg.value` that is going to get paid for sending this message.
+    /// @param snapshot The accounting snapshot to send to the remote peer.
+    // forge-lint: disable-next-line(mixed-case-function)
+    function _sendAccountingSnapshotOverAMB(
+        uint256 transportPayment,
+        JBAccountingSnapshot memory snapshot
+    )
+        internal
+        virtual
+        override
+    {
+        _sendCcipMessage({
+            transportPayment: transportPayment,
+            gasLimit: _ccipGasLimitFor({sourceContextCount: snapshot.sourceContexts.length}),
+            encodedPayload: abi.encode(_CCIP_MSG_TYPE_ACCOUNTING, abi.encode(snapshot)),
+            tokenAmounts: new Client.EVMTokenAmount[](0)
+        });
+    }
+
+    /// @notice Sends a CCIP message and records failed native-fee refunds as caller credit.
+    /// @param transportPayment The amount of `msg.value` available to pay native CCIP fees.
+    /// @param gasLimit The destination gas limit to ask CCIP to provide.
+    /// @param encodedPayload The typed CCIP payload to send to the peer sucker.
+    /// @param tokenAmounts The token amounts to bridge with the message.
+    function _sendCcipMessage(
+        uint256 transportPayment,
+        uint256 gasLimit,
+        bytes memory encodedPayload,
+        Client.EVMTokenAmount[] memory tokenAmounts
+    )
+        internal
+    {
+        // Cache the caller so refund accounting and LINK fee pulls are charged to the same account.
+        address sender = _msgSender();
+
+        // Determine fee payment mode: native ETH or LINK token.
+        // When transportPayment == 0, we pay in LINK pulled from the caller via transferFrom.
+        // This enables chains with no meaningful native token (e.g. Tempo) while keeping
+        // toRemote permissionless — the caller provides LINK inline with their bridge intent.
+        address feeToken = transportPayment == 0 ? CCIPHelper.linkOfChain(block.chainid) : address(0);
+
+        // Build and send the CCIP message with the provided typed payload.
+        (bool refundFailed, uint256 refundAmount) = JBCCIPLib.sendCCIPMessage({
+            ccipRouter: CCIP_ROUTER,
+            remoteChainSelector: REMOTE_CHAIN_SELECTOR,
+            peerAddress: _peerAddress(),
+            transportPayment: transportPayment,
+            feeToken: feeToken,
+            feeTokenPayer: feeToken != address(0) ? sender : address(0),
+            gasLimit: gasLimit,
+            encodedPayload: encodedPayload,
+            tokenAmounts: tokenAmounts,
+            refundRecipient: sender
+        });
+
+        // Retain failed refunds as caller credit instead of leaving them project-addable or stranded.
+        if (refundFailed) {
+            _retainTransportPaymentRefund({account: sender, amount: refundAmount});
+            emit TransportPaymentRefundFailed({recipient: sender, amount: refundAmount, caller: sender});
+        }
+    }
 
     /// @notice Uses CCIP to send the root and assets over the bridge to the peer.
     /// @dev Delegates CCIP message construction and sending to JBCCIPLib (via DELEGATECALL) to reduce bytecode.
@@ -264,8 +342,8 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
         virtual
         override
     {
-        // Start with the base gas limit for cross-chain calls.
-        uint256 gasLimit = MESSENGER_BASE_GAS_LIMIT;
+        // Budget for the root receiver plus the accounting contexts carried in the root message.
+        uint256 gasLimit = _ccipGasLimitFor({sourceContextCount: suckerMessage.sourceContexts.length});
         Client.EVMTokenAmount[] memory tokenAmounts;
 
         if (amount != 0) {
@@ -279,37 +357,24 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
             tokenAmounts = new Client.EVMTokenAmount[](0);
         }
 
-        // Determine fee payment mode: native ETH or LINK token.
-        // When transportPayment == 0, we pay in LINK pulled from the caller via transferFrom.
-        // This enables chains with no meaningful native token (e.g. Tempo) while keeping
-        // toRemote permissionless — the caller provides LINK inline with their bridge intent.
-        address feeToken = transportPayment == 0 ? CCIPHelper.linkOfChain(block.chainid) : address(0);
-
-        // Build and send the CCIP message with the root payload.
-        (bool refundFailed, uint256 refundAmount) = JBCCIPLib.sendCCIPMessage({
-            ccipRouter: CCIP_ROUTER,
-            remoteChainSelector: REMOTE_CHAIN_SELECTOR,
-            peerAddress: _peerAddress(),
+        _sendCcipMessage({
             transportPayment: transportPayment,
-            feeToken: feeToken,
-            feeTokenPayer: feeToken != address(0) ? _msgSender() : address(0),
             gasLimit: gasLimit,
             encodedPayload: abi.encode(_CCIP_MSG_TYPE_ROOT, abi.encode(suckerMessage)),
-            tokenAmounts: tokenAmounts,
-            refundRecipient: _msgSender()
+            tokenAmounts: tokenAmounts
         });
-
-        // Retain failed refunds as caller credit instead of leaving them project-addable or stranded.
-        if (refundFailed) {
-            // Refund accounting is isolated per caller; reentry cannot increase the retained credit.
-            _retainTransportPaymentRefund({account: _msgSender(), amount: refundAmount});
-            emit TransportPaymentRefundFailed({recipient: _msgSender(), amount: refundAmount, caller: _msgSender()});
-        }
     }
 
     //*********************************************************************//
     // ------------------------ internal views --------------------------- //
     //*********************************************************************//
+
+    /// @notice The CCIP destination gas limit for a message carrying `sourceContextCount` accounting contexts.
+    /// @param sourceContextCount The number of source accounting contexts in the message.
+    /// @return gasLimit The destination gas limit to ask CCIP to provide.
+    function _ccipGasLimitFor(uint256 sourceContextCount) internal pure returns (uint256 gasLimit) {
+        return MESSENGER_BASE_GAS_LIMIT + (sourceContextCount * _CCIP_SOURCE_CONTEXT_GAS_LIMIT);
+    }
 
     /// @notice Checks whether the given sender is a remote peer. Unused in this context.
     /// @param sender The address to check.

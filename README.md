@@ -23,6 +23,7 @@ Suckers bridge a project by tracking claims in append-only Merkle trees:
 
 - users call `prepare` to burn tokens and create a bridge claim in the local outbox tree
 - anyone can relay the current root to the peer chain with `toRemote`
+- anyone can refresh or retry peer accounting with `syncAccountingData`
 - claimants prove inclusion against the peer inbox tree to mint on the destination chain
 
 The base implementation is extended for multiple bridge families so the same project model can work across different networks.
@@ -35,16 +36,17 @@ The main idea is not "bridge the token contract." The main idea is "bridge a Jui
 
 | Contract | Role |
 | --- | --- |
-| `JBSucker` | Base bridge logic for prepare, relay, claim, token mapping, and lifecycle controls. |
+| `JBSucker` | Base bridge logic for prepare, relay, accounting sync, claim, token mapping, and lifecycle controls. |
 | `JBSuckerRegistry` | Registry for per-project sucker deployments, deployer allowlists, and shared bridge fee settings. |
 | Chain-specific suckers | Transport-specific implementations for OP Stack, Arbitrum, CCIP, and related environments. |
 
 ## Mental model
 
-Each sucker pair has two jobs:
+Each sucker pair has three jobs:
 
 1. destroy or lock the local economic position into a claimable message
 2. recreate the remote position from a bridged Merkle root plus transported value
+3. keep the peer's aggregate accounting views fresh enough for cross-chain estimates
 
 That means every bridge path has two trust surfaces:
 
@@ -65,6 +67,7 @@ That means every bridge path has two trust surfaces:
 - root ordering and message delivery semantics matter as much as proof format
 - token mapping is part of the economic invariant
 - peer contexts are merged only when they share both currency and decimals; same-currency contexts with different decimals are kept separate and valued independently at read time, never summed across precisions
+- `syncAccountingData` pays no registry `toRemoteFee`, but bridge-specific transport costs still apply and duplicate snapshots can still consume bridge/indexer resources
 - emergency and deprecation paths are part of normal operational safety
 
 ## Where state lives
@@ -80,6 +83,7 @@ That means every bridge path has two trust surfaces:
 3. `test/ForkClaimMainnet.t.sol`
 4. `test/regression/PeerSnapshotDesync.t.sol`
 5. `test/regression/ToRemoteFeeIrrecoverable.t.sol`
+6. `test/regression/CCIPUntypedMessageRejected.t.sol`
 
 ## Install
 
