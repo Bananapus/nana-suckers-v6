@@ -109,24 +109,28 @@ contract PartialPullArbitrumGateway {
 }
 
 contract PartialPullArbitrumGatewayRouter is IArbGatewayRouter, IArbL2GatewayRouter {
-    address public immutable gateway;
+    address public immutable localGateway;
     address public immutable localToken;
+    address public immutable remoteGateway;
+    address public immutable remoteToken;
 
-    constructor(address _gateway, address _localToken) {
-        gateway = _gateway;
+    constructor(address _localGateway, address _localToken, address _remoteGateway, address _remoteToken) {
+        localGateway = _localGateway;
         localToken = _localToken;
+        remoteGateway = _remoteGateway;
+        remoteToken = _remoteToken;
     }
 
     function defaultGateway() external view override returns (address) {
-        return gateway;
+        return remoteGateway;
     }
 
-    function getGateway(address) external view override returns (address) {
-        return gateway;
+    function getGateway(address token) external view override returns (address) {
+        return token == remoteToken ? remoteGateway : localGateway;
     }
 
     function outboundTransfer(
-        address,
+        address l1Token,
         address,
         uint256 amount,
         bytes calldata
@@ -136,7 +140,8 @@ contract PartialPullArbitrumGatewayRouter is IArbGatewayRouter, IArbL2GatewayRou
         override
         returns (bytes memory)
     {
-        PartialPullArbitrumGateway(gateway).pull({token: localToken, from: msg.sender, amount: amount});
+        require(l1Token == remoteToken, "wrong L1 token");
+        PartialPullArbitrumGateway(remoteGateway).pull({token: localToken, from: msg.sender, amount: amount});
         return "";
     }
 }
@@ -152,13 +157,13 @@ contract ArbitrumL2AllowanceHarness is JBArbitrumSucker {
         JBArbitrumSucker(deployer, directory, permissions, tokens, 1, registry, address(0))
     {}
 
-    function sendTokenToL1(address token, uint256 amount) external {
+    function sendTokenToL1(address token, address remoteToken, uint256 amount) external {
         _toL1({
             token: token,
             amount: amount,
             data: "",
             remoteToken: JBRemoteToken({
-                addr: bytes32(uint256(uint160(token))), enabled: true, emergencyHatch: false, minGas: 200_000
+                addr: bytes32(uint256(uint160(remoteToken))), enabled: true, emergencyHatch: false, minGas: 200_000
             })
         });
     }
@@ -200,10 +205,17 @@ contract BridgeAllowanceCleanupTest is Test {
         assertEq(link.allowance(address(harness), address(router)), 0, "fee token allowance must be revoked");
     }
 
-    function test_arbitrumL2_clearsGatewayAllowanceAfterPartialPull() external {
+    function test_arbitrumL2_approvesRemoteGatewayAndClearsGatewayAllowanceAfterPartialPull() external {
         BridgeAllowanceToken token = new BridgeAllowanceToken("Bridge", "BRG");
-        PartialPullArbitrumGateway gateway = new PartialPullArbitrumGateway();
-        PartialPullArbitrumGatewayRouter router = new PartialPullArbitrumGatewayRouter(address(gateway), address(token));
+        address remoteToken = makeAddr("remoteToken");
+        PartialPullArbitrumGateway localGateway = new PartialPullArbitrumGateway();
+        PartialPullArbitrumGateway remoteGateway = new PartialPullArbitrumGateway();
+        PartialPullArbitrumGatewayRouter router = new PartialPullArbitrumGatewayRouter({
+            _localGateway: address(localGateway),
+            _localToken: address(token),
+            _remoteGateway: address(remoteGateway),
+            _remoteToken: remoteToken
+        });
 
         vm.mockCall(DIRECTORY, abi.encodeCall(IJBDirectory.PROJECTS, ()), abi.encode(address(0)));
 
@@ -231,9 +243,12 @@ contract BridgeAllowanceCleanupTest is Test {
         vm.etch(address(100), hex"00");
         vm.mockCall(address(100), abi.encodeWithSignature("sendTxToL1(address,bytes)"), abi.encode(uint256(0)));
 
-        harness.sendTokenToL1({token: address(token), amount: 100 ether});
+        harness.sendTokenToL1({token: address(token), remoteToken: remoteToken, amount: 100 ether});
 
-        assertEq(token.balanceOf(address(gateway)), 50 ether, "gateway should have partially pulled bridge tokens");
-        assertEq(token.allowance(address(harness), address(gateway)), 0, "gateway allowance must be revoked");
+        assertEq(token.balanceOf(address(remoteGateway)), 50 ether, "remote gateway should pull bridge tokens");
+        assertEq(token.balanceOf(address(localGateway)), 0, "local gateway should not be used for L1-token route");
+        assertEq(
+            token.allowance(address(harness), address(remoteGateway)), 0, "remote gateway allowance must be revoked"
+        );
     }
 }
