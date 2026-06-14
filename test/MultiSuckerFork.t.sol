@@ -548,24 +548,32 @@ contract MultiSuckerForkTest is Test {
     }
 
     // ═══════════════════════════════════════════════════════════════════
-    // Test 9: Zero state from active replacement hides deprecated state
+    // Test 9: Un-synced active replacement does NOT hide deprecated state
     // ═══════════════════════════════════════════════════════════════════
 
-    /// @notice Deploy sucker1 with state, deprecate, deploy sucker2 with NO state delivered yet.
-    /// The active replacement should own the peer-chain aggregate even before it has delivered state.
-    function test_newSuckerZeroState_activeReplacementWins() external {
+    /// @notice Deploy sucker1 with state, deprecate, deploy sucker2 with NO state delivered yet. The active
+    /// replacement advertises its peer chain through `peerChainIds(true)` with a zero-freshness sentinel before it has
+    /// synced. That sentinel must not supersede the deprecated sucker's real record: the registry keeps showing the
+    /// deprecated values until the active replacement delivers its own snapshot, avoiding a zero-supply migration
+    /// window in the cross-chain cash-out views.
+    function test_newSuckerZeroState_deprecatedStateShownUntilActiveSyncs() external {
         MultiSuckerMock sucker1 = _createMockSucker("zero-a", ARBITRUM);
         _deployViaRegistry(sucker1);
         _deliverState(sucker1, 1, 1000e18, 500e18, 2000e18);
 
         _deprecateAndRemove(sucker1);
 
-        // Deploy sucker2 but DON'T deliver any state (all zeros).
+        // Deploy sucker2 but DON'T deliver any state (zero-freshness sentinel).
         MultiSuckerMock sucker2 = _createMockSucker("zero-b", ARBITRUM);
         _deployViaRegistry(sucker2);
 
-        // Registry should ignore stale deprecated values once an active replacement exists for that peer chain.
-        assertEq(registry.remoteTotalSupplyOf(PROJECT_ID), 0, "active zero state should own total supply");
-        assertEq(registry.totalRemoteBalanceOf(PROJECT_ID, ETH_CURRENCY, 18), 0, "active zero state should own balance");
+        // The un-synced active sentinel is skipped; the deprecated sucker's real record still answers for the chain.
+        assertEq(registry.remoteTotalSupplyOf(PROJECT_ID), 1000e18, "deprecated supply shown until active syncs");
+        assertEq(
+            registry.totalRemoteBalanceOf(PROJECT_ID, ETH_CURRENCY, 18), 2000e18, "deprecated balance shown until sync"
+        );
+        assertEq(
+            registry.totalRemoteSurplusOf(PROJECT_ID, ETH_CURRENCY, 18), 500e18, "deprecated surplus shown until sync"
+        );
     }
 }

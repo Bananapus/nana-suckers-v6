@@ -77,7 +77,9 @@ contract RegistryAggHarness is JBSuckerRegistry {
 /// @notice Functional-correctness proofs for the sucker registry's cross-chain aggregation and valuation semantics.
 /// @dev The aggregation rules (`_recordPeerValue`) encode the spec from `JBSuckerRegistry.sol:544-581`:
 ///  - one entry per peer chain (dedupe);
-///  - an ACTIVE sucker's value always supersedes a deprecated fallback;
+///  - an ACTIVE sucker's value supersedes a deprecated fallback, EXCEPT an empty sentinel (value 0, timestamp 0)
+///    from a never-synced active sucker, which is skipped so it cannot hide a deprecated sucker's real record during
+///    a migration window;
 ///  - among same-state sources, the FRESHEST snapshot wins, with MAX(value) only as a same-freshness tie-break.
 /// These are what keep multiple bridge-lane suckers on one chain from double-counting and what make a deprecated
 /// sucker a strict migration fallback. Dual-implemented per the repo house convention.
@@ -107,6 +109,9 @@ contract SuckerRegistryAggregationProperties is Test {
         public
         view
     {
+        // The first record must not be an empty active sentinel (value 0, timestamp 0): such a record is skipped, so
+        // it would not seed the chain. This property is about dedup of a real first record.
+        vm.assume(!(v1 == 0 && t1 == 0 && a1));
         PeerValueScratch memory s = _reg.scratch(4);
         uint256 c;
         (s, c) = _reg.record(s, chainId, v1, t1, a1);
@@ -128,6 +133,10 @@ contract SuckerRegistryAggregationProperties is Test {
         view
     {
         vm.assume(chainA != chainB);
+        // Exclude the empty active sentinel (value 0, timestamp 0): a never-synced active record is skipped, so it
+        // would not create an entry. This property is about two non-sentinel chains.
+        vm.assume(!(v1 == 0 && t1 == 0));
+        vm.assume(!(v2 == 0 && t2 == 0));
         PeerValueScratch memory s = _reg.scratch(4);
         uint256 c;
         (s, c) = _reg.record(s, chainA, v1, t1, true);
@@ -150,6 +159,9 @@ contract SuckerRegistryAggregationProperties is Test {
         public
         view
     {
+        // A non-sentinel active reading: an empty active sentinel (value 0, timestamp 0) is covered by its own
+        // property, since it is skipped rather than superseding.
+        vm.assume(!(actValue == 0 && actTs == 0));
         PeerValueScratch memory s = _reg.scratch(2);
         uint256 c;
         // First a deprecated reading.
@@ -175,6 +187,8 @@ contract SuckerRegistryAggregationProperties is Test {
         public
         view
     {
+        // A non-sentinel active reading; the empty active sentinel case has its own property below.
+        vm.assume(!(actValue == 0 && actTs == 0));
         PeerValueScratch memory s = _reg.scratch(2);
         uint256 c;
         (s, c) = _reg.record(s, chainId, actValue, actTs, true);
@@ -182,6 +196,28 @@ contract SuckerRegistryAggregationProperties is Test {
         assertEq(s.values[0], actValue, "deprecated must not override active value");
         assertEq(s.snapshotTimestamps[0], actTs, "deprecated must not override active timestamp");
         assertTrue(s.hasActiveValue[0], "entry stays active");
+    }
+
+    /// @notice [FUZZ] A never-synced active sentinel (value 0, timestamp 0) does NOT supersede a deprecated record, so
+    /// the registry keeps showing the deprecated value during the migration window before the replacement syncs.
+    function testFuzz_emptyActiveSentinelDoesNotOverrideDeprecated(
+        uint256 chainId,
+        uint256 depValue,
+        uint256 depTs
+    )
+        public
+        view
+    {
+        // The deprecated record must be non-empty so there is a real value to preserve.
+        vm.assume(!(depValue == 0 && depTs == 0));
+        PeerValueScratch memory s = _reg.scratch(2);
+        uint256 c;
+        (s, c) = _reg.record(s, chainId, depValue, depTs, false);
+        // An empty active sentinel for the same chain is skipped, not recorded over the deprecated value.
+        (s, c) = _reg.record(s, chainId, 0, 0, true);
+        assertEq(s.values[0], depValue, "empty active sentinel must not override deprecated value");
+        assertEq(s.snapshotTimestamps[0], depTs, "empty active sentinel must not override deprecated timestamp");
+        assertFalse(s.hasActiveValue[0], "entry stays deprecated until a real active record arrives");
     }
 
     // ------------------------------------------------------------------ //

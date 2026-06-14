@@ -801,6 +801,14 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
         pure
         returns (uint256)
     {
+        // A freshly-deployed active sucker advertises its direct peer chain through `peerChainIds(true)` before it has
+        // received any snapshot, producing an empty sentinel (value 0, timestamp 0). Skip that empty active record so
+        // it cannot supersede a deprecated sucker's real record for the chain during a migration window. The timestamp
+        // is the discriminator — a real snapshot always stamps a nonzero freshness key, so a zero key means "never
+        // synced" and this never drops a legitimately zero-valued synced chain; the value clause keeps the skip to
+        // genuinely empty records.
+        if (isActive && snapshotTimestamp == 0 && value == 0) return scratch.chainCount;
+
         for (uint256 j; j < scratch.chainCount;) {
             if (scratch.chainIds[j] == chainId) {
                 // Each sucker caches the entire remote chain's state (not a per-sucker share), so multiple
