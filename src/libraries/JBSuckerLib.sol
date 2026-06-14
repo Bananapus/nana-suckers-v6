@@ -552,6 +552,14 @@ library JBSuckerLib {
         if (address(controller) != address(0) && address(controller).code.length != 0) {
             (additionalSupply, hookContexts) =
                 _peerChainAdjustedAccountsOf({controller: controller, projectId: projectId});
+            // Fail soft to the baseline snapshot. A malformed hook that returns a `supply` which would overflow the
+            // controller supply contributes no extra supply or contexts — the documented fail-soft model — instead of
+            // reverting the whole snapshot and bricking every outbound send (`toRemote` / `syncAccountingData`) while
+            // the hook stays active.
+            if (additionalSupply > type(uint256).max - localTotalSupply) {
+                additionalSupply = 0;
+                hookContexts = new JBSourceContext[](0);
+            }
             localTotalSupply += additionalSupply;
         }
 
