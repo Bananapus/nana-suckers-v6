@@ -945,9 +945,11 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     /// @notice The peer chains this sucker reports accounting for.
     /// @dev With `includeVirtual` false, returns only the directly-connected peer chain (the one this sucker is bridged
     /// to). With `includeVirtual` true, also returns every other chain it has learned about through gossip relayed by
-    /// that peer. The directly-connected peer is always present (with a zero value until its first record) so a
-    /// freshly-deployed active sucker immediately owns that chain's accounting, overriding a deprecated sucker's stale
-    /// data during a migration window.
+    /// that peer. The directly-connected peer is always present (with a zero value until its first record) so the
+    /// registry can enumerate the chain the moment this sucker is deployed. Until the sucker receives its first record,
+    /// that entry is an empty sentinel (value 0, freshness 0) which the registry skips, so a freshly-deployed active
+    /// sucker takes over a chain's accounting only once it has synced real data — a deprecated sucker's record keeps
+    /// answering for the chain during the migration window.
     /// @param includeVirtual Whether to also include virtually-known (gossiped) peer chains.
     /// @return chainIds The peer chain IDs.
     function peerChainIds(bool includeVirtual) external view returns (uint256[] memory chainIds) {
