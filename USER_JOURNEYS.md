@@ -56,8 +56,8 @@ This repo lets a Juicebox project move a claimable project-token position from o
 
 **Main Flow**
 1. A caller invokes `toRemote(...)` for the mapped token.
-2. The chain-specific implementation packages the root, source snapshot, and value transfer for its bridge.
-3. The remote sucker authenticates the sender and records the inbox root if its freshness key is newer.
+2. The chain-specific implementation packages the root, value transfer, and a per-source-chain accounting gossip bundle (this chain's record plus every peer-chain record the project knows, gathered via the registry, excluding the destination chain) for its bridge.
+3. The remote sucker authenticates the sender, records the inbox root if its freshness key is newer, and stores each bundle record whose source freshness key beats the one it already holds for that chain.
 
 **Failure Modes**
 - bridge messages are censored, delayed, underfunded, or malformed
@@ -71,7 +71,7 @@ This repo lets a Juicebox project move a claimable project-token position from o
 
 **Actor:** relayer, integration, or any account willing to pay transport costs.
 
-**Intent:** update the peer chain's cached total supply, surplus, and balance without sending a new claim root.
+**Intent:** propagate per-source-chain total supply, surplus, and balance across the sucker mesh without sending a new claim root.
 
 **Preconditions**
 - the sucker is still allowed to send outbound messages
@@ -79,16 +79,17 @@ This repo lets a Juicebox project move a claimable project-token position from o
 
 **Main Flow**
 1. A caller invokes `syncAccountingData()`.
-2. The sucker snapshots current project supply plus raw per-context surplus and balance.
-3. The chain-specific implementation sends only the accounting snapshot to the peer.
-4. The peer authenticates the sender and records the snapshot if its freshness key is newer.
+2. The sucker builds a gossip bundle: its own chain's record (current project supply plus raw per-context surplus and balance) plus every peer-chain record the project knows, gathered via the registry, each stamped with its origin chain's freshness key and excluding the destination chain.
+3. The chain-specific implementation sends only that accounting bundle to the peer.
+4. The peer authenticates the sender and, per source chain, records each bundle record whose source freshness key is newer than the one it already holds (dropping records for its own chain and chain 0).
 
 **Failure Modes**
 - the bridge message is delayed, underfunded, or malformed
-- a stale accounting snapshot arrives after a fresher root or accounting snapshot and is ignored
+- a stale record for a given source chain arrives after a fresher root or accounting bundle and is ignored for that chain
 
 **Postconditions**
-- registry aggregate views can use the fresher peer snapshot
+- registry aggregate views can use the freshest record per source chain
+- one sync round from a hub propagates every chain's accounting to every spoke
 - token-local inbox roots and claimable value are unchanged
 
 ## Journey 4: Claim on the destination chain
@@ -143,7 +144,8 @@ This repo lets a Juicebox project move a claimable project-token position from o
 
 - shared sucker logic and bridge-specific transport behavior are separate review surfaces
 - non-atomic cross-chain delivery is normal and must be modeled explicitly
-- registry aggregate views are estimates for discovery and dashboards, not settlement guarantees
+- registry aggregate views are estimates for discovery and dashboards, not settlement guarantees: they aggregate over every (sucker, chain) pair and dedup per source chain by the freshest accepted record, skipping any pair that reverts (so they bias low)
+- accounting propagates as a per-source-chain gossip bundle across the project's own same-address sucker mesh; a record is only ever as trustworthy as its origin chain's own sucker, the same trust already extended to a directly-paired peer
 
 ## Hand-offs
 

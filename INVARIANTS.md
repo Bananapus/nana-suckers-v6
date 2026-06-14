@@ -2,7 +2,7 @@
 
 Scope: the cross-chain bridging primitives that move a Juicebox V6 project-token position from one chain to another — the `JBSucker` base contract, its chain-specific transports (`JBOptimismSucker` / `JBBaseSucker` / `JBArbitrumSucker` / `JBCCIPSucker`), and the `JBSuckerRegistry` that gates deployment and shared fees. The package on npm is `@bananapus/suckers-v6`. Archived (reference only — not compiled or deployed): `JBSwapCCIPSucker` (+ its swap libs/structs `JBSwapPoolLib` / `JBSwapLib` / `JBPendingSwap` / `JBConversionRate`) and `JBCeloSucker`; see `src/archive/`.
 
-Trust model in one sentence: a **pair of suckers** lets a holder burn project tokens on the local chain into a Merkle-committed claim, ship the committing root + backing terminal-token value across an external AMB, and let any caller mint to the **leaf-encoded beneficiary** on the destination — front-run safe, double-spend safe, fee-bypass safe, and operator-driven only at the configuration boundary.
+Trust model in one sentence: a **pair of suckers** lets a holder burn project tokens on the local chain into a Merkle-committed claim, ship the committing root + backing terminal-token value across an external AMB, and let any caller mint to the **leaf-encoded beneficiary** on the destination — front-run safe, double-spend safe, fee-bypass safe, and operator-driven only at the configuration boundary; accounting (supply / surplus / balance) additionally propagates as a **per-source-chain gossip bundle** across the whole project's sucker mesh, so a hub-and-spoke topology (L2s bridged only through mainnet) shares every chain's accounting without a direct sucker between every pair.
 
 This file documents the invariants the **runtime contracts in this repo** enforce. It does not document downstream consumers (data hooks or distributors); those have their own invariants documents. Cross-chain economic divergence between projects (the arbitrage model) lives in the canonical `INVARIANTS.md` at `../INVARIANTS.md` Section D2.
 
@@ -26,7 +26,7 @@ This file documents the invariants the **runtime contracts in this repo** enforc
 - Reverts on emergency-hatched tokens; reverts in `SENDING_DISABLED` / `DEPRECATED`; reverts when nothing has changed since the last relay (`outbox.balance == 0 && tree.count == numberOfClaimsSent`).
 - Fee payment is **best-effort**: a `try/catch` around the fee project's `terminal.pay(...)`. On failure the fee ETH is retained as **refundable caller credit** (not silently rebated to `transportPayment`), which is critical for zero-cost bridges (OP/Base/Arb L2→L1) that revert if any value is forwarded to the AMB call.
 - `transportPayment = msg.value - toRemoteFee` is exactly what flows to `_sendRootOverAMB`. The implementation does not silently re-route ETH between accounts.
-- `syncAccountingData()` is also permissionless, but it sends only the project-wide accounting snapshot. It pays no registry `toRemoteFee`, allows retrying unchanged accounting data, and forwards `msg.value` only as bridge transport payment.
+- `syncAccountingData()` is also permissionless, but it sends only the accounting gossip bundle — this chain's own record plus every peer-chain record the project knows (gathered through the registry), each stamped with its origin chain's freshness key and excluding the destination chain. It pays no registry `toRemoteFee`, allows retrying unchanged accounting data, and forwards `msg.value` only as bridge transport payment. A plain `toRemote` root send carries the same bundle alongside its root, so a root relay also propagates accounting.
 
 ## A.3 Claim — mint to leaf beneficiary, never to caller
 
@@ -43,8 +43,9 @@ This file documents the invariants the **runtime contracts in this repo** enforc
 - `fromRemote(JBMessageRoot)` is auth-gated to the messenger (`JBSucker.sol:415-480`). Critically, it uses **raw `msg.sender`**, never `_msgSender()`, to authenticate the AMB (`JBSucker.sol:417-419`). This defeats ERC-2771 forwarder spoofing — a trusted forwarder cannot append a calldata suffix to impersonate the bridge messenger.
 - `MESSAGE_VERSION` mismatches revert.
 - Per-token inbox state advances on any **strictly-greater** `root.remoteRoot.nonce` (not strictly sequential). Stale nonces emit `StaleRootRejected` and return silently (intentional — reverting would lose bridged native ETH).
-- `fromRemoteAccounting(JBAccountingSnapshot)` is auth-gated to the same messenger path and applies the same message-version gate, but it has no token-local root, amount, or inbox state to update.
-- The **project-wide snapshot** (`peerChainTotalSupply` plus the enumerable per-currency context set `_peerContexts`) advances only when `sourceTimestamp > snapshotTimestamp` — fresher source-timestamp wins, regardless of whether the snapshot arrived with a root or through `fromRemoteAccounting`. A fresher snapshot rebuilds the whole `_peerContexts` set, so contexts dropped by the new snapshot simply vanish. Each remote context resolves to its local token, whose authoritative accounting-context currency is read once from the terminal (`accountingContextForTokenOf(token).currency`) and cached; contexts within a snapshot are summed only when they match on **both currency and decimals**. Same-currency contexts that carry different decimals (including ones appended by `IJBPeerChainAdjustedAccounts` hooks) are kept as separate per-`(currency, decimals)` entries and decimals-adjusted independently at read time, so raw amounts on different scales are never summed across precisions. Optional data-hook peer adjustments are read through `staticcall` and defensively decoded; reverting, non-supporting, or malformed successful returns contribute no extra supply or contexts. Stale messages cannot roll back shared state.
+- `fromRemoteAccounting(JBAccountingSnapshot)` is auth-gated to the same messenger path and applies the same message-version gate, but it has no token-local root, amount, or inbox state to update — it carries only the accounting gossip bundle.
+- **Both** ingress paths carry the same gossip bundle: `fromRemote(JBMessageRoot)` and `fromRemoteAccounting(JBAccountingSnapshot)` each pass `accounts` (a `JBChainAccounting[]`) into `_storeAccountingBundle`, which stores each record per source chain.
+- The **per-source-chain accounting store** (`peerChainTotalSupplyOf[chainId]` plus the per-chain raw context set `_peerContextsOf[chainId]`, gated by `snapshotTimestampOf[chainId]`) advances per chain only when that record's `sourceTimestamp > snapshotTimestampOf[chainId]` — fresher source-timestamp wins for that chain, regardless of whether the record arrived with a root or through `fromRemoteAccounting`. A record describing the receiver's own chain (`block.chainid`) or chain 0 is dropped. A fresher record rebuilds that chain's raw context set, so contexts dropped by the new record simply vanish. Contexts are stored **raw** (in the source chain's own token addresses) and resolved to a local currency at **read time** in `JBSuckerLib.foldPeerContexts` — there is no per-token currency cache. At read time each raw context resolves to its local token, whose currency is derived from the resolved local token; contexts are summed only when they match on **both currency and decimals**, and this fold runs **per source chain**. Same-currency contexts that carry different decimals (including ones appended by `IJBPeerChainAdjustedAccounts` hooks) are kept as separate per-`(currency, decimals)` entries and decimals-adjusted independently at read time, so raw amounts on different scales are never summed across precisions. Optional data-hook peer adjustments are read through `staticcall` and defensively decoded; reverting, non-supporting, or malformed successful returns contribute no extra supply or contexts. Stale records cannot roll back the chain they describe.
 - Roots are accepted in `DEPRECATED` state to prevent stranding tokens already sent before deprecation — outbound sends are blocked in `SENDING_DISABLED`/`DEPRECATED` so double-spend is impossible.
 - Unmapped tokens are accepted (claims later fail at mapping lookup) — rejecting at ingress time would permanently lose bridged tokens for a token that becomes mappable later.
 
@@ -141,17 +142,17 @@ Base contract. All cross-chain variants inherit. ERC-2771–aware for app-layer 
 
 ### Cross-chain ingress (AMB-only)
 
-- **`fromRemote(JBMessageRoot calldata root) payable`** — `JBSucker.sol:415-480`. Only the messenger via `_isRemotePeer(msg.sender)`. Uses raw `msg.sender`, never `_msgSender()`.
-  - **Invariant:** per-token inbox advances on strictly-greater nonce; project-wide snapshot advances on strictly-greater `sourceTimestamp`; stale nonces silently ignored (event-emitting); accepted even in `DEPRECATED`.
+- **`fromRemote(JBMessageRoot calldata root) payable`** — `JBSucker.fromRemote`. Only the messenger via `_isRemotePeer(msg.sender)`. Uses raw `msg.sender`, never `_msgSender()`.
+  - **Invariant:** per-token inbox advances on strictly-greater nonce; the gossip bundle in `root.accounts` is stored per source chain via `_storeAccountingBundle`, each chain advancing on its own strictly-greater `sourceTimestamp` (records for `block.chainid` / chain 0 dropped); stale nonces silently ignored (event-emitting); accepted even in `DEPRECATED`.
 - **`fromRemoteAccounting(JBAccountingSnapshot calldata snapshot)`** — only the messenger via `_isRemotePeer(msg.sender)`. Uses raw `msg.sender`, never `_msgSender()`.
-  - **Invariant:** project-wide snapshot advances on strictly-greater `sourceTimestamp`; token-local inbox roots and claimable balances are unchanged.
+  - **Invariant:** the gossip bundle in `snapshot.accounts` is stored per source chain via `_storeAccountingBundle`, each chain advancing on its own strictly-greater `sourceTimestamp` (records for `block.chainid` / chain 0 dropped); token-local inbox roots and claimable balances are unchanged.
 
 ### Permissionless relay
 
 - **`toRemote(address token) payable`** — `JBSucker.sol:646-700`. Ships outbox root + locked terminal-token funds across the bridge.
   - **Invariant:** registry fee paid best-effort (retained on failure for caller pull); `transportPayment` preserved as `msg.value - fee`; reverts on emergency-hatched tokens; reverts if nothing changed since last relay.
-- **`syncAccountingData() payable`** — ships only the current accounting snapshot across the bridge.
-  - **Invariant:** no registry `toRemoteFee`; root/inbox state and `numberOfClaimsSent` unchanged, including on duplicate accounting snapshots.
+- **`syncAccountingData() payable`** — ships only the accounting gossip bundle (this chain's record plus every peer-chain record the project knows, gathered via the registry, excluding the destination chain) across the bridge.
+  - **Invariant:** no registry `toRemoteFee`; root/inbox state and `numberOfClaimsSent` unchanged, including on duplicate accounting bundles.
 
 ### Operator / permissioned configuration
 
@@ -177,9 +178,11 @@ Base contract. All cross-chain variants inherit. ERC-2771–aware for app-layer 
 
 ### Views
 
-- `inboxOf(token)`, `outboxOf(token)`, `remoteTokenFor(token)`, `isMapped(token)`, `amountToAddToBalanceOf(token)`, `peer()`, `projectId()`, `state()`, `peerChainContextsOf()`, `peerChainTotalSupply` (public storage), `executedLeafHashOf(token, index)` (public storage), `snapshotTimestamp` (public storage), `peerChainId()` (virtual — overridden per chain), `supportsInterface(bytes4)`.
-- `peerChainContextsOf()` returns `(JBPeerChainContext[] contexts, uint256 chainId, uint256 snapshot)` — the sucker's single **raw, oracle-free** peer-chain view, where `JBPeerChainContext{currency, decimals, surplus, balance}` carries the un-valued per-currency amounts. The sucker holds no prices/oracle reference; valuation happens at read time in the registry. **Invariant:** this is a pure projection of `_peerContexts` plus the snapshot freshness key — it introduces no new state.
-- `peerChainTotalSupplyValue()` returns a `JBPeerChainValue{value, peerChainId, snapshotTimestamp}` so `JBSuckerRegistry` can read the raw token supply, peer chain ID, and snapshot freshness in one call. **Invariant:** `value` equals `peerChainTotalSupply` exactly — a pure projection that introduces no new state.
+- `inboxOf(token)`, `outboxOf(token)`, `remoteTokenFor(token)`, `isMapped(token)`, `amountToAddToBalanceOf(token)`, `peer()`, `projectId()`, `state()`, `peerChainIds(bool includeVirtual)`, `peerChainContextsOf(uint256 chainId)`, `peerChainTotalSupplyOf(uint256 chainId)` (public mapping), `peerChainTotalSupplyValue(uint256 chainId)`, `peerChainAccountsOf()`, `executedLeafHashOf(token, index)` (public storage), `snapshotTimestampOf(uint256 chainId)` (public mapping), `peerChainId()` (virtual — overridden per chain), `supportsInterface(bytes4)`.
+- `peerChainIds(bool includeVirtual)` returns the sucker's directly-connected peer chain, plus — when `includeVirtual` is true — every source chain it has heard about through gossip. **Invariant:** the directly-connected peer is always present (zero-valued until its first record) so a fresh active sucker owns that chain; the virtual set is a projection of `_peerChainIds` and introduces no new state. The registry aggregates the `includeVirtual: true` set.
+- `peerChainContextsOf(uint256 chainId)` returns `(JBPeerChainContext[] contexts, uint256 snapshot)` — one source chain's **raw, oracle-free** peer-chain view, where `JBPeerChainContext{currency, decimals, surplus, balance}` carries the un-valued per-currency amounts resolved from that chain's raw stored contexts. The sucker holds no prices/oracle reference; valuation happens at read time in the registry. **Invariant:** this resolves `_peerContextsOf[chainId]` (raw, in the source chain's own token addresses) to local currencies and folds same-`(currency, decimals)` entries in `JBSuckerLib.foldPeerContexts`, pairing it with that chain's `snapshotTimestampOf[chainId]` freshness key — it introduces no new state.
+- `peerChainTotalSupplyValue(uint256 chainId)` returns a `JBPeerChainValue{value, peerChainId, snapshotTimestamp}` so `JBSuckerRegistry` can read one chain's raw token supply, peer chain ID, and snapshot freshness in one call. **Invariant:** `value` equals `peerChainTotalSupplyOf(chainId)` exactly — a pure projection that introduces no new state.
+- `peerChainAccountsOf()` returns the raw `JBChainAccounting[]` records this sucker holds for every known peer chain, exactly as received (source-chain token addresses and decimals). **Invariant:** the registry reads this to gather a project's full cross-chain knowledge and re-gossip it; a pure projection of the per-chain store, introducing no new state.
 
 ### `receive() external payable`
 
@@ -267,14 +270,15 @@ Ownable registry. Tracks per-project sucker inventory + deployer allowlist + sha
 - `suckersOf(projectId)` — active only.
 - `suckerPairsOf(projectId)` — active suckers with their `peerChainId`.
 - `isSuckerOf(projectId, addr)` — true for both active and deprecated entries.
-- The registry holds `IJBPrices PRICES` and does the valuation, exactly as the terminal store values local surplus. Per-sucker `remoteBalanceOf(sucker, projectId, currency, decimals)` / `remoteSurplusOf(sucker, projectId, currency, decimals)` value one sucker's raw contexts into the requested currency. Each context is decimals-adjusted, then a context whose currency already equals the requested currency is taken at **par via an identity short-circuit** (no feed consulted), while a cross-currency context is valued through `PRICES.pricePerUnitOf(projectId, fromCurrency, toCurrency, 18)`. A missing cross-currency feed reverts, and the per-sucker `try/catch` in the aggregate swallows that revert — dropping just that sucker (bias-low / conservative, the safe direction).
-- `totalRemoteBalanceOf(projectId, currency, decimals)` / `totalRemoteSurplusOf(projectId, currency, decimals)` / `remoteTotalSupplyOf(projectId)` — **aggregate views with explicit failure semantics**:
-  - `totalRemoteBalanceOf` / `totalRemoteSurplusOf` value each sucker via the per-sucker `remoteBalanceOf` / `remoteSurplusOf` self-call; `remoteTotalSupplyOf` reads the raw token supply via the sucker's `peerChainTotalSupplyValue` (unchanged).
-  - `try/catch` around each sucker; failing peers (including a missing cross-currency feed) are silently skipped (fail-open for liveness, bias-low).
+- `peerChainAccountsOf(uint256 projectId, uint256 exceptChainId)` gathers a project's full cross-chain knowledge — the only place a hub chain's per-peer suckers are visible together. A sucker building an outbound gossip bundle calls this and prepends its own local record. Records are deduped per source chain (freshest wins; an active sucker's record supersedes a deprecated one's), with the destination chain (`exceptChainId`) and the local chain excluded. Suckers and records that revert are silently skipped.
+- The registry holds `IJBPrices PRICES` and does the valuation, exactly as the terminal store values local surplus. Per-sucker `remoteBalanceOf(sucker, chainId, projectId, currency, decimals)` / `remoteSurplusOf(sucker, chainId, projectId, currency, decimals)` value one sucker's raw contexts for **one source chain** into the requested currency. Each context is decimals-adjusted, then a context whose currency already equals the requested currency is taken at **par via an identity short-circuit** (no feed consulted), while a cross-currency context is valued through `PRICES.pricePerUnitOf(projectId, fromCurrency, toCurrency, 18)`. A missing cross-currency feed reverts, and the per-`(sucker, chain)` `try/catch` in the aggregate swallows that revert — dropping just that one (sucker, chain) (bias-low / conservative, the safe direction).
+- `totalRemoteBalanceOf(projectId, currency, decimals)` / `totalRemoteSurplusOf(projectId, currency, decimals)` / `remoteTotalSupplyOf(projectId)` keep the **same signatures** but now aggregate over **every (sucker, chain) pair** and dedup per source chain — **aggregate views with explicit failure semantics**:
+  - `totalRemoteBalanceOf` / `totalRemoteSurplusOf` value each (sucker, chain) pair via the per-sucker `remoteBalanceOf` / `remoteSurplusOf` self-call (now passed a `chainId`); `remoteTotalSupplyOf` reads each chain's raw token supply via the sucker's `peerChainTotalSupplyValue(chainId)`.
+  - `try/catch` around each (sucker, chain); failing pairs (including a missing cross-currency feed) are silently skipped (fail-open for liveness, bias-low).
   - A sucker that reports a zero peer chain ID (after a successful read) reverts the whole aggregate, matching deploy-time validation.
-  - Multiple active suckers targeting the same peer chain are **deduped by freshest accepted snapshot timestamp** (each sucker caches the *entire* remote chain's state; SUM would double-count).
+  - Multiple (sucker, chain) pairs reporting the same source chain are **deduped per source chain by freshest accepted record timestamp** (each sucker caches the *entire* remote chain's state per source chain; SUM would double-count).
   - MAX is only a same-freshness tie-breaker.
-  - Deprecated suckers are used only as a fallback when no active sucker answers for that peer chain.
+  - Deprecated suckers are used only as a fallback when no active sucker answers for that source chain.
   - **These are estimates, not settlement data** — consumers must not treat them as authoritative.
 
 ---
@@ -285,13 +289,13 @@ Ownable registry. Tracks per-project sucker inventory + deployer allowlist + sha
 
 2. **AMB ingress uses raw `msg.sender`.** `fromRemote`, `fromRemoteAccounting`, and `ccipReceive` **never** use `_msgSender()` for caller authentication. ERC-2771 forwarder spoofing is structurally impossible.
 
-3. **Snapshot freshness key.** `peerChainTotalSupply` and the per-currency context set `_peerContexts` are gated by `snapshotTimestamp` (strictly greater source-timestamp wins, regardless of whether the snapshot arrived with a root or through `fromRemoteAccounting`; a fresher snapshot rebuilds the whole context set). Per-token inbox roots are gated by per-token nonce (strictly greater). Two independent gates — neither can roll the other back.
+3. **Per-source-chain freshness key.** `peerChainTotalSupplyOf[chainId]` and that chain's raw context set `_peerContextsOf[chainId]` are gated by `snapshotTimestampOf[chainId]` independently per source chain (strictly greater source-timestamp wins for that chain, regardless of whether the record arrived with a root or through `fromRemoteAccounting`; a fresher record rebuilds that chain's context set; records for `block.chainid` / chain 0 are dropped). Per-token inbox roots are gated by per-token nonce (strictly greater). Independent gates — neither chain nor the inbox can roll any other back.
 
 4. **OZ BitMaps `_executedFor`** — one bit per leaf per token. Claim path uses key `terminalToken`; emergency-exit path uses key `address(bytes20(keccak256(abi.encode(terminalToken))))`. The two paths are slot-disjoint, but both are append-only (`set` only, never cleared).
 
 5. **uint128 amount cap.** `_insertIntoTree` reverts if `projectTokenCount` or `terminalTokenAmount` exceeds `type(uint128).max`. SVM-compat constraint.
 
-6. **Conservation of project supply across chains.** For an asset operated through suckers, `total project token supply ≈ Σ local_supply_per_chain + Σ outbox.balance_per_chain (in flight)`. The protocol does not reconstruct this on-chain; data hooks aggregate `peerChainTotalSupply` snapshots from each sucker to drive cross-chain cashout/borrow math.
+6. **Conservation of project supply across chains.** For an asset operated through suckers, `total project token supply ≈ Σ local_supply_per_chain + Σ outbox.balance_per_chain (in flight)`. The protocol does not reconstruct this on-chain; consumers read the per-source-chain `peerChainTotalSupplyOf[chainId]` records each sucker holds (deduped per chain by the registry's aggregate views) to drive cross-chain cashout/borrow math.
 
 7. **Outbox accounting invariants** (tested in `test/unit/invariants.t.sol`):
    - `outbox.balance == totalInserted - totalEmergencyExited - totalSent`.
@@ -339,7 +343,7 @@ Ownable registry. Tracks per-project sucker inventory + deployer allowlist + sha
 - Leaf hash construction: `src/JBSucker.sol:1514-1538` (`_buildTreeHash`).
 - Raw `msg.sender` for AMB: `src/JBSucker.sol` (`fromRemote`, `fromRemoteAccounting`), `src/JBCCIPSucker.sol` (`ccipReceive`).
 - Inbox nonce gate: `src/JBSucker.sol:447-460`.
-- Snapshot freshness gate: `src/JBSucker.sol:466-479`.
+- Per-source-chain freshness gate and bundle storage: `JBSucker._storeChainAccounting` (per record) and `JBSucker._storeAccountingBundle` (per bundle), shared by `fromRemote` and `fromRemoteAccounting`.
 - State machine: `src/JBSucker.sol:815-839`.
 - 14-day deprecation delay: `src/JBSucker.sol:608-634`, `_maxMessagingDelay()` `src/JBSucker.sol:1162`.
 - Emergency hatch (per-token, one-way): `src/JBSucker.sol:340-359`.
@@ -350,7 +354,10 @@ Ownable registry. Tracks per-project sucker inventory + deployer allowlist + sha
 - CCIP delivered-amount check: `src/JBCCIPSucker.sol:182-216`.
 - Outbox uint128 cap: `src/JBSucker.sol:_insertIntoTree` at `src/JBSucker.sol:1016-1058`.
 - Registry deployment auth + salt mixing: `src/JBSuckerRegistry.sol:516-584`.
-- Registry aggregate-view dedup logic: `src/JBSuckerRegistry.sol:213-365`.
+- Registry aggregate-view dedup logic: `JBSuckerRegistry._aggregateRemoteValueOf` (per-source-chain dedup across every (sucker, chain) pair).
+- Registry gossip-bundle gather (hub forwards sibling-spoke records): `JBSuckerRegistry.peerChainAccountsOf`.
+- Outbound gossip-bundle assembly: `JBSuckerLib.buildAccountingSnapshot` / `JBSuckerLib._buildGossipBundle`.
+- Read-time raw-context currency resolution and fold: `JBSuckerLib.foldPeerContexts`.
 
 For the cross-chain economic-divergence (arbitrage) model that frames *why* sucker `prepare` uses `cashOutTaxRate=0` and the normal cashout path uses the aggregated rate, see Section D2 of `../INVARIANTS.md`.
 

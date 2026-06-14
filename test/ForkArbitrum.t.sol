@@ -14,6 +14,7 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IERC721Receiver} from "@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol";
 import {JBTokenMapping} from "../src/structs/JBTokenMapping.sol";
 import {IJBSuckerRegistry} from "../src/interfaces/IJBSuckerRegistry.sol";
+import {JBChainAccounting} from "../src/structs/JBChainAccounting.sol";
 
 // forge-lint: disable-next-line(unaliased-plain-import)
 import "forge-std/Test.sol";
@@ -129,11 +130,21 @@ contract ForkArbitrumDeployerTest is TestBaseWorkflow, IERC721Receiver {
         _launchProject();
         suckerL2 = deployerL2.createForSender(1, "arb-l2", bytes32(0));
 
-        // Mock the registry's toRemoteFee() on both forks (registry is address(0) in tests).
+        // Mock the registry's toRemoteFee() and gossip set on both forks (registry is address(0) in tests).
         vm.selectFork(l1Fork);
         vm.mockCall(address(0), abi.encodeCall(IJBSuckerRegistry.toRemoteFee, ()), abi.encode(uint256(0)));
+        vm.mockCall(
+            address(0),
+            abi.encodeWithSelector(IJBSuckerRegistry.peerChainAccountsOf.selector),
+            abi.encode(new JBChainAccounting[](0))
+        );
         vm.selectFork(l2Fork);
         vm.mockCall(address(0), abi.encodeCall(IJBSuckerRegistry.toRemoteFee, ()), abi.encode(uint256(0)));
+        vm.mockCall(
+            address(0),
+            abi.encodeWithSelector(IJBSuckerRegistry.peerChainAccountsOf.selector),
+            abi.encode(new JBChainAccounting[](0))
+        );
     }
 
     /// @notice L1 deployer and sucker have correct configuration with real Arbitrum inbox and gateway router.
@@ -304,6 +315,12 @@ contract ForkArbitrumNativeTransferTest is TestBaseWorkflow {
 
         // Mock the registry's toRemoteFee() (registry is address(0) in tests).
         vm.mockCall(address(0), abi.encodeCall(IJBSuckerRegistry.toRemoteFee, ()), abi.encode(uint256(0)));
+        // Registry gossip set is empty when there's no registry (project's only sucker is the one under test).
+        vm.mockCall(
+            address(0),
+            abi.encodeWithSelector(IJBSuckerRegistry.peerChainAccountsOf.selector),
+            abi.encode(new JBChainAccounting[](0))
+        );
     }
 
     /// @notice Launch a project that accepts native ETH with surplus allowance.

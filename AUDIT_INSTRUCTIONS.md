@@ -9,7 +9,7 @@ There is a billion dollars of well-meaning projects' money in the Juicebox Money
 Suggestions of where to look:
 
 - break Merkle-root or nonce progression
-- make accounting-only sync mutate claim state or bypass freshness
+- make the accounting gossip bundle mutate claim state, or bypass the per-source-chain freshness gate (each source chain gates independently on a strictly-newer freshness key); probe whether a crafted bundle can roll back a source chain, get a record for `block.chainid` or chain 0 stored despite the drop, or poison a spoke's view of a chain it has no direct sucker to (records are built on-chain from authenticated peer state via the registry, never caller-supplied — confirm that holds)
 - allow bad token mapping or peer assumptions
 - permit double-claim or bad emergency exit behavior
 - make non-atomic bridge semantics unsafe

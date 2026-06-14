@@ -4,6 +4,7 @@ pragma solidity ^0.8.0;
 import {IJBDirectory} from "@bananapus/core-v6/src/interfaces/IJBDirectory.sol";
 import {IJBProjects} from "@bananapus/core-v6/src/interfaces/IJBProjects.sol";
 
+import {JBChainAccounting} from "../structs/JBChainAccounting.sol";
 import {JBSuckerDeployerConfig} from "../structs/JBSuckerDeployerConfig.sol";
 import {JBSuckersPair} from "../structs/JBSuckersPair.sol";
 
@@ -68,9 +69,23 @@ interface IJBSuckerRegistry {
     /// @return Whether the sucker belongs to the project.
     function isSuckerOf(uint256 projectId, address addr) external view returns (bool);
 
+    /// @notice The freshest accounting record per source chain that a project's suckers hold, for re-gossiping.
+    /// @dev A sucker building an outbound gossip bundle calls this to gather the project's full cross-chain knowledge,
+    /// deduped per chain (freshest wins; active supersedes deprecated), excluding the destination and local chains.
+    /// @param projectId The ID of the project.
+    /// @param exceptChainId The destination chain to exclude.
+    /// @return accounts The deduped raw accounting records, one per known source chain.
+    function peerChainAccountsOf(
+        uint256 projectId,
+        uint256 exceptChainId
+    )
+        external
+        view
+        returns (JBChainAccounting[] memory accounts);
+
     /// @notice The cumulative total supply across all remote peer chains for a project.
-    /// @dev Dedupes same-peer active suckers by freshest snapshot, then sums peer-chain values. Silently skips suckers
-    /// that revert.
+    /// @dev Aggregates over every (sucker, chain) pair and dedups per chain by freshest record. Silently skips suckers
+    /// and records that revert.
     /// @param projectId The ID of the project.
     /// @return totalSupply The combined peer chain total supply.
     function remoteTotalSupplyOf(uint256 projectId) external view returns (uint256 totalSupply);
@@ -95,9 +110,9 @@ interface IJBSuckerRegistry {
     function toRemoteFee() external view returns (uint256);
 
     /// @notice The cumulative peer-chain balance across all remote peer chains for a project, valued into a currency.
-    /// @dev Dedups same-peer active suckers by freshest snapshot, then sums each sucker's balance valued into
-    /// `currency`. A context whose currency already matches is taken at par (no feed); a missing cross-currency feed
-    /// reverts and that sucker is silently skipped (conservative, bias-low).
+    /// @dev Aggregates over every (sucker, chain) pair and dedups per chain by freshest record, then sums each chain's
+    /// balance valued into `currency`. A context whose currency already matches is taken at par (no feed); a missing
+    /// cross-currency feed reverts and that (sucker, chain) is silently skipped (conservative, bias-low).
     /// @param projectId The ID of the project.
     /// @param currency The currency to value the combined balance into.
     /// @param decimals The decimal precision for the returned value.
@@ -112,9 +127,9 @@ interface IJBSuckerRegistry {
         returns (uint256 balance);
 
     /// @notice The cumulative peer-chain surplus across all remote peer chains for a project, valued into a currency.
-    /// @dev Dedups same-peer active suckers by freshest snapshot, then sums each sucker's surplus valued into
-    /// `currency`. A context whose currency already matches is taken at par (no feed); a missing cross-currency feed
-    /// reverts and that sucker is silently skipped (conservative, bias-low).
+    /// @dev Aggregates over every (sucker, chain) pair and dedups per chain by freshest record, then sums each chain's
+    /// surplus valued into `currency`. A context whose currency already matches is taken at par (no feed); a missing
+    /// cross-currency feed reverts and that (sucker, chain) is silently skipped (conservative, bias-low).
     /// @param projectId The ID of the project.
     /// @param currency The currency to value the combined surplus into.
     /// @param decimals The decimal precision for the returned value.

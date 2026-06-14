@@ -18,7 +18,7 @@ import {IOPStandardBridge} from "../../src/interfaces/IOPStandardBridge.sol";
 import {JBTokenMapping} from "../../src/structs/JBTokenMapping.sol";
 import {JBSuckerDeployerConfig} from "../../src/structs/JBSuckerDeployerConfig.sol";
 import {JBMessageRoot} from "../../src/structs/JBMessageRoot.sol";
-import {JBSourceContext} from "../../src/structs/JBSourceContext.sol";
+import {JBChainAccounting} from "../../src/structs/JBChainAccounting.sol";
 import {JBInboxTreeRoot} from "../../src/structs/JBInboxTreeRoot.sol";
 
 contract RegistryPeerMismatchTest is Test {
@@ -83,9 +83,7 @@ contract RegistryPeerMismatchTest is Test {
                 token: bytes32(0),
                 amount: 0,
                 remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(1))}),
-                sourceTotalSupply: 0,
-                sourceContexts: new JBSourceContext[](0),
-                sourceTimestamp: 1
+                accounts: new JBChainAccounting[](0)
             })
             );
     }

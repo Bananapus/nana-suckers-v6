@@ -16,6 +16,7 @@ import {LibClone} from "solady/src/utils/LibClone.sol";
 
 import "../../src/JBSucker.sol";
 import "../../src/interfaces/IJBSuckerRegistry.sol";
+import {JBChainAccounting} from "../../src/structs/JBChainAccounting.sol";
 import "../../src/structs/JBClaim.sol";
 import "../../src/structs/JBInboxTreeRoot.sol";
 import "../../src/structs/JBLeaf.sol";
@@ -163,6 +164,12 @@ contract RegressionToRemoteFeeIrrecoverableTest is Test {
             abi.encode(uint256(0))
         );
         vm.mockCall(REGISTRY, abi.encodeCall(IJBSuckerRegistry.toRemoteFee, ()), abi.encode(FEE));
+        // Mock registry.peerChainAccountsOf() so the gossip gather in _sendRoot() returns an empty peer set.
+        vm.mockCall(
+            REGISTRY,
+            abi.encodeWithSelector(IJBSuckerRegistry.peerChainAccountsOf.selector),
+            abi.encode(new JBChainAccounting[](0))
+        );
 
         // Mock DIRECTORY.terminalsOf() so the per-context snapshot builder in _sendRoot() doesn't revert.
         vm.mockCall(DIRECTORY, abi.encodeCall(IJBDirectory.terminalsOf, (PROJECT_ID)), abi.encode(new IJBTerminal[](0)));

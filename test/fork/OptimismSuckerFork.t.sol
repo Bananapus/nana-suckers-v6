@@ -15,6 +15,7 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 // Sucker imports for OP bridge testing.
 import {IJBSucker} from "../../src/interfaces/IJBSucker.sol";
 import {IJBSuckerRegistry} from "../../src/interfaces/IJBSuckerRegistry.sol";
+import {JBChainAccounting} from "../../src/structs/JBChainAccounting.sol";
 import {JBTokenMapping} from "../../src/structs/JBTokenMapping.sol";
 import {IOPMessenger} from "../../src/interfaces/IOPMessenger.sol";
 import {IOPStandardBridge} from "../../src/interfaces/IOPStandardBridge.sol";
@@ -181,6 +182,13 @@ contract OptimismSuckerForkTest is TestBaseWorkflow {
             address(0),
             abi.encodeCall(IJBSuckerRegistry.toRemoteFee, ()),
             abi.encode(uint256(0)) // Zero bridging fee for test simplicity.
+        );
+
+        // Mock the registry's peerChainAccountsOf() so the send path's gossip gather finds no extra peers.
+        vm.mockCall(
+            address(0),
+            abi.encodeWithSelector(IJBSuckerRegistry.peerChainAccountsOf.selector),
+            abi.encode(new JBChainAccounting[](0))
         );
     }
 

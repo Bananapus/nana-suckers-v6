@@ -22,8 +22,8 @@ The codebase includes multiple bridge variants, but the canonical deployment and
 Suckers bridge a project by tracking claims in append-only Merkle trees:
 
 - users call `prepare` to burn tokens and create a bridge claim in the local outbox tree
-- anyone can relay the current root to the peer chain with `toRemote`
-- anyone can refresh or retry peer accounting with `syncAccountingData`
+- anyone can relay the current root to the peer chain with `toRemote`, which also gossips the project's per-source-chain accounting bundle
+- anyone can refresh or retry the accounting gossip bundle with `syncAccountingData`
 - claimants prove inclusion against the peer inbox tree to mint on the destination chain
 
 The base implementation is extended for multiple bridge families so the same project model can work across different networks.
@@ -46,7 +46,7 @@ Each sucker pair has three jobs:
 
 1. destroy or lock the local economic position into a claimable message
 2. recreate the remote position from a bridged Merkle root plus transported value
-3. keep the peer's aggregate accounting views fresh enough for cross-chain estimates
+3. keep a per-source-chain accounting store fresh enough for cross-chain estimates, gossiping every chain's record across the sucker mesh
 
 That means every bridge path has two trust surfaces:
 
@@ -66,8 +66,9 @@ That means every bridge path has two trust surfaces:
 - do not reason about suckers as if they were generic ERC-20 bridges
 - root ordering and message delivery semantics matter as much as proof format
 - token mapping is part of the economic invariant
-- peer contexts are merged only when they share both currency and decimals; same-currency contexts with different decimals are kept separate and valued independently at read time, never summed across precisions
-- `syncAccountingData` pays no registry `toRemoteFee`, but bridge-specific transport costs still apply and duplicate snapshots can still consume bridge/indexer resources
+- peer contexts are merged only when they share both currency and decimals; same-currency contexts with different decimals are kept separate and valued independently at read time, never summed across precisions — and this merge applies per source chain, since each chain's record is stored and folded on its own
+- accounting propagates as a gossip bundle: a sucker sends its own chain's record plus every peer-chain record the project knows (gathered through the registry), so one sync round from a hub propagates every chain's data to every spoke without a direct sucker between each pair
+- `syncAccountingData` pays no registry `toRemoteFee`, but bridge-specific transport costs still apply and duplicate bundles can still consume bridge/indexer resources
 - emergency and deprecation paths are part of normal operational safety
 
 ## Where state lives

@@ -11,12 +11,12 @@
 ## Core invariants
 
 - Merkle trees remain append-only and claims cannot be replayed.
-- Source freshness keys only move forward, so stale peer snapshots cannot roll back remote state.
-- Accounting-only messages can update peer supply/context state but cannot update token-local inbox roots.
+- Each source chain's freshness key only moves forward independently, so a stale record for one chain cannot roll back that chain's stored accounting.
+- Accounting-only messages can update per-source-chain supply/context state but cannot update token-local inbox roots.
 - Token mappings stay coherent once outbox activity depends on them.
 - The transported terminal-token value matches the claimable project-token position.
 - Emergency exits and deprecation paths recover value without enabling double claims.
-- Registry aggregate views never double-count redundant same-peer snapshots.
+- Registry aggregate views never double-count redundant records for the same source chain across a project's suckers.
 
 ## Modules
 
@@ -28,7 +28,7 @@
 | `JBArbitrumSucker` | Arbitrum retryable-ticket and gateway flow | Transport-specific fee sizing matters |
 | `JBCCIPSucker` | Chainlink CCIP delivery and optional LINK fee mode | Higher external dependency surface |
 | `JBSuckerDeployer` variants | Clone and configure chain-specific suckers | Deployment wiring is part of correctness |
-| `MerkleLib` / `JBSuckerLib` / `JBPeerChainAdjustedAccountsLib` | Merkle and bytecode-heavy accounting helpers, plus defensive optional-hook return decoding | Shared by runtime paths |
+| `MerkleLib` / `JBSuckerLib` / `JBPeerChainAdjustedAccountsLib` | Merkle and bytecode-heavy accounting helpers (gossip-bundle assembly, raw-context folding to a local currency at read time), plus defensive optional-hook return decoding | Shared by runtime paths |
 | `JBSwapCCIPSucker` (+ swap libs/structs) / `JBCeloSucker` | Swap-assisted CCIP bridging / Celo-oriented native-token handling | Archived (reference only — not compiled or deployed); see `src/archive/` |
 
 ## Trust boundaries
@@ -48,17 +48,19 @@
 holder cashes out locally
   -> sucker builds a Merkle leaf and appends it to the outbox
   -> local terminal-token backing is held or bridged
-  -> toRemote sends the current root and transported value through the selected bridge
-  -> peer sucker records the root and latest source snapshot
+  -> toRemote gathers this chain's own record plus every peer-chain record the project knows (via the registry) into a gossip bundle, excluding the destination chain
+  -> toRemote sends the current root, transported value, and that bundle through the selected bridge
+  -> peer sucker records the root and stores the freshest record per source chain (ignoring its own chain and chain 0)
 ```
 
 ### Accounting sync
 
 ```text
 project accounting should be refreshed or retried without a new root send
-  -> any caller invokes syncAccountingData to refresh or retry the latest accounting snapshot
-  -> the selected bridge transports only supply, surplus, balance, and freshness data
-  -> peer sucker records the snapshot if it is fresher, without changing any inbox root
+  -> any caller invokes syncAccountingData to refresh or retry the accounting gossip bundle
+  -> the bundle carries this chain's own record plus every peer-chain record the project knows, each stamped with its origin chain's freshness key, excluding the destination chain
+  -> the selected bridge transports only supply, surplus, balance, and per-chain freshness data — no inbox root
+  -> peer sucker stores each record whose source freshness key is strictly newer than the one it already holds for that chain, without changing any inbox root
 ```
 
 ### Claim
@@ -81,7 +83,7 @@ project authority schedules deprecation or enables emergency hatch
 
 ## Accounting model
 
-The local sucker snapshots project supply plus a per-currency set of raw surplus and balance amounts before sending roots or accounting-only messages. The peer sucker stores these as oracle-free contexts and never prices them itself; valuation happens at read time in `JBSuckerRegistry`, which holds the prices reference and converts each context into a requested currency exactly as the terminal store values local surplus — taking a context already in the requested currency at par with no feed, and valuing a different-currency context through the project's price feed. `syncAccountingData` sends only this accounting snapshot, pays no registry `toRemoteFee`, and can be retried with the same accounting values if an operator wants a fresh transport attempt. Registry aggregate views are intentionally best-effort: they skip reverting suckers (including any whose cross-currency feed is missing) and dedupe active same-peer lanes by the freshest accepted snapshot, with deprecated lanes used only when no active lane answers for that peer chain.
+Each sucker keeps a per-source-chain accounting store: for every chain it has heard about, the freshest record of project supply plus a set of raw surplus and balance contexts, gated independently per chain on a strictly-newer freshness key. Outbound messages carry a gossip bundle — an array of `JBChainAccounting` records, one per source chain the project knows (its own chain plus every peer-chain record gathered through the registry, which is the only contract that sees a hub chain's per-peer suckers together), each stamped with its origin chain's freshness key and excluding the destination chain. This lets a project's accounting propagate across a hub-and-spoke sucker mesh (L2s bridged only through mainnet) without a direct sucker between every pair of chains: one sync round from the hub forwards every chain's record to every spoke. The receiving sucker stores each record whose freshness key beats the one it already holds for that source chain, ignoring any record for its own chain (`block.chainid`) or chain 0. Contexts are stored raw, in the source chain's own token addresses, and resolved to a local currency at read time in `JBSuckerLib.foldPeerContexts` (there is no per-token currency cache); the sucker never prices a context itself. Valuation into a requested currency happens in `JBSuckerRegistry`, which holds the prices reference and values each context exactly as the terminal store values local surplus — a context already in the requested currency folds in at par with no feed, and a different-currency context is valued through the project's price feed. `syncAccountingData` sends only this gossip bundle, pays no registry `toRemoteFee`, and can be retried if an operator wants a fresh transport attempt. Registry aggregate views are intentionally best-effort: they skip reverting suckers (including any whose cross-currency feed is missing) and dedupe per source chain across every (sucker, chain) pair by the freshest accepted record, with deprecated suckers used only when no active sucker answers for that source chain.
 
 ## Security model
 
@@ -93,7 +95,7 @@ The local sucker snapshots project supply plus a per-currency set of raw surplus
 ## Safe change guide
 
 - Review `JBSucker` and the matching chain-specific implementation together when changing send or receive behavior.
-- Re-check token mapping, outbox balance, source snapshot, and emergency-exit behavior together.
+- Re-check token mapping, outbox balance, the per-source-chain accounting store and its gossip-bundle assembly, and emergency-exit behavior together.
 - Treat registry aggregate changes as user-facing estimator changes, not harmless view refactors.
 - If a change touches bridge fees or gas limits, verify the real transport API rather than only local mocks.
 

@@ -18,6 +18,7 @@ import {IJBSucker} from "../src/interfaces/IJBSucker.sol";
 import {IJBSuckerDeployer} from "../src/interfaces/IJBSuckerDeployer.sol";
 import {IJBSuckerRegistry} from "../src/interfaces/IJBSuckerRegistry.sol";
 import {JBMessageRoot} from "../src/structs/JBMessageRoot.sol";
+import {JBChainAccounting} from "../src/structs/JBChainAccounting.sol";
 import {JBSourceContext} from "../src/structs/JBSourceContext.sol";
 import {JBInboxTreeRoot} from "../src/structs/JBInboxTreeRoot.sol";
 import {JBRemoteToken} from "../src/structs/JBRemoteToken.sol";
@@ -180,8 +181,10 @@ contract MultiSuckerForkTest is Test {
         });
     }
 
-    /// @dev Build a JBMessageRoot with the given state values.
+    /// @dev Build a JBMessageRoot carrying one source chain's accounting record with the given state values.
+    /// @param sourceChainId The source chain the record describes — must be a remote chain (not the receiver's own).
     function _buildStateMessage(
+        uint256 sourceChainId,
         uint64 sourceTimestamp,
         uint256 totalSupply,
         uint256 surplus,
@@ -201,18 +204,21 @@ contract MultiSuckerForkTest is Test {
             balance: uint128(balance)
         });
 
+        JBChainAccounting[] memory accounts = new JBChainAccounting[](1);
+        accounts[0] = JBChainAccounting({
+            chainId: sourceChainId, totalSupply: totalSupply, contexts: ctxs, timestamp: sourceTimestamp
+        });
+
         return JBMessageRoot({
             version: 1,
             token: bytes32(uint256(uint160(JBConstants.NATIVE_TOKEN))),
             amount: 0,
             remoteRoot: JBInboxTreeRoot({nonce: sourceTimestamp, root: bytes32(0)}),
-            sourceTotalSupply: totalSupply,
-            sourceContexts: ctxs,
-            sourceTimestamp: sourceTimestamp
+            accounts: accounts
         });
     }
 
-    /// @dev Deliver state to a sucker via `fromRemote()`.
+    /// @dev Deliver state to a sucker via `fromRemote()`, stamping the record with the sucker's peer chain.
     function _deliverState(
         MultiSuckerMock sucker,
         uint64 sourceTimestamp,
@@ -222,7 +228,8 @@ contract MultiSuckerForkTest is Test {
     )
         internal
     {
-        JBMessageRoot memory root = _buildStateMessage(sourceTimestamp, totalSupply, surplus, balance);
+        JBMessageRoot memory root =
+            _buildStateMessage(sucker.peerChainId(), sourceTimestamp, totalSupply, surplus, balance);
         sucker.fromRemote(root);
     }
 
@@ -269,7 +276,7 @@ contract MultiSuckerForkTest is Test {
         _deliverState(sucker1, 1, 1000e18, 500e18, 2000e18);
 
         // Verify sucker1 stored the state.
-        assertEq(sucker1.peerChainTotalSupply(), 1000e18, "sucker1 should store total supply");
+        assertEq(sucker1.peerChainTotalSupplyOf(sucker1.peerChainId()), 1000e18, "sucker1 should store total supply");
 
         // Verify registry aggregate views before deprecation.
         assertEq(registry.remoteTotalSupplyOf(PROJECT_ID), 1000e18, "registry total supply before deprecation");
@@ -433,13 +440,17 @@ contract MultiSuckerForkTest is Test {
 
         // Deliver fresh state with nonce=2.
         _deliverState(sucker, 2, 5000e18, 3000e18, 10_000e18);
-        assertEq(sucker.peerChainTotalSupply(), 5000e18, "nonce=2 state should be stored");
+        assertEq(sucker.peerChainTotalSupplyOf(sucker.peerChainId()), 5000e18, "nonce=2 state should be stored");
 
         // Deliver stale state with nonce=1 (lower values).
         _deliverState(sucker, 1, 1000e18, 500e18, 2000e18);
 
         // State should NOT have rolled back.
-        assertEq(sucker.peerChainTotalSupply(), 5000e18, "stale nonce=1 should NOT overwrite nonce=2 state");
+        assertEq(
+            sucker.peerChainTotalSupplyOf(sucker.peerChainId()),
+            5000e18,
+            "stale nonce=1 should NOT overwrite nonce=2 state"
+        );
         assertEq(
             registry.remoteTotalSupplyOf(PROJECT_ID), 5000e18, "registry should reflect nonce=2 state (not rolled back)"
         );
@@ -456,13 +467,17 @@ contract MultiSuckerForkTest is Test {
 
         // Deliver initial state.
         _deliverState(sucker, 1, 5000e18, 3000e18, 10_000e18);
-        assertEq(sucker.peerChainTotalSupply(), 5000e18);
+        assertEq(sucker.peerChainTotalSupplyOf(sucker.peerChainId()), 5000e18);
 
         // Deliver newer state with lower values.
         _deliverState(sucker, 2, 2000e18, 1000e18, 4000e18);
 
         // State SHOULD update to the newer (lower) values.
-        assertEq(sucker.peerChainTotalSupply(), 2000e18, "nonce=2 should overwrite nonce=1 even with lower values");
+        assertEq(
+            sucker.peerChainTotalSupplyOf(sucker.peerChainId()),
+            2000e18,
+            "nonce=2 should overwrite nonce=1 even with lower values"
+        );
         assertEq(
             registry.totalRemoteBalanceOf(PROJECT_ID, ETH_CURRENCY, 18),
             4000e18,

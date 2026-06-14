@@ -21,8 +21,8 @@ import {JBClaim} from "../src/structs/JBClaim.sol";
 import {JBLeaf} from "../src/structs/JBLeaf.sol";
 import {JBInboxTreeRoot} from "../src/structs/JBInboxTreeRoot.sol";
 import {JBMessageRoot} from "../src/structs/JBMessageRoot.sol";
+import {JBChainAccounting} from "../src/structs/JBChainAccounting.sol";
 import {JBRemoteToken} from "../src/structs/JBRemoteToken.sol";
-import {JBSourceContext} from "../src/structs/JBSourceContext.sol";
 import {MerkleLib} from "../src/utils/MerkleLib.sol";
 
 /// @notice A test sucker that exposes internals for regression gap testing.
@@ -218,6 +218,13 @@ contract TestRegressionGaps is Test {
 
         // Mock the registry's toRemoteFee() to return 0 (registry is address(1) with no code).
         vm.mockCall(address(1), abi.encodeCall(IJBSuckerRegistry.toRemoteFee, ()), abi.encode(uint256(0)));
+
+        // Mock registry.peerChainAccountsOf() so the gossip gather in _sendRoot() returns an empty peer set.
+        vm.mockCall(
+            address(1),
+            abi.encodeWithSelector(IJBSuckerRegistry.peerChainAccountsOf.selector),
+            abi.encode(new JBChainAccounting[](0))
+        );
 
         // Mock DIRECTORY.terminalsOf() so the per-context snapshot builder in _sendRoot() doesn't revert.
         vm.mockCall(DIRECTORY, abi.encodeCall(IJBDirectory.terminalsOf, (PROJECT_ID)), abi.encode(new IJBTerminal[](0)));
@@ -494,9 +501,7 @@ contract TestRegressionGaps is Test {
                 token: bytes32(uint256(uint160(TOKEN))),
                 amount: i * 1 ether,
                 remoteRoot: JBInboxTreeRoot({nonce: i, root: roots[i - 1]}),
-                sourceTotalSupply: 0,
-                sourceContexts: new JBSourceContext[](0),
-                sourceTimestamp: 1
+                accounts: new JBChainAccounting[](0)
             });
 
             vm.prank(address(sucker)); // peer = self for clones
@@ -516,9 +521,7 @@ contract TestRegressionGaps is Test {
             token: bytes32(uint256(uint160(TOKEN))),
             amount: 3 ether,
             remoteRoot: JBInboxTreeRoot({nonce: 3, root: bytes32(uint256(0xDDD))}),
-            sourceTotalSupply: 0,
-            sourceContexts: new JBSourceContext[](0),
-            sourceTimestamp: 1
+            accounts: new JBChainAccounting[](0)
         });
 
         vm.prank(address(sucker));
@@ -533,9 +536,7 @@ contract TestRegressionGaps is Test {
             token: bytes32(uint256(uint160(TOKEN))),
             amount: 2 ether,
             remoteRoot: JBInboxTreeRoot({nonce: 2, root: bytes32(uint256(0xEEE))}),
-            sourceTotalSupply: 0,
-            sourceContexts: new JBSourceContext[](0),
-            sourceTimestamp: 1
+            accounts: new JBChainAccounting[](0)
         });
 
         vm.prank(address(sucker));
@@ -700,9 +701,7 @@ contract TestRegressionGaps is Test {
                 token: bytes32(uint256(uint160(TOKEN))),
                 amount: 1 ether,
                 remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(0x111))}),
-                sourceTotalSupply: 0,
-                sourceContexts: new JBSourceContext[](0),
-                sourceTimestamp: 1
+                accounts: new JBChainAccounting[](0)
             })
         );
         assertEq(sucker.test_getInboxNonce(TOKEN), 1);
@@ -715,9 +714,7 @@ contract TestRegressionGaps is Test {
                 token: bytes32(uint256(uint160(TOKEN))),
                 amount: 2 ether,
                 remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(0x222))}),
-                sourceTotalSupply: 0,
-                sourceContexts: new JBSourceContext[](0),
-                sourceTimestamp: 1
+                accounts: new JBChainAccounting[](0)
             })
         );
         assertEq(sucker.test_getInboxNonce(TOKEN), 1, "Same nonce should not update");
@@ -731,9 +728,7 @@ contract TestRegressionGaps is Test {
                 token: bytes32(uint256(uint160(TOKEN))),
                 amount: 5 ether,
                 remoteRoot: JBInboxTreeRoot({nonce: 5, root: bytes32(uint256(0x555))}),
-                sourceTotalSupply: 0,
-                sourceContexts: new JBSourceContext[](0),
-                sourceTimestamp: 1
+                accounts: new JBChainAccounting[](0)
             })
         );
         assertEq(sucker.test_getInboxNonce(TOKEN), 5, "Higher nonce should update");
@@ -747,9 +742,7 @@ contract TestRegressionGaps is Test {
                 token: bytes32(uint256(uint160(TOKEN))),
                 amount: 3 ether,
                 remoteRoot: JBInboxTreeRoot({nonce: 3, root: bytes32(uint256(0x333))}),
-                sourceTotalSupply: 0,
-                sourceContexts: new JBSourceContext[](0),
-                sourceTimestamp: 1
+                accounts: new JBChainAccounting[](0)
             })
         );
         assertEq(sucker.test_getInboxNonce(TOKEN), 5, "Lower nonce should not update");
@@ -799,9 +792,7 @@ contract TestRegressionGaps is Test {
                 token: bytes32(uint256(uint160(tokenA))),
                 amount: 1 ether,
                 remoteRoot: JBInboxTreeRoot({nonce: 3, root: bytes32(uint256(0xAAA))}),
-                sourceTotalSupply: 0,
-                sourceContexts: new JBSourceContext[](0),
-                sourceTimestamp: 1
+                accounts: new JBChainAccounting[](0)
             })
         );
 
@@ -812,9 +803,7 @@ contract TestRegressionGaps is Test {
                 token: bytes32(uint256(uint160(tokenB))),
                 amount: 2 ether,
                 remoteRoot: JBInboxTreeRoot({nonce: 7, root: bytes32(uint256(0xBBB))}),
-                sourceTotalSupply: 0,
-                sourceContexts: new JBSourceContext[](0),
-                sourceTimestamp: 1
+                accounts: new JBChainAccounting[](0)
             })
         );
 
@@ -832,9 +821,7 @@ contract TestRegressionGaps is Test {
                 token: bytes32(uint256(uint160(tokenA))),
                 amount: 10 ether,
                 remoteRoot: JBInboxTreeRoot({nonce: 10, root: bytes32(uint256(0xCCC))}),
-                sourceTotalSupply: 0,
-                sourceContexts: new JBSourceContext[](0),
-                sourceTimestamp: 1
+                accounts: new JBChainAccounting[](0)
             })
         );
 
@@ -927,9 +914,7 @@ contract TestRegressionGaps is Test {
             token: bytes32(uint256(uint160(TOKEN))),
             amount: 1 ether,
             remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(0x123))}),
-            sourceTotalSupply: 0,
-            sourceContexts: new JBSourceContext[](0),
-            sourceTimestamp: 1
+            accounts: new JBChainAccounting[](0)
         });
 
         vm.prank(address(sucker));

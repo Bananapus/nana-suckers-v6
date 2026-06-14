@@ -25,6 +25,7 @@ import {JBCCIPLib} from "./libraries/JBCCIPLib.sol";
 
 // Local: structs (alphabetized)
 import {JBAccountingSnapshot} from "./structs/JBAccountingSnapshot.sol";
+import {JBChainAccounting} from "./structs/JBChainAccounting.sol";
 import {JBMessageRoot} from "./structs/JBMessageRoot.sol";
 import {JBRemoteToken} from "./structs/JBRemoteToken.sol";
 import {JBTokenMapping} from "./structs/JBTokenMapping.sol";
@@ -269,7 +270,7 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
     {
         _sendCcipMessage({
             transportPayment: transportPayment,
-            gasLimit: _ccipGasLimitFor({sourceContextCount: snapshot.sourceContexts.length}),
+            gasLimit: _ccipGasLimitFor({accounts: snapshot.accounts}),
             encodedPayload: abi.encode(_CCIP_MSG_TYPE_ACCOUNTING, abi.encode(snapshot)),
             tokenAmounts: new Client.EVMTokenAmount[](0)
         });
@@ -343,7 +344,7 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
         override
     {
         // Budget for the root receiver plus the accounting contexts carried in the root message.
-        uint256 gasLimit = _ccipGasLimitFor({sourceContextCount: suckerMessage.sourceContexts.length});
+        uint256 gasLimit = _ccipGasLimitFor({accounts: suckerMessage.accounts});
         Client.EVMTokenAmount[] memory tokenAmounts;
 
         if (amount != 0) {
@@ -369,11 +370,21 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
     // ------------------------ internal views --------------------------- //
     //*********************************************************************//
 
-    /// @notice The CCIP destination gas limit for a message carrying `sourceContextCount` accounting contexts.
-    /// @param sourceContextCount The number of source accounting contexts in the message.
+    /// @notice The CCIP destination gas limit for a message carrying the given accounting gossip bundle.
+    /// @dev Scales with the total number of source accounting contexts across every record in the bundle, since the
+    /// receiver does per-context work for each one.
+    /// @param accounts The accounting records carried by the message.
     /// @return gasLimit The destination gas limit to ask CCIP to provide.
-    function _ccipGasLimitFor(uint256 sourceContextCount) internal pure returns (uint256 gasLimit) {
-        return MESSENGER_BASE_GAS_LIMIT + (sourceContextCount * _CCIP_SOURCE_CONTEXT_GAS_LIMIT);
+    function _ccipGasLimitFor(JBChainAccounting[] memory accounts) internal pure returns (uint256 gasLimit) {
+        uint256 contextCount;
+        uint256 numAccounts = accounts.length;
+        for (uint256 i; i < numAccounts;) {
+            contextCount += accounts[i].contexts.length;
+            unchecked {
+                ++i;
+            }
+        }
+        return MESSENGER_BASE_GAS_LIMIT + (contextCount * _CCIP_SOURCE_CONTEXT_GAS_LIMIT);
     }
 
     /// @notice Checks whether the given sender is a remote peer. Unused in this context.

@@ -12,6 +12,7 @@ import {ICCIPRouter} from "src/interfaces/ICCIPRouter.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {JBTokenMapping} from "../src/structs/JBTokenMapping.sol";
 import {IJBSuckerRegistry} from "../src/interfaces/IJBSuckerRegistry.sol";
+import {JBChainAccounting} from "../src/structs/JBChainAccounting.sol";
 
 // forge-lint: disable-next-line(unaliased-plain-import)
 import "forge-std/Test.sol";
@@ -153,6 +154,12 @@ abstract contract CCIPSuckerMainnetForkTestBase is SuckerForkHelpers {
         vm.stopPrank();
 
         vm.mockCall(address(0), abi.encodeCall(IJBSuckerRegistry.toRemoteFee, ()), abi.encode(uint256(0)));
+        // Registry gossip set is empty when there's no registry (project's only sucker is the one under test).
+        vm.mockCall(
+            address(0),
+            abi.encodeWithSelector(IJBSuckerRegistry.peerChainAccountsOf.selector),
+            abi.encode(new JBChainAccounting[](0))
+        );
     }
 
     // ── Tests

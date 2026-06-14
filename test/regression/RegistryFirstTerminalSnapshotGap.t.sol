@@ -20,6 +20,7 @@ import {LibClone} from "solady/src/utils/LibClone.sol";
 
 import {JBSucker} from "../../src/JBSucker.sol";
 import {IJBSuckerRegistry} from "../../src/interfaces/IJBSuckerRegistry.sol";
+import {JBChainAccounting} from "../../src/structs/JBChainAccounting.sol";
 import {JBMessageRoot} from "../../src/structs/JBMessageRoot.sol";
 import {JBRemoteToken} from "../../src/structs/JBRemoteToken.sol";
 import {MerkleLib} from "../../src/utils/MerkleLib.sol";
@@ -132,6 +133,12 @@ contract RegistryFirstTerminalSnapshotGapTest is Test {
         );
 
         vm.mockCall(address(1), abi.encodeCall(IJBSuckerRegistry.toRemoteFee, ()), abi.encode(uint256(0)));
+        // Mock registry.peerChainAccountsOf() so the gossip gather in _sendRoot() returns an empty peer set.
+        vm.mockCall(
+            address(1),
+            abi.encodeWithSelector(IJBSuckerRegistry.peerChainAccountsOf.selector),
+            abi.encode(new JBChainAccounting[](0))
+        );
         vm.mockCall(
             DIRECTORY,
             abi.encodeCall(IJBDirectory.primaryTerminalOf, (PROJECT_ID, JBConstants.NATIVE_TOKEN)),
@@ -185,13 +192,18 @@ contract RegistryFirstTerminalSnapshotGapTest is Test {
 
         JBMessageRoot memory message = sucker.test_getLastSentMessage();
 
-        assertEq(message.sourceTotalSupply, 1000 ether, "control: snapshot still records controller supply");
-        assertEq(message.sourceContexts.length, 1, "only the treasury terminal contributes a context");
+        // The sender's own chain leads the gossip bundle; with no registry-gathered peers it is the only record.
+        assertEq(message.accounts.length, 1, "only the local chain's record is bundled");
+        assertEq(message.accounts[0].chainId, block.chainid, "local record carries the source chain id");
+        assertEq(message.accounts[0].totalSupply, 1000 ether, "control: snapshot still records controller supply");
+        assertEq(message.accounts[0].contexts.length, 1, "only the treasury terminal contributes a context");
         assertEq(
-            message.sourceContexts[0].token, bytes32(uint256(uint160(TOKEN))), "later terminal's token is snapshotted"
+            message.accounts[0].contexts[0].token,
+            bytes32(uint256(uint160(TOKEN))),
+            "later terminal's token is snapshotted"
         );
-        assertEq(message.sourceContexts[0].surplus, 40 ether, "later terminal surplus is still snapshotted");
-        assertEq(message.sourceContexts[0].balance, 70 ether, "later terminal balance is still snapshotted");
+        assertEq(message.accounts[0].contexts[0].surplus, 40 ether, "later terminal surplus is still snapshotted");
+        assertEq(message.accounts[0].contexts[0].balance, 70 ether, "later terminal balance is still snapshotted");
     }
 
     function _createSucker() internal returns (SnapshotGapHarness) {

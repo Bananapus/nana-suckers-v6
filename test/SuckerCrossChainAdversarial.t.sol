@@ -22,6 +22,7 @@ import {JBClaim} from "../src/structs/JBClaim.sol";
 import {JBLeaf} from "../src/structs/JBLeaf.sol";
 import {JBInboxTreeRoot} from "../src/structs/JBInboxTreeRoot.sol";
 import {JBMessageRoot} from "../src/structs/JBMessageRoot.sol";
+import {JBChainAccounting} from "../src/structs/JBChainAccounting.sol";
 import {JBSourceContext} from "../src/structs/JBSourceContext.sol";
 import {JBRemoteToken} from "../src/structs/JBRemoteToken.sol";
 import {JBOutboxTree} from "../src/structs/JBOutboxTree.sol";
@@ -167,6 +168,9 @@ contract SuckerCrossChainAdversarial is Test {
 
     uint256 constant PROJECT_ID = 1;
     address constant TOKEN = address(0x000000000000000000000000000000000000EEEe);
+    /// @dev The remote source chain a gossiped accounting record describes. Distinct from the receiver's own
+    /// `block.chainid`, so the sucker keeps the record instead of dropping it as its own-chain accounting.
+    uint256 constant REMOTE_CHAIN = 42_161;
 
     CrossChainTestSucker sucker;
 
@@ -250,9 +254,7 @@ contract SuckerCrossChainAdversarial is Test {
                 token: bytes32(uint256(uint160(TOKEN))),
                 amount: 0,
                 remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(111))}),
-                sourceTotalSupply: 1000,
-                sourceContexts: new JBSourceContext[](0),
-                sourceTimestamp: 1
+                accounts: _accounts({totalSupply: 1000, contexts: new JBSourceContext[](0), timestamp: 1})
             })
         );
         assertEq(sucker.test_getInboxNonce(TOKEN), 1, "Nonce accepted in DEPRECATION_PENDING");
@@ -267,9 +269,7 @@ contract SuckerCrossChainAdversarial is Test {
                 token: bytes32(uint256(uint160(TOKEN))),
                 amount: 0,
                 remoteRoot: JBInboxTreeRoot({nonce: 2, root: bytes32(uint256(222))}),
-                sourceTotalSupply: 1000,
-                sourceContexts: new JBSourceContext[](0),
-                sourceTimestamp: 2
+                accounts: _accounts({totalSupply: 1000, contexts: new JBSourceContext[](0), timestamp: 2})
             })
         );
         assertEq(sucker.test_getInboxNonce(TOKEN), 2, "Nonce accepted in SENDING_DISABLED");
@@ -284,9 +284,7 @@ contract SuckerCrossChainAdversarial is Test {
                 token: bytes32(uint256(uint160(TOKEN))),
                 amount: 0,
                 remoteRoot: JBInboxTreeRoot({nonce: 3, root: bytes32(uint256(333))}),
-                sourceTotalSupply: 1000,
-                sourceContexts: new JBSourceContext[](0),
-                sourceTimestamp: 3
+                accounts: _accounts({totalSupply: 1000, contexts: new JBSourceContext[](0), timestamp: 3})
             })
         );
         assertEq(sucker.test_getInboxNonce(TOKEN), 3, "Nonce accepted in DEPRECATED");
@@ -322,9 +320,7 @@ contract SuckerCrossChainAdversarial is Test {
                 token: bytes32(uint256(uint160(TOKEN))),
                 amount: 0,
                 remoteRoot: JBInboxTreeRoot({nonce: 100, root: bytes32(uint256(999))}),
-                sourceTotalSupply: 0,
-                sourceContexts: new JBSourceContext[](0),
-                sourceTimestamp: 100
+                accounts: _accounts({totalSupply: 0, contexts: new JBSourceContext[](0), timestamp: 100})
             })
         );
         assertEq(sucker.test_getInboxNonce(TOKEN), 100);
@@ -337,9 +333,7 @@ contract SuckerCrossChainAdversarial is Test {
                 token: bytes32(uint256(uint160(TOKEN))),
                 amount: 0,
                 remoteRoot: JBInboxTreeRoot({nonce: 50, root: bytes32(uint256(555))}),
-                sourceTotalSupply: 0,
-                sourceContexts: new JBSourceContext[](0),
-                sourceTimestamp: 50
+                accounts: _accounts({totalSupply: 0, contexts: new JBSourceContext[](0), timestamp: 50})
             })
         );
         // Nonce unchanged — stale message was ignored.
@@ -367,9 +361,7 @@ contract SuckerCrossChainAdversarial is Test {
                 token: bytes32(uint256(uint160(tokenA))),
                 amount: 0,
                 remoteRoot: JBInboxTreeRoot({nonce: 5, root: bytes32(uint256(111))}),
-                sourceTotalSupply: 0,
-                sourceContexts: new JBSourceContext[](0),
-                sourceTimestamp: 5
+                accounts: _accounts({totalSupply: 0, contexts: new JBSourceContext[](0), timestamp: 5})
             })
         );
 
@@ -381,9 +373,7 @@ contract SuckerCrossChainAdversarial is Test {
                 token: bytes32(uint256(uint160(tokenB))),
                 amount: 0,
                 remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(222))}),
-                sourceTotalSupply: 0,
-                sourceContexts: new JBSourceContext[](0),
-                sourceTimestamp: 1
+                accounts: _accounts({totalSupply: 0, contexts: new JBSourceContext[](0), timestamp: 1})
             })
         );
 
@@ -413,9 +403,7 @@ contract SuckerCrossChainAdversarial is Test {
                 token: bytes32(uint256(uint160(TOKEN))),
                 amount: 1 ether,
                 remoteRoot: JBInboxTreeRoot({nonce: 1, root: rootHash}),
-                sourceTotalSupply: 0,
-                sourceContexts: new JBSourceContext[](0),
-                sourceTimestamp: 1
+                accounts: _accounts({totalSupply: 0, contexts: new JBSourceContext[](0), timestamp: 1})
             })
         );
         // Give the sucker ETH to back the claim.
@@ -498,12 +486,12 @@ contract SuckerCrossChainAdversarial is Test {
                 token: bytes32(uint256(uint160(TOKEN))),
                 amount: 0,
                 remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(111))}),
-                sourceTotalSupply: 1000,
-                sourceContexts: _nativeContext({surplus: 500, balance: 800}),
-                sourceTimestamp: 1
+                accounts: _accounts({
+                    totalSupply: 1000, contexts: _nativeContext({surplus: 500, balance: 800}), timestamp: 1
+                })
             })
         );
-        assertEq(sucker.peerChainTotalSupply(), 1000, "Supply after nonce 1");
+        assertEq(sucker.peerChainTotalSupplyOf(REMOTE_CHAIN), 1000, "Supply after nonce 1");
 
         // Second root: supply increased to 2000.
         vm.prank(peer);
@@ -513,12 +501,12 @@ contract SuckerCrossChainAdversarial is Test {
                 token: bytes32(uint256(uint160(TOKEN))),
                 amount: 0,
                 remoteRoot: JBInboxTreeRoot({nonce: 2, root: bytes32(uint256(222))}),
-                sourceTotalSupply: 2000,
-                sourceContexts: _nativeContext({surplus: 300, balance: 700}),
-                sourceTimestamp: 2
+                accounts: _accounts({
+                    totalSupply: 2000, contexts: _nativeContext({surplus: 300, balance: 700}), timestamp: 2
+                })
             })
         );
-        assertEq(sucker.peerChainTotalSupply(), 2000, "Supply updated to 2000");
+        assertEq(sucker.peerChainTotalSupplyOf(REMOTE_CHAIN), 2000, "Supply updated to 2000");
 
         // Stale message with nonce 1 again: supply should NOT revert to 1000.
         vm.prank(peer);
@@ -528,12 +516,12 @@ contract SuckerCrossChainAdversarial is Test {
                 token: bytes32(uint256(uint160(TOKEN))),
                 amount: 0,
                 remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(111))}),
-                sourceTotalSupply: 1000,
-                sourceContexts: _nativeContext({surplus: 500, balance: 800}),
-                sourceTimestamp: 1
+                accounts: _accounts({
+                    totalSupply: 1000, contexts: _nativeContext({surplus: 500, balance: 800}), timestamp: 1
+                })
             })
         );
-        assertEq(sucker.peerChainTotalSupply(), 2000, "Supply NOT reverted by stale message");
+        assertEq(sucker.peerChainTotalSupplyOf(REMOTE_CHAIN), 2000, "Supply NOT reverted by stale message");
     }
 
     /// @notice Supply snapshot only updates when sourceTimestamp is newer.
@@ -548,12 +536,12 @@ contract SuckerCrossChainAdversarial is Test {
                 token: bytes32(uint256(uint160(TOKEN))),
                 amount: 0,
                 remoteRoot: JBInboxTreeRoot({nonce: 3, root: bytes32(uint256(333))}),
-                sourceTotalSupply: 500,
-                sourceContexts: _nativeContext({surplus: 200, balance: 400}),
-                sourceTimestamp: 2
+                accounts: _accounts({
+                    totalSupply: 500, contexts: _nativeContext({surplus: 200, balance: 400}), timestamp: 2
+                })
             })
         );
-        assertEq(sucker.peerChainTotalSupply(), 500, "Supply from sourceTimestamp 2");
+        assertEq(sucker.peerChainTotalSupplyOf(REMOTE_CHAIN), 500, "Supply from sourceTimestamp 2");
 
         // Nonce 5, but sourceTimestamp 1 (older snapshot): should the supply update?
         // This tests whether the contract uses the inbox nonce or the sourceTimestamp for supply gating.
@@ -564,13 +552,13 @@ contract SuckerCrossChainAdversarial is Test {
                 token: bytes32(uint256(uint160(TOKEN))),
                 amount: 0,
                 remoteRoot: JBInboxTreeRoot({nonce: 5, root: bytes32(uint256(555))}),
-                sourceTotalSupply: 300,
-                sourceContexts: _nativeContext({surplus: 100, balance: 200}),
-                sourceTimestamp: 1
+                accounts: _accounts({
+                    totalSupply: 300, contexts: _nativeContext({surplus: 100, balance: 200}), timestamp: 1
+                })
             })
         );
         // sourceTimestamp 1 < snapshotTimestamp (2), so supply should NOT update.
-        assertEq(sucker.peerChainTotalSupply(), 500, "Supply NOT updated with stale sourceTimestamp");
+        assertEq(sucker.peerChainTotalSupplyOf(REMOTE_CHAIN), 500, "Supply NOT updated with stale sourceTimestamp");
     }
 
     // ======================================================================
@@ -611,9 +599,7 @@ contract SuckerCrossChainAdversarial is Test {
                 token: bytes32(uint256(uint160(TOKEN))),
                 amount: 1 ether,
                 remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(999))}),
-                sourceTotalSupply: 1000,
-                sourceContexts: new JBSourceContext[](0),
-                sourceTimestamp: 1
+                accounts: _accounts({totalSupply: 1000, contexts: new JBSourceContext[](0), timestamp: 1})
             })
         );
     }
@@ -630,9 +616,7 @@ contract SuckerCrossChainAdversarial is Test {
                 token: bytes32(uint256(uint160(TOKEN))),
                 amount: 1 ether,
                 remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(999))}),
-                sourceTotalSupply: 1000,
-                sourceContexts: new JBSourceContext[](0),
-                sourceTimestamp: 1
+                accounts: _accounts({totalSupply: 1000, contexts: new JBSourceContext[](0), timestamp: 1})
             })
         );
     }
@@ -710,6 +694,26 @@ contract SuckerCrossChainAdversarial is Test {
         ctxs = new JBSourceContext[](1);
         ctxs[0] = JBSourceContext({
             token: bytes32(uint256(uint160(TOKEN))), decimals: 18, surplus: surplus, balance: balance
+        });
+    }
+
+    /// @notice Wrap one source chain's accounting into the single-element bundle a message root now carries.
+    /// @param totalSupply The source chain's total project-token supply for this record.
+    /// @param contexts The source chain's raw per-context surplus and balance.
+    /// @param timestamp The record's source-chain freshness key.
+    /// @return accounts A one-element bundle stamped with `REMOTE_CHAIN` so the receiver stores it.
+    function _accounts(
+        uint256 totalSupply,
+        JBSourceContext[] memory contexts,
+        uint256 timestamp
+    )
+        internal
+        pure
+        returns (JBChainAccounting[] memory accounts)
+    {
+        accounts = new JBChainAccounting[](1);
+        accounts[0] = JBChainAccounting({
+            chainId: REMOTE_CHAIN, totalSupply: totalSupply, contexts: contexts, timestamp: timestamp
         });
     }
 }

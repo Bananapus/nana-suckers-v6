@@ -15,8 +15,11 @@ import {JBSuckerRegistry} from "../../src/JBSuckerRegistry.sol";
 import {IJBSucker} from "../../src/interfaces/IJBSucker.sol";
 import {IJBSuckerDeployer} from "../../src/interfaces/IJBSuckerDeployer.sol";
 import {IJBSuckerRegistry} from "../../src/interfaces/IJBSuckerRegistry.sol";
+import {JBChainAccounting} from "../../src/structs/JBChainAccounting.sol";
+import {JBInboxTreeRoot} from "../../src/structs/JBInboxTreeRoot.sol";
 import {JBMessageRoot} from "../../src/structs/JBMessageRoot.sol";
 import {JBRemoteToken} from "../../src/structs/JBRemoteToken.sol";
+import {JBSourceContext} from "../../src/structs/JBSourceContext.sol";
 import {JBTokenMapping} from "../../src/structs/JBTokenMapping.sol";
 import {JBSuckerDeployerConfig} from "../../src/structs/JBSuckerDeployerConfig.sol";
 
@@ -33,8 +36,24 @@ contract RegressionDeprecatedLiveSucker is JBSucker {
         return 10;
     }
 
+    /// @notice Inject a peer-chain total supply by storing a single accounting record for this sucker's peer chain
+    /// through the real receive path, so the registry's aggregate views read it back per chain.
+    /// @param supply The total supply to record for the peer chain.
     function test_setPeerChainTotalSupply(uint256 supply) external {
-        peerChainTotalSupply = supply;
+        JBChainAccounting[] memory accounts = new JBChainAccounting[](1);
+        accounts[0] = JBChainAccounting({
+            chainId: peerChainId(), totalSupply: supply, contexts: new JBSourceContext[](0), timestamp: 1
+        });
+
+        JBMessageRoot memory root = JBMessageRoot({
+            version: MESSAGE_VERSION,
+            token: bytes32(0),
+            amount: 0,
+            remoteRoot: JBInboxTreeRoot({nonce: 0, root: bytes32(0)}),
+            accounts: accounts
+        });
+
+        this.fromRemote(root);
     }
 
     function test_setDeprecatedAfter(uint256 timestamp) external {

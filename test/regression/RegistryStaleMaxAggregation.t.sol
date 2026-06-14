@@ -31,8 +31,11 @@ contract RegistryHarness is JBSuckerRegistry {
     }
 }
 
-/// @notice A sucker that reports one raw peer-chain context plus a supply, used to exercise the registry's per-chain
-/// dedup and valuation. The context currency matches the test's query currency, so valuation is par (no feed).
+/// @notice A single-peer sucker that reports one raw peer-chain context plus a supply, used to exercise the registry's
+/// per-chain dedup and valuation. The context currency matches the test's query currency, so valuation is par (no
+/// feed). It holds a record for exactly one peer chain, so `peerChainIds(bool)` returns that one chain and every
+/// per-chain read is
+/// keyed on it.
 contract MockAggregateSucker {
     uint256 public immutable chainId;
     uint256 public immutable snapshotTimestamp;
@@ -52,13 +55,34 @@ contract MockAggregateSucker {
         return chainId;
     }
 
-    function peerChainContextsOf() external view returns (JBPeerChainContext[] memory contexts, uint256, uint256) {
-        contexts = new JBPeerChainContext[](1);
-        contexts[0] = JBPeerChainContext({currency: _currency, decimals: 18, surplus: _surplus, balance: 0});
-        return (contexts, chainId, snapshotTimestamp);
+    function peerChainIds(bool) external view returns (uint256[] memory chainIds) {
+        chainIds = new uint256[](1);
+        chainIds[0] = chainId;
     }
 
-    function peerChainTotalSupplyValue() external view returns (JBPeerChainValue memory) {
+    function peerChainContextsOf(uint256 queriedChainId)
+        external
+        view
+        returns (JBPeerChainContext[] memory contexts, uint256 snapshot)
+    {
+        if (queriedChainId != chainId) return (new JBPeerChainContext[](0), 0);
+        contexts = new JBPeerChainContext[](1);
+        contexts[0] = JBPeerChainContext({currency: _currency, decimals: 18, surplus: _surplus, balance: 0});
+        snapshot = snapshotTimestamp;
+    }
+
+    function peerChainTotalSupplyOf(uint256 queriedChainId) external view returns (uint256) {
+        return queriedChainId == chainId ? peerChainTotalSupply : 0;
+    }
+
+    function snapshotTimestampOf(uint256 queriedChainId) external view returns (uint256) {
+        return queriedChainId == chainId ? snapshotTimestamp : 0;
+    }
+
+    function peerChainTotalSupplyValue(uint256 queriedChainId) external view returns (JBPeerChainValue memory) {
+        if (queriedChainId != chainId) {
+            return JBPeerChainValue({value: 0, peerChainId: 0, snapshotTimestamp: 0});
+        }
         return
             JBPeerChainValue({value: peerChainTotalSupply, peerChainId: chainId, snapshotTimestamp: snapshotTimestamp});
     }
