@@ -1398,13 +1398,6 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         });
     }
 
-    /// @notice What is the maximum time it takes for a message to be received on the other side.
-    /// @dev Be sure to keep in mind if a message fails having to retry and the time it takes to retry.
-    /// @return The maximum time it takes for a message to be received on the other side.
-    function _maxMessagingDelay() internal pure virtual returns (uint40) {
-        return 14 days;
-    }
-
     /// @notice Cash out project tokens for terminal tokens.
     /// @param projectToken The project token to cash out (unused, kept for interface compatibility).
     /// @param count The number of project tokens to cash out.
@@ -1896,6 +1889,13 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     /// @return The suffix length in bytes.
     function _contextSuffixLength() internal view virtual override(ERC2771Context, Context) returns (uint256) {
         return ERC2771Context._contextSuffixLength();
+    }
+
+    /// @notice What is the maximum time it takes for a message to be received on the other side.
+    /// @dev Be sure to keep in mind if a message fails having to retry and the time it takes to retry.
+    /// @return The maximum time it takes for a message to be received on the other side.
+    function _maxMessagingDelay() internal pure virtual returns (uint40) {
+        return 14 days;
     }
 
     /// @notice The calldata. Preferred to use over `msg.data`.

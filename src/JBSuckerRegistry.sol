@@ -25,6 +25,7 @@ import {JBSuckerDeployerConfig} from "./structs/JBSuckerDeployerConfig.sol";
 import {JBSuckersPair} from "./structs/JBSuckersPair.sol";
 import {PeerAccountScratch} from "./structs/PeerAccountScratch.sol";
 import {PeerValueScratch} from "./structs/PeerValueScratch.sol";
+import {RemoteValueParams} from "./structs/RemoteValueParams.sol";
 
 /// @notice The canonical registry that deploys, tracks, and governs cross-chain suckers for Juicebox projects. It
 /// maintains an allowlist of approved deployer contracts, allows multiple active suckers per peer chain for bridge
@@ -51,23 +52,6 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
 
     /// @notice Thrown when a sucker reports a zero peer chain ID and cannot identify a real peer chain.
     error JBSuckerRegistry_ZeroPeerChainId(address sucker);
-
-    //*********************************************************************//
-    // ----------------------------- structs ----------------------------- //
-    //*********************************************************************//
-
-    /// @notice The invariant valuation parameters for one aggregate-view pass, bundled so per-chain aggregation
-    /// helpers stay under the stack-slot limit.
-    /// @custom:member projectId The project whose price feeds to use.
-    /// @custom:member currency The currency to value into.
-    /// @custom:member decimals The decimal precision to value into.
-    /// @custom:member surplus Whether the pass aggregates surplus (true) or balance (false).
-    struct RemoteValueParams {
-        uint256 projectId;
-        uint256 currency;
-        uint256 decimals;
-        bool surplus;
-    }
 
     //*********************************************************************//
     // ------------------------- public constants ------------------------ //
@@ -627,6 +611,39 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
         return ERC2771Context._contextSuffixLength();
     }
 
+    /// @notice Reads one sucker's raw records and folds each into the per-chain gather scratch.
+    /// @dev Extracted from `peerChainAccountsOf` to keep its stack shallow. A sucker that reverts contributes nothing.
+    /// The destination chain, the local chain, and chain 0 are excluded.
+    /// @param scratch The per-chain gather scratch to fold records into.
+    /// @param sucker The sucker to read records from.
+    /// @param isActive Whether the sucker is active (vs deprecated).
+    /// @param exceptChainId The destination chain to exclude.
+    function _gatherSuckerAccounts(
+        PeerAccountScratch memory scratch,
+        address sucker,
+        bool isActive,
+        uint256 exceptChainId
+    )
+        internal
+        view
+    {
+        try IJBSucker(sucker).peerChainAccountsOf() returns (JBChainAccounting[] memory records) {
+            uint256 numRecords = records.length;
+            for (uint256 r; r < numRecords;) {
+                // Exclude the destination chain (authoritative about itself), the local chain, and chain 0.
+                if (
+                    records[r].chainId != exceptChainId && records[r].chainId != block.chainid
+                        && records[r].chainId != 0
+                ) {
+                    _recordPeerChainAccounting({scratch: scratch, record: records[r], isActive: isActive});
+                }
+                unchecked {
+                    ++r;
+                }
+            }
+        } catch {}
+    }
+
     /// @notice The calldata. Preferred to use over `msg.data`.
     /// @return calldata The `msg.data` of this call.
     function _msgData() internal view override(ERC2771Context, Context) returns (bytes calldata) {
@@ -637,19 +654,6 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
     /// @return sender The address which sent this call.
     function _msgSender() internal view override(ERC2771Context, Context) returns (address sender) {
         return ERC2771Context._msgSender();
-    }
-
-    /// @notice Allocates scratch arrays used to collapse many suckers into one aggregate value per peer chain.
-    /// @dev `len` is the number of suckers being scanned, which is the maximum possible number of distinct peer
-    /// chains. `chainCount` starts at zero and is incremented as new peer chains are discovered.
-    /// @param len The maximum number of peer-chain entries the aggregation can need.
-    /// @return scratch Empty scratch space sized for the current aggregation pass.
-    function _peerValueScratch(uint256 len) internal pure returns (PeerValueScratch memory scratch) {
-        // Allocate each parallel array up front so `_recordPeerValue` can update by index without resizing memory.
-        scratch.chainIds = new uint256[](len);
-        scratch.values = new uint256[](len);
-        scratch.snapshotTimestamps = new uint256[](len);
-        scratch.hasActiveValue = new bool[](len);
     }
 
     /// @notice Reads a sucker's peer chain ID, reverting if the sucker cannot identify a real peer chain.
@@ -690,37 +694,17 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
         }
     }
 
-    /// @notice Reads one sucker's raw records and folds each into the per-chain gather scratch.
-    /// @dev Extracted from `peerChainAccountsOf` to keep its stack shallow. A sucker that reverts contributes nothing.
-    /// The destination chain, the local chain, and chain 0 are excluded.
-    /// @param scratch The per-chain gather scratch to fold records into.
-    /// @param sucker The sucker to read records from.
-    /// @param isActive Whether the sucker is active (vs deprecated).
-    /// @param exceptChainId The destination chain to exclude.
-    function _gatherSuckerAccounts(
-        PeerAccountScratch memory scratch,
-        address sucker,
-        bool isActive,
-        uint256 exceptChainId
-    )
-        internal
-        view
-    {
-        try IJBSucker(sucker).peerChainAccountsOf() returns (JBChainAccounting[] memory records) {
-            uint256 numRecords = records.length;
-            for (uint256 r; r < numRecords;) {
-                // Exclude the destination chain (authoritative about itself), the local chain, and chain 0.
-                if (
-                    records[r].chainId != exceptChainId && records[r].chainId != block.chainid
-                        && records[r].chainId != 0
-                ) {
-                    _recordPeerChainAccounting({scratch: scratch, record: records[r], isActive: isActive});
-                }
-                unchecked {
-                    ++r;
-                }
-            }
-        } catch {}
+    /// @notice Allocates scratch arrays used to collapse many suckers into one aggregate value per peer chain.
+    /// @dev `len` is the number of suckers being scanned, which is the maximum possible number of distinct peer
+    /// chains. `chainCount` starts at zero and is incremented as new peer chains are discovered.
+    /// @param len The maximum number of peer-chain entries the aggregation can need.
+    /// @return scratch Empty scratch space sized for the current aggregation pass.
+    function _peerValueScratch(uint256 len) internal pure returns (PeerValueScratch memory scratch) {
+        // Allocate each parallel array up front so `_recordPeerValue` can update by index without resizing memory.
+        scratch.chainIds = new uint256[](len);
+        scratch.values = new uint256[](len);
+        scratch.snapshotTimestamps = new uint256[](len);
+        scratch.hasActiveValue = new bool[](len);
     }
 
     /// @notice Records one source chain's raw accounting record into a per-chain gather scratch, keeping the freshest.
@@ -764,6 +748,36 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
         unchecked {
             scratch.chainCount = scratch.chainCount + 1;
         }
+    }
+
+    /// @notice Records a combined peer-chain read (value, peer chain ID, snapshot freshness key) from one sucker.
+    /// @dev A wrapper over `_recordPeerValue` that unpacks the single-call `JBPeerChainValue` read and enforces the
+    /// same non-zero peer-chain requirement the registry applies everywhere else. The peer-chain check reverts here
+    /// (inside the caller's `try` success body, so the revert propagates) to preserve the prior behavior where a
+    /// sucker reporting a zero peer chain ID fails the whole aggregate view.
+    /// @param scratch The per-chain aggregate values and freshness keys recorded so far.
+    /// @param read The combined value, peer chain ID, and snapshot freshness key returned by the sucker.
+    /// @param sucker The sucker the read came from, used only for the zero-peer-chain error.
+    /// @param isActive Whether the value came from an active sucker.
+    /// @return The updated number of populated chain entries.
+    function _recordPeerChainValue(
+        PeerValueScratch memory scratch,
+        JBPeerChainValue memory read,
+        address sucker,
+        bool isActive
+    )
+        internal
+        pure
+        returns (uint256)
+    {
+        if (read.peerChainId == 0) revert JBSuckerRegistry_ZeroPeerChainId({sucker: sucker});
+        return _recordPeerValue({
+            scratch: scratch,
+            chainId: read.peerChainId,
+            value: read.value,
+            snapshotTimestamp: read.snapshotTimestamp,
+            isActive: isActive
+        });
     }
 
     /// @notice Records a project-scoped peer-chain aggregate value.
@@ -824,36 +838,6 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
         unchecked {
             return scratch.chainCount + 1;
         }
-    }
-
-    /// @notice Records a combined peer-chain read (value, peer chain ID, snapshot freshness key) from one sucker.
-    /// @dev A wrapper over `_recordPeerValue` that unpacks the single-call `JBPeerChainValue` read and enforces the
-    /// same non-zero peer-chain requirement the registry applies everywhere else. The peer-chain check reverts here
-    /// (inside the caller's `try` success body, so the revert propagates) to preserve the prior behavior where a
-    /// sucker reporting a zero peer chain ID fails the whole aggregate view.
-    /// @param scratch The per-chain aggregate values and freshness keys recorded so far.
-    /// @param read The combined value, peer chain ID, and snapshot freshness key returned by the sucker.
-    /// @param sucker The sucker the read came from, used only for the zero-peer-chain error.
-    /// @param isActive Whether the value came from an active sucker.
-    /// @return The updated number of populated chain entries.
-    function _recordPeerChainValue(
-        PeerValueScratch memory scratch,
-        JBPeerChainValue memory read,
-        address sucker,
-        bool isActive
-    )
-        internal
-        pure
-        returns (uint256)
-    {
-        if (read.peerChainId == 0) revert JBSuckerRegistry_ZeroPeerChainId({sucker: sucker});
-        return _recordPeerValue({
-            scratch: scratch,
-            chainId: read.peerChainId,
-            value: read.value,
-            snapshotTimestamp: read.snapshotTimestamp,
-            isActive: isActive
-        });
     }
 
     /// @notice Values an amount held in one currency/decimals into another, mirroring the terminal store.
@@ -1031,6 +1015,14 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
         emit SuckerDeprecated({projectId: projectId, sucker: address(sucker), caller: _msgSender()});
     }
 
+    /// @notice Removes a sucker deployer from the allowlist.
+    /// @dev Can only be called by this contract's owner (initially project ID 1, or JuiceboxDAO).
+    /// @param deployer The address of the deployer to remove.
+    function removeSuckerDeployer(address deployer) public override onlyOwner {
+        suckerDeployerIsAllowed[deployer] = false;
+        emit SuckerDeployerRemoved({deployer: deployer, caller: _msgSender()});
+    }
+
     /// @notice Set the ETH fee (in wei) paid into the fee project on each toRemote() call.
     /// @dev Only callable by the contract owner. Fee cannot exceed MAX_TO_REMOTE_FEE.
     /// @param fee The new fee amount in wei.
@@ -1039,13 +1031,5 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
         uint256 oldFee = toRemoteFee;
         toRemoteFee = fee;
         emit ToRemoteFeeChanged({oldFee: oldFee, newFee: fee, caller: _msgSender()});
-    }
-
-    /// @notice Removes a sucker deployer from the allowlist.
-    /// @dev Can only be called by this contract's owner (initially project ID 1, or JuiceboxDAO).
-    /// @param deployer The address of the deployer to remove.
-    function removeSuckerDeployer(address deployer) public override onlyOwner {
-        suckerDeployerIsAllowed[deployer] = false;
-        emit SuckerDeployerRemoved({deployer: deployer, caller: _msgSender()});
     }
 }

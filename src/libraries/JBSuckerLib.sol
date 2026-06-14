@@ -37,7 +37,7 @@ library JBSuckerLib {
     uint256 internal constant _CURRENT_RULESET_OF_RETURN_BYTES = (9 + 19) * 32;
 
     //*********************************************************************//
-    // ---------------------- external transactions ---------------------- //
+    // ------------------------- external views -------------------------- //
     //*********************************************************************//
 
     /// @notice Build the cross-chain accounting gossip bundle (the local chain's record plus known peer records).
@@ -122,10 +122,6 @@ library JBSuckerLib {
             })
         });
     }
-
-    //*********************************************************************//
-    // ------------------------- external views -------------------------- //
-    //*********************************************************************//
 
     /// @notice Compute a branch root from a leaf, branch, and index. Wraps MerkleLib.branchRoot so its
     /// ~170 lines of unrolled assembly live in the library's bytecode instead of each sucker's.
