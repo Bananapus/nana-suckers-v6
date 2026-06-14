@@ -25,11 +25,7 @@ contract PeerHookSupplyOverflowFailsSoftTest is PeerChainStateTest {
 
         // A hook returning supply = type(uint256).max would overflow `localTotalSupply += additionalSupply`.
         PeerChainAdjustedAccountsHookMock overflowingHook = new PeerChainAdjustedAccountsHookMock({
-            supply: type(uint256).max,
-            surplus: 0,
-            balance: 0,
-            token: TOKEN,
-            decimals: 18
+            supply: type(uint256).max, surplus: 0, balance: 0, token: TOKEN, decimals: 18
         });
         _mockCurrentRulesetDataHook(address(overflowingHook));
 
