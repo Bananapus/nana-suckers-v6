@@ -15,6 +15,7 @@ import {IJBSuckerRegistry} from "../src/interfaces/IJBSuckerRegistry.sol";
 import {Client} from "@chainlink/contracts-ccip/contracts/libraries/Client.sol";
 import {JBInboxTreeRoot} from "../src/structs/JBInboxTreeRoot.sol";
 import {JBMessageRoot} from "../src/structs/JBMessageRoot.sol";
+import {JBChainAccounting} from "../src/structs/JBChainAccounting.sol";
 import {JBSourceContext} from "../src/structs/JBSourceContext.sol";
 import {JBClaim} from "../src/structs/JBClaim.sol";
 import {JBLeaf} from "../src/structs/JBLeaf.sol";
@@ -168,10 +169,20 @@ abstract contract CCIPSuckerClaimForkTestBase is SuckerForkHelpers {
         jbController().deployERC20For(1, "SuckerToken", "SOOK", bytes32(0));
         vm.stopPrank();
 
-        // Mock the registry's toRemoteFee() on both forks (registry is address(0) in tests).
+        // Mock the registry's toRemoteFee() and gossip set on both forks (registry is address(0) in tests).
         vm.mockCall(address(0), abi.encodeCall(IJBSuckerRegistry.toRemoteFee, ()), abi.encode(uint256(0)));
+        vm.mockCall(
+            address(0),
+            abi.encodeWithSelector(IJBSuckerRegistry.peerChainAccountsOf.selector),
+            abi.encode(new JBChainAccounting[](0))
+        );
         vm.selectFork(l1Fork);
         vm.mockCall(address(0), abi.encodeCall(IJBSuckerRegistry.toRemoteFee, ()), abi.encode(uint256(0)));
+        vm.mockCall(
+            address(0),
+            abi.encodeWithSelector(IJBSuckerRegistry.peerChainAccountsOf.selector),
+            abi.encode(new JBChainAccounting[](0))
+        );
     }
 
     // ── Helpers
@@ -355,14 +366,16 @@ abstract contract CCIPSuckerClaimForkTestBase is SuckerForkHelpers {
             deal(token, address(suckerL1), totalAmount);
         }
 
+        JBChainAccounting[] memory accounts = new JBChainAccounting[](1);
+        accounts[0] = JBChainAccounting({
+            chainId: suckerL1.peerChainId(), totalSupply: 0, contexts: new JBSourceContext[](0), timestamp: 1
+        });
         JBMessageRoot memory messageRoot = JBMessageRoot({
             version: 1,
             token: bytes32(uint256(uint160(token))),
             amount: totalAmount,
             remoteRoot: JBInboxTreeRoot({nonce: nonce, root: root}),
-            sourceTotalSupply: 0,
-            sourceContexts: new JBSourceContext[](0),
-            sourceTimestamp: 1
+            accounts: accounts
         });
 
         Client.Any2EVMMessage memory ccipMessage = _buildCCIPMessage(messageRoot);
@@ -797,14 +810,16 @@ abstract contract CCIPSuckerClaimForkTestBase is SuckerForkHelpers {
 
         // Try to deliver a different root with the same nonce.
         bytes32 fakeRoot = bytes32(uint256(0xbeef));
+        JBChainAccounting[] memory staleAccounts = new JBChainAccounting[](1);
+        staleAccounts[0] = JBChainAccounting({
+            chainId: suckerL1.peerChainId(), totalSupply: 0, contexts: new JBSourceContext[](0), timestamp: 2
+        });
         JBMessageRoot memory staleMessage = JBMessageRoot({
             version: 1,
             token: bytes32(uint256(uint160(token))),
             amount: 0,
             remoteRoot: JBInboxTreeRoot({nonce: sentNonce, root: fakeRoot}), // Same nonce, different root.
-            sourceTotalSupply: 0,
-            sourceContexts: new JBSourceContext[](0),
-            sourceTimestamp: 2
+            accounts: staleAccounts
         });
 
         Client.Any2EVMMessage memory ccipMessage = _buildCCIPMessage(staleMessage);

@@ -21,7 +21,7 @@ import {JBClaim} from "../src/structs/JBClaim.sol";
 import {JBLeaf} from "../src/structs/JBLeaf.sol";
 import {JBInboxTreeRoot} from "../src/structs/JBInboxTreeRoot.sol";
 import {JBMessageRoot} from "../src/structs/JBMessageRoot.sol";
-import {JBSourceContext} from "../src/structs/JBSourceContext.sol";
+import {JBChainAccounting} from "../src/structs/JBChainAccounting.sol";
 import {JBRemoteToken} from "../src/structs/JBRemoteToken.sol";
 import {MerkleLib} from "../src/utils/MerkleLib.sol";
 
@@ -190,9 +190,7 @@ contract SuckerAttacks is Test {
             token: bytes32(uint256(uint160(JBConstants.NATIVE_TOKEN))),
             amount: 1 ether,
             remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(123))}),
-            sourceTotalSupply: 0,
-            sourceContexts: new JBSourceContext[](0),
-            sourceTimestamp: 1
+            accounts: new JBChainAccounting[](0)
         });
 
         // Non-peer calling fromRemote should revert
@@ -217,9 +215,7 @@ contract SuckerAttacks is Test {
             token: bytes32(uint256(uint160(JBConstants.NATIVE_TOKEN))),
             amount: 1 ether,
             remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(456))}),
-            sourceTotalSupply: 0,
-            sourceContexts: new JBSourceContext[](0),
-            sourceTimestamp: 1
+            accounts: new JBChainAccounting[](0)
         });
 
         vm.prank(wrongSender);
@@ -242,9 +238,7 @@ contract SuckerAttacks is Test {
             token: bytes32(uint256(uint160(JBConstants.NATIVE_TOKEN))),
             amount: 0,
             remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(789))}),
-            sourceTotalSupply: 0,
-            sourceContexts: new JBSourceContext[](0),
-            sourceTimestamp: 1
+            accounts: new JBChainAccounting[](0)
         });
 
         // Other sucker calling fromRemote should be rejected
@@ -272,9 +266,7 @@ contract SuckerAttacks is Test {
                 token: bytes32(uint256(uint160(JBConstants.NATIVE_TOKEN))),
                 amount: 0,
                 remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(0)}),
-                sourceTotalSupply: 0,
-                sourceContexts: new JBSourceContext[](0),
-                sourceTimestamp: 1
+                accounts: new JBChainAccounting[](0)
             });
 
             vm.expectRevert();

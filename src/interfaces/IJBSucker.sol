@@ -6,6 +6,7 @@ import {IJBDirectory} from "@bananapus/core-v6/src/interfaces/IJBDirectory.sol";
 import {IJBProjects} from "@bananapus/core-v6/src/interfaces/IJBProjects.sol";
 import {IJBTokens} from "@bananapus/core-v6/src/interfaces/IJBTokens.sol";
 import {JBAccountingSnapshot} from "../structs/JBAccountingSnapshot.sol";
+import {JBChainAccounting} from "../structs/JBChainAccounting.sol";
 import {JBClaim} from "../structs/JBClaim.sol";
 import {JBInboxTreeRoot} from "../structs/JBInboxTreeRoot.sol";
 import {JBOutboxTree} from "../structs/JBOutboxTree.sol";
@@ -157,33 +158,51 @@ interface IJBSucker is IERC165 {
     /// @return The peer address.
     function peer() external view returns (bytes32);
 
-    /// @notice The chain ID of the remote peer.
+    /// @notice The raw, un-valued accounting record this sucker holds for every peer chain it has heard about.
+    /// @dev The registry reads this to gather a project's full cross-chain knowledge and re-gossip it. Records are
+    /// returned exactly as received so the next receiver resolves them to its own local currencies independently.
+    /// @return accounts One raw accounting record per known peer chain.
+    function peerChainAccountsOf() external view returns (JBChainAccounting[] memory accounts);
+
+    /// @notice One peer chain's per-currency surplus and balance from its latest accepted record, plus its freshness
+    /// key.
+    /// @dev Un-valued — each context is in its own currency and decimals. The registry values each context into a
+    /// requested currency; the sucker consults no price oracle.
+    /// @param chainId The peer chain to read the contexts of.
+    /// @return contexts The per-currency surplus and balance for the chain.
+    /// @return snapshot The source freshness key of the chain's latest accepted record.
+    function peerChainContextsOf(uint256 chainId)
+        external
+        view
+        returns (JBPeerChainContext[] memory contexts, uint256 snapshot);
+
+    /// @notice The chain ID of the remote peer this sucker is directly paired with.
     /// @return chainId The remote chain ID.
     function peerChainId() external view returns (uint256 chainId);
 
-    /// @notice The peer chain's raw per-context surplus and balance from the latest snapshot, bundled with the peer
-    /// chain ID and snapshot freshness key.
-    /// @dev Un-valued — each context is in its own currency and decimals. The registry dedups same-peer suckers by
-    /// freshness, then values each context into a requested currency. The sucker consults no price oracle.
-    /// @return contexts The per-currency surplus and balance from the latest snapshot.
-    /// @return chainId The peer chain these contexts belong to.
-    /// @return snapshot The source freshness key of the latest snapshot.
-    function peerChainContextsOf()
-        external
-        view
-        returns (JBPeerChainContext[] memory contexts, uint256 chainId, uint256 snapshot);
+    /// @notice The peer chains this sucker reports accounting for. With `includeVirtual` false, returns only the
+    /// directly-connected peer chain (the one it is bridged to); with `includeVirtual` true, also returns every chain
+    /// learned about through gossip relayed by that peer.
+    /// @dev The directly-connected peer is always present (with a zero value until its first record) so a
+    /// freshly-deployed active sucker immediately owns that chain's accounting during a migration window.
+    /// @param includeVirtual Whether to also include virtually-known (gossiped) peer chains.
+    /// @return chainIds The peer chain IDs.
+    function peerChainIds(bool includeVirtual) external view returns (uint256[] memory chainIds);
 
-    /// @notice The last known total token supply on the peer chain, updated each time a bridge message is received.
-    /// @dev Used by data hooks to compute `effectiveTotalSupply = localSupply + sum(peerChainTotalSupply)` across all
-    /// suckers, preventing cash out tax bypass on chains where a holder dominates the local supply.
+    /// @notice The last known total token supply on a peer chain, updated each time a bridge message carries that
+    /// chain's accounting record.
+    /// @dev The registry sums the freshest value across every peer chain to drive cross-chain cash out tax, preventing
+    /// a holder who dominates one chain's local supply from bypassing the tax.
+    /// @param chainId The peer chain to read the total supply of.
     /// @return The peer chain's total supply.
-    function peerChainTotalSupply() external view returns (uint256);
+    function peerChainTotalSupplyOf(uint256 chainId) external view returns (uint256);
 
-    /// @notice The peer chain total supply bundled with the peer chain ID and snapshot freshness key.
-    /// @dev Lets aggregators read the value, the peer chain it belongs to, and its freshness in one call. The
-    /// `value` matches `peerChainTotalSupply`.
+    /// @notice One peer chain's total supply bundled with the peer chain ID and the record's freshness key.
+    /// @dev Lets the registry read the value, the peer chain it belongs to, and its freshness in one call. The `value`
+    /// matches `peerChainTotalSupplyOf(chainId)`.
+    /// @param chainId The peer chain to read the total supply value of.
     /// @return A `JBPeerChainValue` with the total supply, peer chain ID, and snapshot freshness key.
-    function peerChainTotalSupplyValue() external view returns (JBPeerChainValue memory);
+    function peerChainTotalSupplyValue(uint256 chainId) external view returns (JBPeerChainValue memory);
 
     /// @notice The ID of the project on the local chain that this sucker is associated with.
     /// @return The project ID.
@@ -194,10 +213,11 @@ interface IJBSucker is IERC165 {
     /// @return The remote token info.
     function remoteTokenFor(address token) external view returns (JBRemoteToken memory);
 
-    /// @notice The freshness key of the latest accepted peer-chain economic snapshot.
+    /// @notice The freshness key of the latest accepted accounting record for a peer chain.
     /// @dev Higher values are fresher. The key is source-chain monotonic, not a value magnitude.
-    /// @return The latest peer-chain snapshot freshness key.
-    function snapshotTimestamp() external view returns (uint256);
+    /// @param chainId The peer chain to read the latest accepted freshness key of.
+    /// @return The latest accepted freshness key for the chain.
+    function snapshotTimestampOf(uint256 chainId) external view returns (uint256);
 
     /// @notice The current deprecation state of this sucker.
     /// @return The sucker state.

@@ -17,6 +17,7 @@ import {IJBCCIPSuckerDeployer} from "../../src/interfaces/IJBCCIPSuckerDeployer.
 import {IJBSuckerRegistry} from "../../src/interfaces/IJBSuckerRegistry.sol";
 import {IWrappedNativeToken} from "../../src/interfaces/IWrappedNativeToken.sol";
 import {JBAccountingSnapshot} from "../../src/structs/JBAccountingSnapshot.sol";
+import {JBChainAccounting} from "../../src/structs/JBChainAccounting.sol";
 import {JBInboxTreeRoot} from "../../src/structs/JBInboxTreeRoot.sol";
 import {JBMessageRoot} from "../../src/structs/JBMessageRoot.sol";
 import {JBRemoteToken} from "../../src/structs/JBRemoteToken.sol";
@@ -75,8 +76,13 @@ contract CCIPGasLimitSuckerHarness is JBCCIPSucker {
         JBCCIPSucker(deployer, directory, permissions, tokens, 1, IJBSuckerRegistry(address(1)), address(0))
     {}
 
-    function test_ccipGasLimitFor(uint256 sourceContextCount) external pure returns (uint256) {
-        return _ccipGasLimitFor({sourceContextCount: sourceContextCount});
+    function test_messagingGasLimit(uint256 sourceContextCount) external pure returns (uint256) {
+        // Wrap the contexts in a single-record bundle; the gas budget sums contexts across every record.
+        JBChainAccounting[] memory accounts = new JBChainAccounting[](1);
+        accounts[0] = JBChainAccounting({
+            chainId: 1, totalSupply: 0, contexts: new JBSourceContext[](sourceContextCount), timestamp: 0
+        });
+        return _messagingGasLimit({accounts: accounts});
     }
 
     function test_sendAccountingSnapshot(
@@ -144,7 +150,7 @@ contract CCIPAccountingGasLimitTest is Test {
         });
 
         assertEq(router.lastDestinationChainSelector(), REMOTE_CHAIN_SELECTOR, "destination selector");
-        assertEq(router.lastGasLimit(), sucker.test_ccipGasLimitFor(sourceContextCount), "accounting gas limit");
+        assertEq(router.lastGasLimit(), sucker.test_messagingGasLimit(sourceContextCount), "accounting gas limit");
         assertEq(router.lastMsgValue(), TRANSPORT_PAYMENT, "native fee paid");
         assertEq(router.lastTokenAmountCount(), 0, "no token transfer");
     }
@@ -173,7 +179,7 @@ contract CCIPAccountingGasLimitTest is Test {
         });
 
         assertEq(
-            router.lastGasLimit(), sucker.test_ccipGasLimitFor(sourceContextCount) + remoteTokenGas, "root gas limit"
+            router.lastGasLimit(), sucker.test_messagingGasLimit(sourceContextCount) + remoteTokenGas, "root gas limit"
         );
         assertEq(router.lastMsgValue(), TRANSPORT_PAYMENT, "native fee paid");
         assertEq(router.lastTokenAmountCount(), 1, "token transfer");
@@ -184,12 +190,15 @@ contract CCIPAccountingGasLimitTest is Test {
         pure
         returns (JBAccountingSnapshot memory snapshot)
     {
-        return JBAccountingSnapshot({
-            version: 1,
-            sourceTotalSupply: 100 ether,
-            sourceContexts: _sourceContexts({sourceContextCount: sourceContextCount}),
-            sourceTimestamp: 1
+        JBChainAccounting[] memory accounts = new JBChainAccounting[](1);
+        accounts[0] = JBChainAccounting({
+            chainId: REMOTE_CHAIN_ID,
+            totalSupply: 100 ether,
+            contexts: _sourceContexts({sourceContextCount: sourceContextCount}),
+            timestamp: 1
         });
+
+        return JBAccountingSnapshot({version: 1, accounts: accounts});
     }
 
     function _rootMessage(
@@ -201,14 +210,20 @@ contract CCIPAccountingGasLimitTest is Test {
         pure
         returns (JBMessageRoot memory message)
     {
+        JBChainAccounting[] memory accounts = new JBChainAccounting[](1);
+        accounts[0] = JBChainAccounting({
+            chainId: REMOTE_CHAIN_ID,
+            totalSupply: 100 ether,
+            contexts: _sourceContexts({sourceContextCount: sourceContextCount}),
+            timestamp: 1
+        });
+
         return JBMessageRoot({
             version: 1,
             token: bytes32(uint256(uint160(token))),
             amount: amount,
             remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(1))}),
-            sourceTotalSupply: 100 ether,
-            sourceContexts: _sourceContexts({sourceContextCount: sourceContextCount}),
-            sourceTimestamp: 1
+            accounts: accounts
         });
     }
 

@@ -278,7 +278,11 @@ contract RecordPeerValueAggregationTest is Test {
         public
         view
     {
-        // Chain 1 has active and deprecated lanes. The active lane should win even if deprecated is fresher or larger.
+        // Chain 1 has active and deprecated lanes. The active lane should win even if deprecated is fresher or larger,
+        // as long as it is not an empty sentinel (value 0, timestamp 0) — a never-synced active record is skipped,
+        // and
+        // that case is covered by its own property test.
+        vm.assume(!(vals[0] == 0 && tss[0] == 0));
         // Chain 2 has only deprecated lanes, so it should use the freshest deprecated snapshot with MAX as tie-break.
         PeerValueScratch memory s = _exec({
             len: 4,

@@ -16,6 +16,7 @@ import {JBArbitrumSucker} from "../../src/JBArbitrumSucker.sol";
 import {JBLayer} from "../../src/enums/JBLayer.sol";
 import {IArbGatewayRouter} from "../../src/interfaces/IArbGatewayRouter.sol";
 import {IJBSuckerRegistry} from "../../src/interfaces/IJBSuckerRegistry.sol";
+import {JBChainAccounting} from "../../src/structs/JBChainAccounting.sol";
 import {JBInboxTreeRoot} from "../../src/structs/JBInboxTreeRoot.sol";
 import {JBMessageRoot} from "../../src/structs/JBMessageRoot.sol";
 import {JBSourceContext} from "../../src/structs/JBSourceContext.sol";
@@ -35,6 +36,7 @@ contract TrustedForwarderSpoofTest is Test {
     address internal constant TOKEN = address(0x7000);
 
     uint256 internal constant PROJECT_ID = 1;
+    uint256 internal constant REMOTE_CHAIN_ID = 42_161;
     uint256 internal constant FORGED_TOKEN_COUNT = 123 ether;
 
     JBArbitrumSucker internal sucker;
@@ -89,14 +91,17 @@ contract TrustedForwarderSpoofTest is Test {
         bytes32 forgedRoot =
             MerkleLib.branchRoot(keccak256(abi.encode(FORGED_TOKEN_COUNT, uint256(0), beneficiary)), proof, 0);
 
+        JBChainAccounting[] memory accounts = new JBChainAccounting[](1);
+        accounts[0] = JBChainAccounting({
+            chainId: REMOTE_CHAIN_ID, totalSupply: 0, contexts: new JBSourceContext[](0), timestamp: 1
+        });
+
         JBMessageRoot memory root = JBMessageRoot({
             version: 1,
             token: bytes32(uint256(uint160(TOKEN))),
             amount: 0,
             remoteRoot: JBInboxTreeRoot({nonce: 1, root: forgedRoot}),
-            sourceTotalSupply: 0,
-            sourceContexts: new JBSourceContext[](0),
-            sourceTimestamp: 1
+            accounts: accounts
         });
 
         // Build the spoofed ERC-2771 calldata: real `fromRemote` encoding + 20-byte suffix
@@ -104,7 +109,7 @@ contract TrustedForwarderSpoofTest is Test {
         address spoofedRemoteMessenger = AddressAliasHelper.applyL1ToL2Alias(address(sucker));
         bytes memory forwardedCalldata = bytes.concat(
             abi.encodeWithSignature(
-                "fromRemote((uint8,bytes32,uint256,(uint64,bytes32),uint256,(bytes32,uint8,uint128,uint128)[],uint256))",
+                "fromRemote((uint8,bytes32,uint256,(uint64,bytes32),(uint256,uint256,(bytes32,uint8,uint128,uint128)[],uint256)[]))",
                 root
             ),
             bytes20(spoofedRemoteMessenger)

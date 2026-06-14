@@ -21,6 +21,7 @@ import {JBCCIPSuckerDeployer} from "../../src/deployers/JBCCIPSuckerDeployer.sol
 import {IJBCCIPSuckerDeployer} from "../../src/interfaces/IJBCCIPSuckerDeployer.sol";
 import {IJBSuckerRegistry} from "../../src/interfaces/IJBSuckerRegistry.sol";
 import {ICCIPRouter} from "../../src/interfaces/ICCIPRouter.sol";
+import {JBChainAccounting} from "../../src/structs/JBChainAccounting.sol";
 import {JBMessageRoot} from "../../src/structs/JBMessageRoot.sol";
 import {JBRemoteToken} from "../../src/structs/JBRemoteToken.sol";
 import {MerkleLib} from "../../src/utils/MerkleLib.sol";
@@ -232,6 +233,13 @@ contract RegressionFeeLockingTest is Test {
 
         // Mock DIRECTORY.terminalsOf() so the per-context snapshot builder in _sendRoot() doesn't revert.
         vm.mockCall(DIRECTORY, abi.encodeCall(IJBDirectory.terminalsOf, (PROJECT_ID)), abi.encode(new IJBTerminal[](0)));
+
+        // Mock registry.peerChainAccountsOf() so the gossip gather in _sendRoot() returns an empty peer set.
+        vm.mockCall(
+            REGISTRY,
+            abi.encodeWithSelector(IJBSuckerRegistry.peerChainAccountsOf.selector),
+            abi.encode(new JBChainAccounting[](0))
+        );
     }
 
     function test_failedToRemoteFeePayment_isRefundableAndExcludedFromNativeClaims() public {

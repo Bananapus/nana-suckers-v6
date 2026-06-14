@@ -76,17 +76,34 @@ contract SameChainSuckerMock {
         return _chainId;
     }
 
-    function peerChainContextsOf() external view returns (JBPeerChainContext[] memory contexts, uint256, uint256) {
+    function peerChainIds(bool) external view returns (uint256[] memory chainIds) {
+        chainIds = new uint256[](1);
+        chainIds[0] = _chainId;
+    }
+
+    function peerChainContextsOf(uint256 queriedChainId)
+        external
+        view
+        returns (JBPeerChainContext[] memory contexts, uint256 snapshot)
+    {
+        if (queriedChainId != _chainId) return (new JBPeerChainContext[](0), 0);
         contexts = new JBPeerChainContext[](1);
         contexts[0] = JBPeerChainContext({currency: _currency, decimals: 18, surplus: _surplus, balance: 0});
-        return (contexts, _chainId, 0);
+        snapshot = 0;
     }
 
-    function peerChainTotalSupply() external view returns (uint256) {
-        return _supply;
+    function peerChainTotalSupplyOf(uint256 queriedChainId) external view returns (uint256) {
+        return queriedChainId == _chainId ? _supply : 0;
     }
 
-    function peerChainTotalSupplyValue() external view returns (JBPeerChainValue memory) {
+    function snapshotTimestampOf(uint256) external pure returns (uint256) {
+        return 0;
+    }
+
+    function peerChainTotalSupplyValue(uint256 queriedChainId) external view returns (JBPeerChainValue memory) {
+        if (queriedChainId != _chainId) {
+            return JBPeerChainValue({value: 0, peerChainId: 0, snapshotTimestamp: 0});
+        }
         return JBPeerChainValue({value: _supply, peerChainId: _chainId, snapshotTimestamp: 0});
     }
 }

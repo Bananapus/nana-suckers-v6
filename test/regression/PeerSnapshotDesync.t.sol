@@ -11,6 +11,7 @@ import {LibClone} from "solady/src/utils/LibClone.sol";
 
 import "../../src/JBSucker.sol";
 import {IJBSuckerRegistry} from "../../src/interfaces/IJBSuckerRegistry.sol";
+import {JBChainAccounting} from "../../src/structs/JBChainAccounting.sol";
 import {JBInboxTreeRoot} from "../../src/structs/JBInboxTreeRoot.sol";
 import {JBMessageRoot} from "../../src/structs/JBMessageRoot.sol";
 import {JBPeerChainContext} from "../../src/structs/JBPeerChainContext.sol";
@@ -57,6 +58,10 @@ contract RegressionPeerSnapshotDesyncTest is Test {
     uint256 internal constant PROJECT_ID = 1;
     uint8 internal constant ETH_DECIMALS = 18;
 
+    /// @dev The remote peer chain that records are attributed to. A record stamped with the receiver's own
+    /// `block.chainid` (or chain 0) is dropped, so the bundle must carry a distinct remote chain id.
+    uint256 internal constant REMOTE_CHAIN_ID = 42_161;
+
     address internal constant TOKEN_A = address(0xA11CE);
     address internal constant TOKEN_B = address(0xB0B);
 
@@ -77,14 +82,16 @@ contract RegressionPeerSnapshotDesyncTest is Test {
         // First message sets supply to 500.
         vm.prank(address(sucker));
         sucker.fromRemote(_messageRoot(TOKEN_A, 1, 1, 500 ether, 100 ether, 200 ether));
-        assertEq(sucker.peerChainTotalSupply(), 500 ether, "supply set to 500");
+        assertEq(sucker.peerChainTotalSupplyOf(REMOTE_CHAIN_ID), 500 ether, "supply set to 500");
 
         // Second message has legitimate zero supply with a newer snapshot nonce.
         vm.prank(address(sucker));
         sucker.fromRemote(_messageRoot(TOKEN_A, 2, 2, 0, 50 ether, 75 ether));
 
         // A legitimate zero supply clears the phantom cached supply rather than being skipped.
-        assertEq(sucker.peerChainTotalSupply(), 0, "zero supply correctly clears phantom cached supply");
+        assertEq(
+            sucker.peerChainTotalSupplyOf(REMOTE_CHAIN_ID), 0, "zero supply correctly clears phantom cached supply"
+        );
 
         JBPeerChainContext memory context = _contextFor(_currencyOf(TOKEN_A));
         assertEq(context.balance, 75 ether, "balance updated");
@@ -103,7 +110,9 @@ contract RegressionPeerSnapshotDesyncTest is Test {
 
         // Token B's staler snapshot freshness key (1 < 2) does NOT overwrite shared state.
         assertEq(
-            sucker.peerChainTotalSupply(), 900 ether, "fresher token-A supply preserved despite later token-B delivery"
+            sucker.peerChainTotalSupplyOf(REMOTE_CHAIN_ID),
+            900 ether,
+            "fresher token-A supply preserved despite later token-B delivery"
         );
 
         JBPeerChainContext memory context = _contextFor(_currencyOf(TOKEN_A));
@@ -122,7 +131,7 @@ contract RegressionPeerSnapshotDesyncTest is Test {
         sucker.fromRemote(_messageRoot(TOKEN_B, 1, 1, 100 ether, 10 ether, 20 ether));
 
         // Shared state kept from token A (snapshot nonce 2 > 1).
-        assertEq(sucker.peerChainTotalSupply(), 900 ether, "shared state from fresher snapshot");
+        assertEq(sucker.peerChainTotalSupplyOf(REMOTE_CHAIN_ID), 900 ether, "shared state from fresher snapshot");
 
         // But token B's inbox was still updated (per-token nonce 1 > 0).
         // We verify by trying to send the same nonce again — it should emit StaleRootRejected.
@@ -140,7 +149,7 @@ contract RegressionPeerSnapshotDesyncTest is Test {
 
     /// @notice The stored peer context for a currency, reverting if none exists.
     function _contextFor(uint32 currency) internal view returns (JBPeerChainContext memory) {
-        (JBPeerChainContext[] memory contexts,,) = sucker.peerChainContextsOf();
+        (JBPeerChainContext[] memory contexts,) = sucker.peerChainContextsOf(REMOTE_CHAIN_ID);
         for (uint256 i; i < contexts.length; ++i) {
             if (contexts[i].currency == currency) return contexts[i];
         }
@@ -169,14 +178,17 @@ contract RegressionPeerSnapshotDesyncTest is Test {
             balance: uint128(balance)
         });
 
+        JBChainAccounting[] memory accounts = new JBChainAccounting[](1);
+        accounts[0] = JBChainAccounting({
+            chainId: REMOTE_CHAIN_ID, totalSupply: totalSupply, contexts: contexts, timestamp: sourceTs
+        });
+
         return JBMessageRoot({
             version: 1,
             token: bytes32(uint256(uint160(token))),
             amount: 0,
             remoteRoot: JBInboxTreeRoot({nonce: nonce, root: bytes32(uint256(nonce))}),
-            sourceTotalSupply: totalSupply,
-            sourceContexts: contexts,
-            sourceTimestamp: sourceTs
+            accounts: accounts
         });
     }
 }

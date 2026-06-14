@@ -17,6 +17,7 @@ import {JBSuckerRegistry} from "../../src/JBSuckerRegistry.sol";
 import {IJBSucker} from "../../src/interfaces/IJBSucker.sol";
 import {IJBSuckerDeployer} from "../../src/interfaces/IJBSuckerDeployer.sol";
 import {IJBSuckerRegistry} from "../../src/interfaces/IJBSuckerRegistry.sol";
+import {JBChainAccounting} from "../../src/structs/JBChainAccounting.sol";
 import {JBInboxTreeRoot} from "../../src/structs/JBInboxTreeRoot.sol";
 import {JBMessageRoot} from "../../src/structs/JBMessageRoot.sol";
 import {JBPeerChainContext} from "../../src/structs/JBPeerChainContext.sol";
@@ -42,14 +43,18 @@ contract RemoteSurplusSuckerHarness is JBSucker {
     }
 
     function test_acceptSnapshot(uint256 supply, JBSourceContext[] memory contexts, uint256 freshness) external {
+        // Carry the supply, contexts, and freshness as this peer chain's single accounting record. The record's
+        // `chainId` is the remote peer chain so the receiving sucker stores it.
+        JBChainAccounting[] memory accounts = new JBChainAccounting[](1);
+        accounts[0] =
+            JBChainAccounting({chainId: peerChainId(), totalSupply: supply, contexts: contexts, timestamp: freshness});
+
         JBMessageRoot memory root = JBMessageRoot({
             version: MESSAGE_VERSION,
             token: bytes32(uint256(uint160(address(0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE)))),
             amount: 0,
             remoteRoot: JBInboxTreeRoot({nonce: uint64(freshness), root: bytes32(uint256(0xBEEF))}),
-            sourceTotalSupply: supply,
-            sourceContexts: contexts,
-            sourceTimestamp: freshness
+            accounts: accounts
         });
 
         this.fromRemote(root);
@@ -145,6 +150,9 @@ contract RemoteSurplusDecimalAndMissingFeedTest is Test {
     // per-(currency, decimals) entries so the registry can decimal-adjust each independently before summing.
     function test_mixedDecimalsSameCurrencyAreKeptSeparateAndValuedCorrectly() external {
         RemoteSurplusSuckerHarness sucker = _clone("mixed-decimals");
+        // The clone runs no constructor, so set its remote peer chain explicitly; a record for chain 0 would be
+        // dropped as malformed.
+        sucker.test_setPeerChainId(10);
 
         address usdc = makeAddr("USDC");
         address dai = makeAddr("DAI");
@@ -157,7 +165,7 @@ contract RemoteSurplusDecimalAndMissingFeedTest is Test {
 
         sucker.test_acceptSnapshot({supply: 0, contexts: contexts, freshness: 1});
 
-        (JBPeerChainContext[] memory stored,,) = sucker.peerChainContextsOf();
+        (JBPeerChainContext[] memory stored,) = sucker.peerChainContextsOf(sucker.peerChainId());
         // The fix: the two mixed-decimal contexts are NOT collapsed; each keeps its own decimals and raw amount.
         assertEq(stored.length, 2, "mixed-decimal same-currency contexts are kept separate, not collapsed");
         assertEq(stored[0].currency, USD, "first stored under USD");
@@ -167,8 +175,11 @@ contract RemoteSurplusDecimalAndMissingFeedTest is Test {
         assertEq(stored[1].decimals, 18, "second keeps its 18 decimals");
         assertEq(stored[1].surplus, 1 ether, "second holds only the 18-decimal raw amount");
 
-        // The registry now decimal-adjusts each entry to the target before summing, yielding the correct 2 USD.
-        JBPeerChainValue memory valued = registry.remoteSurplusOf(address(sucker), PROJECT_ID, USD, 6);
+        // The registry now decimal-adjusts each entry to the target before summing, yielding the correct 2 USD. The
+        // per-chain boundary takes the peer chain id as its second argument.
+        JBPeerChainValue memory valued = registry.remoteSurplusOf({
+            sucker: address(sucker), chainId: sucker.peerChainId(), projectId: PROJECT_ID, currency: USD, decimals: 6
+        });
         assertEq(valued.value, 2_000_000, "1 USD (6dec) + 1 USD (18dec adjusted to 6dec) = 2 USD at 6 decimals");
         assertEq(valued.value, _normalizedTwoUsd(), "matches the correct normalized 2 USD at 6 decimals");
     }

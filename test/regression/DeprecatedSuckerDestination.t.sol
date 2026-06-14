@@ -16,7 +16,7 @@ import {IJBSuckerRegistry} from "../../src/interfaces/IJBSuckerRegistry.sol";
 import {JBSuckerState} from "../../src/enums/JBSuckerState.sol";
 import {JBInboxTreeRoot} from "../../src/structs/JBInboxTreeRoot.sol";
 import {JBMessageRoot} from "../../src/structs/JBMessageRoot.sol";
-import {JBSourceContext} from "../../src/structs/JBSourceContext.sol";
+import {JBChainAccounting} from "../../src/structs/JBChainAccounting.sol";
 import {JBRemoteToken} from "../../src/structs/JBRemoteToken.sol";
 import {MerkleLib} from "../../src/utils/MerkleLib.sol";
 
@@ -104,6 +104,12 @@ contract DeprecatedSuckerDestinationTest is Test {
         vm.mockCall(DIRECTORY, abi.encodeCall(IJBDirectory.PROJECTS, ()), abi.encode(PROJECT));
         vm.mockCall(PROJECT, abi.encodeCall(IERC721.ownerOf, (PROJECT_ID)), abi.encode(address(this)));
         vm.mockCall(address(1), abi.encodeCall(IJBSuckerRegistry.toRemoteFee, ()), abi.encode(uint256(0)));
+        // Mock registry.peerChainAccountsOf() so the gossip gather in _sendRoot() returns an empty peer set.
+        vm.mockCall(
+            address(1),
+            abi.encodeWithSelector(IJBSuckerRegistry.peerChainAccountsOf.selector),
+            abi.encode(new JBChainAccounting[](0))
+        );
         vm.mockCall(DIRECTORY, abi.encodeCall(IJBDirectory.controllerOf, (PROJECT_ID)), abi.encode(address(0)));
         vm.mockCall(
             DIRECTORY, abi.encodeCall(IJBDirectory.primaryTerminalOf, (PROJECT_ID, TOKEN)), abi.encode(TERMINAL)
@@ -148,9 +154,7 @@ contract DeprecatedSuckerDestinationTest is Test {
             remoteRoot: JBInboxTreeRoot({
                 nonce: source.test_getOutboxNonce(TOKEN), root: source.test_getOutboxRoot(TOKEN)
             }),
-            sourceTotalSupply: 0,
-            sourceContexts: new JBSourceContext[](0),
-            sourceTimestamp: 1
+            accounts: new JBChainAccounting[](0)
         });
 
         vm.prank(address(destination));

@@ -51,12 +51,23 @@ A sucker bridges a Juicebox project's token economy between two chains. Cashed-o
 
 ### `JBAccountingSnapshot` (argument to `fromRemoteAccounting`)
 
+A cross-chain accounting gossip bundle: the sending chain's own record plus every peer-chain record it currently holds.
+
 | Field | Type | Meaning |
 |-------|------|---------|
 | `version` | `uint8` | Message format version. Must match `MESSAGE_VERSION`. |
-| `sourceTotalSupply` | `uint256` | Source-chain project-token supply, including reserved tokens. |
-| `sourceContexts` | `JBSourceContext[]` | Raw source-chain surplus and balance contexts, un-valued. |
-| `sourceTimestamp` | `uint256` | Monotonic freshness key used to reject stale accounting updates. |
+| `accounts` | `JBChainAccounting[]` | One accounting record per source chain known to the sender (its own chain plus forwarded peers), each carrying its origin chain id and freshness key. The receiver stores the freshest record per source chain. |
+
+The same `JBChainAccounting[] accounts` bundle is also carried by the root message `JBMessageRoot` (alongside `token`, `amount`, and `remoteRoot`), so a `toRemote` send propagates accounting too.
+
+### `JBChainAccounting` (one source chain's record in a bundle)
+
+| Field | Type | Meaning |
+|-------|------|---------|
+| `chainId` | `uint256` | The source chain this record describes. A receiver ignores a record for its own chain or chain 0. |
+| `totalSupply` | `uint256` | Source-chain project-token supply, including reserved tokens. |
+| `contexts` | `JBSourceContext[]` | Raw source-chain surplus and balance contexts, un-valued (in the source chain's own token addresses and decimals). |
+| `timestamp` | `uint256` | Monotonic source-chain freshness key, gated independently per source chain. |
 
 ## Key functions
 
@@ -66,8 +77,8 @@ A sucker bridges a Juicebox project's token economy between two chains. Cashed-o
 |----------|--------------|
 | `prepare(uint256 projectTokenCount, bytes32 beneficiary, uint256 minTokensReclaimed, address token, bytes32 metadata)` | Cash out `projectTokenCount` project tokens into `token` and insert a leaf for `beneficiary` into the outbox tree for bridging. `minTokensReclaimed` bounds slippage; `metadata` is an opaque attribution payload carried in the leaf hash (`bytes32(0)` for a plain bridge). |
 | `toRemote(address token) payable` | Send the current outbox tree root and bridged assets for `token` to the remote peer through the chain-specific transport. `payable` to fund the transport message and the registry's `toRemoteFee`. |
-| `syncAccountingData() payable` | Send the latest total supply, surplus, and balance snapshot without sending an outbox root or paying the registry `toRemoteFee`. Can be retried with unchanged accounting data; `payable` only funds bridge transport. |
-| `fromRemoteAccounting(JBAccountingSnapshot calldata snapshot)` | Authenticated receive path for accounting-only snapshots. Updates peer accounting if the snapshot is fresher, without touching any token-local inbox root. |
+| `syncAccountingData() payable` | Send the cross-chain accounting gossip bundle — this chain's own record plus every peer-chain record it holds (gathered across the project's suckers via the registry, minus the destination) — without sending an outbox root or paying the registry `toRemoteFee`. Can be retried with unchanged data; `payable` only funds bridge transport. |
+| `fromRemoteAccounting(JBAccountingSnapshot calldata snapshot)` | Authenticated receive path for an accounting-only gossip bundle. Stores the freshest record per source chain, without touching any token-local inbox root. |
 | `claim(JBClaim calldata claimData)` | Claim bridged project tokens for the leaf's beneficiary by proving inclusion against the inbox root. |
 | `claim(JBClaim[] calldata claims)` | Claim multiple leaves in one call. Each leaf is routed through an external `this.claim` sub-call, so one failing leaf emits `ClaimFailed` and is reverted in isolation while the rest of the batch proceeds; the failed leaf stays claimable later. |
 | `mapToken(JBTokenMapping calldata map) payable` | Map a single local token to a remote token for bridging. Mappings are immutable once the outbox tree has entries (can only be disabled, not remapped). Requires `MAP_SUCKER_TOKEN` permission (initial mappings are applied at deploy under `DEPLOY_SUCKERS`). |
@@ -97,8 +108,12 @@ A sucker bridges a Juicebox project's token economy between two chains. Cashed-o
 | `outboxOf(address token)` | The outbox merkle tree (`JBOutboxTree`) for a token. |
 | `amountToAddToBalanceOf(address token)` | Tokens received from bridging that are waiting to be added to the project's terminal balance. |
 | `executedLeafHashOf(address token, uint256 index)` | The committed leaf hash at `(token, index)`, or `bytes32(0)` if unexecuted. Beneficiary contracts re-derive this to authenticate a settlement that a front-runner's direct `claim` already executed. |
-| `peerChainTotalSupply()` | The last-known peer-chain total token supply (used by data hooks to compute effective cross-chain supply). |
-| `peerChainContextsOf()` | Per-context raw surplus and balance from the latest peer snapshot, with chain ID and freshness key. Un-valued (each context in its own currency/decimals). |
+| `peerChainIds(bool includeVirtual)` | The peer chains this sucker reports accounting for: its directly-connected peer, plus — when `includeVirtual` is true — every chain learned about through gossip. The registry aggregates the `includeVirtual: true` set. |
+| `peerChainAccountsOf()` | The raw, un-valued `JBChainAccounting[]` record this sucker holds for every known peer chain. The registry reads this to gather a project's cross-chain knowledge and re-gossip it. |
+| `peerChainContextsOf(uint256 chainId)` | Per-context surplus and balance for one peer chain, resolved to local currencies and folded at read time. Un-valued; returned with the chain's freshness key. |
+| `peerChainTotalSupplyOf(uint256 chainId)` | The last-known total token supply on one peer chain (the registry sums these to compute effective cross-chain supply). |
+| `peerChainTotalSupplyValue(uint256 chainId)` | One peer chain's total supply bundled with its chain id and freshness key (`JBPeerChainValue`). |
+| `snapshotTimestampOf(uint256 chainId)` | The freshness key of the latest accepted record for one peer chain. |
 | `retainedToRemoteFeeOf(address account)` | ETH owed to `account` from a failed `toRemote` fee payment. |
 | `retainedTransportPaymentRefundOf(address account)` | ETH owed to `account` from a failed transport-payment refund. |
 
@@ -116,7 +131,8 @@ A sucker bridges a Juicebox project's token economy between two chains. Cashed-o
 | `suckerPairsOf(uint256 projectId)` | The local/remote sucker pairs (`JBSuckersPair[]`) for a project. |
 | `isSuckerOf(uint256 projectId, address addr)` | Whether `addr` is a registry-deployed sucker for the project. |
 | `suckerDeployerIsAllowed(address deployer)` | Whether a deployer is on the allowlist. |
-| `remoteTotalSupplyOf(uint256 projectId)` | Combined peer-chain total supply across all remote chains (dedups same-peer suckers by freshest snapshot). |
-| `totalRemoteSurplusOf(uint256 projectId, uint256 currency, uint256 decimals)` | Combined peer-chain surplus valued into `currency`. Matching-currency contexts taken at par; missing cross-currency feed skips that sucker (conservative). |
+| `peerChainAccountsOf(uint256 projectId, uint256 exceptChainId)` | The freshest accounting record per source chain across all of a project's suckers, deduped and minus `exceptChainId` — the peer set a sucker forwards when re-gossiping. |
+| `remoteTotalSupplyOf(uint256 projectId)` | Combined peer-chain total supply across all remote chains (aggregates every (sucker, chain) pair, deduped per source chain by freshest record). |
+| `totalRemoteSurplusOf(uint256 projectId, uint256 currency, uint256 decimals)` | Combined peer-chain surplus valued into `currency`. Matching-currency contexts taken at par; a missing cross-currency feed skips that (sucker, chain) (conservative). |
 | `totalRemoteBalanceOf(uint256 projectId, uint256 currency, uint256 decimals)` | Combined peer-chain balance valued into `currency`, same valuation rules as above. |
 | `toRemoteFee()` / `MAX_TO_REMOTE_FEE()` | The current `toRemote` fee and its hardcoded ceiling. |

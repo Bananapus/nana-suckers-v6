@@ -15,11 +15,11 @@ import "../../src/JBCCIPSucker.sol";
 import "../../src/JBSucker.sol";
 import {JBCCIPSuckerDeployer} from "../../src/deployers/JBCCIPSuckerDeployer.sol";
 import {IJBSuckerRegistry} from "../../src/interfaces/IJBSuckerRegistry.sol";
+import {JBChainAccounting} from "../../src/structs/JBChainAccounting.sol";
 import {JBClaim} from "../../src/structs/JBClaim.sol";
 import {JBInboxTreeRoot} from "../../src/structs/JBInboxTreeRoot.sol";
 import {JBLeaf} from "../../src/structs/JBLeaf.sol";
 import {JBMessageRoot} from "../../src/structs/JBMessageRoot.sol";
-import {JBSourceContext} from "../../src/structs/JBSourceContext.sol";
 
 contract RegressionMockWETH {
     mapping(address => uint256) public balanceOf;
@@ -169,9 +169,7 @@ contract RegressionCCIPWrappedNativeMisunwrapTest is Test {
                     index: 0
                 })
             }),
-            sourceTotalSupply: 0,
-            sourceContexts: new JBSourceContext[](0),
-            sourceTimestamp: 1
+            accounts: new JBChainAccounting[](0)
         });
 
         Client.EVMTokenAmount[] memory tokenAmounts = new Client.EVMTokenAmount[](1);
@@ -204,9 +202,7 @@ contract RegressionCCIPWrappedNativeMisunwrapTest is Test {
             token: bytes32(uint256(uint160(JBConstants.NATIVE_TOKEN))),
             amount: amount,
             remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(1))}),
-            sourceTotalSupply: 0,
-            sourceContexts: new JBSourceContext[](0),
-            sourceTimestamp: 1
+            accounts: new JBChainAccounting[](0)
         });
 
         Client.EVMTokenAmount[] memory tokenAmounts = new Client.EVMTokenAmount[](1);

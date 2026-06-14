@@ -16,6 +16,7 @@ import {JBSuckerRegistry} from "../../src/JBSuckerRegistry.sol";
 import {IJBSucker} from "../../src/interfaces/IJBSucker.sol";
 import {IJBSuckerDeployer} from "../../src/interfaces/IJBSuckerDeployer.sol";
 import {IJBSuckerRegistry} from "../../src/interfaces/IJBSuckerRegistry.sol";
+import {JBChainAccounting} from "../../src/structs/JBChainAccounting.sol";
 import {JBInboxTreeRoot} from "../../src/structs/JBInboxTreeRoot.sol";
 import {JBMessageRoot} from "../../src/structs/JBMessageRoot.sol";
 import {JBRemoteToken} from "../../src/structs/JBRemoteToken.sol";
@@ -60,14 +61,19 @@ contract AggregateMockSucker is JBSucker {
             balance: uint128(balance)
         });
 
+        // Carry the supply, contexts, and freshness as this peer chain's single accounting record. The record's
+        // `chainId` is the remote peer chain so the receiving sucker stores it (a record for the local chain or chain 0
+        // is ignored).
+        JBChainAccounting[] memory accounts = new JBChainAccounting[](1);
+        accounts[0] =
+            JBChainAccounting({chainId: peerChainId(), totalSupply: supply, contexts: contexts, timestamp: freshness});
+
         JBMessageRoot memory root = JBMessageRoot({
             version: MESSAGE_VERSION,
             token: bytes32(uint256(uint160(JBConstants.NATIVE_TOKEN))),
             amount: 0,
             remoteRoot: JBInboxTreeRoot({nonce: 0, root: bytes32(0)}),
-            sourceTotalSupply: supply,
-            sourceContexts: contexts,
-            sourceTimestamp: freshness
+            accounts: accounts
         });
 
         // `_isRemotePeer` is overridden to always accept, so the populated snapshot is stored verbatim.
@@ -293,26 +299,28 @@ contract RegistryAggregateReadEquivalenceTest is Test {
         );
     }
 
-    /// @notice A sucker that reports a zero peer chain id reverts every aggregate view (after a successful value read).
-    function test_zeroPeerChainIdRevertsAllViews() external {
+    /// @notice The aggregate views iterate each sucker's stored peer chain records, not its `peerChainId()`, so a
+    /// sucker later reporting a zero peer chain id leaves its already-stored chain records contributing as before.
+    function test_zeroPeerChainIdDoesNotAffectStoredRecords() external {
         suckerA.test_setSnapshot({supply: 500e18, balance: 200e18, surplus: 100e18, freshness: 1});
         suckerB.test_setSnapshot({supply: 300e18, balance: 150e18, surplus: 80e18, freshness: 1});
         suckerC.test_setSnapshot({supply: 250e18, balance: 90e18, surplus: 40e18, freshness: 1});
 
-        // Force suckerB to report a zero peer chain id.
+        // Force suckerB to report a zero peer chain id. Its record for chain 42_161 was stored before this change, and
+        // aggregation enumerates that stored record rather than the live `peerChainId()`, so the totals are unchanged.
         suckerB.test_setPeerChain(0);
 
-        bytes memory expectedRevert =
-            abi.encodeWithSelector(JBSuckerRegistry.JBSuckerRegistry_ZeroPeerChainId.selector, address(suckerB));
-
-        vm.expectRevert(expectedRevert);
-        registry.remoteTotalSupplyOf(PROJECT_ID);
-
-        vm.expectRevert(expectedRevert);
-        registry.totalRemoteBalanceOf({projectId: PROJECT_ID, currency: CURRENCY, decimals: ETH_DECIMALS});
-
-        vm.expectRevert(expectedRevert);
-        registry.totalRemoteSurplusOf({projectId: PROJECT_ID, currency: CURRENCY, decimals: ETH_DECIMALS});
+        assertEq(registry.remoteTotalSupplyOf(PROJECT_ID), 1050e18, "stored chain records still sum");
+        assertEq(
+            registry.totalRemoteBalanceOf({projectId: PROJECT_ID, currency: CURRENCY, decimals: ETH_DECIMALS}),
+            440e18,
+            "stored chain records still sum"
+        );
+        assertEq(
+            registry.totalRemoteSurplusOf({projectId: PROJECT_ID, currency: CURRENCY, decimals: ETH_DECIMALS}),
+            220e18,
+            "stored chain records still sum"
+        );
     }
 
     /// @notice With no snapshots populated, every aggregate view returns zero.

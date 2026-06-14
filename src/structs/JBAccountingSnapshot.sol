@@ -1,19 +1,17 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import {JBSourceContext} from "./JBSourceContext.sol";
+import {JBChainAccounting} from "./JBChainAccounting.sol";
 
-/// @notice A peer-chain accounting snapshot, without any token-local merkle root or transported value.
+/// @notice A cross-chain accounting gossip bundle, sent without any token-local merkle root or transported value.
+/// @dev Carries the sending chain's own accounting record plus every peer-chain record the sender currently holds,
+/// each stamped with its originating chain's freshness key. The receiving chain stores the freshest record per source
+/// chain, so accounting propagates across a hub-and-spoke sucker mesh without a direct sucker between every pair of
+/// chains.
 /// @custom:member version The message format version. Used to reject incompatible messages.
-/// @custom:member sourceTotalSupply The total token supply (including reserved tokens) on the source chain at the
-/// time the message was sent. Used by the receiving chain to track cross-chain supply for cash out tax calculations.
-/// @custom:member sourceContexts The source chain's surplus and balance per accounting context, each in the context's
-/// own currency and decimals, un-valued.
-/// @custom:member sourceTimestamp A monotonic source-chain freshness key for the snapshot. Used by the receiving
-/// chain to reject stale surplus/balance/supply updates.
+/// @custom:member accounts One accounting record per source chain known to the sender: its own chain plus every peer
+/// chain it has heard about, excluding the destination chain.
 struct JBAccountingSnapshot {
     uint8 version;
-    uint256 sourceTotalSupply;
-    JBSourceContext[] sourceContexts;
-    uint256 sourceTimestamp;
+    JBChainAccounting[] accounts;
 }

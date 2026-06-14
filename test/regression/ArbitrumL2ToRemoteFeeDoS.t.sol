@@ -22,6 +22,7 @@ import "../../src/enums/JBLayer.sol";
 import "../../src/interfaces/IArbGatewayRouter.sol";
 // forge-lint: disable-next-line(unaliased-plain-import)
 import "../../src/interfaces/IJBSuckerRegistry.sol";
+import {JBChainAccounting} from "../../src/structs/JBChainAccounting.sol";
 // forge-lint: disable-next-line(unaliased-plain-import)
 import "../../src/structs/JBRemoteToken.sol";
 
@@ -104,6 +105,12 @@ contract ArbitrumL2ToRemoteFeeDoSTest is Test {
 
         // Mock the registry fee and fee terminal.
         vm.mockCall(REGISTRY, abi.encodeCall(IJBSuckerRegistry.toRemoteFee, ()), abi.encode(uint256(1)));
+        // Mock registry.peerChainAccountsOf() so the gossip gather in _sendRoot() returns an empty peer set.
+        vm.mockCall(
+            REGISTRY,
+            abi.encodeWithSelector(IJBSuckerRegistry.peerChainAccountsOf.selector),
+            abi.encode(new JBChainAccounting[](0))
+        );
         vm.mockCall(
             DIRECTORY,
             abi.encodeCall(IJBDirectory.primaryTerminalOf, (1, JBConstants.NATIVE_TOKEN)),

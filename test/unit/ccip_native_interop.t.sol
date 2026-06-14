@@ -19,9 +19,9 @@ import "../../src/JBSucker.sol";
 import {JBCCIPSuckerDeployer} from "../../src/deployers/JBCCIPSuckerDeployer.sol";
 
 import {IJBSuckerRegistry} from "../../src/interfaces/IJBSuckerRegistry.sol";
+import {JBChainAccounting} from "../../src/structs/JBChainAccounting.sol";
 import {JBInboxTreeRoot} from "../../src/structs/JBInboxTreeRoot.sol";
 import {JBMessageRoot} from "../../src/structs/JBMessageRoot.sol";
-import {JBSourceContext} from "../../src/structs/JBSourceContext.sol";
 import {JBRemoteToken} from "../../src/structs/JBRemoteToken.sol";
 import {JBTokenMapping} from "../../src/structs/JBTokenMapping.sol";
 import {MerkleLib} from "../../src/utils/MerkleLib.sol";
@@ -337,9 +337,7 @@ contract CCIPNativeInteropTest is Test {
             token: bytes32(uint256(uint160(JBConstants.NATIVE_TOKEN))),
             amount: bridgeAmount,
             remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(0xdead))}),
-            sourceTotalSupply: 0,
-            sourceContexts: new JBSourceContext[](0),
-            sourceTimestamp: 1
+            accounts: new JBChainAccounting[](0)
         });
 
         Client.EVMTokenAmount[] memory tokenAmounts = new Client.EVMTokenAmount[](1);
@@ -376,9 +374,7 @@ contract CCIPNativeInteropTest is Test {
             token: bytes32(uint256(uint160(celoETH))), // ERC20, not NATIVE_TOKEN
             amount: bridgeAmount,
             remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(0xbeef))}),
-            sourceTotalSupply: 0,
-            sourceContexts: new JBSourceContext[](0),
-            sourceTimestamp: 1
+            accounts: new JBChainAccounting[](0)
         });
 
         Client.EVMTokenAmount[] memory tokenAmounts = new Client.EVMTokenAmount[](1);
@@ -424,9 +420,7 @@ contract CCIPNativeInteropTest is Test {
             token: bytes32(uint256(uint160(celoETH))),
             amount: amount,
             remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(0xdead))}),
-            sourceTotalSupply: 0,
-            sourceContexts: new JBSourceContext[](0),
-            sourceTimestamp: 1
+            accounts: new JBChainAccounting[](0)
         });
 
         // Verify MockWETH balance is 0 before.
@@ -482,9 +476,7 @@ contract CCIPNativeInteropTest is Test {
             token: bytes32(uint256(uint160(celoETH))),
             amount: 1 ether,
             remoteRoot: JBInboxTreeRoot({nonce: 1, root: outboxRoot}),
-            sourceTotalSupply: 0,
-            sourceContexts: new JBSourceContext[](0),
-            sourceTimestamp: 1
+            accounts: new JBChainAccounting[](0)
         });
 
         // Provide a delivery matching the root's positive amount so the consistency check passes.
@@ -525,9 +517,7 @@ contract CCIPNativeInteropTest is Test {
             token: bytes32(uint256(uint160(JBConstants.NATIVE_TOKEN))),
             amount: bridgeAmount,
             remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(0xcafe))}),
-            sourceTotalSupply: 0,
-            sourceContexts: new JBSourceContext[](0),
-            sourceTimestamp: 1
+            accounts: new JBChainAccounting[](0)
         });
 
         Client.EVMTokenAmount[] memory tokenAmounts = new Client.EVMTokenAmount[](1);
@@ -596,9 +586,7 @@ contract CCIPNativeInteropTest is Test {
             token: bytes32(uint256(uint160(celoETH))),
             amount: bridgeAmount,
             remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(0xaaa))}),
-            sourceTotalSupply: 0,
-            sourceContexts: new JBSourceContext[](0),
-            sourceTimestamp: 1
+            accounts: new JBChainAccounting[](0)
         });
         ccipSucker.exposed_sendRootOverAMB{value: 0.01 ether}(
             0.01 ether, JBConstants.NATIVE_TOKEN, bridgeAmount, remoteToken, sendMsg
@@ -622,9 +610,7 @@ contract CCIPNativeInteropTest is Test {
             token: bytes32(uint256(uint160(JBConstants.NATIVE_TOKEN))),
             amount: bridgeAmount,
             remoteRoot: JBInboxTreeRoot({nonce: 2, root: bytes32(uint256(0xbbb))}),
-            sourceTotalSupply: 0,
-            sourceContexts: new JBSourceContext[](0),
-            sourceTimestamp: 1
+            accounts: new JBChainAccounting[](0)
         });
 
         Client.EVMTokenAmount[] memory tokenAmounts = new Client.EVMTokenAmount[](1);

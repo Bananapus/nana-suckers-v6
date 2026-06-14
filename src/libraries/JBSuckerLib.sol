@@ -12,10 +12,13 @@ import {JBRulesetMetadata} from "@bananapus/core-v6/src/structs/JBRulesetMetadat
 import {IERC165} from "@openzeppelin/contracts/utils/introspection/ERC165.sol";
 
 import {IJBPeerChainAdjustedAccounts} from "../interfaces/IJBPeerChainAdjustedAccounts.sol";
+import {IJBSuckerRegistry} from "../interfaces/IJBSuckerRegistry.sol";
 import {JBPeerChainAdjustedAccountsLib} from "./JBPeerChainAdjustedAccountsLib.sol";
 import {JBAccountingSnapshot} from "../structs/JBAccountingSnapshot.sol";
+import {JBChainAccounting} from "../structs/JBChainAccounting.sol";
 import {JBInboxTreeRoot} from "../structs/JBInboxTreeRoot.sol";
 import {JBMessageRoot} from "../structs/JBMessageRoot.sol";
+import {JBPeerChainContext} from "../structs/JBPeerChainContext.sol";
 import {JBSourceContext} from "../structs/JBSourceContext.sol";
 import {MerkleLib} from "../utils/MerkleLib.sol";
 
@@ -34,20 +37,25 @@ library JBSuckerLib {
     uint256 internal constant _CURRENT_RULESET_OF_RETURN_BYTES = (9 + 19) * 32;
 
     //*********************************************************************//
-    // ---------------------- external transactions ---------------------- //
+    // ------------------------- external views -------------------------- //
     //*********************************************************************//
 
-    /// @notice Build the cross-chain accounting snapshot (total supply plus per-context surplus and balance).
+    /// @notice Build the cross-chain accounting gossip bundle (the local chain's record plus known peer records).
     /// @dev Extracted from `JBSucker.syncAccountingData` to reduce child contract bytecode. Called via DELEGATECALL.
-    /// The snapshot carries each context's surplus and balance in its own currency, without price-feed valuation.
+    /// Each record carries its source chain's surplus and balance per context in that context's own currency, without
+    /// price-feed valuation.
     /// @param directory The JB directory to look up controllers and terminals.
+    /// @param registry The sucker registry that aggregates the project's per-chain records.
     /// @param projectId The project ID.
+    /// @param exceptChainId The destination chain, excluded from the gathered peer records.
     /// @param messageVersion The message format version.
-    /// @param sourceTimestamp The monotonic source freshness key for this snapshot.
+    /// @param sourceTimestamp The monotonic source freshness key for the local chain's record.
     /// @return snapshot The constructed accounting snapshot.
     function buildAccountingSnapshot(
         IJBDirectory directory,
+        IJBSuckerRegistry registry,
         uint256 projectId,
+        uint256 exceptChainId,
         uint8 messageVersion,
         uint256 sourceTimestamp
     )
@@ -55,34 +63,39 @@ library JBSuckerLib {
         view
         returns (JBAccountingSnapshot memory snapshot)
     {
-        // Snapshot the project's per-context surplus and balance, un-valued. No price oracle is consulted on send.
-        (uint256 localTotalSupply, JBSourceContext[] memory sourceContexts) =
-            _snapshotAccountsOf({directory: directory, projectId: projectId});
-
         // Construct the accounting-only message without any token-local merkle root.
         snapshot = JBAccountingSnapshot({
             version: messageVersion,
-            sourceTotalSupply: localTotalSupply,
-            sourceContexts: sourceContexts,
-            sourceTimestamp: sourceTimestamp
+            accounts: _buildGossipBundle({
+                directory: directory,
+                registry: registry,
+                projectId: projectId,
+                exceptChainId: exceptChainId,
+                sourceTimestamp: sourceTimestamp
+            })
         });
     }
 
-    /// @notice Build the cross-chain snapshot message (total supply plus per-context surplus and balance).
+    /// @notice Build the cross-chain root message, carrying the accounting gossip bundle alongside the outbox root.
     /// @dev Extracted from `JBSucker._buildSnapshotAndSend` to reduce child contract bytecode. Called via DELEGATECALL.
-    /// The snapshot carries each context's surplus and balance in its own currency, without price-feed valuation.
+    /// Each accounting record carries its source chain's surplus and balance per context in that context's own
+    /// currency, without price-feed valuation.
     /// @param directory The JB directory to look up controllers and terminals.
+    /// @param registry The sucker registry that aggregates the project's per-chain records.
     /// @param projectId The project ID.
+    /// @param exceptChainId The destination chain, excluded from the gathered peer records.
     /// @param remoteToken The remote token bytes32 address.
     /// @param amount The amount of terminal tokens to bridge.
     /// @param nonce The outbox nonce for this send.
     /// @param root The merkle root of the outbox tree.
     /// @param messageVersion The message format version.
-    /// @param sourceTimestamp The monotonic source freshness key for this snapshot.
+    /// @param sourceTimestamp The monotonic source freshness key for the local chain's record.
     /// @return message The constructed JBMessageRoot.
     function buildSnapshotMessage(
         IJBDirectory directory,
+        IJBSuckerRegistry registry,
         uint256 projectId,
+        uint256 exceptChainId,
         bytes32 remoteToken,
         uint256 amount,
         uint64 nonce,
@@ -94,25 +107,21 @@ library JBSuckerLib {
         view
         returns (JBMessageRoot memory message)
     {
-        // Snapshot the project's per-context surplus and balance, un-valued. No price oracle is consulted on send.
-        (uint256 localTotalSupply, JBSourceContext[] memory sourceContexts) =
-            _snapshotAccountsOf({directory: directory, projectId: projectId});
-
-        // Construct the cross-chain message with the per-context snapshot data.
+        // Construct the cross-chain message with the outbox root and the accounting gossip bundle.
         message = JBMessageRoot({
             version: messageVersion,
             token: remoteToken,
             amount: amount,
             remoteRoot: JBInboxTreeRoot({nonce: nonce, root: root}),
-            sourceTotalSupply: localTotalSupply,
-            sourceContexts: sourceContexts,
-            sourceTimestamp: sourceTimestamp
+            accounts: _buildGossipBundle({
+                directory: directory,
+                registry: registry,
+                projectId: projectId,
+                exceptChainId: exceptChainId,
+                sourceTimestamp: sourceTimestamp
+            })
         });
     }
-
-    //*********************************************************************//
-    // ------------------------- external views -------------------------- //
-    //*********************************************************************//
 
     /// @notice Compute a branch root from a leaf, branch, and index. Wraps MerkleLib.branchRoot so its
     /// ~170 lines of unrolled assembly live in the library's bytecode instead of each sucker's.
@@ -177,9 +186,129 @@ library JBSuckerLib {
         }
     }
 
+    /// @notice Folds a peer chain's raw source contexts into per-currency surplus and balance, resolving each to a
+    /// local currency.
+    /// @dev Extracted from `JBSucker.peerChainContextsOf` to reduce child contract bytecode. Called via DELEGATECALL.
+    /// Each `localTokens[i]` is the local token the sucker resolved `rawContexts[i].token` to (via its token mapping or
+    /// identity); this derives that token's authoritative accounting-context currency and merges entries that share
+    /// BOTH currency AND decimals. The accounting-context currency is immutable, so re-resolving on each read is safe.
+    /// Entries that share a currency but carry different decimals stay separate, since the raw amounts are on different
+    /// scales. No price oracle is consulted.
+    /// @param directory The JB directory to look up the project's terminals.
+    /// @param projectId The project whose accounting contexts to read.
+    /// @param localTokens The local token each raw context resolves to, parallel to `rawContexts`.
+    /// @param rawContexts The peer chain's raw per-context surplus and balance.
+    /// @return contexts The per-currency surplus and balance for the chain.
+    function foldPeerContexts(
+        IJBDirectory directory,
+        uint256 projectId,
+        address[] memory localTokens,
+        JBSourceContext[] memory rawContexts
+    )
+        external
+        view
+        returns (JBPeerChainContext[] memory contexts)
+    {
+        uint256 numRaw = rawContexts.length;
+
+        // The folded set is no larger than the raw set, so allocate to that upper bound and track the populated length.
+        JBPeerChainContext[] memory buf = new JBPeerChainContext[](numRaw);
+        uint256 count;
+
+        for (uint256 i; i < numRaw;) {
+            uint8 ctxDecimals = rawContexts[i].decimals;
+            uint128 ctxSurplus = rawContexts[i].surplus;
+            uint128 ctxBalance = rawContexts[i].balance;
+            uint32 ctxCurrency = _currencyOf({directory: directory, projectId: projectId, token: localTokens[i]});
+
+            // Fold into an existing entry that matches on BOTH currency AND decimals, or append a new one.
+            bool merged;
+            for (uint256 j; j < count;) {
+                if (buf[j].currency == ctxCurrency && buf[j].decimals == ctxDecimals) {
+                    buf[j].surplus = _saturatingAddU128(buf[j].surplus, ctxSurplus);
+                    buf[j].balance = _saturatingAddU128(buf[j].balance, ctxBalance);
+                    merged = true;
+                    break;
+                }
+                unchecked {
+                    ++j;
+                }
+            }
+            if (!merged) {
+                buf[count++] = JBPeerChainContext({
+                    currency: ctxCurrency, decimals: ctxDecimals, surplus: ctxSurplus, balance: ctxBalance
+                });
+            }
+
+            unchecked {
+                ++i;
+            }
+        }
+
+        // Trim the over-allocated buffer to the folded length.
+        contexts = new JBPeerChainContext[](count);
+        for (uint256 k; k < count;) {
+            contexts[k] = buf[k];
+            unchecked {
+                ++k;
+            }
+        }
+    }
+
     //*********************************************************************//
     // ------------------------- internal views -------------------------- //
     //*********************************************************************//
+
+    /// @notice Assemble a cross-chain accounting gossip bundle: the local chain's own record plus every peer-chain
+    /// record the project's suckers currently hold, excluding the destination chain.
+    /// @dev The local record is taken fresh from `_snapshotAccountsOf` (including any data-hook adjusted accounts). The
+    /// peer records are gathered from the registry, which is the only contract that sees a hub chain's per-peer
+    /// suckers together; it dedups them to the freshest per chain. A reverting or unset registry yields a local-only
+    /// bundle, so a standalone sucker still propagates its own record. Forwarded peer records keep their own origin
+    /// chain and freshness key so the receiver gates each chain independently.
+    /// @param directory The JB directory to look up controllers and terminals.
+    /// @param registry The sucker registry that aggregates the project's per-chain records.
+    /// @param projectId The project to snapshot.
+    /// @param exceptChainId The destination chain, excluded from the gathered peer records.
+    /// @param sourceTimestamp The local record's freshness key.
+    /// @return accounts The assembled gossip bundle, with the local chain's record first.
+    function _buildGossipBundle(
+        IJBDirectory directory,
+        IJBSuckerRegistry registry,
+        uint256 projectId,
+        uint256 exceptChainId,
+        uint256 sourceTimestamp
+    )
+        internal
+        view
+        returns (JBChainAccounting[] memory accounts)
+    {
+        // Snapshot the local chain's own supply and per-context surplus/balance, un-valued. No price oracle is read.
+        (uint256 localTotalSupply, JBSourceContext[] memory localContexts) =
+            _snapshotAccountsOf({directory: directory, projectId: projectId});
+
+        // Gather every other chain's record the project knows, deduped per chain and minus the destination. The
+        // accounting gossip is best-effort, so a reverting registry must never break the essential root/token bridge:
+        // catch the failure and propagate just this chain's own record.
+        JBChainAccounting[] memory peers;
+        try registry.peerChainAccountsOf({projectId: projectId, exceptChainId: exceptChainId}) returns (
+            JBChainAccounting[] memory gathered
+        ) {
+            peers = gathered;
+        } catch {}
+
+        // The local record leads; forwarded peer records follow verbatim, keeping their own origin chain and freshness.
+        accounts = new JBChainAccounting[](peers.length + 1);
+        accounts[0] = JBChainAccounting({
+            chainId: block.chainid, totalSupply: localTotalSupply, contexts: localContexts, timestamp: sourceTimestamp
+        });
+        for (uint256 i; i < peers.length;) {
+            accounts[i + 1] = peers[i];
+            unchecked {
+                ++i;
+            }
+        }
+    }
 
     /// @notice Builds the project's per-accounting-context surplus and balance, each in the context's own currency,
     /// with no price-feed valuation.
@@ -251,6 +380,42 @@ library JBSuckerLib {
                 if (supported) controller = IJBController(address(controllerIERC165));
             } catch {}
         } catch {}
+    }
+
+    /// @notice The project's authoritative accounting-context currency for a local token, or a convention fallback.
+    /// @dev Reads the token's accounting context from its primary terminal via length-guarded staticcalls, so a missing
+    /// or non-conforming directory/terminal just yields the fallback. Falls back to `uint32(uint160(token))` when the
+    /// project has no local accounting context for the token yet. The accounting-context currency is immutable.
+    /// @param directory The JB directory to look up the project's primary terminal for the token.
+    /// @param projectId The project whose accounting context to read.
+    /// @param token The local token to resolve the currency of.
+    /// @return currency The project's accounting-context currency for the token.
+    function _currencyOf(
+        IJBDirectory directory,
+        uint256 projectId,
+        address token
+    )
+        internal
+        view
+        returns (uint32 currency)
+    {
+        // Resolve the project's primary terminal for the token. An `address` return needs a full word.
+        (bool terminalOk, bytes memory terminalData) =
+            address(directory).staticcall(abi.encodeCall(IJBDirectory.primaryTerminalOf, (projectId, token)));
+        if (terminalOk && terminalData.length >= 32) {
+            address terminal = abi.decode(terminalData, (address));
+            if (terminal != address(0)) {
+                // Read the token's accounting context. The struct encodes to three words.
+                (bool contextOk, bytes memory contextData) =
+                    terminal.staticcall(abi.encodeCall(IJBTerminal.accountingContextForTokenOf, (projectId, token)));
+                if (contextOk && contextData.length >= 96) {
+                    JBAccountingContext memory accountingContext = abi.decode(contextData, (JBAccountingContext));
+                    if (accountingContext.currency != 0) return accountingContext.currency;
+                }
+            }
+        }
+        // forge-lint: disable-next-line(unsafe-typecast)
+        return uint32(uint160(token));
     }
 
     /// @notice Optional project-specific adjusted accounts to add to peer-chain snapshots.
@@ -339,6 +504,21 @@ library JBSuckerLib {
         });
     }
 
+    /// @notice Adds two `uint128` amounts, saturating at `type(uint128).max` instead of overflowing.
+    /// @dev Saturation keeps a pathological peer record from reverting the read path; the cap can only under-report a
+    /// remote amount, the safe direction.
+    /// @param a The first amount.
+    /// @param b The second amount.
+    /// @return The saturated sum.
+    function _saturatingAddU128(uint128 a, uint128 b) internal pure returns (uint128) {
+        unchecked {
+            uint256 sum = uint256(a) + uint256(b);
+            // The cast only runs when `sum <= type(uint128).max`, so it cannot truncate.
+            // forge-lint: disable-next-line(unsafe-typecast)
+            return sum > type(uint128).max ? type(uint128).max : uint128(sum);
+        }
+    }
+
     /// @notice Builds the local accounting values used in outbound peer-chain snapshots.
     /// @dev Project token supply stays a single currency-agnostic scalar. Surplus and balance are emitted per context
     /// in that context's currency, with no price-feed valuation. The receiving chain folds each context into its
@@ -372,6 +552,15 @@ library JBSuckerLib {
         if (address(controller) != address(0) && address(controller).code.length != 0) {
             (additionalSupply, hookContexts) =
                 _peerChainAdjustedAccountsOf({controller: controller, projectId: projectId});
+            // Fail soft to the baseline snapshot. A malformed hook that returns a `supply` which would overflow the
+            // controller supply contributes no extra supply or contexts — the documented fail-soft model — instead
+            // of
+            // reverting the whole snapshot and bricking every outbound send (`toRemote` / `syncAccountingData`) while
+            // the hook stays active.
+            if (additionalSupply > type(uint256).max - localTotalSupply) {
+                additionalSupply = 0;
+                hookContexts = new JBSourceContext[](0);
+            }
             localTotalSupply += additionalSupply;
         }
 

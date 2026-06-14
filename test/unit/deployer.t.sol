@@ -584,16 +584,8 @@ contract DeployerTests is Test, TestBaseWorkflow, IERC721Receiver {
 
         // Mock: sucker1 reports 900e18, sucker2 reports 1000e18 — both on the same peer chain at the same freshness,
         // so the registry's combined read collapses them to MAX rather than SUM.
-        vm.mockCall(
-            address(sucker1),
-            abi.encodeCall(IJBSucker.peerChainTotalSupplyValue, ()),
-            abi.encode(JBPeerChainValue({value: 900e18, peerChainId: remoteChainId, snapshotTimestamp: 0}))
-        );
-        vm.mockCall(
-            address(sucker2),
-            abi.encodeCall(IJBSucker.peerChainTotalSupplyValue, ()),
-            abi.encode(JBPeerChainValue({value: 1000e18, peerChainId: remoteChainId, snapshotTimestamp: 0}))
-        );
+        _mockPeerChainTotalSupply(address(sucker1), remoteChainId, 900e18, 0);
+        _mockPeerChainTotalSupply(address(sucker2), remoteChainId, 1000e18, 0);
 
         // remoteTotalSupplyOf should return MAX(900, 1000) = 1000, NOT SUM 1900.
         assertEq(registry.remoteTotalSupplyOf(projectId), 1000e18, "should use MAX, not SUM");
@@ -645,8 +637,14 @@ contract DeployerTests is Test, TestBaseWorkflow, IERC721Receiver {
     }
 
     /// @notice Mock a sucker's raw per-context snapshot: one native-currency context carrying `surplus` and `balance`,
-    /// reported for `peerChainId` at the given snapshot freshness key. The registry values this at par into the
-    /// native-token convention currency the aggregate views query.
+    /// reported for `peerChainId` at the given snapshot freshness key. The registry enumerates the sucker's
+    /// `peerChainIds(true)` then values each chain's contexts at par into the native-token convention currency the
+    /// aggregate views query.
+    /// @param sucker The sucker to mock the per-chain contexts on.
+    /// @param peerChainId The remote peer chain the contexts are reported for.
+    /// @param surplus The native-currency surplus to report for the chain.
+    /// @param balance The native-currency balance to report for the chain.
+    /// @param snapshotTimestamp The source freshness key of the chain's record.
     function _mockPeerChainContexts(
         address sucker,
         uint256 peerChainId,
@@ -656,12 +654,41 @@ contract DeployerTests is Test, TestBaseWorkflow, IERC721Receiver {
     )
         internal
     {
+        // The aggregate views iterate this sucker's known peer chains, so expose the one chain it holds a record for.
+        uint256[] memory chainIds = new uint256[](1);
+        chainIds[0] = peerChainId;
+        vm.mockCall(sucker, abi.encodeWithSelector(IJBSucker.peerChainIds.selector), abi.encode(chainIds));
+
         JBPeerChainContext[] memory contexts = new JBPeerChainContext[](1);
         contexts[0] = JBPeerChainContext({currency: _ethCurrency(), decimals: 18, surplus: surplus, balance: balance});
         vm.mockCall(
             sucker,
-            abi.encodeCall(IJBSucker.peerChainContextsOf, ()),
-            abi.encode(contexts, peerChainId, snapshotTimestamp)
+            abi.encodeCall(IJBSucker.peerChainContextsOf, (peerChainId)),
+            abi.encode(contexts, snapshotTimestamp)
+        );
+    }
+
+    /// @notice Mock a sucker's single-peer total-supply read: expose the one peer chain it holds a record for via
+    /// `peerChainIds(true)`, then return `value` from `peerChainTotalSupplyValue(chainId)` for that chain.
+    /// @param sucker The sucker to mock the per-chain total supply on.
+    /// @param peerChainId The remote peer chain the supply is reported for.
+    /// @param value The total supply to report for the chain.
+    /// @param snapshotTimestamp The source freshness key of the chain's record.
+    function _mockPeerChainTotalSupply(
+        address sucker,
+        uint256 peerChainId,
+        uint256 value,
+        uint256 snapshotTimestamp
+    )
+        internal
+    {
+        uint256[] memory chainIds = new uint256[](1);
+        chainIds[0] = peerChainId;
+        vm.mockCall(sucker, abi.encodeWithSelector(IJBSucker.peerChainIds.selector), abi.encode(chainIds));
+        vm.mockCall(
+            sucker,
+            abi.encodeCall(IJBSucker.peerChainTotalSupplyValue, (peerChainId)),
+            abi.encode(JBPeerChainValue({value: value, peerChainId: peerChainId, snapshotTimestamp: snapshotTimestamp}))
         );
     }
 
@@ -687,16 +714,8 @@ contract DeployerTests is Test, TestBaseWorkflow, IERC721Receiver {
         IJBSucker sucker2 = _deployThroughRegistry(deployer2, projectId, bytes32("salt2"));
 
         // Mock the combined peer-chain read on each sucker (distinct peer chains, so they sum).
-        vm.mockCall(
-            address(sucker1),
-            abi.encodeCall(IJBSucker.peerChainTotalSupplyValue, ()),
-            abi.encode(JBPeerChainValue({value: 100e18, peerChainId: 10, snapshotTimestamp: 0}))
-        );
-        vm.mockCall(
-            address(sucker2),
-            abi.encodeCall(IJBSucker.peerChainTotalSupplyValue, ()),
-            abi.encode(JBPeerChainValue({value: 250e18, peerChainId: 42_161, snapshotTimestamp: 0}))
-        );
+        _mockPeerChainTotalSupply(address(sucker1), 10, 100e18, 0);
+        _mockPeerChainTotalSupply(address(sucker2), 42_161, 250e18, 0);
 
         assertEq(registry.remoteTotalSupplyOf(projectId), 350e18);
     }
@@ -768,11 +787,7 @@ contract DeployerTests is Test, TestBaseWorkflow, IERC721Receiver {
         IJBSucker sucker1 = _deployThroughRegistry(deployer1, projectId, bytes32("salt1"));
 
         // Mock the combined peer-chain read.
-        vm.mockCall(
-            address(sucker1),
-            abi.encodeCall(IJBSucker.peerChainTotalSupplyValue, ()),
-            abi.encode(JBPeerChainValue({value: 100e18, peerChainId: 10, snapshotTimestamp: 0}))
-        );
+        _mockPeerChainTotalSupply(address(sucker1), 10, 100e18, 0);
 
         // Before deprecation: 100e18.
         assertEq(registry.remoteTotalSupplyOf(projectId), 100e18);
@@ -803,13 +818,16 @@ contract DeployerTests is Test, TestBaseWorkflow, IERC721Receiver {
         // forge-lint: disable-next-line(unsafe-typecast)
         IJBSucker sucker2 = _deployThroughRegistry(deployer2, projectId, bytes32("salt2"));
 
-        // sucker1 returns 100e18, sucker2's combined read reverts.
+        // sucker1 returns 100e18, sucker2's per-chain read reverts. sucker2 still enumerates its chain via
+        // `peerChainIds(true)`, but the registry's per-chain `peerChainTotalSupplyValue` read reverts and is skipped.
+        _mockPeerChainTotalSupply(address(sucker1), 10, 100e18, 0);
+
+        uint256[] memory sucker2Chains = new uint256[](1);
+        sucker2Chains[0] = 42_161;
         vm.mockCall(
-            address(sucker1),
-            abi.encodeCall(IJBSucker.peerChainTotalSupplyValue, ()),
-            abi.encode(JBPeerChainValue({value: 100e18, peerChainId: 10, snapshotTimestamp: 0}))
+            address(sucker2), abi.encodeWithSelector(IJBSucker.peerChainIds.selector), abi.encode(sucker2Chains)
         );
-        vm.mockCallRevert(address(sucker2), abi.encodeCall(IJBSucker.peerChainTotalSupplyValue, ()), "boom");
+        vm.mockCallRevert(address(sucker2), abi.encodeCall(IJBSucker.peerChainTotalSupplyValue, (42_161)), "boom");
 
         // Should still return 100e18 (sucker2's revert is silently skipped).
         assertEq(registry.remoteTotalSupplyOf(projectId), 100e18);

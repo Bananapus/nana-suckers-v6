@@ -19,6 +19,7 @@ import "../../src/JBOptimismSucker.sol";
 import "../../src/deployers/JBOptimismSuckerDeployer.sol";
 // forge-lint: disable-next-line(unaliased-plain-import)
 import "../../src/interfaces/IJBSuckerRegistry.sol";
+import {JBChainAccounting} from "../../src/structs/JBChainAccounting.sol";
 // forge-lint: disable-next-line(unaliased-plain-import)
 import "../../src/interfaces/IOPMessenger.sol";
 // forge-lint: disable-next-line(unaliased-plain-import)
@@ -90,6 +91,12 @@ contract ToRemoteFeeFallbackTest is Test {
         sucker.seedOutbox(JBConstants.NATIVE_TOKEN, bytes32(uint256(uint160(JBConstants.NATIVE_TOKEN))));
 
         vm.mockCall(REGISTRY, abi.encodeCall(IJBSuckerRegistry.toRemoteFee, ()), abi.encode(uint256(1)));
+        // Mock registry.peerChainAccountsOf() so the gossip gather in _sendRoot() returns an empty peer set.
+        vm.mockCall(
+            REGISTRY,
+            abi.encodeWithSelector(IJBSuckerRegistry.peerChainAccountsOf.selector),
+            abi.encode(new JBChainAccounting[](0))
+        );
 
         // Mock DIRECTORY.controllerOf() so the try-catch in _sendRoot() doesn't revert under via-IR.
         vm.mockCall(DIRECTORY, abi.encodeCall(IJBDirectory.controllerOf, (uint256(1))), abi.encode(address(0)));

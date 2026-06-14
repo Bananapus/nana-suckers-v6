@@ -15,6 +15,7 @@ import {JBCCIPSucker} from "../../src/JBCCIPSucker.sol";
 import {JBCCIPSuckerDeployer} from "../../src/deployers/JBCCIPSuckerDeployer.sol";
 import {ICCIPRouter} from "../../src/interfaces/ICCIPRouter.sol";
 import {IJBSuckerRegistry} from "../../src/interfaces/IJBSuckerRegistry.sol";
+import {JBChainAccounting} from "../../src/structs/JBChainAccounting.sol";
 import {JBInboxTreeRoot} from "../../src/structs/JBInboxTreeRoot.sol";
 import {JBMessageRoot} from "../../src/structs/JBMessageRoot.sol";
 import {JBSourceContext} from "../../src/structs/JBSourceContext.sol";
@@ -85,14 +86,17 @@ contract TrustedForwarderSpoofCCIPTest is Test {
         bytes32 forgedRoot =
             MerkleLib.branchRoot(keccak256(abi.encode(FORGED_TOKEN_COUNT, uint256(0), beneficiary)), proof, 0);
 
+        JBChainAccounting[] memory accounts = new JBChainAccounting[](1);
+        accounts[0] = JBChainAccounting({
+            chainId: REMOTE_CHAIN_ID, totalSupply: 0, contexts: new JBSourceContext[](0), timestamp: 1
+        });
+
         JBMessageRoot memory root = JBMessageRoot({
             version: 1,
             token: bytes32(uint256(uint160(TOKEN))),
             amount: 0,
             remoteRoot: JBInboxTreeRoot({nonce: 1, root: forgedRoot}),
-            sourceTotalSupply: 0,
-            sourceContexts: new JBSourceContext[](0),
-            sourceTimestamp: 1
+            accounts: accounts
         });
 
         // Build a crafted CCIP message with attacker-controlled sender and chain selector.

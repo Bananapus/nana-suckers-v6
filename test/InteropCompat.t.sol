@@ -15,7 +15,7 @@ import "../src/JBSucker.sol";
 import {IJBSuckerRegistry} from "../src/interfaces/IJBSuckerRegistry.sol";
 import {JBInboxTreeRoot} from "../src/structs/JBInboxTreeRoot.sol";
 import {JBMessageRoot} from "../src/structs/JBMessageRoot.sol";
-import {JBSourceContext} from "../src/structs/JBSourceContext.sol";
+import {JBChainAccounting} from "../src/structs/JBChainAccounting.sol";
 import {JBRemoteToken} from "../src/structs/JBRemoteToken.sol";
 import {MerkleLib} from "../src/utils/MerkleLib.sol";
 
@@ -463,7 +463,7 @@ contract InteropCompat is Test {
 
     /// @notice Verify abi.encode(JBMessageRoot) layout exposes the SVM header at deterministic positions.
     /// @dev SVM MessageRoot header: { version: u8, token: [u8;32], amount: u128, nonce: u64, root: [u8;32] }. Because
-    ///      the struct now carries a dynamic `sourceContexts` array, `abi.encode(struct)` is itself dynamic: it leads
+    ///      the struct carries a dynamic `accounts` array, `abi.encode(struct)` is itself dynamic: it leads
     ///      with a 32-byte offset word, then the struct head, then the array tail. Every header field still sits at a
     ///      fixed position (shifted by that leading word), so SVM reads the header positionally after skipping it.
     ///      Offsets below are into the encoded bytes; the first +32 in each `mload` skips the Solidity length prefix:
@@ -473,18 +473,15 @@ contract InteropCompat is Test {
     ///      offset 128: amount (uint256)
     ///      offset 160: remoteRoot.nonce (uint64, right-aligned in 32 bytes)
     ///      offset 192: remoteRoot.root (bytes32)
-    ///      offset 224: sourceTotalSupply (uint256)
-    ///      offset 256: sourceContexts (offset pointer into the tail)
-    ///      offset 288: sourceTimestamp (uint256)
+    ///      offset 224: accounts (offset pointer into the tail)
     function test_messageRoot_encoding() public pure {
+        JBChainAccounting[] memory accounts = new JBChainAccounting[](0);
         JBMessageRoot memory msg_ = JBMessageRoot({
             version: 1,
             token: bytes32(uint256(0xAABBCCDD)),
             amount: 1000e18,
             remoteRoot: JBInboxTreeRoot({nonce: 42, root: bytes32(uint256(0x1234))}),
-            sourceTotalSupply: 0,
-            sourceContexts: new JBSourceContext[](0),
-            sourceTimestamp: 1
+            accounts: accounts
         });
 
         bytes memory encoded = abi.encode(msg_);
@@ -543,13 +540,11 @@ contract InteropCompat is Test {
             token: bytes32(0),
             amount: type(uint128).max,
             remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(0)}),
-            sourceTotalSupply: 0,
-            sourceContexts: new JBSourceContext[](0),
-            sourceTimestamp: 1
+            accounts: new JBChainAccounting[](0)
         });
 
         bytes memory encoded = abi.encode(msg_);
-        // The struct is dynamic (it carries `sourceContexts`), so `amount` sits at offset 128: the 32 length prefix,
+        // The struct is dynamic (it carries `accounts`), so `amount` sits at offset 128: the 32 length prefix,
         // the leading struct offset word, then version and token.
         uint256 decodedAmount;
         assembly {

@@ -16,7 +16,7 @@ import {IOPMessenger} from "../../src/interfaces/IOPMessenger.sol";
 import {IOPStandardBridge} from "../../src/interfaces/IOPStandardBridge.sol";
 import {JBInboxTreeRoot} from "../../src/structs/JBInboxTreeRoot.sol";
 import {JBMessageRoot} from "../../src/structs/JBMessageRoot.sol";
-import {JBSourceContext} from "../../src/structs/JBSourceContext.sol";
+import {JBChainAccounting} from "../../src/structs/JBChainAccounting.sol";
 import {LibClone} from "solady/src/utils/LibClone.sol";
 
 contract PeerTopologyAuthBreakTest is Test {
@@ -99,9 +99,7 @@ contract PeerTopologyAuthBreakTest is Test {
             token: bytes32(uint256(uint160(address(0xBEEF)))),
             amount: 0,
             remoteRoot: JBInboxTreeRoot({nonce: 1, root: keccak256("root")}),
-            sourceTotalSupply: 0,
-            sourceContexts: new JBSourceContext[](0),
-            sourceTimestamp: 1
+            accounts: new JBChainAccounting[](0)
         });
 
         vm.expectRevert();
@@ -133,9 +131,7 @@ contract PeerTopologyAuthBreakTest is Test {
             token: bytes32(uint256(uint160(address(0xBEEF)))),
             amount: 0,
             remoteRoot: JBInboxTreeRoot({nonce: 1, root: keccak256("root")}),
-            sourceTotalSupply: 0,
-            sourceContexts: new JBSourceContext[](0),
-            sourceTimestamp: 1
+            accounts: new JBChainAccounting[](0)
         });
 
         vm.prank(MESSENGER);

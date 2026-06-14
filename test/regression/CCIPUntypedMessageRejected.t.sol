@@ -13,6 +13,7 @@ import {ICCIPRouter} from "../../src/interfaces/ICCIPRouter.sol";
 import {IJBCCIPSuckerDeployer} from "../../src/interfaces/IJBCCIPSuckerDeployer.sol";
 import {IJBSuckerRegistry} from "../../src/interfaces/IJBSuckerRegistry.sol";
 import {JBAccountingSnapshot} from "../../src/structs/JBAccountingSnapshot.sol";
+import {JBChainAccounting} from "../../src/structs/JBChainAccounting.sol";
 import {JBInboxTreeRoot} from "../../src/structs/JBInboxTreeRoot.sol";
 import {JBMessageRoot} from "../../src/structs/JBMessageRoot.sol";
 import {JBPeerChainContext} from "../../src/structs/JBPeerChainContext.sol";
@@ -67,14 +68,16 @@ contract RegressionCCIPUntypedMessageRejectedTest is Test {
             token: bytes32(uint256(uint160(address(0xBEEF)))), decimals: 18, surplus: 1 ether, balance: 1 ether
         });
 
+        JBChainAccounting[] memory accounts = new JBChainAccounting[](1);
+        accounts[0] =
+            JBChainAccounting({chainId: REMOTE_CHAIN_ID, totalSupply: 1 ether, contexts: contexts, timestamp: 1});
+
         JBMessageRoot memory root = JBMessageRoot({
             version: 1,
             token: bytes32(uint256(uint160(address(0xBEEF)))),
             amount: 1 ether,
             remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(1))}),
-            sourceTotalSupply: 1 ether,
-            sourceContexts: contexts,
-            sourceTimestamp: 1
+            accounts: accounts
         });
 
         Client.Any2EVMMessage memory message = Client.Any2EVMMessage({
@@ -100,14 +103,14 @@ contract RegressionCCIPUntypedMessageRejectedTest is Test {
         vm.prank(ROUTER);
         sucker.ccipReceive(_makeAccountingMessage({snapshot: snapshot, destTokenAmountCount: 0}));
 
-        assertEq(sucker.peerChainTotalSupply(), 100 ether, "accounting supply");
-        assertEq(sucker.snapshotTimestamp(), 1, "accounting timestamp");
+        assertEq(sucker.peerChainTotalSupplyOf(REMOTE_CHAIN_ID), 100 ether, "accounting supply");
+        assertEq(sucker.snapshotTimestampOf(REMOTE_CHAIN_ID), 1, "accounting timestamp");
 
         JBInboxTreeRoot memory inbox = sucker.inboxOf(token);
         assertEq(inbox.nonce, 0, "accounting does not update inbox nonce");
         assertEq(inbox.root, bytes32(0), "accounting does not update inbox root");
 
-        (JBPeerChainContext[] memory contexts,,) = sucker.peerChainContextsOf();
+        (JBPeerChainContext[] memory contexts,) = sucker.peerChainContextsOf(REMOTE_CHAIN_ID);
         assertEq(contexts.length, 1, "one peer context");
         assertEq(contexts[0].currency, uint32(uint160(token)), "fallback currency");
         assertEq(contexts[0].decimals, 18, "decimals");
@@ -170,8 +173,11 @@ contract RegressionCCIPUntypedMessageRejectedTest is Test {
             token: bytes32(uint256(uint160(token))), decimals: 18, surplus: surplus, balance: balance
         });
 
-        return JBAccountingSnapshot({
-            version: 1, sourceTotalSupply: sourceTotalSupply, sourceContexts: contexts, sourceTimestamp: sourceTimestamp
+        JBChainAccounting[] memory accounts = new JBChainAccounting[](1);
+        accounts[0] = JBChainAccounting({
+            chainId: REMOTE_CHAIN_ID, totalSupply: sourceTotalSupply, contexts: contexts, timestamp: sourceTimestamp
         });
+
+        return JBAccountingSnapshot({version: 1, accounts: accounts});
     }
 }

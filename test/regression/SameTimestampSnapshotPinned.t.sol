@@ -11,6 +11,7 @@ import {LibClone} from "solady/src/utils/LibClone.sol";
 
 import "../../src/JBSucker.sol";
 import {IJBSuckerRegistry} from "../../src/interfaces/IJBSuckerRegistry.sol";
+import {JBChainAccounting} from "../../src/structs/JBChainAccounting.sol";
 import {JBInboxTreeRoot} from "../../src/structs/JBInboxTreeRoot.sol";
 import {JBMessageRoot} from "../../src/structs/JBMessageRoot.sol";
 import {JBPeerChainContext} from "../../src/structs/JBPeerChainContext.sol";
@@ -57,6 +58,10 @@ contract SameTimestampSnapshotPinnedTest is Test {
     uint8 internal constant ETH_DECIMALS = 18;
     address internal constant TOKEN = address(0xBEEF);
 
+    /// @dev The remote peer chain that records are attributed to. A record stamped with the receiver's own
+    /// `block.chainid` (or chain 0) is dropped, so the bundle must carry a distinct remote chain id.
+    uint256 internal constant REMOTE_CHAIN_ID = 42_161;
+
     SameTimestampSnapshotSucker internal sucker;
 
     function setUp() external {
@@ -87,8 +92,8 @@ contract SameTimestampSnapshotPinnedTest is Test {
 
         JBPeerChainContext memory context = _contextFor(_currencyOf(TOKEN));
 
-        assertEq(sucker.snapshotTimestamp(), 101, "freshness key advances within the same block");
-        assertEq(sucker.peerChainTotalSupply(), 100 ether, "later same-block supply update is applied");
+        assertEq(sucker.snapshotTimestampOf(REMOTE_CHAIN_ID), 101, "freshness key advances within the same block");
+        assertEq(sucker.peerChainTotalSupplyOf(REMOTE_CHAIN_ID), 100 ether, "later same-block supply update is applied");
         assertEq(context.surplus, 50 ether, "later same-block surplus update is applied");
         assertEq(context.balance, 70 ether, "later same-block balance update is applied");
     }
@@ -101,7 +106,7 @@ contract SameTimestampSnapshotPinnedTest is Test {
 
     /// @notice The stored peer context for a currency, reverting if none exists.
     function _contextFor(uint32 currency) internal view returns (JBPeerChainContext memory) {
-        (JBPeerChainContext[] memory contexts,,) = sucker.peerChainContextsOf();
+        (JBPeerChainContext[] memory contexts,) = sucker.peerChainContextsOf(REMOTE_CHAIN_ID);
         for (uint256 i; i < contexts.length; ++i) {
             if (contexts[i].currency == currency) return contexts[i];
         }
@@ -129,14 +134,17 @@ contract SameTimestampSnapshotPinnedTest is Test {
             balance: uint128(balance)
         });
 
+        JBChainAccounting[] memory accounts = new JBChainAccounting[](1);
+        accounts[0] = JBChainAccounting({
+            chainId: REMOTE_CHAIN_ID, totalSupply: totalSupply, contexts: contexts, timestamp: sourceTimestamp
+        });
+
         return JBMessageRoot({
             version: 1,
             token: bytes32(uint256(uint160(TOKEN))),
             amount: 0,
             remoteRoot: JBInboxTreeRoot({nonce: nonce, root: bytes32(uint256(nonce))}),
-            sourceTotalSupply: totalSupply,
-            sourceContexts: contexts,
-            sourceTimestamp: sourceTimestamp
+            accounts: accounts
         });
     }
 }

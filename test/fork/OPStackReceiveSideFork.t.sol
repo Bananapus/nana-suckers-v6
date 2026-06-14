@@ -13,7 +13,7 @@ import {IOPMessenger} from "../../src/interfaces/IOPMessenger.sol";
 import {IOPStandardBridge} from "../../src/interfaces/IOPStandardBridge.sol";
 import {JBInboxTreeRoot} from "../../src/structs/JBInboxTreeRoot.sol";
 import {JBMessageRoot} from "../../src/structs/JBMessageRoot.sol";
-import {JBSourceContext} from "../../src/structs/JBSourceContext.sol";
+import {JBChainAccounting} from "../../src/structs/JBChainAccounting.sol";
 import {JBConstants} from "@bananapus/core-v6/src/libraries/JBConstants.sol";
 
 /// @notice Receive-side fork coverage for the OP Stack sucker. Existing `ForkOPStack.t.sol` exercises the
@@ -77,17 +77,21 @@ contract OPStackReceiveSideFork is SuckerForkHelpers {
 
         // Registry fee call falls through cleanly when there's no registry.
         vm.mockCall(address(0), abi.encodeCall(IJBSuckerRegistry.toRemoteFee, ()), abi.encode(uint256(0)));
+        // Registry gossip set is empty when there's no registry (project's only sucker is the one under test).
+        vm.mockCall(
+            address(0),
+            abi.encodeWithSelector(IJBSuckerRegistry.peerChainAccountsOf.selector),
+            abi.encode(new JBChainAccounting[](0))
+        );
     }
 
-    function _buildRoot(uint64 nonce, bytes32 root) internal view returns (JBMessageRoot memory) {
+    function _buildRoot(uint64 nonce, bytes32 root) internal pure returns (JBMessageRoot memory) {
         return JBMessageRoot({
             version: 1,
             token: bytes32(uint256(uint160(JBConstants.NATIVE_TOKEN))),
             amount: 0,
             remoteRoot: JBInboxTreeRoot({nonce: nonce, root: root}),
-            sourceTotalSupply: 0,
-            sourceContexts: new JBSourceContext[](0),
-            sourceTimestamp: uint64(block.timestamp)
+            accounts: new JBChainAccounting[](0)
         });
     }
 

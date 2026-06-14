@@ -19,7 +19,7 @@ import "../../src/JBSucker.sol";
 import {JBLeaf} from "../../src/structs/JBLeaf.sol";
 import {JBClaim} from "../../src/structs/JBClaim.sol";
 import {JBMessageRoot} from "../../src/structs/JBMessageRoot.sol";
-import {JBSourceContext} from "../../src/structs/JBSourceContext.sol";
+import {JBChainAccounting} from "../../src/structs/JBChainAccounting.sol";
 import {JBInboxTreeRoot} from "../../src/structs/JBInboxTreeRoot.sol";
 import {IJBSucker} from "../../src/interfaces/IJBSucker.sol";
 import {IJBSuckerRegistry} from "../../src/interfaces/IJBSuckerRegistry.sol";
@@ -456,15 +456,13 @@ contract InboxRootRingTest is Test {
         vm.mockCall(CONTROLLER, abi.encodeWithSelector(IJBController.mintTokensOf.selector), abi.encode(uint256(0)));
     }
 
-    function _msgRoot(bytes32 root, uint64 nonce, uint256 sourceTs) internal pure returns (JBMessageRoot memory) {
+    function _msgRoot(bytes32 root, uint64 nonce, uint256) internal pure returns (JBMessageRoot memory) {
         return JBMessageRoot({
             version: 1,
             token: bytes32(uint256(uint160(JBConstants.NATIVE_TOKEN))),
             amount: 0,
             remoteRoot: JBInboxTreeRoot({nonce: nonce, root: root}),
-            sourceTotalSupply: 0,
-            sourceContexts: new JBSourceContext[](0),
-            sourceTimestamp: sourceTs
+            accounts: new JBChainAccounting[](0)
         });
     }
 

@@ -3,6 +3,8 @@ solc = '0.8.28'
 bytecode_hash = "none"
 evm_version = 'cancun'
 optimizer_runs = 200
+# The IR pipeline keeps the per-chain accounting suckers (Arbitrum, CCIP) under the EIP-170 runtime size limit.
+via_ir = true
 libs = ["node_modules", "lib"]
 fs_permissions = [{ access = "read-write", path = "./"}]
 # Archived, unused contracts (e.g. JBSwapCCIPSucker) and their tests live under `archive/` folders and are

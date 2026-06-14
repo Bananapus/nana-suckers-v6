@@ -27,7 +27,7 @@ import {JBClaim} from "../src/structs/JBClaim.sol";
 import {JBLeaf} from "../src/structs/JBLeaf.sol";
 import {JBInboxTreeRoot} from "../src/structs/JBInboxTreeRoot.sol";
 import {JBMessageRoot} from "../src/structs/JBMessageRoot.sol";
-import {JBSourceContext} from "../src/structs/JBSourceContext.sol";
+import {JBChainAccounting} from "../src/structs/JBChainAccounting.sol";
 import {JBRemoteToken} from "../src/structs/JBRemoteToken.sol";
 import {JBTokenMapping} from "../src/structs/JBTokenMapping.sol";
 import {MerkleLib} from "../src/utils/MerkleLib.sol";
@@ -239,6 +239,13 @@ contract SuckerDeepAttacks is Test {
 
         // Mock DIRECTORY.terminalsOf() so the per-context snapshot builder in _sendRoot() doesn't revert.
         vm.mockCall(DIRECTORY, abi.encodeCall(IJBDirectory.terminalsOf, (PROJECT_ID)), abi.encode(new IJBTerminal[](0)));
+
+        // Mock registry.peerChainAccountsOf() so the gossip gather in _sendRoot() returns an empty peer set.
+        vm.mockCall(
+            MOCK_REGISTRY,
+            abi.encodeWithSelector(IJBSuckerRegistry.peerChainAccountsOf.selector),
+            abi.encode(new JBChainAccounting[](0))
+        );
     }
 
     function _createTestSucker(uint256 projectId, bytes32 salt) internal returns (DeepAttackSucker) {
@@ -302,9 +309,7 @@ contract SuckerDeepAttacks is Test {
             token: bytes32(uint256(uint160(TOKEN))),
             amount: 1 ether,
             remoteRoot: JBInboxTreeRoot({nonce: 5, root: bytes32(uint256(0xbeef))}),
-            sourceTotalSupply: 0,
-            sourceContexts: new JBSourceContext[](0),
-            sourceTimestamp: 1
+            accounts: new JBChainAccounting[](0)
         });
 
         vm.prank(address(sucker)); // peer = address(this) for clones
@@ -324,9 +329,7 @@ contract SuckerDeepAttacks is Test {
             token: bytes32(uint256(uint160(TOKEN))),
             amount: 1 ether,
             remoteRoot: JBInboxTreeRoot({nonce: 3, root: bytes32(uint256(0xbeef))}),
-            sourceTotalSupply: 0,
-            sourceContexts: new JBSourceContext[](0),
-            sourceTimestamp: 1
+            accounts: new JBChainAccounting[](0)
         });
 
         vm.prank(address(sucker));
@@ -345,9 +348,7 @@ contract SuckerDeepAttacks is Test {
             token: bytes32(uint256(uint160(TOKEN))),
             amount: 1 ether,
             remoteRoot: JBInboxTreeRoot({nonce: 5, root: bytes32(uint256(0xbbb))}),
-            sourceTotalSupply: 0,
-            sourceContexts: new JBSourceContext[](0),
-            sourceTimestamp: 1
+            accounts: new JBChainAccounting[](0)
         });
 
         vm.prank(address(sucker));
@@ -370,9 +371,7 @@ contract SuckerDeepAttacks is Test {
             token: bytes32(uint256(uint160(TOKEN))),
             amount: 1 ether,
             remoteRoot: JBInboxTreeRoot({nonce: 2, root: bytes32(uint256(0xbbbb))}),
-            sourceTotalSupply: 0,
-            sourceContexts: new JBSourceContext[](0),
-            sourceTimestamp: 1
+            accounts: new JBChainAccounting[](0)
         });
 
         // Roots are accepted in DEPRECATED state to prevent stranding tokens that were sent
@@ -401,9 +400,7 @@ contract SuckerDeepAttacks is Test {
             token: bytes32(uint256(uint160(TOKEN))),
             amount: 1 ether,
             remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(0xabc))}),
-            sourceTotalSupply: 0,
-            sourceContexts: new JBSourceContext[](0),
-            sourceTimestamp: 1
+            accounts: new JBChainAccounting[](0)
         });
 
         vm.prank(address(sucker));
@@ -1530,9 +1527,7 @@ contract SuckerDeepAttacks is Test {
             token: bytes32(uint256(uint160(TOKEN))),
             amount: 1 ether,
             remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(0xbeef))}),
-            sourceTotalSupply: 0,
-            sourceContexts: new JBSourceContext[](0),
-            sourceTimestamp: 1
+            accounts: new JBChainAccounting[](0)
         });
 
         vm.expectRevert(
@@ -1549,9 +1544,7 @@ contract SuckerDeepAttacks is Test {
             token: bytes32(uint256(uint160(TOKEN))),
             amount: 1 ether,
             remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(0xbeef))}),
-            sourceTotalSupply: 0,
-            sourceContexts: new JBSourceContext[](0),
-            sourceTimestamp: 1
+            accounts: new JBChainAccounting[](0)
         });
 
         vm.expectRevert(
@@ -1568,9 +1561,7 @@ contract SuckerDeepAttacks is Test {
             token: bytes32(uint256(uint160(TOKEN))),
             amount: 0,
             remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(0xbeef))}),
-            sourceTotalSupply: 0,
-            sourceContexts: new JBSourceContext[](0),
-            sourceTimestamp: 1
+            accounts: new JBChainAccounting[](0)
         });
 
         vm.prank(address(sucker));
@@ -1594,9 +1585,7 @@ contract SuckerDeepAttacks is Test {
             token: bytes32(uint256(uint160(TOKEN))),
             amount: 1 ether,
             remoteRoot: JBInboxTreeRoot({nonce: 3, root: bytes32(uint256(0xbeef))}),
-            sourceTotalSupply: 0,
-            sourceContexts: new JBSourceContext[](0),
-            sourceTimestamp: 1
+            accounts: new JBChainAccounting[](0)
         });
 
         vm.expectEmit(true, false, false, true, address(sucker));
@@ -1727,9 +1716,7 @@ contract SuckerDeepAttacks is Test {
             token: bytes32(uint256(uint160(TOKEN))),
             amount: 1 ether,
             remoteRoot: JBInboxTreeRoot({nonce: 5, root: bytes32(uint256(0xbeef))}),
-            sourceTotalSupply: 0,
-            sourceContexts: new JBSourceContext[](0),
-            sourceTimestamp: 1
+            accounts: new JBChainAccounting[](0)
         });
 
         vm.expectEmit(true, false, false, true, address(sucker));

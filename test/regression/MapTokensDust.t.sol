@@ -10,6 +10,7 @@ import {LibClone} from "solady/src/utils/LibClone.sol";
 import {IJBTerminal} from "@bananapus/core-v6/src/interfaces/IJBTerminal.sol";
 import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import {IJBSuckerRegistry} from "../../src/interfaces/IJBSuckerRegistry.sol";
+import {JBChainAccounting} from "../../src/structs/JBChainAccounting.sol";
 
 /// @notice mapTokens msg.value dust from integer division.
 /// When `msg.value / numberToDisable` has a remainder, the dust wei must be refunded to the caller.
@@ -48,6 +49,13 @@ contract MapTokensDustTest is Test {
 
         // Mock DIRECTORY.terminalsOf() so the per-context snapshot builder in _sendRoot() doesn't revert.
         vm.mockCall(DIRECTORY, abi.encodeCall(IJBDirectory.terminalsOf, (projectId)), abi.encode(new IJBTerminal[](0)));
+
+        // Mock registry.peerChainAccountsOf() so the gossip gather in _sendRoot() returns an empty peer set.
+        vm.mockCall(
+            address(1),
+            abi.encodeWithSelector(IJBSuckerRegistry.peerChainAccountsOf.selector),
+            abi.encode(new JBChainAccounting[](0))
+        );
     }
 
     /// @notice When mapTokens disables multiple tokens and msg.value is not evenly divisible,
