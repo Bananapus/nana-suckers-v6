@@ -162,11 +162,10 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
     /// @notice The freshest accounting record per source chain that a project's suckers hold, for re-gossiping to a
     /// peer.
     /// @dev A sucker building an outbound gossip bundle calls this to gather the project's full cross-chain knowledge
-    /// —
-    /// the only place a hub chain's per-peer suckers are visible together — then prepends its own local record.
-    /// Records
-    /// are deduped per chain (freshest wins; an active sucker's record supersedes a deprecated one's), and the
-    /// destination chain and the local chain are excluded. Suckers and records that revert are silently skipped.
+    /// (the registry is the only place a hub chain's per-peer suckers are visible together), then prepends its own
+    /// local record. Records are deduped per chain (freshest wins; an active sucker's record supersedes a deprecated
+    /// one's), and the destination chain and the local chain are excluded. Suckers and records that revert are
+    /// silently skipped.
     /// @param projectId The ID of the project.
     /// @param exceptChainId The destination chain to exclude (it has authoritative data about itself).
     /// @return accounts The deduped raw accounting records, one per known source chain.
@@ -218,8 +217,8 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
     }
 
     /// @notice Values one peer chain's raw balance held by one sucker into a currency, with peer chain ID and
-    /// freshness. @dev Exposed as an external self-call boundary so `totalRemoteBalanceOf` can `try` it and drop a
-    /// single
+    /// freshness.
+    /// @dev Exposed as an external self-call boundary so `totalRemoteBalanceOf` can `try` it and drop a single
     /// (sucker, chain) whose price feed is missing without losing that sucker's other chains. A context whose currency
     /// already matches `currency` folds in at par (no feed read); a missing cross-currency feed reverts, and the
     /// aggregator catches it and skips just this (sucker, chain).
@@ -268,8 +267,8 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
     }
 
     /// @notice Values one peer chain's raw surplus held by one sucker into a currency, with peer chain ID and
-    /// freshness. @dev Exposed as an external self-call boundary so `totalRemoteSurplusOf` can `try` it and drop a
-    /// single
+    /// freshness.
+    /// @dev Exposed as an external self-call boundary so `totalRemoteSurplusOf` can `try` it and drop a single
     /// (sucker, chain) whose price feed is missing without losing that sucker's other chains. A context whose currency
     /// already matches `currency` folds in at par (no feed read); a missing cross-currency feed reverts, and the
     /// aggregator catches it and skips just this (sucker, chain).
@@ -665,14 +664,14 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
     }
 
     /// @notice Gathers each sucker's known peer chains and the total across them, to size per-chain aggregation
-    /// scratch. @dev Each sucker holds a record per source chain it has heard about, so the distinct-chain count can
-    /// exceed the
+    /// scratch.
+    /// @dev Each sucker holds a record per source chain it has heard about, so the distinct-chain count can exceed the
     /// sucker count. A sucker that reverts contributes no chains. The gathered arrays are reused by the caller's
     /// per-chain loop so `peerChainIds()` is read once per sucker.
     /// @param allSuckers The project's suckers (active and deprecated).
     /// @return chainIdsBySucker Each sucker's peer chain IDs, parallel to `allSuckers`; empty for a sucker that
-    /// reverts. @return totalChains The total number of (sucker, chain) entries — the upper bound on distinct peer
-    /// chains.
+    /// reverts.
+    /// @return totalChains The total number of (sucker, chain) entries, the upper bound on distinct peer chains.
     function _peerChainIdsBySucker(address[] memory allSuckers)
         internal
         view
