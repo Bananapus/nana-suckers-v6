@@ -5,10 +5,13 @@ import {IJBController} from "@bananapus/core-v6/src/interfaces/IJBController.sol
 import {IJBDirectory} from "@bananapus/core-v6/src/interfaces/IJBDirectory.sol";
 import {IJBMultiTerminal} from "@bananapus/core-v6/src/interfaces/IJBMultiTerminal.sol";
 import {IJBTerminal} from "@bananapus/core-v6/src/interfaces/IJBTerminal.sol";
+import {JBConstants} from "@bananapus/core-v6/src/libraries/JBConstants.sol";
 import {JBAccountingContext} from "@bananapus/core-v6/src/structs/JBAccountingContext.sol";
 import {JBRulesetMetadataResolver} from "@bananapus/core-v6/src/libraries/JBRulesetMetadataResolver.sol";
 import {JBRuleset} from "@bananapus/core-v6/src/structs/JBRuleset.sol";
 import {JBRulesetMetadata} from "@bananapus/core-v6/src/structs/JBRulesetMetadata.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {IERC165} from "@openzeppelin/contracts/utils/introspection/ERC165.sol";
 
 import {IJBPeerChainAdjustedAccounts} from "../interfaces/IJBPeerChainAdjustedAccounts.sol";
@@ -21,6 +24,11 @@ import {JBMessageRoot} from "../structs/JBMessageRoot.sol";
 import {JBPeerChainContext} from "../structs/JBPeerChainContext.sol";
 import {JBSourceContext} from "../structs/JBSourceContext.sol";
 import {MerkleLib} from "../utils/MerkleLib.sol";
+
+/// @notice Mirrors `JBSucker.JBSucker_UnexpectedTokenBalance` so `addToBalance` (run via DELEGATECALL) reverts with
+/// the identical selector when a terminal does not pull exactly the deposited amount. Declared here because a library
+/// cannot reference an error declared inside the calling contract.
+error JBSucker_UnexpectedTokenBalance(address token, uint256 expectedBalance, uint256 actualBalance);
 
 /// @notice Library with bytecode-heavy functions extracted from JBSucker to reduce child contract sizes.
 /// @dev These are `external` library functions, so they are deployed as a separate contract and called via
@@ -35,6 +43,51 @@ library JBSuckerLib {
     /// @notice The expected byte length returned by `IJBController.currentRulesetOf(...)`.
     /// @dev A V6 ruleset return value contains one `JBRuleset` (9 words) and one `JBRulesetMetadata` (19 words).
     uint256 internal constant _CURRENT_RULESET_OF_RETURN_BYTES = (9 + 19) * 32;
+
+    //*********************************************************************//
+    // ---------------------- external transactions ---------------------- //
+    //*********************************************************************//
+
+    /// @notice Deposit `amount` of `token` into the project's `terminal` balance, asserting the terminal pulled the
+    /// exact amount for ERC-20s.
+    /// @dev Extracted from `JBSucker._addToBalance` to keep the base — and so every sucker variant — under the
+    /// EIP-170 runtime size limit. Runs via DELEGATECALL, so the `{value:}` attachment, the allowance grant, and the
+    /// balance reads all act on the calling sucker's own address and ETH, identically to the inlined body. The caller
+    /// validates the addable amount and resolves the non-zero terminal before calling, so this performs only the
+    /// deposit and the fee-on-transfer / non-conforming-token balance assertion.
+    /// @param terminal The project's primary terminal for `token`.
+    /// @param token The terminal token to add (native or ERC-20).
+    /// @param amount The amount of terminal tokens to add.
+    /// @param projectId The project to credit.
+    function addToBalance(IJBTerminal terminal, address token, uint256 amount, uint256 projectId) external {
+        // Native and ERC-20 differ only in (a) value attachment to the call, and (b) ERC-20 requires an allowance
+        // grant + post-transfer balance assertion to catch fee-on-transfer / non-conforming tokens. The terminal call
+        // itself is identical for both, so it lives outside the branch.
+        uint256 nativeValue;
+        uint256 balanceBefore;
+        bool isErc20 = token != JBConstants.NATIVE_TOKEN;
+        if (isErc20) {
+            balanceBefore = IERC20(token).balanceOf(address(this));
+            SafeERC20.forceApprove({token: IERC20(token), spender: address(terminal), value: amount});
+        } else {
+            nativeValue = amount;
+        }
+
+        terminal.addToBalanceOf{value: nativeValue}({
+            projectId: projectId, token: token, amount: amount, shouldReturnHeldFees: false, memo: "", metadata: ""
+        });
+
+        if (isErc20) {
+            // The terminal must pull exactly `amount`; fee-on-transfer or non-conforming tokens are unsupported.
+            uint256 expectedBalance = balanceBefore - amount;
+            uint256 actualBalance = IERC20(token).balanceOf(address(this));
+            if (actualBalance != expectedBalance) {
+                revert JBSucker_UnexpectedTokenBalance({
+                    token: token, expectedBalance: expectedBalance, actualBalance: actualBalance
+                });
+            }
+        }
+    }
 
     //*********************************************************************//
     // ------------------------- external views -------------------------- //

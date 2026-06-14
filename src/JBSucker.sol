@@ -1169,38 +1169,10 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
             revert JBSucker_NoTerminalForToken({projectId: cachedProjectId, token: token});
         }
 
-        // Native and ERC-20 differ only in (a) value attachment to the call, and (b) ERC-20 requires an
-        // allowance grant + post-transfer balance assertion to catch fee-on-transfer / non-conforming tokens.
-        // The terminal call itself is identical for both, so it lives outside the branch.
-        uint256 nativeValue;
-        uint256 balanceBefore;
-        bool isErc20 = token != JBConstants.NATIVE_TOKEN;
-        if (isErc20) {
-            balanceBefore = IERC20(token).balanceOf(address(this));
-            SafeERC20.forceApprove({token: IERC20(token), spender: address(terminal), value: amount});
-        } else {
-            nativeValue = amount;
-        }
-
-        terminal.addToBalanceOf{value: nativeValue}({
-            projectId: cachedProjectId,
-            token: token,
-            amount: amount,
-            shouldReturnHeldFees: false,
-            memo: "",
-            metadata: ""
-        });
-
-        if (isErc20) {
-            // The terminal must pull exactly `amount`; fee-on-transfer or non-conforming tokens are unsupported.
-            uint256 expectedBalance = balanceBefore - amount;
-            uint256 actualBalance = IERC20(token).balanceOf(address(this));
-            if (actualBalance != expectedBalance) {
-                revert JBSucker_UnexpectedTokenBalance({
-                    token: token, expectedBalance: expectedBalance, actualBalance: actualBalance
-                });
-            }
-        }
+        // Perform the deposit (and the ERC-20 fee-on-transfer balance assertion) through the library to keep this
+        // contract under the EIP-170 size limit. Run via DELEGATECALL, so the `{value:}` attachment, the allowance
+        // grant, and the balance reads all act on this sucker — identical to performing them inline.
+        JBSuckerLib.addToBalance({terminal: terminal, token: token, amount: amount, projectId: cachedProjectId});
     }
 
     /// @notice Actions to perform after a user has successfully proven their claim.
