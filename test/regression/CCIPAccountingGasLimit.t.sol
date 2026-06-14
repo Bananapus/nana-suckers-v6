@@ -76,13 +76,13 @@ contract CCIPGasLimitSuckerHarness is JBCCIPSucker {
         JBCCIPSucker(deployer, directory, permissions, tokens, 1, IJBSuckerRegistry(address(1)), address(0))
     {}
 
-    function test_ccipGasLimitFor(uint256 sourceContextCount) external pure returns (uint256) {
+    function test_messagingGasLimit(uint256 sourceContextCount) external pure returns (uint256) {
         // Wrap the contexts in a single-record bundle; the gas budget sums contexts across every record.
         JBChainAccounting[] memory accounts = new JBChainAccounting[](1);
         accounts[0] = JBChainAccounting({
             chainId: 1, totalSupply: 0, contexts: new JBSourceContext[](sourceContextCount), timestamp: 0
         });
-        return _ccipGasLimitFor({accounts: accounts});
+        return _messagingGasLimit({accounts: accounts});
     }
 
     function test_sendAccountingSnapshot(
@@ -150,7 +150,7 @@ contract CCIPAccountingGasLimitTest is Test {
         });
 
         assertEq(router.lastDestinationChainSelector(), REMOTE_CHAIN_SELECTOR, "destination selector");
-        assertEq(router.lastGasLimit(), sucker.test_ccipGasLimitFor(sourceContextCount), "accounting gas limit");
+        assertEq(router.lastGasLimit(), sucker.test_messagingGasLimit(sourceContextCount), "accounting gas limit");
         assertEq(router.lastMsgValue(), TRANSPORT_PAYMENT, "native fee paid");
         assertEq(router.lastTokenAmountCount(), 0, "no token transfer");
     }
@@ -179,7 +179,7 @@ contract CCIPAccountingGasLimitTest is Test {
         });
 
         assertEq(
-            router.lastGasLimit(), sucker.test_ccipGasLimitFor(sourceContextCount) + remoteTokenGas, "root gas limit"
+            router.lastGasLimit(), sucker.test_messagingGasLimit(sourceContextCount) + remoteTokenGas, "root gas limit"
         );
         assertEq(router.lastMsgValue(), TRANSPORT_PAYMENT, "native fee paid");
         assertEq(router.lastTokenAmountCount(), 1, "token transfer");

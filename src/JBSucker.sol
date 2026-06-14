@@ -185,6 +185,12 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     /// double-spend guard.
     uint256 internal constant _INBOX_ROOT_RING_SIZE = 4;
 
+    /// @notice Extra destination gas budgeted per source accounting context carried in a gossip bundle.
+    /// @dev Covers the receiver's per-context storage writes in `_storeChainAccounting`, so the messaging gas limit
+    /// scales with the bundle (via `_messagingGasLimit`) instead of a fixed cap that would bound how large the
+    /// cross-chain mesh can grow before the destination call runs out of gas.
+    uint256 internal constant _MESSENGER_SOURCE_CONTEXT_GAS_LIMIT = 75_000;
+
     /// @notice The depth of the merkle tree used to store the outbox and inbox.
     uint32 internal constant _TREE_DEPTH = 32;
 
@@ -1896,6 +1902,25 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     /// @return The maximum time it takes for a message to be received on the other side.
     function _maxMessagingDelay() internal pure virtual returns (uint40) {
         return 14 days;
+    }
+
+    /// @notice The destination gas limit a gossip-carrying message needs to store its bundle on the remote chain.
+    /// @dev A fixed base (`MESSENGER_BASE_GAS_LIMIT`) plus `_MESSENGER_SOURCE_CONTEXT_GAS_LIMIT` per source context, so
+    /// the budget grows with the bundle. Without this, a fixed cap would bound the mesh: once the bundle's contexts
+    /// exceed the cap, the destination `fromRemote`/`fromRemoteAccounting` runs out of gas. Every bridge variant sizes
+    /// its outbound gas limit from this so the OP-stack, Arbitrum, and CCIP suckers scale identically.
+    /// @param accounts The accounting records carried by the message.
+    /// @return gasLimit The destination gas limit to request from the bridge.
+    function _messagingGasLimit(JBChainAccounting[] memory accounts) internal pure returns (uint256 gasLimit) {
+        uint256 contextCount;
+        uint256 numAccounts = accounts.length;
+        for (uint256 i; i < numAccounts;) {
+            contextCount += accounts[i].contexts.length;
+            unchecked {
+                ++i;
+            }
+        }
+        return MESSENGER_BASE_GAS_LIMIT + (contextCount * _MESSENGER_SOURCE_CONTEXT_GAS_LIMIT);
     }
 
     /// @notice The calldata. Preferred to use over `msg.data`.

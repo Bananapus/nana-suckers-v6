@@ -112,11 +112,13 @@ contract JBArbitrumSucker is JBSucker, IJBArbitrumSucker {
     }
 
     /// @notice Helper to create the retryable ticket, avoiding stack-too-deep.
+    /// @param gasLimit The destination L2 gas to provision, scaled to the message's gossip bundle.
     function _createRetryableTicket(
         uint256 callTransportCost,
         uint256 nativeValue,
         uint256 maxSubmissionCost,
         uint256 maxFeePerGas,
+        uint256 gasLimit,
         bytes memory data
     )
         internal
@@ -128,7 +130,7 @@ contract JBArbitrumSucker is JBSucker, IJBArbitrumSucker {
             maxSubmissionCost: maxSubmissionCost,
             excessFeeRefundAddress: _msgSender(),
             callValueRefundAddress: peerAddress,
-            gasLimit: MESSENGER_BASE_GAS_LIMIT,
+            gasLimit: gasLimit,
             maxFeePerGas: maxFeePerGas,
             data: data
         });
@@ -158,7 +160,8 @@ contract JBArbitrumSucker is JBSucker, IJBArbitrumSucker {
                 transportPayment: transportPayment,
                 amount: 0,
                 data: data,
-                remoteToken: remoteToken
+                remoteToken: remoteToken,
+                gasLimit: _messagingGasLimit({accounts: snapshot.accounts})
             });
         } else {
             // L2→L1 via ArbSys is free — reject any transport payment.
@@ -191,7 +194,12 @@ contract JBArbitrumSucker is JBSucker, IJBArbitrumSucker {
             // L1→L2 requires transport payment for retryable tickets.
             if (transportPayment == 0) revert JBSucker_ExpectedMsgValue({msgValue: transportPayment});
             _toL2({
-                token: token, transportPayment: transportPayment, amount: amount, data: data, remoteToken: remoteToken
+                token: token,
+                transportPayment: transportPayment,
+                amount: amount,
+                data: data,
+                remoteToken: remoteToken,
+                gasLimit: _messagingGasLimit({accounts: message.accounts})
             });
         } else {
             // L2→L1 via ArbSys is free — reject any transport payment.
@@ -255,12 +263,14 @@ contract JBArbitrumSucker is JBSucker, IJBArbitrumSucker {
     /// @param token The token to bridge.
     /// @param amount The amount of tokens to bridge.
     /// @param data The calldata to send to the remote chain. This calls `JBSucker.fromRemote` on the remote peer.
+    /// @param gasLimit The destination L2 gas to provision, scaled to the message's gossip bundle.
     function _toL2(
         address token,
         uint256 transportPayment,
         uint256 amount,
         bytes memory data,
-        JBRemoteToken memory remoteToken
+        JBRemoteToken memory remoteToken,
+        uint256 gasLimit
     )
         internal
     {
@@ -273,8 +283,9 @@ contract JBArbitrumSucker is JBSucker, IJBArbitrumSucker {
             maxSubmissionCost =
                 ARBINBOX.calculateRetryableSubmissionFee({dataLength: data.length, baseFee: maxFeePerGas});
 
-            // Tracks the cost for the call to the remote peer.
-            callTransportCost = maxSubmissionCost + (MESSENGER_BASE_GAS_LIMIT * maxFeePerGas);
+            // Tracks the cost for the call to the remote peer. Scaled to the bundle so a larger mesh's accounting
+            // store does not run out of gas on the destination.
+            callTransportCost = maxSubmissionCost + (gasLimit * maxFeePerGas);
         }
 
         // If the token is an ERC-20, bridge it to the peer.
@@ -351,6 +362,7 @@ contract JBArbitrumSucker is JBSucker, IJBArbitrumSucker {
             nativeValue: nativeValue,
             maxSubmissionCost: maxSubmissionCost,
             maxFeePerGas: maxFeePerGas,
+            gasLimit: gasLimit,
             data: data
         });
     }

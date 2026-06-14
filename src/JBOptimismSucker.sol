@@ -7,6 +7,7 @@ import {IJBTokens} from "@bananapus/core-v6/src/interfaces/IJBTokens.sol";
 import {JBConstants} from "@bananapus/core-v6/src/libraries/JBConstants.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 
 import {JBSucker} from "./JBSucker.sol";
 import {JBOptimismSuckerDeployer} from "./deployers/JBOptimismSuckerDeployer.sol";
@@ -102,7 +103,8 @@ contract JBOptimismSucker is JBSucker, IJBOptimismSucker {
         OPMESSENGER.sendMessage({
             target: _toAddress(peer()),
             message: abi.encodeCall(JBSucker.fromRemoteAccounting, (snapshot)),
-            gasLimit: MESSENGER_BASE_GAS_LIMIT
+            // Scale the destination gas with the bundle so a larger mesh's accounting still stores in one relay.
+            gasLimit: SafeCast.toUint32(_messagingGasLimit({accounts: snapshot.accounts}))
         });
     }
 
@@ -160,7 +162,8 @@ contract JBOptimismSucker is JBSucker, IJBOptimismSucker {
         OPMESSENGER.sendMessage{value: nativeValue}({
             target: peerAddress,
             message: abi.encodeCall(JBSucker.fromRemote, (message)),
-            gasLimit: MESSENGER_BASE_GAS_LIMIT
+            // Scale the destination gas with the bundle so a larger mesh's accounting still stores in one relay.
+            gasLimit: SafeCast.toUint32(_messagingGasLimit({accounts: message.accounts}))
         });
     }
 }

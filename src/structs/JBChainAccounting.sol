@@ -8,8 +8,13 @@ import {JBSourceContext} from "./JBSourceContext.sol";
 /// the originating chain's own freshness key. The receiving chain stores the freshest record per source chain, so a
 /// project's accounting propagates across a hub-and-spoke sucker mesh (L2s bridged only through mainnet) without a
 /// direct sucker between every pair of chains. `contexts` carry the source chain's own token addresses, so each
-/// receiver resolves them to its own local currencies independently; a record is only ever as trustworthy as the
-/// source chain's own sucker, exactly as for the directly-paired peer.
+/// receiver resolves them to its own local currencies independently. Trust is transitive across the mesh: a receiver
+/// authenticates only the directly-bridged peer that delivers a bundle, not the origin of each forwarded record, so
+/// any authenticated peer can forward a record for any other chain. A record is therefore only as trustworthy as the
+/// project's same-address sucker invariant — the same CREATE2 same-bytecode assumption every paired sucker already
+/// relies on — and a peer running adversarial bytecode could forge another chain's record. The freshest-per-chain
+/// gate bounds rollback, not authorship; the supply view it feeds is clamped downstream by each chain's own local
+/// surplus, so a forged record cannot by itself over-credit a cash out.
 /// @custom:member chainId The source chain this record describes. A receiver ignores a record for its own chain, since
 /// it reads its own local accounting directly.
 /// @custom:member totalSupply The total token supply (including reserved tokens) on the source chain when the record
