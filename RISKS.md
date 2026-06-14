@@ -58,7 +58,17 @@ This file focuses on the bridge-like risks in the sucker system: merkle-root pro
   ETH (from failed Arbitrum retryable tickets) and stale native deliveries correctly become project-claimable. The
   tradeoff is that an Arbitrum root whose own ERC-20 leg is delayed can become claimable once another batch's ERC-20
   leg lands, shifting claim timing between beneficiaries. The project is still the ultimate beneficiary and unbacked
-  minting is blocked by the balance check.
+  minting is blocked by the balance check. Because `fromRemote` accepts the freshest root (nonce gaps allowed) and the
+  outbox tree is append-only, *any* leaf contained in an accepted root is claimable from this shared pool whether or
+  not its own delivery has arrived — so claims are effectively first-come-first-served against arrived funds. If a
+  delivery is merely delayed this nets out (every beneficiary is eventually paid); if a delivery is **permanently**
+  lost, the pool stays short and the shortfall lands on whichever beneficiary claims last, not on the one whose
+  delivery was lost. This is an **accepted, audit-reviewed limitation** (independently surfaced by external review).
+  Two fixes were considered and deferred: (a) track cumulative funding per token and gate value-bearing roots on
+  `amountToAddToBalanceOf(token) >= cumulativeSent − cumulativeClaimed`; (b) require strictly sequential value-bearing
+  roots (`nonce == inbox.nonce + 1`). Neither is adopted: (b) sacrifices the deliberate out-of-order-delivery
+  resilience above, (a) adds accounting to the claim hot path, and in normal operation the pool nets out while a
+  permanent loss on a canonical bridge is rare. Revisit if a concrete loss path emerges.
 - **`fromRemote` does not revert on stale nonce.** By design, stale/duplicate messages are silently ignored (emitting `StaleRootRejected`). This prevents fund loss on native token transfers where reverting would lose the ETH, but means monitoring must watch for this event to detect bridge issues.
 
 ## 4. Token mapping risks
