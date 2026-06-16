@@ -610,7 +610,7 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
         return ERC2771Context._contextSuffixLength();
     }
 
-    /// @notice Reads one sucker's raw records and folds each into the per-chain gather scratch.
+    /// @notice Reads one sucker's locally-keyed records and folds each into the per-chain gather scratch.
     /// @dev Extracted from `peerChainAccountsOf` to keep its stack shallow. A sucker that reverts contributes nothing.
     /// The destination chain, the local chain, and chain 0 are excluded.
     /// @param scratch The per-chain gather scratch to fold records into.
@@ -706,8 +706,8 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
         scratch.hasActiveValue = new bool[](len);
     }
 
-    /// @notice Records one source chain's raw accounting record into a per-chain gather scratch, keeping the freshest.
-    /// @dev Mirrors `_recordPeerValue`'s selection rule for raw records: an active sucker's record supersedes a
+    /// @notice Records one source chain's accounting record into a per-chain gather scratch, keeping the freshest.
+    /// @dev Mirrors `_recordPeerValue`'s selection rule for gathered records: an active sucker's record supersedes a
     /// deprecated one's for the same chain; among same-state records the strictly-fresher timestamp wins; equal
     /// freshness keeps the first writer, since records from one origin chain at one freshness key are identical. Used
     /// to gather records for re-gossiping.

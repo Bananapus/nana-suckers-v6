@@ -5,22 +5,27 @@ import {IJBController} from "@bananapus/core-v6/src/interfaces/IJBController.sol
 import {IJBDirectory} from "@bananapus/core-v6/src/interfaces/IJBDirectory.sol";
 import {IJBMultiTerminal} from "@bananapus/core-v6/src/interfaces/IJBMultiTerminal.sol";
 import {IJBTerminal} from "@bananapus/core-v6/src/interfaces/IJBTerminal.sol";
-import {JBAccountingContext} from "@bananapus/core-v6/src/structs/JBAccountingContext.sol";
 import {JBRulesetMetadataResolver} from "@bananapus/core-v6/src/libraries/JBRulesetMetadataResolver.sol";
+import {JBAccountingContext} from "@bananapus/core-v6/src/structs/JBAccountingContext.sol";
 import {JBRuleset} from "@bananapus/core-v6/src/structs/JBRuleset.sol";
 import {JBRulesetMetadata} from "@bananapus/core-v6/src/structs/JBRulesetMetadata.sol";
 import {IERC165} from "@openzeppelin/contracts/utils/introspection/ERC165.sol";
 
+// Local: interfaces (alphabetized)
 import {IJBPeerChainAdjustedAccounts} from "../interfaces/IJBPeerChainAdjustedAccounts.sol";
 import {IJBSuckerRegistry} from "../interfaces/IJBSuckerRegistry.sol";
+
+// Local: libraries (alphabetized)
 import {JBPeerChainAdjustedAccountsLib} from "./JBPeerChainAdjustedAccountsLib.sol";
+import {MerkleLib} from "../utils/MerkleLib.sol";
+
+// Local: structs (alphabetized)
 import {JBAccountingSnapshot} from "../structs/JBAccountingSnapshot.sol";
 import {JBChainAccounting} from "../structs/JBChainAccounting.sol";
 import {JBInboxTreeRoot} from "../structs/JBInboxTreeRoot.sol";
 import {JBMessageRoot} from "../structs/JBMessageRoot.sol";
 import {JBPeerChainContext} from "../structs/JBPeerChainContext.sol";
 import {JBSourceContext} from "../structs/JBSourceContext.sol";
-import {MerkleLib} from "../utils/MerkleLib.sol";
 
 /// @notice Library with bytecode-heavy functions extracted from JBSucker to reduce child contract sizes.
 /// @dev These are `external` library functions, so they are deployed as a separate contract and called via
@@ -186,23 +191,20 @@ library JBSuckerLib {
         }
     }
 
-    /// @notice Folds a peer chain's raw source contexts into per-currency surplus and balance, resolving each to a
-    /// local currency.
+    /// @notice Folds a peer chain's source contexts into per-currency surplus and balance.
     /// @dev Extracted from `JBSucker.peerChainContextsOf` to reduce child contract bytecode. Called via DELEGATECALL.
-    /// Each `localTokens[i]` is the local token the sucker resolved `rawContexts[i].token` to (via its token mapping or
-    /// identity); this derives that token's authoritative accounting-context currency and merges entries that share
-    /// BOTH currency AND decimals. The accounting-context currency is immutable, so re-resolving on each read is safe.
-    /// Entries that share a currency but carry different decimals stay separate, since the raw amounts are on different
-    /// scales. No price oracle is consulted.
+    /// The caller stores mapped remote-token keys in its local token namespace before this runs. This derives each
+    /// token's authoritative accounting-context currency and merges entries that share BOTH currency AND decimals. The
+    /// accounting-context currency is immutable, so re-resolving on each read is safe. Entries that share a currency
+    /// but carry different decimals stay separate, since the raw amounts are on different scales. No price oracle is
+    /// consulted.
     /// @param directory The JB directory to look up the project's terminals.
     /// @param projectId The project whose accounting contexts to read.
-    /// @param localTokens The local token each raw context resolves to, parallel to `rawContexts`.
-    /// @param rawContexts The peer chain's raw per-context surplus and balance.
+    /// @param rawContexts The peer chain's per-context surplus and balance.
     /// @return contexts The per-currency surplus and balance for the chain.
     function foldPeerContexts(
         IJBDirectory directory,
         uint256 projectId,
-        address[] memory localTokens,
         JBSourceContext[] memory rawContexts
     )
         external
@@ -219,7 +221,8 @@ library JBSuckerLib {
             uint8 ctxDecimals = rawContexts[i].decimals;
             uint128 ctxSurplus = rawContexts[i].surplus;
             uint128 ctxBalance = rawContexts[i].balance;
-            uint32 ctxCurrency = _currencyOf({directory: directory, projectId: projectId, token: localTokens[i]});
+            address token = address(uint160(uint256(rawContexts[i].token)));
+            uint32 ctxCurrency = _currencyOf({directory: directory, projectId: projectId, token: token});
 
             // Fold into an existing entry that matches on BOTH currency AND decimals, or append a new one.
             bool merged;
@@ -265,7 +268,8 @@ library JBSuckerLib {
     /// peer records are gathered from the registry, which is the only contract that sees a hub chain's per-peer
     /// suckers together; it dedups them to the freshest per chain. A reverting or unset registry yields a local-only
     /// bundle, so a standalone sucker still propagates its own record. Forwarded peer records keep their own origin
-    /// chain and freshness key so the receiver gates each chain independently.
+    /// chain and freshness key, while their context token keys are already localized by the sucker they were gathered
+    /// from so the receiver only needs its mapping to the direct peer's token.
     /// @param directory The JB directory to look up controllers and terminals.
     /// @param registry The sucker registry that aggregates the project's per-chain records.
     /// @param projectId The project to snapshot.
@@ -297,7 +301,7 @@ library JBSuckerLib {
             peers = gathered;
         } catch {}
 
-        // The local record leads; forwarded peer records follow verbatim, keeping their own origin chain and freshness.
+        // The local record leads; forwarded peer records follow, keeping their own origin chain and freshness.
         accounts = new JBChainAccounting[](peers.length + 1);
         accounts[0] = JBChainAccounting({
             chainId: block.chainid, totalSupply: localTotalSupply, contexts: localContexts, timestamp: sourceTimestamp

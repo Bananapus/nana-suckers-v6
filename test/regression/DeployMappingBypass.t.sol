@@ -56,9 +56,10 @@ contract DeployMappingBypassTest is DeployerTests {
 
         vm.chainId(10);
         vm.prank(operator);
-        address[] memory suckers = registry.deploySuckersFor({
-            projectId: projectId, salt: bytes32("deploy-mapping"), configurations: configurations
-        });
+        // forge-lint: disable-next-line(unsafe-typecast)
+        bytes32 salt = bytes32("deploy-mapping");
+        address[] memory suckers =
+            registry.deploySuckersFor({projectId: projectId, salt: salt, configurations: configurations});
 
         JBRemoteToken memory remote = IJBSucker(suckers[0]).remoteTokenFor(JBConstants.NATIVE_TOKEN);
         assertTrue(remote.enabled);

@@ -112,6 +112,7 @@ contract RegressionCCIPUntypedMessageRejectedTest is Test {
 
         (JBPeerChainContext[] memory contexts,) = sucker.peerChainContextsOf(REMOTE_CHAIN_ID);
         assertEq(contexts.length, 1, "one peer context");
+        // forge-lint: disable-next-line(unsafe-typecast)
         assertEq(contexts[0].currency, uint32(uint160(token)), "fallback currency");
         assertEq(contexts[0].decimals, 18, "decimals");
         assertEq(contexts[0].surplus, 11 ether, "surplus");

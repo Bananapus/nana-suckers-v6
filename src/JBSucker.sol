@@ -332,12 +332,12 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     /// project's chain count.
     uint256[] private _peerChainIds;
 
-    /// @notice Each peer chain's raw, un-valued per-context surplus and balance from its latest accepted record.
-    /// @dev Stored exactly as received — in the source chain's own token addresses and decimals — so the record can
-    /// be
-    /// re-gossiped to other chains faithfully and resolved to local currencies at read time. A fresher record for a
-    /// chain replaces that chain's set from scratch; a context dropped by the fresher record simply vanishes.
-    /// @custom:param chainId The peer chain to read the raw contexts of.
+    /// @notice Each peer chain's un-valued per-context surplus and balance from its latest accepted record.
+    /// @dev Stored in this sucker's token namespace where a remote-token mapping exists; unmapped tokens stay as
+    /// received. `peerChainContextsOf` resolves these token keys for local valuation.
+    /// A fresher record for a chain replaces that chain's set from scratch; a context dropped by the fresher record
+    /// simply vanishes.
+    /// @custom:param chainId The peer chain to read the contexts of.
     mapping(uint256 chainId => JBSourceContext[]) private _peerContextsOf;
 
     //*********************************************************************//
@@ -882,11 +882,11 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         return _outboxOf[token];
     }
 
-    /// @notice The raw, un-valued accounting record this sucker holds for every peer chain it has heard about.
-    /// @dev The registry reads this to gather a project's full cross-chain knowledge and re-gossip it. Records are
-    /// returned exactly as received (in each source chain's own token addresses and decimals) so the next receiver
-    /// resolves them to its own local currencies independently.
-    /// @return accounts One raw accounting record per known peer chain.
+    /// @notice The un-valued accounting record this sucker holds for every peer chain it has heard about.
+    /// @dev The registry reads this to gather a project's full cross-chain knowledge and re-gossip it. Incoming
+    /// contexts are stored in this sucker's token namespace where a mapping exists, so a hub forwards sibling-chain
+    /// accounting in hub-local token terms and the next spoke only needs its mapping to the hub token.
+    /// @return accounts One accounting record per known peer chain.
     function peerChainAccountsOf() external view returns (JBChainAccounting[] memory accounts) {
         uint256[] storage chainIds = _peerChainIds;
         uint256 numChains = chainIds.length;
@@ -907,10 +907,10 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
 
     /// @notice One peer chain's per-currency surplus and balance from its latest accepted record, plus that record's
     /// freshness key.
-    /// @dev Resolves each raw stored context to its local currency and folds same-currency, same-decimals entries
-    /// together. The result is un-valued — the registry values each context into a requested currency; the sucker
-    /// consults no price oracle. Contexts that share a currency but carry different decimals are kept separate because
-    /// the raw amounts are on different scales and cannot be summed directly.
+    /// @dev Stored contexts are already keyed in this sucker's token namespace where a mapping exists. This folds
+    /// same-currency, same-decimals entries together. The result is un-valued — the registry values each context into
+    /// a requested currency; the sucker consults no price oracle. Contexts that share a currency but carry different
+    /// decimals are kept separate because the raw amounts are on different scales and cannot be summed directly.
     /// @param chainId The peer chain to read the contexts of.
     /// @return contexts The per-currency surplus and balance for the chain.
     /// @return snapshot The source freshness key of the chain's latest accepted record.
@@ -919,25 +919,8 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         view
         returns (JBPeerChainContext[] memory contexts, uint256 snapshot)
     {
-        JBSourceContext[] storage rawContexts = _peerContextsOf[chainId];
-        uint256 numRaw = rawContexts.length;
-
-        // Copy the raw contexts to memory and resolve each source-local token to a local token (mapping first, identity
-        // fallback). The bytecode-heavy currency resolution and fold then run in the library.
-        JBSourceContext[] memory raw = new JBSourceContext[](numRaw);
-        address[] memory localTokens = new address[](numRaw);
-        for (uint256 i; i < numRaw;) {
-            JBSourceContext storage ctx = rawContexts[i];
-            raw[i] = ctx;
-            address contextToken = _localTokenForRemoteToken[ctx.token];
-            localTokens[i] = contextToken == address(0) ? _toAddress(ctx.token) : contextToken;
-            unchecked {
-                ++i;
-            }
-        }
-
         contexts = JBSuckerLib.foldPeerContexts({
-            directory: DIRECTORY, projectId: projectId(), localTokens: localTokens, rawContexts: raw
+            directory: DIRECTORY, projectId: projectId(), rawContexts: _peerContextsOf[chainId]
         });
         snapshot = snapshotTimestampOf[chainId];
     }
@@ -1600,12 +1583,13 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     /// @notice Store one source chain's accounting record if it is fresher than the one already held for that chain.
     /// @dev A record for the local chain is ignored — a chain reads its own accounting directly. Each peer chain is
     /// gated independently on a strictly-newer freshness key, so a stale relay cannot roll back any chain and records
-    /// delivered out of order converge. Contexts are stored raw (in the source chain's own token addresses) so the
-    /// record can be re-gossiped faithfully; each receiver resolves them to its own local currencies at read time.
+    /// delivered out of order converge. Any source token that matches this sucker's remote-token mapping is re-keyed
+    /// to this sucker's local token before storage, so forwarded records are already in the current hop's token
+    /// namespace.
     /// @param chainId The source chain the record describes.
     /// @param sourceTimestamp The record's source-chain freshness key.
     /// @param sourceTotalSupply The source chain's total project-token supply.
-    /// @param sourceContexts The source chain's raw per-context surplus and balance.
+    /// @param sourceContexts The source chain's per-context surplus and balance.
     function _storeChainAccounting(
         uint256 chainId,
         uint256 sourceTimestamp,
@@ -1634,15 +1618,17 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
             _peerChainIds.push(chainId);
         }
 
-        // Rebuild this chain's raw context set from scratch. A context dropped by the fresher record is simply absent.
-        // Each context is stored verbatim so it can be re-gossiped faithfully; folding to a local currency happens at
-        // read time in `peerChainContextsOf`.
+        // Rebuild this chain's context set from scratch. A context dropped by the fresher record is simply absent.
+        // Each context keeps its source amount and decimals, while its token key is localized for this hop when a
+        // mapping exists.
         delete _peerContextsOf[chainId];
         JBSourceContext[] storage storedContexts = _peerContextsOf[chainId];
 
         uint256 numContexts = sourceContexts.length;
         for (uint256 i; i < numContexts;) {
             storedContexts.push(sourceContexts[i]);
+            address localToken = _localTokenForRemoteToken[sourceContexts[i].token];
+            if (localToken != address(0)) storedContexts[i].token = bytes32(uint256(uint160(localToken)));
             unchecked {
                 ++i;
             }

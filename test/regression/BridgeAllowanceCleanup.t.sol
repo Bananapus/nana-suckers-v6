@@ -51,6 +51,7 @@ contract PartialPullCCIPRouter is ICCIPRouter {
 
     function ccipSend(uint64, Client.EVM2AnyMessage calldata message) external payable override returns (bytes32) {
         if (message.feeToken != address(0)) {
+            // forge-lint: disable-next-line(erc20-unchecked-transfer)
             IERC20(message.feeToken).transferFrom(msg.sender, address(this), fee / 2);
         }
 

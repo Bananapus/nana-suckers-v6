@@ -61,6 +61,7 @@ contract RecordingCCIPRouter is ICCIPRouter {
     }
 
     function _gasLimitFrom(bytes calldata extraArgs) private pure returns (uint256 gasLimit) {
+        // forge-lint: disable-next-line(unsafe-typecast)
         assert(bytes4(extraArgs) == Client.EVM_EXTRA_ARGS_V1_TAG);
         return abi.decode(extraArgs[4:], (uint256));
     }
@@ -166,6 +167,7 @@ contract CCIPAccountingGasLimitTest is Test {
         JBRemoteToken memory remoteToken = JBRemoteToken({
             enabled: true,
             emergencyHatch: false,
+            // forge-lint: disable-next-line(unsafe-typecast)
             minGas: uint32(remoteTokenGas),
             addr: bytes32(uint256(uint160(makeAddr("remoteToken"))))
         });
@@ -236,9 +238,12 @@ contract CCIPAccountingGasLimitTest is Test {
 
         for (uint256 i; i < sourceContextCount;) {
             sourceContexts[i] = JBSourceContext({
+                // forge-lint: disable-next-line(unsafe-typecast)
                 token: bytes32(uint256(uint160(0xBEEF + i))),
                 decimals: 18,
+                // forge-lint: disable-next-line(unsafe-typecast)
                 surplus: uint128(1 ether + i),
+                // forge-lint: disable-next-line(unsafe-typecast)
                 balance: uint128(2 ether + i)
             });
 

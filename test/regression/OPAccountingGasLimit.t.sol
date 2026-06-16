@@ -167,9 +167,12 @@ contract OPAccountingGasLimitTest is Test {
 
         for (uint256 i; i < sourceContextCount;) {
             sourceContexts[i] = JBSourceContext({
+                // forge-lint: disable-next-line(unsafe-typecast)
                 token: bytes32(uint256(uint160(0xBEEF + i))),
                 decimals: 18,
+                // forge-lint: disable-next-line(unsafe-typecast)
                 surplus: uint128(1 ether + i),
+                // forge-lint: disable-next-line(unsafe-typecast)
                 balance: uint128(2 ether + i)
             });
 
