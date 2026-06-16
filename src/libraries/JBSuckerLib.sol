@@ -11,15 +11,12 @@ import {JBRuleset} from "@bananapus/core-v6/src/structs/JBRuleset.sol";
 import {JBRulesetMetadata} from "@bananapus/core-v6/src/structs/JBRulesetMetadata.sol";
 import {IERC165} from "@openzeppelin/contracts/utils/introspection/ERC165.sol";
 
-// Local: interfaces (alphabetized)
 import {IJBPeerChainAdjustedAccounts} from "../interfaces/IJBPeerChainAdjustedAccounts.sol";
 import {IJBSuckerRegistry} from "../interfaces/IJBSuckerRegistry.sol";
 
-// Local: libraries (alphabetized)
 import {JBPeerChainAdjustedAccountsLib} from "./JBPeerChainAdjustedAccountsLib.sol";
 import {MerkleLib} from "../utils/MerkleLib.sol";
 
-// Local: structs (alphabetized)
 import {JBAccountingSnapshot} from "../structs/JBAccountingSnapshot.sol";
 import {JBChainAccounting} from "../structs/JBChainAccounting.sol";
 import {JBInboxTreeRoot} from "../structs/JBInboxTreeRoot.sol";

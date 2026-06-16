@@ -6,10 +6,8 @@ import {IJBProjects} from "@bananapus/core-v6/src/interfaces/IJBProjects.sol";
 import {IJBTokens} from "@bananapus/core-v6/src/interfaces/IJBTokens.sol";
 import {IERC165} from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
 
-// Local: enums
 import {JBSuckerState} from "../enums/JBSuckerState.sol";
 
-// Local: structs (alphabetized)
 import {JBAccountingSnapshot} from "../structs/JBAccountingSnapshot.sol";
 import {JBChainAccounting} from "../structs/JBChainAccounting.sol";
 import {JBClaim} from "../structs/JBClaim.sol";
