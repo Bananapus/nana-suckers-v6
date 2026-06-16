@@ -53,6 +53,7 @@ contract RemoteSurplusSuckerHarness is JBSucker {
             version: MESSAGE_VERSION,
             token: bytes32(uint256(uint160(address(0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE)))),
             amount: 0,
+            // forge-lint: disable-next-line(unsafe-typecast)
             remoteRoot: JBInboxTreeRoot({nonce: uint64(freshness), root: bytes32(uint256(0xBEEF))}),
             accounts: accounts
         });

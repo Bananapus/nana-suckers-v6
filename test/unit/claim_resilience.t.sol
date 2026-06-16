@@ -599,6 +599,7 @@ contract InboxRootRingTest is Test {
         bytes32[] memory leaves = new bytes32[](5);
         leaves[0] = l0;
         for (uint256 k = 1; k <= 4; ++k) {
+            // forge-lint: disable-next-line(unsafe-typecast)
             leaves[k] = _leafHash((k + 1) * 1 ether, (k + 1) * 1 ether, address(uint160(0x100 + k)));
             bytes32[] memory sub = new bytes32[](k + 1);
             for (uint256 j; j <= k; ++j) {
@@ -606,6 +607,7 @@ contract InboxRootRingTest is Test {
             }
             bytes32 rk = builder.rootOf(sub);
             vm.prank(peer);
+            // forge-lint: disable-next-line(unsafe-typecast)
             sucker.fromRemote(_msgRoot(rk, uint64(k + 1), 100 + k));
         }
 

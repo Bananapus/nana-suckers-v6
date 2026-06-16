@@ -1,10 +1,13 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import {IERC165} from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
 import {IJBDirectory} from "@bananapus/core-v6/src/interfaces/IJBDirectory.sol";
 import {IJBProjects} from "@bananapus/core-v6/src/interfaces/IJBProjects.sol";
 import {IJBTokens} from "@bananapus/core-v6/src/interfaces/IJBTokens.sol";
+import {IERC165} from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
+
+import {JBSuckerState} from "../enums/JBSuckerState.sol";
+
 import {JBAccountingSnapshot} from "../structs/JBAccountingSnapshot.sol";
 import {JBChainAccounting} from "../structs/JBChainAccounting.sol";
 import {JBClaim} from "../structs/JBClaim.sol";
@@ -13,7 +16,6 @@ import {JBOutboxTree} from "../structs/JBOutboxTree.sol";
 import {JBPeerChainContext} from "../structs/JBPeerChainContext.sol";
 import {JBPeerChainValue} from "../structs/JBPeerChainValue.sol";
 import {JBRemoteToken} from "../structs/JBRemoteToken.sol";
-import {JBSuckerState} from "../enums/JBSuckerState.sol";
 import {JBTokenMapping} from "../structs/JBTokenMapping.sol";
 
 /// @notice The minimal interface for a sucker contract.
@@ -158,10 +160,11 @@ interface IJBSucker is IERC165 {
     /// @return The peer address.
     function peer() external view returns (bytes32);
 
-    /// @notice The raw, un-valued accounting record this sucker holds for every peer chain it has heard about.
+    /// @notice The un-valued accounting record this sucker holds for every peer chain it has heard about.
     /// @dev The registry reads this to gather a project's full cross-chain knowledge and re-gossip it. Records are
-    /// returned exactly as received so the next receiver resolves them to its own local currencies independently.
-    /// @return accounts One raw accounting record per known peer chain.
+    /// keyed to this sucker's local token when a source token matches a remote-token mapping. The next receiver only
+    /// needs its mapping to this peer's token.
+    /// @return accounts One accounting record per known peer chain.
     function peerChainAccountsOf() external view returns (JBChainAccounting[] memory accounts);
 
     /// @notice One peer chain's per-currency surplus and balance from its latest accepted record, plus its freshness
