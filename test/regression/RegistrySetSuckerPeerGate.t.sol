@@ -84,6 +84,11 @@ contract RegistrySetSuckerPeerGateTest is Test, TestBaseWorkflow, IERC721Receive
         deployer.configureSingleton(singleton);
 
         registry.allowSuckerDeployer(address(deployer));
+        registry.allowTokenMapping({
+            localToken: JBConstants.NATIVE_TOKEN,
+            remoteChainId: 1,
+            remoteToken: bytes32(uint256(uint160(JBConstants.NATIVE_TOKEN)))
+        });
 
         projectId = _launchProject();
 

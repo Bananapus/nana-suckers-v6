@@ -35,6 +35,20 @@ interface IJBSuckerRegistry {
     /// @param caller The address that removed the sucker.
     event SuckerDeprecated(uint256 projectId, address sucker, address caller);
 
+    /// @notice Emitted when a local-to-remote token mapping is added to the allowlist.
+    /// @param localToken The local token address.
+    /// @param remoteChainId The ID of the remote chain.
+    /// @param remoteToken The remote token address encoded as bytes32.
+    /// @param caller The address that allowed the token mapping.
+    event TokenMappingAllowed(address localToken, uint256 remoteChainId, bytes32 remoteToken, address caller);
+
+    /// @notice Emitted when a local-to-remote token mapping is removed from the allowlist.
+    /// @param localToken The local token address.
+    /// @param remoteChainId The ID of the remote chain.
+    /// @param remoteToken The remote token address encoded as bytes32.
+    /// @param caller The address that removed the token mapping.
+    event TokenMappingRemoved(address localToken, uint256 remoteChainId, bytes32 remoteToken, address caller);
+
     /// @notice Emitted when the toRemoteFee is changed.
     /// @param oldFee The previous fee.
     /// @param newFee The new fee.
@@ -90,6 +104,14 @@ interface IJBSuckerRegistry {
     /// @return totalSupply The combined peer chain total supply.
     function remoteTotalSupplyOf(uint256 projectId) external view returns (uint256 totalSupply);
 
+    /// @notice Reverts unless a token mapping can be chosen by a project.
+    /// @dev Disable mappings never require owner approval. Non-native same-address mappings pass through directly.
+    /// Native-to-native and differing-address mappings must be explicitly allowed.
+    /// @param localToken The local token address.
+    /// @param remoteChainId The ID of the remote chain.
+    /// @param remoteToken The remote token address encoded as bytes32.
+    function requireTokenMappingAllowed(address localToken, uint256 remoteChainId, bytes32 remoteToken) external view;
+
     /// @notice Whether the specified sucker deployer is approved by this registry.
     /// @param deployer The address of the deployer to check.
     /// @return Whether the deployer is allowed.
@@ -104,6 +126,20 @@ interface IJBSuckerRegistry {
     /// @param projectId The ID of the project.
     /// @return The addresses of the suckers.
     function suckersOf(uint256 projectId) external view returns (address[] memory);
+
+    /// @notice Whether a local-to-remote token mapping is approved by this registry.
+    /// @param localToken The local token address.
+    /// @param remoteChainId The ID of the remote chain.
+    /// @param remoteToken The remote token address encoded as bytes32.
+    /// @return Whether the token mapping is allowed.
+    function tokenMappingIsAllowed(
+        address localToken,
+        uint256 remoteChainId,
+        bytes32 remoteToken
+    )
+        external
+        view
+        returns (bool);
 
     /// @notice The ETH fee (in wei) paid into the fee project on each toRemote() call.
     /// @return The current fee.
@@ -153,6 +189,23 @@ interface IJBSuckerRegistry {
     /// @param deployers The addresses of the deployers to allow.
     function allowSuckerDeployers(address[] calldata deployers) external;
 
+    /// @notice Add a local-to-remote token mapping to the allowlist.
+    /// @param localToken The local token address.
+    /// @param remoteChainId The ID of the remote chain.
+    /// @param remoteToken The remote token address encoded as bytes32.
+    function allowTokenMapping(address localToken, uint256 remoteChainId, bytes32 remoteToken) external;
+
+    /// @notice Add multiple local-to-remote token mappings to the allowlist.
+    /// @param localTokens The local token addresses.
+    /// @param remoteChainIds The remote chain IDs.
+    /// @param remoteTokens The remote token addresses encoded as bytes32.
+    function allowTokenMappings(
+        address[] calldata localTokens,
+        uint256[] calldata remoteChainIds,
+        bytes32[] calldata remoteTokens
+    )
+        external;
+
     /// @notice Deploy one or more suckers for the specified project.
     /// @dev This call also applies each configuration's token mappings on the deployed suckers. `DEPLOY_SUCKERS`
     /// authorizes those initial mappings; use `MAP_SUCKER_TOKEN` for post-deployment mapping changes.
@@ -176,6 +229,23 @@ interface IJBSuckerRegistry {
     /// @notice Remove a sucker deployer from the allowlist.
     /// @param deployer The address of the deployer to remove.
     function removeSuckerDeployer(address deployer) external;
+
+    /// @notice Remove a local-to-remote token mapping from the allowlist.
+    /// @param localToken The local token address.
+    /// @param remoteChainId The ID of the remote chain.
+    /// @param remoteToken The remote token address encoded as bytes32.
+    function removeTokenMapping(address localToken, uint256 remoteChainId, bytes32 remoteToken) external;
+
+    /// @notice Remove multiple local-to-remote token mappings from the allowlist.
+    /// @param localTokens The local token addresses.
+    /// @param remoteChainIds The remote chain IDs.
+    /// @param remoteTokens The remote token addresses encoded as bytes32.
+    function removeTokenMappings(
+        address[] calldata localTokens,
+        uint256[] calldata remoteChainIds,
+        bytes32[] calldata remoteTokens
+    )
+        external;
 
     /// @notice Set the ETH fee (in wei) paid on each toRemote() call. Owner only.
     /// @param fee The new fee amount in wei.

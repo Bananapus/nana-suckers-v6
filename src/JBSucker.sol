@@ -1307,6 +1307,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         returns (uint256 transportPaymentSpent)
     {
         address token = map.localToken;
+        bytes32 remoteToken = map.remoteToken;
         JBRemoteToken memory currentMapping = _remoteTokenFor[token];
 
         // Once the emergency hatch for a token is enabled it can't be disabled.
@@ -1328,12 +1329,15 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
             alsoGrantAccessIf: _msgSender() == address(REGISTRY)
         });
 
+        // The registry owner gates mappings that assert economic equivalence across distinct chain assets.
+        REGISTRY.requireTokenMappingAllowed({localToken: token, remoteChainId: peerChainId(), remoteToken: remoteToken});
+
         // Make sure that the token does not get remapped to another remote token.
         // As this would cause the funds for this token to be double spendable on the other side.
         // It should not be possible to cause any issues even without this check
         // a bridge *should* never accept such a request. This is mostly a sanity check.
         if (
-            currentMapping.addr != bytes32(0) && currentMapping.addr != map.remoteToken && map.remoteToken != bytes32(0)
+            currentMapping.addr != bytes32(0) && currentMapping.addr != remoteToken && remoteToken != bytes32(0)
                 && _outboxOf[token].tree.count != 0
         ) {
             revert JBSucker_TokenAlreadyMapped({localToken: token, mappedTo: currentMapping.addr});
@@ -1342,10 +1346,10 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         // A remote token can back only one local token's outbox in this sucker. Otherwise two independent source
         // nonces would race into the same destination inbox key (`root.token`), making one token's root stale or
         // overwriting the other. Other suckers have separate inbox/outbox storage and are unaffected.
-        if (map.remoteToken != bytes32(0)) {
-            address mappedLocalToken = _localTokenForRemoteToken[map.remoteToken];
+        if (remoteToken != bytes32(0)) {
+            address mappedLocalToken = _localTokenForRemoteToken[remoteToken];
             if (mappedLocalToken != address(0) && mappedLocalToken != token) {
-                revert JBSucker_RemoteTokenAlreadyMapped({remoteToken: map.remoteToken, localToken: mappedLocalToken});
+                revert JBSucker_RemoteTokenAlreadyMapped({remoteToken: remoteToken, localToken: mappedLocalToken});
             }
         }
 
@@ -1359,7 +1363,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         // created and the mapping cannot be changed to a different remote token. If tokens are stuck in this state
         // (e.g., the bridge is non-functional), the project owner can call `enableEmergencyHatchFor` to allow
         // local withdrawals via `exitThroughEmergencyHatch`.
-        if (map.remoteToken == bytes32(0) && _outboxOf[token].numberOfClaimsSent != _outboxOf[token].tree.count) {
+        if (remoteToken == bytes32(0) && _outboxOf[token].numberOfClaimsSent != _outboxOf[token].tree.count) {
             // Disable before external call to prevent reentrancy via prepare().
             // _sendRoot uses the `currentMapping` parameter, not storage, so this is safe.
             _remoteTokenFor[token].enabled = false;
@@ -1369,13 +1373,13 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
 
         // Update the reverse reservation if an unused local token is being remapped to a new remote token.
         if (
-            map.remoteToken != bytes32(0) && currentMapping.addr != bytes32(0) && currentMapping.addr != map.remoteToken
+            remoteToken != bytes32(0) && currentMapping.addr != bytes32(0) && currentMapping.addr != remoteToken
                 && _localTokenForRemoteToken[currentMapping.addr] == token
         ) {
             delete _localTokenForRemoteToken[currentMapping.addr];
         }
 
-        bytes32 remoteToken = map.remoteToken == bytes32(0) ? currentMapping.addr : map.remoteToken;
+        remoteToken = remoteToken == bytes32(0) ? currentMapping.addr : remoteToken;
         if (remoteToken != bytes32(0)) _localTokenForRemoteToken[remoteToken] = token;
 
         // Update the token mapping.
@@ -2022,17 +2026,18 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     /// @notice Allow sucker implementations to add/override mapping rules to suit their specific needs.
     /// @param map The token mapping to validate.
     function _validateTokenMapping(JBTokenMapping calldata map) internal pure virtual {
-        bool isNative = map.localToken == JBConstants.NATIVE_TOKEN;
-
         // If the token being mapped is the native token, the `remoteToken` must also be the native token.
         // The native token can also be mapped to the 0 address, which is used to disable native token bridging.
-        if (isNative && map.remoteToken != _toBytes32(JBConstants.NATIVE_TOKEN) && map.remoteToken != bytes32(0)) {
-            revert JBSucker_InvalidNativeRemoteAddress({remoteToken: map.remoteToken});
+        if (map.localToken == JBConstants.NATIVE_TOKEN) {
+            if (map.remoteToken != _toBytes32(JBConstants.NATIVE_TOKEN) && map.remoteToken != bytes32(0)) {
+                revert JBSucker_InvalidNativeRemoteAddress({remoteToken: map.remoteToken});
+            }
+            return;
         }
 
         // Enforce a reasonable minimum gas limit for bridging. A minimum which is too low could lead to the loss of
         // funds.
-        if (map.minGas < MESSENGER_ERC20_MIN_GAS_LIMIT && !isNative) {
+        if (map.minGas < MESSENGER_ERC20_MIN_GAS_LIMIT) {
             revert JBSucker_BelowMinGas({minGas: map.minGas, minGasLimit: MESSENGER_ERC20_MIN_GAS_LIMIT});
         }
     }

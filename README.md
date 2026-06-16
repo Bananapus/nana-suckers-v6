@@ -37,7 +37,7 @@ The main idea is not "bridge the token contract." The main idea is "bridge a Jui
 | Contract | Role |
 | --- | --- |
 | `JBSucker` | Base bridge logic for prepare, relay, accounting sync, claim, token mapping, and lifecycle controls. |
-| `JBSuckerRegistry` | Registry for per-project sucker deployments, deployer allowlists, and shared bridge fee settings. |
+| `JBSuckerRegistry` | Registry for per-project sucker deployments, deployer and owner-gated token-pair allowlists, and shared bridge fee settings. |
 | Chain-specific suckers | Transport-specific implementations for OP Stack, Arbitrum, CCIP, and related environments. |
 
 ## Mental model
@@ -66,6 +66,7 @@ That means every bridge path has two trust surfaces:
 - do not reason about suckers as if they were generic ERC-20 bridges
 - root ordering and message delivery semantics matter as much as proof format
 - token mapping is part of the economic invariant
+- native/native mappings and different-address local/remote token mappings must be approved by the registry owner for the specific `(localToken, remoteChainId, remoteToken)` route before a project can choose them; non-native same-address mappings and disabled mappings do not need owner approval
 - peer contexts are merged only when they share both currency and decimals; same-currency contexts with different decimals are kept separate and valued independently at read time, never summed across precisions — and this merge applies per source chain, since each chain's record is stored and folded on its own
 - accounting propagates as a gossip bundle: a sucker sends its own chain's record plus every peer-chain record the project knows (gathered through the registry), so one sync round from a hub propagates every chain's data to every spoke without a direct sucker between each pair
 - `syncAccountingData` pays no registry `toRemoteFee`, but bridge-specific transport costs still apply and duplicate bundles can still consume bridge/indexer resources

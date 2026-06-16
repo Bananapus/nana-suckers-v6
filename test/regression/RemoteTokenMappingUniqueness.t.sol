@@ -65,6 +65,9 @@ contract RemoteTokenMappingUniquenessTest is Test {
         vm.mockCall(DIRECTORY, abi.encodeCall(IJBDirectory.PROJECTS, ()), abi.encode(PROJECT));
         vm.mockCall(PROJECT, abi.encodeCall(IERC721.ownerOf, (PROJECT_ID)), abi.encode(address(this)));
         vm.mockCall(PERMISSIONS, abi.encodeWithSelector(IJBPermissions.hasPermission.selector), abi.encode(true));
+        vm.mockCall(
+            address(1), abi.encodeWithSelector(IJBSuckerRegistry.requireTokenMappingAllowed.selector), abi.encode()
+        );
 
         sucker = _deployHarness("remote-token-uniqueness");
     }

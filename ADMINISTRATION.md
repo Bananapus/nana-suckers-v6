@@ -6,7 +6,7 @@
 | --- | --- |
 | Scope | Cross-chain sucker deployment, token mapping, shared fees, deprecation, and emergency recovery |
 | Control posture | Mixed registry-owner, project-permission, and bridge-counterparty trust |
-| Highest-risk actions | Adding deployers, mapping tokens, changing shared fees, deploying with wrong peers, and retiring lanes |
+| Highest-risk actions | Adding deployers, approving token pairs, mapping tokens, changing shared fees, deploying with wrong peers, and retiring lanes |
 | Recovery posture | Conservative and often one-way once roots or transported assets are in flight |
 
 ## Purpose
@@ -15,7 +15,7 @@
 
 ## Control model
 
-- registry owner controls deployer allowlists and the shared `toRemoteFee`
+- registry owner controls deployer allowlists, owner-gated token-pair allowlists, and the shared `toRemoteFee`
 - project permissions control token mapping, sucker deployment through the registry, deprecation, and emergency paths
 - chain-specific deployers encode bridge addresses, peer-chain IDs, gas settings, and CCIP selectors
 - bridge counterparties control message delivery guarantees outside this repo
@@ -24,7 +24,7 @@
 
 | Role | How Assigned | Scope | Notes |
 | --- | --- | --- | --- |
-| Registry owner | Registry ownership | Global | Adds/removes deployers and sets shared fees |
+| Registry owner | Registry ownership | Global | Adds/removes deployers, approves owner-gated token pairs, and sets shared fees |
 | Project owner/delegate | Juicebox permissions | Per project | Maps tokens, deploys suckers, and uses recovery controls |
 | Sucker deployer | Registry allowlist | Per bridge family | Creates configured sucker pairs |
 | Relayer | Permissionless caller | Per send | Pays transport costs and triggers root delivery |
@@ -33,6 +33,10 @@
 ## Privileged surfaces
 
 - `JBSuckerRegistry.allowSuckerDeployer(...)`
+- `JBSuckerRegistry.allowTokenMapping(...)`
+- `JBSuckerRegistry.allowTokenMappings(...)`
+- `JBSuckerRegistry.removeTokenMapping(...)`
+- `JBSuckerRegistry.removeTokenMappings(...)`
 - `JBSuckerRegistry.setToRemoteFee(...)`
 - `JBSuckerRegistry.deploySuckersFor(...)`
 - `JBSucker.mapToken(...)`
@@ -43,13 +47,14 @@
 ## Immutable and one-way
 
 - Token mappings become hard to change safely after outbox activity exists.
+- Native/native mappings and different-address local/remote token mappings require registry-owner approval for the specific `(localToken, remoteChainId, remoteToken)` route before a project can choose them.
 - Sucker peer addresses and bridge configuration are deployment-time assumptions.
 - Deprecation is designed to stop new sends without blocking historical claims.
 - Removing a deprecated sucker from active listings does not erase its historical aggregate relevance.
 
 ## Operational notes
 
-- Map tokens only after checking both local and remote token semantics, decimals, and terminal behavior.
+- Map tokens only after checking both local and remote token semantics, decimals, terminal behavior, and any required route-specific registry approval. Non-native same-address mappings and disabled mappings bypass the owner allowlist; native/native mappings do not, because the native sentinel can represent different assets on different chains.
 - Deprecate both sides of a pair with matching timestamps and enough messaging-delay margin.
 - Treat CCIP LINK-fee mode and native-fee mode as different operational flows.
 - Verify bridge-specific gas and calldata sizing against the real transport API.

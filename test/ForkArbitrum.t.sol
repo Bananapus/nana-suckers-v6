@@ -134,12 +134,18 @@ contract ForkArbitrumDeployerTest is TestBaseWorkflow, IERC721Receiver {
         vm.selectFork(l1Fork);
         vm.mockCall(address(0), abi.encodeCall(IJBSuckerRegistry.toRemoteFee, ()), abi.encode(uint256(0)));
         vm.mockCall(
+            address(0), abi.encodeWithSelector(IJBSuckerRegistry.requireTokenMappingAllowed.selector), abi.encode()
+        );
+        vm.mockCall(
             address(0),
             abi.encodeWithSelector(IJBSuckerRegistry.peerChainAccountsOf.selector),
             abi.encode(new JBChainAccounting[](0))
         );
         vm.selectFork(l2Fork);
         vm.mockCall(address(0), abi.encodeCall(IJBSuckerRegistry.toRemoteFee, ()), abi.encode(uint256(0)));
+        vm.mockCall(
+            address(0), abi.encodeWithSelector(IJBSuckerRegistry.requireTokenMappingAllowed.selector), abi.encode()
+        );
         vm.mockCall(
             address(0),
             abi.encodeWithSelector(IJBSuckerRegistry.peerChainAccountsOf.selector),
@@ -315,6 +321,9 @@ contract ForkArbitrumNativeTransferTest is TestBaseWorkflow {
 
         // Mock the registry's toRemoteFee() (registry is address(0) in tests).
         vm.mockCall(address(0), abi.encodeCall(IJBSuckerRegistry.toRemoteFee, ()), abi.encode(uint256(0)));
+        vm.mockCall(
+            address(0), abi.encodeWithSelector(IJBSuckerRegistry.requireTokenMappingAllowed.selector), abi.encode()
+        );
         // Registry gossip set is empty when there's no registry (project's only sucker is the one under test).
         vm.mockCall(
             address(0),

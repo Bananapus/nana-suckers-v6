@@ -19,8 +19,8 @@ contract AggDirectoryStub {
 }
 
 /// @notice Exposes the registry's internal per-chain aggregation and per-context valuation for proof.
-/// @dev The aggregation helpers are `pure`; the valuation helper stays on its same-currency / zero-amount short-circuit
-/// so no price feed is consulted, matching the existing `HalmosValuationHarness` approach.
+/// @dev The aggregation helpers are `pure`; valuation proofs stay on same-currency / zero-amount paths so no price feed
+/// is consulted, matching the existing `HalmosValuationHarness` approach.
 contract RegistryAggHarness is JBSuckerRegistry {
     constructor(IJBDirectory directory)
         JBSuckerRegistry(directory, IJBPermissions(address(0)), IJBPrices(address(0)), address(this), address(0))
@@ -63,7 +63,7 @@ contract RegistryAggHarness is JBSuckerRegistry {
         view
         returns (uint256)
     {
-        return _valued({
+        (bool ok, uint256 converted) = _tryValued({
             amount: amount,
             fromCurrency: fromCurrency,
             fromDecimals: fromDecimals,
@@ -71,6 +71,8 @@ contract RegistryAggHarness is JBSuckerRegistry {
             toDecimals: toDecimals,
             projectId: projectId
         });
+        assert(ok);
+        return converted;
     }
 }
 

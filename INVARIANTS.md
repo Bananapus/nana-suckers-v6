@@ -1,6 +1,6 @@
 # Invariants of `nana-suckers-v6`
 
-Scope: the cross-chain bridging primitives that move a Juicebox V6 project-token position from one chain to another — the `JBSucker` base contract, its chain-specific transports (`JBOptimismSucker` / `JBBaseSucker` / `JBArbitrumSucker` / `JBCCIPSucker`), and the `JBSuckerRegistry` that gates deployment and shared fees. The package on npm is `@bananapus/suckers-v6`. Archived (reference only — not compiled or deployed): `JBSwapCCIPSucker` (+ its swap libs/structs `JBSwapPoolLib` / `JBSwapLib` / `JBPendingSwap` / `JBConversionRate`) and `JBCeloSucker`; see `src/archive/`.
+Scope: the cross-chain bridging primitives that move a Juicebox V6 project-token position from one chain to another — the `JBSucker` base contract, its chain-specific transports (`JBOptimismSucker` / `JBBaseSucker` / `JBArbitrumSucker` / `JBCCIPSucker`), and the `JBSuckerRegistry` that gates deployment, owner-gated token mappings, and shared fees. The package on npm is `@bananapus/suckers-v6`. Archived (reference only — not compiled or deployed): `JBSwapCCIPSucker` (+ its swap libs/structs `JBSwapPoolLib` / `JBSwapLib` / `JBPendingSwap` / `JBConversionRate`) and `JBCeloSucker`; see `src/archive/`.
 
 Trust model in one sentence: a **pair of suckers** lets a holder burn project tokens on the local chain into a Merkle-committed claim, ship the committing root + backing terminal-token value across an external AMB, and let any caller mint to the **leaf-encoded beneficiary** on the destination — front-run safe, double-spend safe, fee-bypass safe, and operator-driven only at the configuration boundary; accounting (supply / surplus / balance) additionally propagates as a **per-source-chain gossip bundle** across the whole project's sucker mesh, so a hub-and-spoke topology (L2s bridged only through mainnet) shares every chain's accounting without a direct sucker between every pair.
 
@@ -79,6 +79,9 @@ This file documents the invariants the **runtime contracts in this repo** enforc
 - `mapToken(JBTokenMapping)` / `mapTokens(JBTokenMapping[])` require `JBPermissionIds.MAP_SUCKER_TOKEN` (`JBSucker.sol:488-526, 919-921`).
 - Setting `remoteToken = bytes32(0)` **disables** a mapping. If the outbox has unsent leaves, a final root flush is sent (requires `msg.value` to cover transport).
 - **Immutability rule:** once `_outboxOf[localToken].tree.count != 0` (first `prepare` happened), the mapping cannot be changed to a *different* non-zero remote token — only disabled. This is the operator-side load-bearing invariant for cross-chain accounting coherence.
+- Owner-gated mappings are checked before they can be chosen: `_mapToken` calls `JBSuckerRegistry.requireTokenMappingAllowed(localToken, peerChainId(), remoteToken)` for the sucker's own peer chain.
+- Different-address local/remote mappings and native/native mappings must be approved by the registry owner for the exact `(localToken, remoteChainId, remoteToken)` route. Non-native same-address mappings and `remoteToken == bytes32(0)` disablements pass without owner approval.
+- Route-scoping is load-bearing: an approval for mainnet USDC to Optimism USDC cannot authorize a mainnet-to-Arbitrum sucker mapping to Arbitrum USDC.
 - `_validateTokenMapping` enforces a per-bridge native-mapping policy:
   - OP / Arb (base class): `NATIVE_TOKEN` may only map to `NATIVE_TOKEN` or `bytes32(0)`.
   - CCIP: `NATIVE_TOKEN` may map to an arbitrary remote ERC-20 (the remote chain might denominate ETH as a wrapped token).
@@ -118,6 +121,7 @@ DEPRECATED           block.timestamp >= deprecatedAfter
 - `JBSuckerRegistry.deploySuckersFor(projectId, salt, configurations[])` requires `JBPermissionIds.DEPLOY_SUCKERS` against the project owner (`JBSuckerRegistry.sol:516-584`).
 - Every non-zero `peer` field additionally requires `JBPermissionIds.SET_SUCKER_PEER` (default `peer == bytes32(0)` uses the deterministic same-address peer; an explicit remote authority is treated as a separate elevation).
 - Each `configuration.deployer` must be on the registry allowlist.
+- Initial mappings in `configuration.mappings` still pass through the registry's owner-gated token-pair allowlist. `DEPLOY_SUCKERS` bypasses the project's separate `MAP_SUCKER_TOKEN` permission for initial setup, not the registry-owner approval required for native/native or different-address routes.
 - The salt is mixed with `_msgSender()` (`keccak256(abi.encode(sender, salt))`) so the same project deploying from different EOAs on different chains gets different sucker addresses — the same-address peer assumption breaks deliberately rather than silently routing to a wrong peer.
 
 ---
@@ -247,11 +251,13 @@ CCIP variant that swaps the bridged token into the locally-required token (e.g. 
 
 ## C.8 JBSuckerRegistry — `src/JBSuckerRegistry.sol`
 
-Ownable registry. Tracks per-project sucker inventory + deployer allowlist + shared `toRemoteFee`.
+Ownable registry. Tracks per-project sucker inventory + deployer allowlist + owner-gated token-pair allowlist + shared `toRemoteFee`.
 
 ### Owner (governance)
 
 - **`allowSuckerDeployer(address)` / `allowSuckerDeployers(address[])`** — `JBSuckerRegistry.sol:481-505`. `onlyOwner`. Adds a deployer to the allowlist.
+- **`allowTokenMapping(address,uint256,bytes32)` / `allowTokenMappings(address[],uint256[],bytes32[])`** — owner-only. Adds route-scoped approvals for native/native or different-address local/remote mappings.
+- **`removeTokenMapping(address,uint256,bytes32)` / `removeTokenMappings(address[],uint256[],bytes32[])`** — owner-only. Removes route-scoped token-mapping approvals; existing sucker mappings remain whatever they already are, but the pair can no longer be chosen again unless it passes without approval.
 - **`removeSuckerDeployer(address)`** — `JBSuckerRegistry.sol:622-625`. `onlyOwner`. Removes a deployer; existing suckers it deployed remain registered.
 - **`setToRemoteFee(uint256 fee)`** — `JBSuckerRegistry.sol:612-617`. `onlyOwner`. Capped at `MAX_TO_REMOTE_FEE`.
 
@@ -271,9 +277,10 @@ Ownable registry. Tracks per-project sucker inventory + deployer allowlist + sha
 - `suckerPairsOf(projectId)` — active suckers with their `peerChainId`.
 - `isSuckerOf(projectId, addr)` — true for both active and deprecated entries.
 - `peerChainAccountsOf(uint256 projectId, uint256 exceptChainId)` gathers a project's full cross-chain knowledge — the only place a hub chain's per-peer suckers are visible together. A sucker building an outbound gossip bundle calls this and prepends its own local record. Records are deduped per source chain (freshest wins; an active sucker's record supersedes a deprecated one's), with the destination chain (`exceptChainId`) and the local chain excluded. Suckers and records that revert are silently skipped.
-- The registry holds `IJBPrices PRICES` and does the valuation, exactly as the terminal store values local surplus. Per-sucker `remoteBalanceOf(sucker, chainId, projectId, currency, decimals)` / `remoteSurplusOf(sucker, chainId, projectId, currency, decimals)` value one sucker's raw contexts for **one source chain** into the requested currency. Each context is decimals-adjusted, then a context whose currency already equals the requested currency is taken at **par via an identity short-circuit** (no feed consulted), while a cross-currency context is valued through `PRICES.pricePerUnitOf(projectId, fromCurrency, toCurrency, 18)`. A missing cross-currency feed reverts, and the per-`(sucker, chain)` `try/catch` in the aggregate swallows that revert — dropping just that one (sucker, chain) (bias-low / conservative, the safe direction).
+- `requireTokenMappingAllowed(localToken, remoteChainId, remoteToken)` enforces the token-pair allowlist used by suckers. Disabling a mapping (`remoteToken == bytes32(0)`) and non-native same-address mappings pass directly. Native/native mappings and different-address mappings require a stored owner approval for that exact route.
+- The registry holds `IJBPrices PRICES` and does the valuation, exactly as the terminal store values local surplus. Aggregate views value one sucker's raw contexts for one source chain internally. Each context is decimals-adjusted, then a context whose currency already equals the requested currency is taken at **par via an identity short-circuit** (no feed consulted), while a cross-currency context is valued through `PRICES.pricePerUnitOf(projectId, fromCurrency, toCurrency, 18)`. A missing cross-currency feed reverts for that internal `(sucker, chain)` valuation, and the per-`(sucker, chain)` `try/catch` in the aggregate swallows that revert — dropping just that one (sucker, chain) (bias-low / conservative, the safe direction).
 - `totalRemoteBalanceOf(projectId, currency, decimals)` / `totalRemoteSurplusOf(projectId, currency, decimals)` / `remoteTotalSupplyOf(projectId)` keep the **same signatures** but now aggregate over **every (sucker, chain) pair** and dedup per source chain — **aggregate views with explicit failure semantics**:
-  - `totalRemoteBalanceOf` / `totalRemoteSurplusOf` value each (sucker, chain) pair via the per-sucker `remoteBalanceOf` / `remoteSurplusOf` self-call (now passed a `chainId`); `remoteTotalSupplyOf` reads each chain's raw token supply via the sucker's `peerChainTotalSupplyValue(chainId)`.
+  - `totalRemoteBalanceOf` / `totalRemoteSurplusOf` value each (sucker, chain) pair internally; `remoteTotalSupplyOf` reads each chain's raw token supply via the sucker's `peerChainTotalSupplyValue(chainId)`.
   - `try/catch` around each (sucker, chain); failing pairs (including a missing cross-currency feed) are silently skipped (fail-open for liveness, bias-low).
   - A sucker that reports a zero peer chain ID (after a successful read) reverts the whole aggregate, matching deploy-time validation.
   - Multiple (sucker, chain) pairs reporting the same source chain are **deduped per source chain by freshest accepted record timestamp** (each sucker caches the *entire* remote chain's state per source chain; SUM would double-count).

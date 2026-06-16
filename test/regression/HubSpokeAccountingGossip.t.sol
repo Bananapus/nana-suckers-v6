@@ -575,6 +575,15 @@ contract HubSpokeAccountingGossipTest is Test {
         deployer.setSucker(IJBSucker(address(sucker)));
         registry.allowSuckerDeployer(address(deployer));
 
+        for (uint256 i; i < mappings.length;) {
+            registry.allowTokenMapping({
+                localToken: mappings[i].localToken, remoteChainId: peerChainId, remoteToken: mappings[i].remoteToken
+            });
+            unchecked {
+                ++i;
+            }
+        }
+
         JBSuckerDeployerConfig[] memory configs = new JBSuckerDeployerConfig[](1);
         configs[0] = JBSuckerDeployerConfig({deployer: deployer, peer: bytes32(0), mappings: mappings});
         registry.deploySuckersFor({

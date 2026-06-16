@@ -5,11 +5,13 @@ pragma solidity 0.8.28;
 import /* {*} from */ "@bananapus/core-v6/test/helpers/TestBaseWorkflow.sol";
 import {JBConstants} from "@bananapus/core-v6/src/libraries/JBConstants.sol";
 import {CCIPLocalSimulatorFork, Register} from "@chainlink/local/src/ccip/CCIPLocalSimulatorFork.sol";
+
+import {IJBSuckerRegistry} from "../../src/interfaces/IJBSuckerRegistry.sol";
 import {CCIPHelper} from "../../src/libraries/CCIPHelper.sol";
+import {JBChainAccounting} from "../../src/structs/JBChainAccounting.sol";
 
 /// @notice Shared helpers for sucker fork tests.
-/// Consolidates `_launchProject()`, metadata initialization, LINK/CCIP registration,
-/// and token etching that were duplicated across 4+ fork test base classes.
+/// @dev Consolidates `_launchProject()`, metadata initialization, LINK/CCIP registration, and token etching.
 abstract contract SuckerForkHelpers is TestBaseWorkflow {
     JBRulesetMetadata _metadata;
 
@@ -109,6 +111,19 @@ abstract contract SuckerForkHelpers is TestBaseWorkflow {
         if (chainId == 8453) return 0x88Fb150BDc53A65fe94Dea0c9BA0a6dAf8C6e196;
         if (chainId == 4217) return 0x15C03488B29e27d62BAf10E30b0c474bf60E0264;
         revert("Unsupported chain for LINK token");
+    }
+
+    /// @notice Mocks the registry calls used by fork fixtures that intentionally run without a registry contract.
+    function _mockNoRegistry() internal {
+        vm.mockCall(address(0), abi.encodeCall(IJBSuckerRegistry.toRemoteFee, ()), abi.encode(uint256(0)));
+        vm.mockCall(
+            address(0), abi.encodeWithSelector(IJBSuckerRegistry.requireTokenMappingAllowed.selector), abi.encode()
+        );
+        vm.mockCall(
+            address(0),
+            abi.encodeWithSelector(IJBSuckerRegistry.peerChainAccountsOf.selector),
+            abi.encode(new JBChainAccounting[](0))
+        );
     }
 
     /// @notice Register mainnet network details for CCIPLocalSimulatorFork.

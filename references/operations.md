@@ -2,7 +2,7 @@
 
 ## Configuration surface
 
-- [`src/JBSuckerRegistry.sol`](../src/JBSuckerRegistry.sol) is the first stop for deployer allowlists, shared fees, project inventory, and deprecation helpers.
+- [`src/JBSuckerRegistry.sol`](../src/JBSuckerRegistry.sol) is the first stop for deployer allowlists, owner-gated token-pair allowlists, shared fees, project inventory, and deprecation helpers.
 - Transport-specific deployers in `src/deployers/` are where chain-specific constants and bridge addresses live.
 - [`script/Deploy.s.sol`](../script/Deploy.s.sol) is where deployment-time environment wiring belongs.
 
@@ -10,6 +10,7 @@
 
 - If you edit base sucker accounting, verify claim flow across at least one chain-specific implementation.
 - If you edit token mapping logic, re-check the registry and deployer assumptions that feed it.
+- If you edit owner-gated token mapping rules, verify native/native, different-address, non-native same-address, disabled, deploy-time, and route-scoped cases.
 - If you edit token mapping semantics, verify that remapping is still impossible once outbox activity has made economic equivalence depend on permanence.
 - If you edit deprecation or emergency paths, verify the intended operator workflow still works end to end.
 - If you edit snapshot or claim-boundary logic, verify `numberOfClaimsSent`, peer snapshots, `syncAccountingData`, and emergency exit behavior together.
@@ -18,6 +19,7 @@
 ## Common failure modes
 
 - Cross-chain issue is blamed on transport when the root or token mapping was wrong before message delivery.
+- A token-pair approval is assumed to be global when it is actually scoped to one `(localToken, remoteChainId, remoteToken)` route.
 - Registry configuration drifts from what a deployer or external operator expects.
 - Emergency hatches or deprecation paths are stale because nobody exercises them until stress conditions arrive.
 

@@ -102,7 +102,7 @@ contract MultiChainEvolutionTest is Test, TestBaseWorkflow, IERC721Receiver {
             permissions: jbPermissions(),
             tokens: jbTokens(),
             feeProjectId: 1,
-            registry: IJBSuckerRegistry(address(0)),
+            registry: IJBSuckerRegistry(address(registry)),
             trustedForwarder: address(0)
         });
         opDeployer.configureSingleton(opSingleton);
@@ -127,7 +127,7 @@ contract MultiChainEvolutionTest is Test, TestBaseWorkflow, IERC721Receiver {
             permissions: jbPermissions(),
             tokens: jbTokens(),
             feeProjectId: 1,
-            registry: IJBSuckerRegistry(address(0)),
+            registry: IJBSuckerRegistry(address(registry)),
             trustedForwarder: address(0)
         });
         ccipDeployer.configureSingleton(ccipSingleton);
@@ -135,6 +135,22 @@ contract MultiChainEvolutionTest is Test, TestBaseWorkflow, IERC721Receiver {
         // Allow both deployers in the registry.
         registry.allowSuckerDeployer(address(opDeployer));
         registry.allowSuckerDeployer(address(ccipDeployer));
+        registry.allowTokenMapping({
+            localToken: JBConstants.NATIVE_TOKEN,
+            remoteChainId: 1,
+            remoteToken: bytes32(uint256(uint160(JBConstants.NATIVE_TOKEN)))
+        });
+        registry.allowTokenMapping({
+            localToken: localUSDC, remoteChainId: 1, remoteToken: bytes32(uint256(uint160(opUSDC)))
+        });
+        registry.allowTokenMapping({
+            localToken: JBConstants.NATIVE_TOKEN,
+            remoteChainId: CELO_CHAIN_ID,
+            remoteToken: bytes32(uint256(uint160(celoETH)))
+        });
+        registry.allowTokenMapping({
+            localToken: localUSDC, remoteChainId: CELO_CHAIN_ID, remoteToken: bytes32(uint256(uint160(celoUSDC)))
+        });
 
         // --- Launch project ---
         JBRulesetMetadata memory metadata = JBRulesetMetadata({

@@ -75,14 +75,7 @@ contract OPStackReceiveSideFork is SuckerForkHelpers {
 
         _launchProject();
 
-        // Registry fee call falls through cleanly when there's no registry.
-        vm.mockCall(address(0), abi.encodeCall(IJBSuckerRegistry.toRemoteFee, ()), abi.encode(uint256(0)));
-        // Registry gossip set is empty when there's no registry (project's only sucker is the one under test).
-        vm.mockCall(
-            address(0),
-            abi.encodeWithSelector(IJBSuckerRegistry.peerChainAccountsOf.selector),
-            abi.encode(new JBChainAccounting[](0))
-        );
+        _mockNoRegistry();
     }
 
     function _buildRoot(uint64 nonce, bytes32 root) internal pure returns (JBMessageRoot memory) {

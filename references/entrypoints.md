@@ -17,7 +17,7 @@ A sucker bridges a Juicebox project's token economy between two chains. Cashed-o
 | `JBOptimismSucker` | OP Stack bridge transport. |
 | `JBCCIPSucker` | Chainlink CCIP transport. |
 | `JBBaseSucker` | Base/OP Stack transport. |
-| `JBSuckerRegistry` | Project-to-sucker inventory, deployer allowlist, shared `toRemote` fee, deprecation removal, cross-chain surplus/supply aggregation. |
+| `JBSuckerRegistry` | Project-to-sucker inventory, deployer allowlist, owner-gated token-pair allowlist, shared `toRemote` fee, deprecation removal, cross-chain surplus/supply aggregation. |
 
 `IJBSucker` is the minimal interface; `IJBSuckerExtended` adds the deprecation, emergency-hatch, and retained-fee surface.
 
@@ -81,7 +81,7 @@ The same `JBChainAccounting[] accounts` bundle is also carried by the root messa
 | `fromRemoteAccounting(JBAccountingSnapshot calldata snapshot)` | Authenticated receive path for an accounting-only gossip bundle. Stores the freshest record per source chain, without touching any token-local inbox root. |
 | `claim(JBClaim calldata claimData)` | Claim bridged project tokens for the leaf's beneficiary by proving inclusion against the inbox root. |
 | `claim(JBClaim[] calldata claims)` | Claim multiple leaves in one call. Each leaf is routed through an external `this.claim` sub-call, so one failing leaf emits `ClaimFailed` and is reverted in isolation while the rest of the batch proceeds; the failed leaf stays claimable later. |
-| `mapToken(JBTokenMapping calldata map) payable` | Map a single local token to a remote token for bridging. Mappings are immutable once the outbox tree has entries (can only be disabled, not remapped). Requires `MAP_SUCKER_TOKEN` permission (initial mappings are applied at deploy under `DEPLOY_SUCKERS`). |
+| `mapToken(JBTokenMapping calldata map) payable` | Map a single local token to a remote token for bridging. Mappings are immutable once the outbox tree has entries (can only be disabled, not remapped). Requires `MAP_SUCKER_TOKEN` permission (initial mappings are applied at deploy under `DEPLOY_SUCKERS`). Native/native mappings and different-address mappings must also be approved by the registry owner for this sucker's peer chain. |
 | `mapTokens(JBTokenMapping[] calldata maps) payable` | Map multiple local tokens to remote tokens in one call. |
 
 ### JBSucker — deprecation & emergency (`IJBSuckerExtended`)
@@ -125,6 +125,10 @@ The same `JBChainAccounting[] accounts` bundle is also carried by the root messa
 | `removeDeprecatedSucker(uint256 projectId, address sucker)` | Remove a fully deprecated sucker from a project's inventory. |
 | `allowSuckerDeployer(address deployer)` / `allowSuckerDeployers(address[] calldata deployers)` | Add deployer(s) to the allowlist. Owner-only. |
 | `removeSuckerDeployer(address deployer)` | Remove a deployer from the allowlist. Owner-only. |
+| `allowTokenMapping(address localToken, uint256 remoteChainId, bytes32 remoteToken)` / `allowTokenMappings(address[] calldata localTokens, uint256[] calldata remoteChainIds, bytes32[] calldata remoteTokens)` | Add route-scoped approvals for native/native or different-address local/remote token mappings. Owner-only. |
+| `removeTokenMapping(address localToken, uint256 remoteChainId, bytes32 remoteToken)` / `removeTokenMappings(address[] calldata localTokens, uint256[] calldata remoteChainIds, bytes32[] calldata remoteTokens)` | Remove route-scoped token-mapping approvals. Owner-only. |
+| `requireTokenMappingAllowed(address localToken, uint256 remoteChainId, bytes32 remoteToken)` | Revert unless the mapping can be chosen. Disabled mappings and non-native same-address mappings pass directly; native/native and different-address mappings require route approval. |
+| `tokenMappingIsAllowed(address localToken, uint256 remoteChainId, bytes32 remoteToken)` | Stored owner approval for an owner-gated token route. |
 | `setToRemoteFee(uint256 fee)` | Set the ETH fee (wei) paid into the fee project on each `toRemote` call. Reverts if `fee > MAX_TO_REMOTE_FEE`. Owner-only. |
 | `suckersOf(uint256 projectId)` | All active suckers for a project. |
 | `allSuckersOf(uint256 projectId)` | Every sucker ever registered for a project, including deprecated ones. |
