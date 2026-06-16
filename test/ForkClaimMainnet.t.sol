@@ -169,20 +169,10 @@ abstract contract CCIPSuckerClaimForkTestBase is SuckerForkHelpers {
         jbController().deployERC20For(1, "SuckerToken", "SOOK", bytes32(0));
         vm.stopPrank();
 
-        // Mock the registry's toRemoteFee() and gossip set on both forks (registry is address(0) in tests).
-        vm.mockCall(address(0), abi.encodeCall(IJBSuckerRegistry.toRemoteFee, ()), abi.encode(uint256(0)));
-        vm.mockCall(
-            address(0),
-            abi.encodeWithSelector(IJBSuckerRegistry.peerChainAccountsOf.selector),
-            abi.encode(new JBChainAccounting[](0))
-        );
+        // The fixture intentionally has no registry; mock the registry reads used by the send path.
+        _mockNoRegistry();
         vm.selectFork(l1Fork);
-        vm.mockCall(address(0), abi.encodeCall(IJBSuckerRegistry.toRemoteFee, ()), abi.encode(uint256(0)));
-        vm.mockCall(
-            address(0),
-            abi.encodeWithSelector(IJBSuckerRegistry.peerChainAccountsOf.selector),
-            abi.encode(new JBChainAccounting[](0))
-        );
+        _mockNoRegistry();
     }
 
     // ── Helpers

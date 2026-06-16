@@ -6,6 +6,7 @@ import {IJBDirectory} from "@bananapus/core-v6/src/interfaces/IJBDirectory.sol";
 import {IJBPermissions} from "@bananapus/core-v6/src/interfaces/IJBPermissions.sol";
 import {IJBPrices} from "@bananapus/core-v6/src/interfaces/IJBPrices.sol";
 import {IJBProjects} from "@bananapus/core-v6/src/interfaces/IJBProjects.sol";
+import {JBConstants} from "@bananapus/core-v6/src/libraries/JBConstants.sol";
 import {JBFixedPointNumber} from "@bananapus/core-v6/src/libraries/JBFixedPointNumber.sol";
 import {JBPermissionIds} from "@bananapus/permission-ids-v6/src/JBPermissionIds.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
@@ -14,13 +15,13 @@ import {Context} from "@openzeppelin/contracts/utils/Context.sol";
 import {EnumerableMap} from "@openzeppelin/contracts/utils/structs/EnumerableMap.sol";
 import {mulDiv} from "@prb/math/src/Common.sol";
 
-import {JBChainAccounting} from "./structs/JBChainAccounting.sol";
-import {JBPeerChainContext} from "./structs/JBPeerChainContext.sol";
-import {JBPeerChainValue} from "./structs/JBPeerChainValue.sol";
 import {JBSuckerState} from "./enums/JBSuckerState.sol";
 import {IJBSucker} from "./interfaces/IJBSucker.sol";
 import {IJBSuckerDeployer} from "./interfaces/IJBSuckerDeployer.sol";
 import {IJBSuckerRegistry} from "./interfaces/IJBSuckerRegistry.sol";
+import {JBChainAccounting} from "./structs/JBChainAccounting.sol";
+import {JBPeerChainContext} from "./structs/JBPeerChainContext.sol";
+import {JBPeerChainValue} from "./structs/JBPeerChainValue.sol";
 import {JBSuckerDeployerConfig} from "./structs/JBSuckerDeployerConfig.sol";
 import {JBSuckersPair} from "./structs/JBSuckersPair.sol";
 import {PeerAccountScratch} from "./structs/PeerAccountScratch.sol";
@@ -49,6 +50,14 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
 
     /// @notice Thrown when a sucker is being removed from active listings but is not deprecated.
     error JBSuckerRegistry_SuckerIsNotDeprecated(address sucker, JBSuckerState suckerState);
+
+    /// @notice Thrown when a project chooses an owner-gated token mapping that has not been approved.
+    error JBSuckerRegistry_TokenMappingNotAllowed(address localToken, uint256 remoteChainId, bytes32 remoteToken);
+
+    /// @notice Thrown when token mapping arrays have different lengths.
+    error JBSuckerRegistry_TokenMappingLengthMismatch(
+        uint256 localTokenCount, uint256 remoteChainIdCount, uint256 remoteTokenCount
+    );
 
     /// @notice Thrown when a sucker reports a zero peer chain ID and cannot identify a real peer chain.
     error JBSuckerRegistry_ZeroPeerChainId(address sucker);
@@ -79,10 +88,10 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
     // --------------- public immutable stored properties ---------------- //
     //*********************************************************************//
 
-    /// @notice The Juicebox directory used to look up project terminals and controllers.
+    /// @notice The Juicebox directory for project terminals and controllers.
     IJBDirectory public immutable override DIRECTORY;
 
-    /// @notice The prices contract used to value remote per-context surplus and balance into a requested currency,
+    /// @notice The prices contract for valuing remote per-context surplus and balance into a requested currency,
     /// exactly as the terminal store values local surplus.
     IJBPrices public immutable PRICES;
 
@@ -96,6 +105,15 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
     /// @notice Tracks whether the specified sucker deployer is approved by this registry.
     /// @custom:param deployer The address of the deployer to check.
     mapping(address deployer => bool) public override suckerDeployerIsAllowed;
+
+    /// @notice Tracks whether projects may choose an owner-gated token mapping.
+    /// @dev Disable mappings and non-native same-address mappings pass through the mapping checks directly.
+    /// @custom:param localToken The local token address.
+    /// @custom:param remoteChainId The ID of the remote chain.
+    /// @custom:param remoteToken The remote token address encoded as bytes32.
+    mapping(address localToken => mapping(uint256 remoteChainId => mapping(bytes32 remoteToken => bool)))
+        public
+        override tokenMappingIsAllowed;
 
     /// @notice The ETH fee (in wei) paid into the fee project via terminal.pay() on each toRemote() call.
     uint256 public override toRemoteFee;
@@ -114,7 +132,7 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
 
     /// @param directory The juicebox directory.
     /// @param permissions A contract storing permissions.
-    /// @param prices The prices contract used to value remote per-context surplus/balance into a requested currency.
+    /// @param prices The prices contract for valuing remote per-context surplus/balance into a requested currency.
     /// @param initialOwner The initial owner of this contract.
     constructor(
         IJBDirectory directory,
@@ -216,108 +234,8 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
         }
     }
 
-    /// @notice Values one peer chain's raw balance held by one sucker into a currency, with peer chain ID and
-    /// freshness.
-    /// @dev Exposed as an external self-call boundary so `totalRemoteBalanceOf` can `try` it and drop a single
-    /// (sucker, chain) whose price feed is missing without losing that sucker's other chains. A context whose currency
-    /// already matches `currency` folds in at par (no feed read); a missing cross-currency feed reverts, and the
-    /// aggregator catches it and skips just this (sucker, chain).
-    /// @param sucker The sucker to read.
-    /// @param chainId The peer chain to read.
-    /// @param projectId The project whose price feeds to use.
-    /// @param currency The currency to value into.
-    /// @param decimals The decimal precision for the returned value.
-    /// @return A `JBPeerChainValue` with the valued balance, the peer chain ID, and its snapshot freshness key.
-    function remoteBalanceOf(
-        address sucker,
-        uint256 chainId,
-        uint256 projectId,
-        uint256 currency,
-        uint256 decimals
-    )
-        external
-        view
-        returns (JBPeerChainValue memory)
-    {
-        // Read this sucker's raw contexts for the chain: one per distinct local currency, plus the freshness key.
-        (JBPeerChainContext[] memory contexts, uint256 snapshot) = IJBSucker(sucker).peerChainContextsOf(chainId);
-
-        // Value each context's balance out of the currency and decimals it was recorded in, into the requested
-        // `currency` and `decimals`, and sum across every context. A context already denominated in `currency` folds
-        // in at par; a cross-currency context is converted through the project's price feed.
-        uint256 value;
-        uint256 numContexts = contexts.length;
-        for (uint256 i; i < numContexts;) {
-            value += _valued({
-                amount: contexts[i].balance,
-                fromCurrency: contexts[i].currency,
-                fromDecimals: contexts[i].decimals,
-                toCurrency: currency,
-                toDecimals: decimals,
-                projectId: projectId
-            });
-            unchecked {
-                ++i;
-            }
-        }
-
-        // Carry the peer chain ID and snapshot freshness alongside the summed value so the aggregator can deduplicate
-        // peers and keep only the freshest snapshot per chain.
-        return JBPeerChainValue({value: value, peerChainId: chainId, snapshotTimestamp: snapshot});
-    }
-
-    /// @notice Values one peer chain's raw surplus held by one sucker into a currency, with peer chain ID and
-    /// freshness.
-    /// @dev Exposed as an external self-call boundary so `totalRemoteSurplusOf` can `try` it and drop a single
-    /// (sucker, chain) whose price feed is missing without losing that sucker's other chains. A context whose currency
-    /// already matches `currency` folds in at par (no feed read); a missing cross-currency feed reverts, and the
-    /// aggregator catches it and skips just this (sucker, chain).
-    /// @param sucker The sucker to read.
-    /// @param chainId The peer chain to read.
-    /// @param projectId The project whose price feeds to use.
-    /// @param currency The currency to value into.
-    /// @param decimals The decimal precision for the returned value.
-    /// @return A `JBPeerChainValue` with the valued surplus, the peer chain ID, and its snapshot freshness key.
-    function remoteSurplusOf(
-        address sucker,
-        uint256 chainId,
-        uint256 projectId,
-        uint256 currency,
-        uint256 decimals
-    )
-        external
-        view
-        returns (JBPeerChainValue memory)
-    {
-        // Read this sucker's raw contexts for the chain: one per distinct local currency, plus the freshness key.
-        (JBPeerChainContext[] memory contexts, uint256 snapshot) = IJBSucker(sucker).peerChainContextsOf(chainId);
-
-        // Value each context's surplus out of the currency and decimals it was recorded in, into the requested
-        // `currency` and `decimals`, and sum across every context. A context already denominated in `currency` folds
-        // in at par; a cross-currency context is converted through the project's price feed.
-        uint256 value;
-        uint256 numContexts = contexts.length;
-        for (uint256 i; i < numContexts;) {
-            value += _valued({
-                amount: contexts[i].surplus,
-                fromCurrency: contexts[i].currency,
-                fromDecimals: contexts[i].decimals,
-                toCurrency: currency,
-                toDecimals: decimals,
-                projectId: projectId
-            });
-            unchecked {
-                ++i;
-            }
-        }
-
-        // Carry the peer chain ID and snapshot freshness alongside the summed value so the aggregator can deduplicate
-        // peers and keep only the freshest snapshot per chain.
-        return JBPeerChainValue({value: value, peerChainId: chainId, snapshotTimestamp: snapshot});
-    }
-
     /// @notice The cumulative total supply across all remote peer chains for a project.
-    /// @dev Each sucker now holds an accounting record per source chain it has heard about (its direct peer plus chains
+    /// @dev Each sucker holds an accounting record per source chain it has heard about (its direct peer plus chains
     /// gossiped through it), so this aggregates over every (sucker, chain) pair and dedups per chain. Includes
     /// deprecated suckers only when no active sucker answers for the same peer chain, to prevent undercounting during
     /// migration windows without letting stale deprecated records dominate live routes. Silently skips suckers and
@@ -365,6 +283,24 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
                 ++k;
             }
         }
+    }
+
+    /// @notice Reverts unless a local-to-remote token mapping can be chosen by a project.
+    /// @dev Disable mappings never require owner approval. Non-native same-address mappings pass through directly.
+    /// Native-to-native and differing-address mappings must be explicitly allowed.
+    /// @param localToken The local token address.
+    /// @param remoteChainId The ID of the remote chain.
+    /// @param remoteToken The remote token address encoded as bytes32.
+    function requireTokenMappingAllowed(
+        address localToken,
+        uint256 remoteChainId,
+        bytes32 remoteToken
+    )
+        external
+        view
+        override
+    {
+        _requireTokenMappingAllowed({localToken: localToken, remoteChainId: remoteChainId, remoteToken: remoteToken});
     }
 
     /// @notice All active (non-deprecated) suckers for a project, with their remote peer address and chain ID.
@@ -489,9 +425,9 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
     //*********************************************************************//
 
     /// @notice Values every known peer chain held by one sucker and folds each into the per-chain dedup scratch.
-    /// @dev Each (sucker, chain) is valued through a registry self-call so a missing price feed reverts only that one
-    /// pair (caught here), not the sucker's other chains. Reads the sucker's chains itself, and is extracted from the
-    /// aggregate view, to keep both stacks shallow.
+    /// @dev Each (sucker, chain) is valued independently so a reverted sucker read or missing cross-currency price
+    /// feed drops only that one chain. Reads the sucker's chains itself, and is extracted from the aggregate view to
+    /// keep both stacks shallow.
     /// @param scratch The per-chain dedup scratch to fold values into.
     /// @param sucker The sucker whose chains to value.
     /// @param isActive Whether the sucker is active (vs deprecated).
@@ -506,9 +442,8 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
         view
     {
         uint256[] memory chainIds;
-        // Aggregate over the full set — directly-connected plus gossiped (virtual) chains — so cross-chain
-        // accounting
-        // reflects every chain the project knows, not only its direct bridges.
+        // Aggregate over direct peer chains and gossiped virtual chains so the result reflects every chain the project
+        // knows, not only its direct bridges.
         try IJBSucker(sucker).peerChainIds(true) returns (uint256[] memory ids) {
             chainIds = ids;
         } catch {
@@ -517,37 +452,20 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
 
         uint256 numChains = chainIds.length;
         for (uint256 c; c < numChains;) {
-            // A registry self-call values one chain's raw contexts so a missing feed reverts only this (sucker, chain)
-            // (caught here). Recording inside the `try` keeps this function under the stack-slot limit.
-            if (params.surplus) {
-                try this.remoteSurplusOf({
-                    sucker: sucker,
-                    chainId: chainIds[c],
-                    projectId: params.projectId,
-                    currency: params.currency,
-                    decimals: params.decimals
-                }) returns (
-                    JBPeerChainValue memory value
-                ) {
-                    scratch.chainCount = _recordPeerChainValue({
-                        scratch: scratch, read: value, sucker: sucker, isActive: isActive
-                    });
-                } catch {}
-            } else {
-                try this.remoteBalanceOf({
-                    sucker: sucker,
-                    chainId: chainIds[c],
-                    projectId: params.projectId,
-                    currency: params.currency,
-                    decimals: params.decimals
-                }) returns (
-                    JBPeerChainValue memory value
-                ) {
-                    scratch.chainCount = _recordPeerChainValue({
-                        scratch: scratch, read: value, sucker: sucker, isActive: isActive
-                    });
-                } catch {}
+            (bool ok, JBPeerChainValue memory value) = _remoteValueOf({
+                sucker: sucker,
+                chainId: chainIds[c],
+                projectId: params.projectId,
+                currency: params.currency,
+                decimals: params.decimals,
+                surplus: params.surplus
+            });
+
+            if (ok) {
+                scratch.chainCount =
+                    _recordPeerChainValue({scratch: scratch, read: value, sucker: sucker, isActive: isActive});
             }
+
             unchecked {
                 ++c;
             }
@@ -693,7 +611,7 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
         }
     }
 
-    /// @notice Allocates scratch arrays used to collapse many suckers into one aggregate value per peer chain.
+    /// @notice Allocates scratch arrays for collapsing many suckers into one aggregate value per peer chain.
     /// @dev `len` is the number of suckers being scanned, which is the maximum possible number of distinct peer
     /// chains. `chainCount` starts at zero and is incremented as new peer chains are discovered.
     /// @param len The maximum number of peer-chain entries the aggregation can need.
@@ -751,9 +669,8 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
 
     /// @notice Records a combined peer-chain read (value, peer chain ID, snapshot freshness key) from one sucker.
     /// @dev A wrapper over `_recordPeerValue` that unpacks the single-call `JBPeerChainValue` read and enforces the
-    /// same non-zero peer-chain requirement the registry applies everywhere else. The peer-chain check reverts here
-    /// (inside the caller's `try` success body, so the revert propagates) to preserve the prior behavior where a
-    /// sucker reporting a zero peer chain ID fails the whole aggregate view.
+    /// same non-zero peer-chain requirement the registry applies everywhere else. A zero peer chain ID fails the whole
+    /// aggregate view because it makes the source chain unidentifiable.
     /// @param scratch The per-chain aggregate values and freshness keys recorded so far.
     /// @param read The combined value, peer chain ID, and snapshot freshness key returned by the sucker.
     /// @param sucker The sucker the read came from, used only for the zero-peer-chain error.
@@ -847,10 +764,140 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
         }
     }
 
+    /// @notice Values one peer chain's raw balance or surplus held by one sucker into a currency.
+    /// @dev Returns `false` if the sucker read reverts or any cross-currency price read fails, allowing aggregate
+    /// views to skip only the affected (sucker, chain) record.
+    /// @param sucker The sucker to read.
+    /// @param chainId The peer chain to read.
+    /// @param projectId The project whose price feeds to use.
+    /// @param currency The currency to value into.
+    /// @param decimals The decimal precision for the returned value.
+    /// @param surplus Whether to value surplus (true) or balance (false).
+    /// @return ok Whether the peer-chain value was read and valued successfully.
+    /// @return read The peer-chain value, peer chain ID, and snapshot freshness key.
+    function _remoteValueOf(
+        address sucker,
+        uint256 chainId,
+        uint256 projectId,
+        uint256 currency,
+        uint256 decimals,
+        bool surplus
+    )
+        internal
+        view
+        returns (bool ok, JBPeerChainValue memory read)
+    {
+        JBPeerChainContext[] memory contexts;
+        uint256 snapshot;
+
+        try IJBSucker(sucker).peerChainContextsOf(chainId) returns (
+            JBPeerChainContext[] memory readContexts, uint256 readSnapshot
+        ) {
+            contexts = readContexts;
+            snapshot = readSnapshot;
+        } catch {
+            return (false, read);
+        }
+
+        uint256 value;
+        uint256 numContexts = contexts.length;
+        for (uint256 i; i < numContexts;) {
+            uint256 amount = surplus ? contexts[i].surplus : contexts[i].balance;
+            (bool priced, uint256 valued) = _tryValued({
+                amount: amount,
+                fromCurrency: contexts[i].currency,
+                fromDecimals: contexts[i].decimals,
+                toCurrency: currency,
+                toDecimals: decimals,
+                projectId: projectId
+            });
+
+            if (!priced) return (false, read);
+            value += valued;
+
+            unchecked {
+                ++i;
+            }
+        }
+
+        read = JBPeerChainValue({value: value, peerChainId: chainId, snapshotTimestamp: snapshot});
+        ok = true;
+    }
+
+    /// @notice Reverts unless a local-to-remote token mapping is allowed.
+    /// @param localToken The local token address.
+    /// @param remoteChainId The ID of the remote chain.
+    /// @param remoteToken The remote token address encoded as bytes32.
+    function _requireTokenMappingAllowed(address localToken, uint256 remoteChainId, bytes32 remoteToken) internal view {
+        if (_tokenMappingPassesWithoutApproval({localToken: localToken, remoteToken: remoteToken})) return;
+
+        // All economically asserted mappings must be allowlisted by the registry owner before project owners choose
+        // them.
+        if (!tokenMappingIsAllowed[localToken][remoteChainId][remoteToken]) {
+            revert JBSuckerRegistry_TokenMappingNotAllowed({
+                localToken: localToken, remoteChainId: remoteChainId, remoteToken: remoteToken
+            });
+        }
+    }
+
+    /// @notice Whether a local-to-remote token mapping can be chosen without owner approval.
+    /// @param localToken The local token address.
+    /// @param remoteToken The remote token address encoded as bytes32.
+    /// @return Whether the mapping passes without owner approval.
+    function _tokenMappingPassesWithoutApproval(address localToken, bytes32 remoteToken) internal pure returns (bool) {
+        // Disabling a mapping is a project-local safety action, not a claim about remote token equivalence.
+        if (remoteToken == bytes32(0)) return true;
+
+        // Non-native same-address mappings are unambiguous across EVM chains. Native tokens use the same sentinel
+        // even when the underlying assets differ, so native-to-native still needs registry owner approval.
+        return localToken != JBConstants.NATIVE_TOKEN && remoteToken == bytes32(uint256(uint160(localToken)));
+    }
+
+    /// @notice Tries to value an amount held in one currency/decimals into another.
+    /// @dev Returns `false` when the needed cross-currency price read reverts or returns zero. Same-currency and
+    /// zero-amount values never consult the price feed.
+    /// @param amount The raw amount in `fromCurrency`/`fromDecimals`.
+    /// @param fromCurrency The currency the amount is held in.
+    /// @param fromDecimals The decimals the amount is held in.
+    /// @param toCurrency The currency to value into.
+    /// @param toDecimals The decimals to value into.
+    /// @param projectId The project whose price feeds to use.
+    /// @return ok Whether the amount was valued successfully.
+    /// @return converted The amount valued into `toCurrency`/`toDecimals`.
+    function _tryValued(
+        uint256 amount,
+        uint256 fromCurrency,
+        uint256 fromDecimals,
+        uint256 toCurrency,
+        uint256 toDecimals,
+        uint256 projectId
+    )
+        internal
+        view
+        returns (bool ok, uint256 converted)
+    {
+        converted = fromDecimals == toDecimals
+            ? amount
+            : JBFixedPointNumber.adjustDecimals({value: amount, decimals: fromDecimals, targetDecimals: toDecimals});
+
+        if (converted == 0 || fromCurrency == toCurrency) return (true, converted);
+
+        try PRICES.pricePerUnitOf({
+            projectId: projectId, pricingCurrency: fromCurrency, unitCurrency: toCurrency, decimals: _PRICE_FIDELITY
+        }) returns (
+            uint256 price
+        ) {
+            if (price == 0) return (false, 0);
+            converted = mulDiv({x: converted, y: 10 ** _PRICE_FIDELITY, denominator: price});
+            ok = true;
+        } catch {
+            return (false, 0);
+        }
+    }
+
     /// @notice Values an amount held in one currency/decimals into another, mirroring the terminal store.
     /// @dev Adjusts decimals, then converts currency via the prices contract. Both steps short-circuit on identity, and
-    /// the currency step also short-circuits on a zero amount, so a same-currency context consults no feed. A missing
-    /// feed reverts (fail-closed), and the caller catches it to drop just the affected sucker.
+    /// the currency step also short-circuits on a zero amount, so a same-currency context consults no feed.
     /// @param amount The raw amount in `fromCurrency`/`fromDecimals`.
     /// @param fromCurrency The currency the amount is held in.
     /// @param fromDecimals The decimals the amount is held in.
@@ -920,12 +967,74 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
         }
     }
 
+    /// @notice Adds a local-to-remote token mapping to the allowlist.
+    /// @dev Can only be called by this contract's owner (initially project ID 1, or JuiceboxDAO).
+    /// @param localToken The local token address.
+    /// @param remoteChainId The ID of the remote chain.
+    /// @param remoteToken The remote token address encoded as bytes32.
+    function allowTokenMapping(
+        address localToken,
+        uint256 remoteChainId,
+        bytes32 remoteToken
+    )
+        public
+        override
+        onlyOwner
+    {
+        tokenMappingIsAllowed[localToken][remoteChainId][remoteToken] = true;
+        emit TokenMappingAllowed({
+            localToken: localToken, remoteChainId: remoteChainId, remoteToken: remoteToken, caller: _msgSender()
+        });
+    }
+
+    /// @notice Adds multiple local-to-remote token mappings to the allowlist.
+    /// @dev Can only be called by this contract's owner (initially project ID 1, or JuiceboxDAO).
+    /// @param localTokens The local token addresses.
+    /// @param remoteChainIds The remote chain IDs.
+    /// @param remoteTokens The remote token addresses encoded as bytes32.
+    function allowTokenMappings(
+        address[] calldata localTokens,
+        uint256[] calldata remoteChainIds,
+        bytes32[] calldata remoteTokens
+    )
+        public
+        override
+        onlyOwner
+    {
+        uint256 localTokenCount = localTokens.length;
+        if (localTokenCount != remoteChainIds.length || localTokenCount != remoteTokens.length) {
+            revert JBSuckerRegistry_TokenMappingLengthMismatch({
+                localTokenCount: localTokenCount,
+                remoteChainIdCount: remoteChainIds.length,
+                remoteTokenCount: remoteTokens.length
+            });
+        }
+
+        // Cache _msgSender() to avoid redundant calls in the loop.
+        address sender = _msgSender();
+
+        // Iterate over each parallel pair exactly once so a single admin transaction configures a full route set.
+        for (uint256 i; i < localTokenCount;) {
+            address localToken = localTokens[i];
+            uint256 remoteChainId = remoteChainIds[i];
+            bytes32 remoteToken = remoteTokens[i];
+
+            tokenMappingIsAllowed[localToken][remoteChainId][remoteToken] = true;
+            emit TokenMappingAllowed({
+                localToken: localToken, remoteChainId: remoteChainId, remoteToken: remoteToken, caller: sender
+            });
+            unchecked {
+                ++i;
+            }
+        }
+    }
+
     /// @notice Deploy one or more cross-chain suckers for a project in a single transaction. Each sucker is created via
     /// its deployer, registered in this registry, and immediately configured with its token mappings. Multiple suckers
     /// targeting the same peer chain are allowed for bridge resilience. The caller must have `DEPLOY_SUCKERS`
     /// permission, which also authorizes the initial token mappings in each deployment configuration.
     /// @param projectId The ID of the project to deploy suckers for.
-    /// @param salt The salt used to deploy the contract. For the suckers to be peers, this must be the same value on
+    /// @param salt The deployment salt. For the suckers to be peers, this must be the same value on
     /// each chain where suckers are deployed.
     /// @param configurations The sucker deployer configs to use to deploy the suckers.
     /// @return suckers The addresses of the deployed suckers.
@@ -1028,6 +1137,68 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
     function removeSuckerDeployer(address deployer) public override onlyOwner {
         suckerDeployerIsAllowed[deployer] = false;
         emit SuckerDeployerRemoved({deployer: deployer, caller: _msgSender()});
+    }
+
+    /// @notice Removes a local-to-remote token mapping from the allowlist.
+    /// @dev Can only be called by this contract's owner (initially project ID 1, or JuiceboxDAO).
+    /// @param localToken The local token address.
+    /// @param remoteChainId The ID of the remote chain.
+    /// @param remoteToken The remote token address encoded as bytes32.
+    function removeTokenMapping(
+        address localToken,
+        uint256 remoteChainId,
+        bytes32 remoteToken
+    )
+        public
+        override
+        onlyOwner
+    {
+        tokenMappingIsAllowed[localToken][remoteChainId][remoteToken] = false;
+        emit TokenMappingRemoved({
+            localToken: localToken, remoteChainId: remoteChainId, remoteToken: remoteToken, caller: _msgSender()
+        });
+    }
+
+    /// @notice Removes multiple local-to-remote token mappings from the allowlist.
+    /// @dev Can only be called by this contract's owner (initially project ID 1, or JuiceboxDAO).
+    /// @param localTokens The local token addresses.
+    /// @param remoteChainIds The remote chain IDs.
+    /// @param remoteTokens The remote token addresses encoded as bytes32.
+    function removeTokenMappings(
+        address[] calldata localTokens,
+        uint256[] calldata remoteChainIds,
+        bytes32[] calldata remoteTokens
+    )
+        public
+        override
+        onlyOwner
+    {
+        uint256 localTokenCount = localTokens.length;
+        if (localTokenCount != remoteChainIds.length || localTokenCount != remoteTokens.length) {
+            revert JBSuckerRegistry_TokenMappingLengthMismatch({
+                localTokenCount: localTokenCount,
+                remoteChainIdCount: remoteChainIds.length,
+                remoteTokenCount: remoteTokens.length
+            });
+        }
+
+        // Cache _msgSender() to avoid redundant calls in the loop.
+        address sender = _msgSender();
+
+        // Iterate over each parallel pair exactly once so a single admin transaction can remove a route set.
+        for (uint256 i; i < localTokenCount;) {
+            address localToken = localTokens[i];
+            uint256 remoteChainId = remoteChainIds[i];
+            bytes32 remoteToken = remoteTokens[i];
+
+            tokenMappingIsAllowed[localToken][remoteChainId][remoteToken] = false;
+            emit TokenMappingRemoved({
+                localToken: localToken, remoteChainId: remoteChainId, remoteToken: remoteToken, caller: sender
+            });
+            unchecked {
+                ++i;
+            }
+        }
     }
 
     /// @notice Set the ETH fee (in wei) paid into the fee project on each toRemote() call.

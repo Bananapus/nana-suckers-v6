@@ -156,7 +156,7 @@ contract DeployerTests is Test, TestBaseWorkflow, IERC721Receiver {
             permissions: jbPermissions(),
             tokens: jbTokens(),
             feeProjectId: 1,
-            registry: IJBSuckerRegistry(address(0)),
+            registry: IJBSuckerRegistry(address(registry)),
             trustedForwarder: address(0)
         });
 
@@ -197,7 +197,7 @@ contract DeployerTests is Test, TestBaseWorkflow, IERC721Receiver {
             permissions: jbPermissions(),
             tokens: jbTokens(),
             feeProjectId: 1,
-            registry: IJBSuckerRegistry(address(0)),
+            registry: IJBSuckerRegistry(address(registry)),
             trustedForwarder: address(0)
         });
 
@@ -236,7 +236,7 @@ contract DeployerTests is Test, TestBaseWorkflow, IERC721Receiver {
             permissions: jbPermissions(),
             tokens: jbTokens(),
             feeProjectId: 1,
-            registry: IJBSuckerRegistry(address(0)),
+            registry: IJBSuckerRegistry(address(registry)),
             trustedForwarder: address(0)
         });
 
@@ -433,6 +433,8 @@ contract DeployerTests is Test, TestBaseWorkflow, IERC721Receiver {
         internal
         returns (IJBSucker)
     {
+        _allowNativeMappingFor(deployer);
+
         JBTokenMapping[] memory mappings = new JBTokenMapping[](1);
         mappings[0] = JBTokenMapping({
             localToken: address(JBConstants.NATIVE_TOKEN),
@@ -444,6 +446,14 @@ contract DeployerTests is Test, TestBaseWorkflow, IERC721Receiver {
         configurations[0] = JBSuckerDeployerConfig({deployer: deployer, peer: bytes32(0), mappings: mappings});
 
         return IJBSucker(registry.deploySuckersFor(_projectId, salt, configurations)[0]);
+    }
+
+    function _allowNativeMappingFor(IJBSuckerDeployer deployer) internal {
+        registry.allowTokenMapping({
+            localToken: JBConstants.NATIVE_TOKEN,
+            remoteChainId: _peerChainIdFor(deployer),
+            remoteToken: bytes32(uint256(uint160(JBConstants.NATIVE_TOKEN)))
+        });
     }
 
     /// @notice Exclude addresses of contracts deployed during setUp to prevent vm.etch from overwriting them.
@@ -458,6 +468,32 @@ contract DeployerTests is Test, TestBaseWorkflow, IERC721Receiver {
         vm.assume(addr != address(jbRulesets()));
         vm.assume(addr != address(jbTerminalStore()));
         vm.assume(addr != address(registry));
+    }
+
+    function _peerChainIdFor(IJBSuckerDeployer deployer) internal view returns (uint256) {
+        try JBCCIPSuckerDeployer(address(deployer)).ccipRemoteChainId() returns (uint256 remoteChainId) {
+            if (remoteChainId != 0) return remoteChainId;
+        } catch {}
+
+        try JBArbitrumSuckerDeployer(address(deployer)).arbLayer() returns (JBLayer layer) {
+            if (layer != JBLayer.L1 && layer != JBLayer.L2) return 0;
+            if (block.chainid == 1) return 42_161;
+            if (block.chainid == 42_161) return 1;
+            if (block.chainid == 11_155_111) return 421_614;
+            if (block.chainid == 421_614) return 11_155_111;
+            return 0;
+        } catch {}
+
+        try JBOptimismSuckerDeployer(address(deployer)).opBridge() returns (IOPStandardBridge bridge) {
+            if (address(bridge) == address(0)) return 0;
+            if (block.chainid == 1) return 10;
+            if (block.chainid == 10) return 1;
+            if (block.chainid == 11_155_111) return 11_155_420;
+            if (block.chainid == 11_155_420) return 11_155_111;
+            return 0;
+        } catch {}
+
+        return 0;
     }
 
     //*********************************************************************//

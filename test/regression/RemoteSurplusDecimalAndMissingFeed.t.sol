@@ -21,7 +21,6 @@ import {JBChainAccounting} from "../../src/structs/JBChainAccounting.sol";
 import {JBInboxTreeRoot} from "../../src/structs/JBInboxTreeRoot.sol";
 import {JBMessageRoot} from "../../src/structs/JBMessageRoot.sol";
 import {JBPeerChainContext} from "../../src/structs/JBPeerChainContext.sol";
-import {JBPeerChainValue} from "../../src/structs/JBPeerChainValue.sol";
 import {JBRemoteToken} from "../../src/structs/JBRemoteToken.sol";
 import {JBSourceContext} from "../../src/structs/JBSourceContext.sol";
 import {JBSuckerDeployerConfig} from "../../src/structs/JBSuckerDeployerConfig.sol";
@@ -146,9 +145,36 @@ contract RemoteSurplusDecimalAndMissingFeedTest is Test {
             new RemoteSurplusSuckerHarness(IJBDirectory(DIRECTORY), IJBPermissions(PERMISSIONS), IJBTokens(TOKENS));
     }
 
-    // Regression for the mixed-decimal merge fix: same-currency source contexts that carry DIFFERENT decimals must
-    // NOT be summed under one decimal scale (their raw amounts are on different scales). They are kept as separate
-    // per-(currency, decimals) entries so the registry can decimal-adjust each independently before summing.
+    function test_missingPriceFeedDropsSurplusButKeepsSupply() external {
+        RemoteSurplusSuckerHarness sucker = _clone("missing-feed");
+        sucker.test_setPeerChainId(42_161);
+
+        address foreignToken = makeAddr("FOREIGN_TOKEN");
+        // forge-lint: disable-next-line(unsafe-typecast)
+        uint32 foreignCurrency = uint32(uint160(foreignToken));
+        vm.mockCall(
+            DIRECTORY,
+            abi.encodeCall(IJBDirectory.primaryTerminalOf, (PROJECT_ID, foreignToken)),
+            abi.encode(address(0))
+        );
+
+        JBSourceContext[] memory contexts = new JBSourceContext[](1);
+        contexts[0] = _ctx(foreignToken, 18, 500 ether, 0);
+        sucker.test_acceptSnapshot({supply: 1000 ether, contexts: contexts, freshness: 1});
+
+        _registerSucker({sucker: IJBSucker(address(sucker)), salt: "missing-feed"});
+
+        assertEq(registry.remoteTotalSupplyOf(PROJECT_ID), 1000 ether, "supply remains included");
+        assertEq(
+            registry.totalRemoteSurplusOf(PROJECT_ID, USD, 18),
+            0,
+            "surplus is skipped when the cross-currency feed reverts"
+        );
+        assertTrue(foreignCurrency != USD, "test must force a price lookup");
+    }
+
+    // Same-currency source contexts with different decimals are kept separate so the registry can decimal-adjust each
+    // context independently before summing.
     function test_mixedDecimalsSameCurrencyAreKeptSeparateAndValuedCorrectly() external {
         RemoteSurplusSuckerHarness sucker = _clone("mixed-decimals");
         // The clone runs no constructor, so set its remote peer chain explicitly; a record for chain 0 would be
@@ -167,7 +193,6 @@ contract RemoteSurplusDecimalAndMissingFeedTest is Test {
         sucker.test_acceptSnapshot({supply: 0, contexts: contexts, freshness: 1});
 
         (JBPeerChainContext[] memory stored,) = sucker.peerChainContextsOf(sucker.peerChainId());
-        // The fix: the two mixed-decimal contexts are NOT collapsed; each keeps its own decimals and raw amount.
         assertEq(stored.length, 2, "mixed-decimal same-currency contexts are kept separate, not collapsed");
         assertEq(stored[0].currency, USD, "first stored under USD");
         assertEq(stored[0].decimals, 6, "first keeps its 6 decimals");
@@ -176,47 +201,11 @@ contract RemoteSurplusDecimalAndMissingFeedTest is Test {
         assertEq(stored[1].decimals, 18, "second keeps its 18 decimals");
         assertEq(stored[1].surplus, 1 ether, "second holds only the 18-decimal raw amount");
 
-        // The registry now decimal-adjusts each entry to the target before summing, yielding the correct 2 USD. The
-        // per-chain boundary takes the peer chain id as its second argument.
-        JBPeerChainValue memory valued = registry.remoteSurplusOf({
-            sucker: address(sucker), chainId: sucker.peerChainId(), projectId: PROJECT_ID, currency: USD, decimals: 6
-        });
-        assertEq(valued.value, 2_000_000, "1 USD (6dec) + 1 USD (18dec adjusted to 6dec) = 2 USD at 6 decimals");
-        assertEq(valued.value, _normalizedTwoUsd(), "matches the correct normalized 2 USD at 6 decimals");
-    }
+        _registerSucker({sucker: IJBSucker(address(sucker)), salt: "mixed-decimals"});
 
-    function test_missingPriceFeedDropsSurplusButKeepsSupply() external {
-        RemoteSurplusSuckerHarness sucker = _clone("missing-feed");
-        sucker.test_setPeerChainId(42_161);
-
-        address foreignToken = makeAddr("FOREIGN_TOKEN");
-        // forge-lint: disable-next-line(unsafe-typecast)
-        uint32 foreignCurrency = uint32(uint160(foreignToken));
-        vm.mockCall(
-            DIRECTORY,
-            abi.encodeCall(IJBDirectory.primaryTerminalOf, (PROJECT_ID, foreignToken)),
-            abi.encode(address(0))
-        );
-
-        JBSourceContext[] memory contexts = new JBSourceContext[](1);
-        contexts[0] = _ctx(foreignToken, 18, 500 ether, 0);
-        sucker.test_acceptSnapshot({supply: 1000 ether, contexts: contexts, freshness: 1});
-
-        StubDeployer deployer = new StubDeployer();
-        deployer.setSucker(IJBSucker(address(sucker)));
-        registry.allowSuckerDeployer(address(deployer));
-
-        JBSuckerDeployerConfig[] memory configs = new JBSuckerDeployerConfig[](1);
-        configs[0] = JBSuckerDeployerConfig({deployer: deployer, peer: bytes32(0), mappings: new JBTokenMapping[](0)});
-        registry.deploySuckersFor({projectId: PROJECT_ID, salt: keccak256("missing-feed"), configurations: configs});
-
-        assertEq(registry.remoteTotalSupplyOf(PROJECT_ID), 1000 ether, "supply remains included");
-        assertEq(
-            registry.totalRemoteSurplusOf(PROJECT_ID, USD, 18),
-            0,
-            "surplus is skipped when the cross-currency feed reverts"
-        );
-        assertTrue(foreignCurrency != USD, "test must force a price lookup");
+        uint256 surplus = registry.totalRemoteSurplusOf({projectId: PROJECT_ID, currency: USD, decimals: 6});
+        assertEq(surplus, 2_000_000, "1 USD (6dec) + 1 USD (18dec adjusted to 6dec) = 2 USD at 6 decimals");
+        assertEq(surplus, _normalizedTwoUsd(), "matches the correct normalized 2 USD at 6 decimals");
     }
 
     function _clone(bytes memory salt) internal returns (RemoteSurplusSuckerHarness clone) {
@@ -254,5 +243,15 @@ contract RemoteSurplusDecimalAndMissingFeedTest is Test {
 
     function _normalizedTwoUsd() internal pure returns (uint256) {
         return 2_000_000;
+    }
+
+    function _registerSucker(IJBSucker sucker, bytes memory salt) internal {
+        StubDeployer deployer = new StubDeployer();
+        deployer.setSucker(sucker);
+        registry.allowSuckerDeployer(address(deployer));
+
+        JBSuckerDeployerConfig[] memory configs = new JBSuckerDeployerConfig[](1);
+        configs[0] = JBSuckerDeployerConfig({deployer: deployer, peer: bytes32(0), mappings: new JBTokenMapping[](0)});
+        registry.deploySuckersFor({projectId: PROJECT_ID, salt: keccak256(salt), configurations: configs});
     }
 }

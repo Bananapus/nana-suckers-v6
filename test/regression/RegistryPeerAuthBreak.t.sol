@@ -68,6 +68,16 @@ contract RegressionRegistryPeerAuthBreakTest is Test, TestBaseWorkflow, IERC721R
 
         registryA.allowSuckerDeployer(address(deployer));
         registryB.allowSuckerDeployer(address(deployer));
+        registryA.allowTokenMapping({
+            localToken: JBConstants.NATIVE_TOKEN,
+            remoteChainId: 1,
+            remoteToken: bytes32(uint256(uint160(JBConstants.NATIVE_TOKEN)))
+        });
+        registryB.allowTokenMapping({
+            localToken: JBConstants.NATIVE_TOKEN,
+            remoteChainId: 1,
+            remoteToken: bytes32(uint256(uint160(JBConstants.NATIVE_TOKEN)))
+        });
 
         projectId = _launchProject();
         _grantRegistryPermissions(address(registryA));
