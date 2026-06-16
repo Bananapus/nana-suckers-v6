@@ -51,13 +51,13 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
     /// @notice Thrown when a sucker is being removed from active listings but is not deprecated.
     error JBSuckerRegistry_SuckerIsNotDeprecated(address sucker, JBSuckerState suckerState);
 
-    /// @notice Thrown when a project chooses an owner-gated token mapping that has not been approved.
-    error JBSuckerRegistry_TokenMappingNotAllowed(address localToken, uint256 remoteChainId, bytes32 remoteToken);
-
     /// @notice Thrown when token mapping arrays have different lengths.
     error JBSuckerRegistry_TokenMappingLengthMismatch(
         uint256 localTokenCount, uint256 remoteChainIdCount, uint256 remoteTokenCount
     );
+
+    /// @notice Thrown when a project chooses an owner-gated token mapping that has not been approved.
+    error JBSuckerRegistry_TokenMappingNotAllowed(address localToken, uint256 remoteChainId, bytes32 remoteToken);
 
     /// @notice Thrown when a sucker reports a zero peer chain ID and cannot identify a real peer chain.
     error JBSuckerRegistry_ZeroPeerChainId(address sucker);
@@ -790,6 +790,7 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
         JBPeerChainContext[] memory contexts;
         uint256 snapshot;
 
+        // The sucker read is isolated so one reverting sucker/chain does not make the aggregate view unusable.
         try IJBSucker(sucker).peerChainContextsOf(chainId) returns (
             JBPeerChainContext[] memory readContexts, uint256 readSnapshot
         ) {
@@ -802,7 +803,11 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
         uint256 value;
         uint256 numContexts = contexts.length;
         for (uint256 i; i < numContexts;) {
+            // The same context set backs both aggregate views; select the requested side before pricing.
             uint256 amount = surplus ? contexts[i].surplus : contexts[i].balance;
+
+            // If one context cannot be valued, the caller skips the whole (sucker, chain) record instead of returning a
+            // partially priced total.
             (bool priced, uint256 valued) = _tryValued({
                 amount: amount,
                 fromCurrency: contexts[i].currency,
@@ -813,6 +818,9 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
             });
 
             if (!priced) return (false, read);
+
+            // Contexts have already been folded by currency/decimals on the sucker, so valued outputs share the
+            // requested units and can be added directly.
             value += valued;
 
             unchecked {
@@ -876,62 +884,32 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
         view
         returns (bool ok, uint256 converted)
     {
+        // Convert the raw context amount to the caller's requested decimals before any currency comparison, matching
+        // terminal-store valuation semantics.
         converted = fromDecimals == toDecimals
             ? amount
             : JBFixedPointNumber.adjustDecimals({value: amount, decimals: fromDecimals, targetDecimals: toDecimals});
 
+        // Zero and same-currency values need no price feed. This is what lets same-asset remote accounting work even
+        // when a project has not configured a price feed.
         if (converted == 0 || fromCurrency == toCurrency) return (true, converted);
 
+        // Cross-currency valuation is best-effort. A reverting or zero price makes the caller drop this (sucker, chain)
+        // record rather than mix priced and unpriced contexts.
         try PRICES.pricePerUnitOf({
             projectId: projectId, pricingCurrency: fromCurrency, unitCurrency: toCurrency, decimals: _PRICE_FIDELITY
         }) returns (
             uint256 price
         ) {
             if (price == 0) return (false, 0);
+
+            // `pricePerUnitOf` returns the `fromCurrency` price of one `toCurrency`, so division expresses the source
+            // amount in `toCurrency`.
             converted = mulDiv({x: converted, y: 10 ** _PRICE_FIDELITY, denominator: price});
             ok = true;
         } catch {
             return (false, 0);
         }
-    }
-
-    /// @notice Values an amount held in one currency/decimals into another, mirroring the terminal store.
-    /// @dev Adjusts decimals, then converts currency via the prices contract. Both steps short-circuit on identity, and
-    /// the currency step also short-circuits on a zero amount, so a same-currency context consults no feed.
-    /// @param amount The raw amount in `fromCurrency`/`fromDecimals`.
-    /// @param fromCurrency The currency the amount is held in.
-    /// @param fromDecimals The decimals the amount is held in.
-    /// @param toCurrency The currency to value into.
-    /// @param toDecimals The decimals to value into.
-    /// @param projectId The project whose price feeds to use.
-    /// @return The amount valued into `toCurrency`/`toDecimals`.
-    function _valued(
-        uint256 amount,
-        uint256 fromCurrency,
-        uint256 fromDecimals,
-        uint256 toCurrency,
-        uint256 toDecimals,
-        uint256 projectId
-    )
-        internal
-        view
-        returns (uint256)
-    {
-        // Step 1: adjust decimals.
-        uint256 value = fromDecimals == toDecimals
-            ? amount
-            : JBFixedPointNumber.adjustDecimals({value: amount, decimals: fromDecimals, targetDecimals: toDecimals});
-
-        // Step 2: convert currency. The price is the denominator: pricePerUnitOf returns the `fromCurrency` price of
-        // one `toCurrency`, so dividing the amount by it yields the amount in `toCurrency`.
-        if (value == 0 || fromCurrency == toCurrency) return value;
-        return mulDiv({
-            x: value,
-            y: 10 ** _PRICE_FIDELITY,
-            denominator: PRICES.pricePerUnitOf({
-                projectId: projectId, pricingCurrency: fromCurrency, unitCurrency: toCurrency, decimals: _PRICE_FIDELITY
-            })
-        });
     }
 
     //*********************************************************************//

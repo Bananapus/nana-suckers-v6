@@ -9,13 +9,13 @@ This repo lets a Juicebox project move a claimable project-token position from o
 - holders bridging project-token positions
 - relayers sending accepted roots or accounting snapshots to peer chains
 - project owners and delegates managing token mappings and recovery paths
-- registry operators managing deployer allowlists and shared fees
+- registry operators managing deployer allowlists, owner-gated token-pair approvals, and shared fees
 - auditors checking Merkle progression, peer authentication, and bridge-specific delivery
 
 ## Key surfaces
 
 - `JBSucker`: shared bridge lifecycle and project accounting
-- `JBSuckerRegistry`: deployment inventory, fees, and aggregate remote-state views
+- `JBSuckerRegistry`: deployment inventory, owner-gated token-pair approvals, fees, and aggregate remote-state views
 - chain-specific suckers and deployers: transport authentication, gas, fee, and peer wiring
 - `MerkleLib` and `JBSuckerLib`: proof and snapshot helpers used by runtime paths
 
@@ -115,6 +115,28 @@ This repo lets a Juicebox project move a claimable project-token position from o
 
 **Postconditions**
 - the claim is consumed exactly once and the remote position is recreated for the beneficiary
+
+## Journey 4a: Approve an owner-gated token route
+
+**Actor:** registry operator.
+
+**Intent:** let projects choose a native/native mapping or different-address local/remote token pair only after route review.
+
+**Preconditions**
+- the intended local and remote tokens have been checked for asset semantics, decimals, issuer risk, and terminal behavior
+- the route's peer chain is known
+
+**Main Flow**
+1. The registry owner calls `allowTokenMapping(...)` or `allowTokenMappings(...)` for the exact `(localToken, remoteChainId, remoteToken)` route.
+2. A project owner or delegate can then choose that mapping through `mapToken`, `mapTokens`, or deploy-time mappings.
+
+**Failure Modes**
+- approval is granted for the wrong peer chain
+- a native/native route is assumed to be automatically safe even though the native sentinel may represent different assets
+- governance approval is mistaken for an oracle guarantee of token value equivalence
+
+**Postconditions**
+- the approved route can be selected by projects; unrelated peer-chain routes remain unapproved
 
 ## Journey 5: Recover from a bad or deprecated bridge path
 

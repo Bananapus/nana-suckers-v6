@@ -3,7 +3,7 @@
 ## Core roles
 
 - [`src/JBSucker.sol`](../src/JBSucker.sol) owns the shared prepare, relay, claim, token-mapping, and lifecycle logic.
-- [`src/JBSuckerRegistry.sol`](../src/JBSuckerRegistry.sol) owns project-to-sucker inventory, deployer allowlists, and shared remote-fee settings.
+- [`src/JBSuckerRegistry.sol`](../src/JBSuckerRegistry.sol) owns project-to-sucker inventory, deployer allowlists, owner-gated token-pair allowlists, and shared remote-fee settings.
 - Chain-specific sucker contracts such as [`src/JBArbitrumSucker.sol`](../src/JBArbitrumSucker.sol), [`src/JBOptimismSucker.sol`](../src/JBOptimismSucker.sol), [`src/JBCCIPSucker.sol`](../src/JBCCIPSucker.sol), and [`src/JBCeloSucker.sol`](../src/JBCeloSucker.sol) own transport-specific delivery and verification.
 - Matching deployers under `src/deployers/` own clone and transport configuration.
 
@@ -17,7 +17,7 @@
 
 ## High-risk areas
 
-- Token mapping: mapping mistakes break economic equivalence, not just UX.
+- Token mapping: mapping mistakes break economic equivalence, not just UX. Native/native and different-address mappings require route-scoped registry-owner approval before a project can choose them.
 - Root ordering and replay protection: message sequencing is part of correctness.
 - Emergency and deprecation paths: these are operational safety surfaces that must remain reliable.
 - Shared accounting vs transport logic: many incidents stem from confusing these layers.

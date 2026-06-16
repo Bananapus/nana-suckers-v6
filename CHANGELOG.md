@@ -19,7 +19,7 @@ This is a V5-to-V6 migration changelog, not a package release log or commit hist
 - Remote surplus and balance aggregation moved toward registry-level, per-context reads. Suckers expose raw peer-chain contexts, resolved to a local currency at read time; the registry values and deduplicates them per source chain across every (sucker, chain) pair.
 - Cross-chain accounting became a per-source-chain "gossip bundle". Each sucker keeps a per-source-chain store (freshest record per chain it has heard about), and a send carries its own chain's record plus every peer-chain record the project knows (gathered via the registry), so accounting propagates across a hub-and-spoke sucker mesh without a direct sucker between every pair of chains. Both the dedicated accounting message and the outbox root message carry the bundle.
 - Peer accounting can be refreshed without sending a root or paying the registry `toRemoteFee`.
-- The registry adds a global `toRemoteFee`, all-sucker lookup, and remote total balance/surplus helpers.
+- The registry adds a global `toRemoteFee`, all-sucker lookup, owner-gated token-pair approvals, and remote total balance/surplus helpers.
 - Claim batching is more resilient. A failed leaf can emit `ClaimFailed` while other leaves continue.
 - Explicit sucker peer configuration is permission-sensitive in V6.
 
@@ -41,6 +41,12 @@ This is a V5-to-V6 migration changelog, not a package release log or commit hist
   - `JBSuckerRegistry.peerChainAccountsOf(uint256,uint256)`
   - `fromRemoteAccounting(JBAccountingSnapshot)`
   - `syncAccountingData()`
+  - `JBSuckerRegistry.allowTokenMapping(address,uint256,bytes32)`
+  - `JBSuckerRegistry.allowTokenMappings(address[],uint256[],bytes32[])`
+  - `JBSuckerRegistry.removeTokenMapping(address,uint256,bytes32)`
+  - `JBSuckerRegistry.removeTokenMappings(address[],uint256[],bytes32[])`
+  - `JBSuckerRegistry.requireTokenMappingAllowed(address,uint256,bytes32)`
+  - `JBSuckerRegistry.tokenMappingIsAllowed(address,uint256,bytes32)`
   - `toRemoteFee()`
   - `setToRemoteFee(uint256)`
   - `totalRemoteBalanceOf(uint256,uint256,uint256)`
@@ -48,7 +54,7 @@ This is a V5-to-V6 migration changelog, not a package release log or commit hist
 - Changed (now per-source-chain) functions:
   - `peerChainContextsOf` now takes a `uint256 chainId` and returns `(JBPeerChainContext[], uint256 snapshot)` for that source chain (the bare `chainId` return field is gone — chains are enumerated via `peerChainIds(true)`).
   - the scalar `snapshotTimestamp()` view becomes the `snapshotTimestampOf(uint256 chainId)` mapping; `peerChainTotalSupply` becomes the `peerChainTotalSupplyOf(uint256 chainId)` mapping.
-  - registry `remoteBalanceOf` / `remoteSurplusOf` self-calls take a `chainId` argument; `totalRemoteBalanceOf` / `totalRemoteSurplusOf` / `remoteTotalSupplyOf` keep the same signatures but aggregate over every (sucker, chain) pair and dedup per source chain.
+  - `totalRemoteBalanceOf` / `totalRemoteSurplusOf` / `remoteTotalSupplyOf` keep the same signatures but aggregate over every (sucker, chain) pair and dedup per source chain. Per-sucker registry valuation helpers are internal implementation details, not public interface methods.
 - Removed or no-longer-primary V5 assumptions:
   - `ADD_TO_BALANCE_MODE()` is not part of the current minimal sucker interface.
   - V5 `address` beneficiary/peer decoding is invalid for V6 leaves.
@@ -60,6 +66,8 @@ This is a V5-to-V6 migration changelog, not a package release log or commit hist
   - `AccountingDataSynced`
   - `ClaimFailed`
   - `StaleRootRejected`
+  - `TokenMappingAllowed`
+  - `TokenMappingRemoved`
   - `ToRemoteFeeChanged`
 - Structs to regenerate:
   - `JBClaim`
@@ -153,4 +161,5 @@ Shared ABI artifacts checked with no ABI item changes:
 - Treat every remote `address` field as a schema migration to `bytes32`.
 - Rebuild merkle leaf, claim, and event decoders from V6 structs.
 - If you aggregate omnichain supply/surplus, read the registry helpers; they now aggregate over every (sucker, chain) pair and dedup per source chain by the freshest record, skipping reverting pairs (including a missing cross-currency feed). Enumerate a sucker's chains via `peerChainIds(true)` (or `peerChainIds(false)` for only its directly-connected peer) and read per-chain contexts via `peerChainContextsOf(chainId)`.
+- Configure registry-owner approvals before deploying or mapping any native/native route or different-address local/remote token pair. Approvals are scoped by `(localToken, remoteChainId, remoteToken)`, so each peer chain's USDC/native-token route needs its own approval. Non-native same-address mappings and disabled mappings (`remoteToken == bytes32(0)`) do not need owner approval.
 - Update permission grants for explicit peer deployments and sucker deprecation.

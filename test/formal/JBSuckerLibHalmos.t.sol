@@ -45,7 +45,7 @@ contract HalmosValuationHarness is JBSuckerRegistry {
         view
         returns (uint256)
     {
-        return _valued({
+        (bool ok, uint256 converted) = _tryValued({
             amount: amount,
             fromCurrency: fromCurrency,
             fromDecimals: fromDecimals,
@@ -53,6 +53,8 @@ contract HalmosValuationHarness is JBSuckerRegistry {
             toDecimals: toDecimals,
             projectId: projectId
         });
+        assert(ok);
+        return converted;
     }
 }
 
