@@ -1,12 +1,13 @@
 {
   "name": "@bananapus/suckers-v6",
-  "version": "1.0.2",
+  "version": "1.1.0",
   "license": "MIT",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/Bananapus/nana-suckers-v6.git"
   },
   "files": [
+    "deployments/",
     "foundry.toml",
     "references/",
     "remappings.txt",
