@@ -88,12 +88,11 @@ This is a V5-to-V6 migration changelog, not a package release log or commit hist
 Generated from Foundry `out/**/*.json` artifacts, filtered to this repo's own runtime source roots and excluding tests, scripts, and dependencies.
 
 - V5 comparison package: `nana-suckers-v5`.
-- Own-source ABI artifacts compared: V6 `53`, V5 `31`.
-- Contract/interface coverage: `22` added, `0` removed, `17` shared names with ABI changes, `14` shared names ABI-identical.
+- Own-source ABI artifacts compared: V6 `52`, V5 `31`.
+- Contract/interface coverage: `21` added, `0` removed, `17` shared names with ABI changes, `14` shared names ABI-identical.
 - Shared-name ABI item deltas: `342` added, `160` removed, `19` modified.
 
 Added V6 ABI artifacts:
-- `IGeomeanOracle` from `src/interfaces/IGeomeanOracle.sol`: `1` functions, `0` events, `0` errors.
 - `IJBPeerChainAdjustedAccounts` from `src/interfaces/IJBPeerChainAdjustedAccounts.sol`: `1` functions, `0` events, `0` errors.
 - `IL1ArbitrumGateway` from `src/interfaces/IL1ArbitrumGateway.sol`: `1` functions, `0` events, `0` errors.
 - `JBCCIPLib` from `src/libraries/JBCCIPLib.sol`: `1` functions, `0` events, `1` errors.
