@@ -77,6 +77,17 @@ This file focuses on the bridge-like risks in the sucker system: merkle-root pro
 - **Immutable after first use.** Once `_outboxOf[token].tree.count != 0` (first `prepare`), the remote token address cannot be changed to a different address -- only disabled (set to `bytes32(0)`). A wrong initial mapping is catastrophic: requires deploying a new sucker.
 - **Per-sucker remote token uniqueness.** Within one sucker, each non-zero remote token address can be reserved by only one local terminal token. The source chain tracks outboxes and nonces by local token, but the destination chain stores received roots by `root.token` (the remote token address converted to its local address). Sharing one remote token across two local tokens inside the same sucker would merge their destination inboxes and make roots reject as stale or overwrite each other. Separate suckers have separate inbox/outbox storage, so a project can run multiple bridge lanes for the same asset pair (for example native bridge and CCIP ETH/USDC lanes) and let users choose the risk profile.
 - **Owner-gated token pairs.** Different-address local/remote mappings and native/native mappings require registry-owner approval before a project can choose them, including deploy-time mappings. The approval is route-scoped by `(localToken, remoteChainId, remoteToken)`, so approval for one peer chain cannot authorize a different peer-chain token. Non-native same-address mappings and disabled mappings (`remoteToken == bytes32(0)`) bypass this owner gate.
+- **Native-bridge ERC-20 pairing is stricter than economic equivalence.** `mapToken` validates token kind and
+  `minGas`, and the registry allowlist records a governance approval; neither check queries the external bridge's
+  registered token pair. On OP Stack, the remote token must be the bridge-compatible mintable counterpart of the
+  local token. Mapping canonical L1 USDC directly to a native L2 USDC can let the source bridge escrow USDC before
+  the destination pair check rejects delivery, leaving the root without its named backing token. On Arbitrum, the
+  gateway router chooses the counterpart independently of `JBRemoteToken.addr`: L1→L2 can deliver a legacy bridged
+  token while the root names a canonical token, and L2→L1 can select a gateway which tries to burn that legacy token
+  even though the sucker holds the canonical token. Before approving or installing an OP/Arbitrum ERC-20 mapping,
+  verify both directions against the live bridge, map the exact token the bridge delivers or burns, and configure the
+  destination terminal to account for that token. Canonical branding, equal addresses, and registry approval are not
+  evidence of bridge compatibility. See `test/regression/NativeBridgeERC20Pairing.t.sol`.
 - **Disable triggers final root flush.** Setting `remoteToken = bytes32(0)` when the outbox has unsent leaves calls `_sendRoot`, which requires `transportPayment` (msg.value). If the caller does not provide sufficient msg.value, the disable transaction reverts.
 - **Emergency hatch is irreversible.** Once `enableEmergencyHatchFor(token)` is called, `enabled` is set to false and `emergencyHatch` to true. There is no way to re-enable the mapping or close the hatch. This is permanent.
 - **Native token mapping constraints differ by sucker.**

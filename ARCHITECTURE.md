@@ -113,6 +113,7 @@ Each sucker keeps a per-source-chain accounting store: for every chain it has he
   `test/ForkArbitrum.t.sol`
   `test/ForkOPStack.t.sol`
   `test/ForkClaimMainnet.t.sol`
+  `test/regression/NativeBridgeERC20Pairing.t.sol`
   `test/archive/ForkCelo.t.sol` (archived — not compiled or deployed)
 - Regression and attack coverage:
   `test/SuckerAttacks.t.sol`

@@ -67,6 +67,7 @@ That means every bridge path has two trust surfaces:
 - root ordering and message delivery semantics matter as much as proof format
 - token mapping is part of the economic invariant
 - native/native mappings and different-address local/remote token mappings must be approved by the registry owner for the specific `(localToken, remoteChainId, remoteToken)` route before a project can choose them; non-native same-address mappings and disabled mappings do not need owner approval
+- OP Stack and Arbitrum ERC-20 mappings must name the exact bridge-registered counterpart delivered or burned by the native bridge in each direction; canonical token identity, equal addresses, and registry approval do not prove that pairing
 - peer contexts are merged only when they share both currency and decimals; same-currency contexts with different decimals are kept separate and valued independently at read time, never summed across precisions — and this merge applies per source chain, since each chain's record is stored and folded on its own
 - accounting propagates as a gossip bundle: a sucker sends its own chain's record plus every peer-chain record the project knows (gathered through the registry), so one sync round from a hub propagates every chain's data to every spoke without a direct sucker between each pair
 - `syncAccountingData` pays no registry `toRemoteFee`, but bridge-specific transport costs still apply and duplicate bundles can still consume bridge/indexer resources
