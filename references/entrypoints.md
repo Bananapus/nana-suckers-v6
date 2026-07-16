@@ -29,7 +29,7 @@ A sucker bridges a Juicebox project's token economy between two chains. Cashed-o
 |-------|------|---------|
 | `localToken` | `address` | The local token address. |
 | `minGas` | `uint32` | The minimum gas to use when bridging this token. |
-| `remoteToken` | `bytes32` | The remote token address (bytes32 for cross-VM compatibility). |
+| `remoteToken` | `bytes32` | The remote token address (bytes32 for cross-VM compatibility). For OP Stack and Arbitrum ERC-20 lanes, this must be the exact bridge-registered counterpart delivered on the destination, not merely an economically equivalent canonical token. |
 
 ### `JBClaim` (argument to `claim` / `exitThroughEmergencyHatch`)
 
@@ -81,7 +81,7 @@ The same `JBChainAccounting[] accounts` bundle is also carried by the root messa
 | `fromRemoteAccounting(JBAccountingSnapshot calldata snapshot)` | Authenticated receive path for an accounting-only gossip bundle. Stores the freshest record per source chain, without touching any token-local inbox root. |
 | `claim(JBClaim calldata claimData)` | Claim bridged project tokens for the leaf's beneficiary by proving inclusion against the inbox root. |
 | `claim(JBClaim[] calldata claims)` | Claim multiple leaves in one call. Each leaf is routed through an external `this.claim` sub-call, so one failing leaf emits `ClaimFailed` and is reverted in isolation while the rest of the batch proceeds; the failed leaf stays claimable later. |
-| `mapToken(JBTokenMapping calldata map) payable` | Map a single local token to a remote token for bridging. Mappings are immutable once the outbox tree has entries (can only be disabled, not remapped). Requires `MAP_SUCKER_TOKEN` permission (initial mappings are applied at deploy under `DEPLOY_SUCKERS`). Native/native mappings and different-address mappings must also be approved by the registry owner for this sucker's peer chain. |
+| `mapToken(JBTokenMapping calldata map) payable` | Map a single local token to a remote token for bridging. Mappings are immutable once the outbox tree has entries (can only be disabled, not remapped). Requires `MAP_SUCKER_TOKEN` permission (initial mappings are applied at deploy under `DEPLOY_SUCKERS`). Native/native mappings and different-address mappings must also be approved by the registry owner for this sucker's peer chain. Mapping and registry checks do not validate an external native bridge's ERC-20 pair; OP Stack and Arbitrum routes must be verified against the live bridge in both directions before use. |
 | `mapTokens(JBTokenMapping[] calldata maps) payable` | Map multiple local tokens to remote tokens in one call. |
 
 ### JBSucker — deprecation & emergency (`IJBSuckerExtended`)

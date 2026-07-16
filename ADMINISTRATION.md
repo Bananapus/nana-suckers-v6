@@ -55,6 +55,11 @@
 ## Operational notes
 
 - Map tokens only after checking both local and remote token semantics, decimals, terminal behavior, and any required route-specific registry approval. Non-native same-address mappings and disabled mappings bypass the owner allowlist; native/native mappings do not, because the native sentinel can represent different assets on different chains.
+- For every OP Stack or Arbitrum ERC-20 route, verify the native bridge pair in both directions before approving or
+  installing the mapping. On OP Stack, confirm that the destination token is the bridge-compatible mintable
+  counterpart for the source token and bridge. On Arbitrum, query the live gateways and confirm the token delivered
+  on L2 and the token burned on L2→L1. The mapped token and destination terminal must use that exact asset; canonical
+  issuer status, address equality, or a registry allowlist entry does not establish bridge compatibility.
 - Deprecate both sides of a pair with matching timestamps and enough messaging-delay margin.
 - Treat CCIP LINK-fee mode and native-fee mode as different operational flows.
 - Verify bridge-specific gas and calldata sizing against the real transport API.

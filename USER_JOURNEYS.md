@@ -125,6 +125,7 @@ This repo lets a Juicebox project move a claimable project-token position from o
 **Preconditions**
 - the intended local and remote tokens have been checked for asset semantics, decimals, issuer risk, and terminal behavior
 - the route's peer chain is known
+- for an OP Stack or Arbitrum ERC-20 lane, the exact bridge-registered pair has been verified in both directions and the destination terminal accounts for the token the bridge actually delivers
 
 **Main Flow**
 1. The registry owner calls `allowTokenMapping(...)` or `allowTokenMappings(...)` for the exact `(localToken, remoteChainId, remoteToken)` route.
@@ -133,6 +134,7 @@ This repo lets a Juicebox project move a claimable project-token position from o
 **Failure Modes**
 - approval is granted for the wrong peer chain
 - a native/native route is assumed to be automatically safe even though the native sentinel may represent different assets
+- a canonical ERC-20 is approved because it is economically equivalent even though the native bridge delivers or burns a different paired token
 - governance approval is mistaken for an oracle guarantee of token value equivalence
 
 **Postconditions**
