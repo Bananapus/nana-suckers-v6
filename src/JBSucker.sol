@@ -1216,12 +1216,12 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         // Mint the project tokens for the beneficiary via the project's controller.
         IJBController(address(DIRECTORY.controllerOf(cachedProjectId)))
             .mintTokensOf({
-            projectId: cachedProjectId,
-            tokenCount: projectTokenAmount,
-            beneficiary: _toAddress(beneficiary),
-            memo: "",
-            useReservedPercent: false
-        });
+                projectId: cachedProjectId,
+                tokenCount: projectTokenAmount,
+                beneficiary: _toAddress(beneficiary),
+                memo: "",
+                useReservedPercent: false
+            });
     }
 
     /// @notice Initializes the sucker's project and optional peer address.

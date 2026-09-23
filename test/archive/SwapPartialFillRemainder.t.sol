@@ -84,8 +84,7 @@ contract PartialFillPool {
         returns (int256 amount0, int256 amount1)
     {
         if (zeroForOne) {
-            IUniswapV3SwapCallback(msg.sender)
-                .uniswapV3SwapCallback({
+            IUniswapV3SwapCallback(msg.sender).uniswapV3SwapCallback({
                 // forge-lint: disable-next-line(unsafe-typecast)
                 amount0Delta: int256(consumedAmount),
                 // forge-lint: disable-next-line(unsafe-typecast)
@@ -98,8 +97,7 @@ contract PartialFillPool {
             return (int256(consumedAmount), -int256(outputAmount));
         }
 
-        IUniswapV3SwapCallback(msg.sender)
-            .uniswapV3SwapCallback({
+        IUniswapV3SwapCallback(msg.sender).uniswapV3SwapCallback({
             // forge-lint: disable-next-line(unsafe-typecast)
             amount0Delta: -int256(outputAmount),
             // forge-lint: disable-next-line(unsafe-typecast)

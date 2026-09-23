@@ -193,8 +193,7 @@ contract MultiChainEvolutionTest is Test, TestBaseWorkflow, IERC721Receiver {
         JBTerminalConfig[] memory terminalConfigs = new JBTerminalConfig[](1);
         terminalConfigs[0] = JBTerminalConfig({terminal: jbMultiTerminal(), accountingContextsToAccept: tokensToAccept});
 
-        projectId = jbController()
-            .launchProjectFor({
+        projectId = jbController().launchProjectFor({
             owner: address(this),
             projectUri: "myproject",
             rulesetConfigurations: rulesetConfigs,
@@ -558,8 +557,10 @@ contract MultiChainEvolutionTest is Test, TestBaseWorkflow, IERC721Receiver {
         IJBSucker(opSuckers[0])
             .mapToken(
                 JBTokenMapping({
-                localToken: JBConstants.NATIVE_TOKEN, minGas: 200_000, remoteToken: bytes32(uint256(uint160(celoETH)))
-            })
+                    localToken: JBConstants.NATIVE_TOKEN,
+                    minGas: 200_000,
+                    remoteToken: bytes32(uint256(uint160(celoETH)))
+                })
             );
     }
 

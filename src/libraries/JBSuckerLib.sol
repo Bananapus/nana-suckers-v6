@@ -490,7 +490,8 @@ library JBSuckerLib {
 
         // Raw recorded balance for this token.
         uint256 balance;
-        try IJBMultiTerminal(address(terminal)).STORE()
+        try IJBMultiTerminal(address(terminal))
+            .STORE()
             .balanceOf({terminal: address(terminal), projectId: projectId, token: context.token}) returns (
             uint256 contextBalance
         ) {

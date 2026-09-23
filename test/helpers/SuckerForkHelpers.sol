@@ -83,8 +83,7 @@ abstract contract SuckerForkHelpers is TestBaseWorkflow {
         terminalConfigurations[0] =
             JBTerminalConfig({terminal: jbMultiTerminal(), accountingContextsToAccept: tokensToAccept});
 
-        jbController()
-            .launchProjectFor({
+        jbController().launchProjectFor({
             owner: multisig(),
             projectUri: "fork-test",
             rulesetConfigurations: rulesetConfigurations,

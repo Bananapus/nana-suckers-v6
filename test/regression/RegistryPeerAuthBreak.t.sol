@@ -103,12 +103,12 @@ contract RegressionRegistryPeerAuthBreakTest is Test, TestBaseWorkflow, IERC721R
         JBOptimismSucker(payable(address(suckerB)))
             .fromRemote(
                 JBMessageRoot({
-                version: 1,
-                token: bytes32(uint256(uint160(JBConstants.NATIVE_TOKEN))),
-                amount: 0,
-                remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(1))}),
-                accounts: new JBChainAccounting[](0)
-            })
+                    version: 1,
+                    token: bytes32(uint256(uint160(JBConstants.NATIVE_TOKEN))),
+                    amount: 0,
+                    remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(1))}),
+                    accounts: new JBChainAccounting[](0)
+                })
             );
     }
 
@@ -135,12 +135,12 @@ contract RegressionRegistryPeerAuthBreakTest is Test, TestBaseWorkflow, IERC721R
         JBOptimismSucker(payable(address(suckerB)))
             .fromRemote(
                 JBMessageRoot({
-                version: 1,
-                token: bytes32(uint256(uint160(JBConstants.NATIVE_TOKEN))),
-                amount: 0,
-                remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(1))}),
-                accounts: new JBChainAccounting[](0)
-            })
+                    version: 1,
+                    token: bytes32(uint256(uint160(JBConstants.NATIVE_TOKEN))),
+                    amount: 0,
+                    remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(1))}),
+                    accounts: new JBChainAccounting[](0)
+                })
             );
 
         assertEq(suckerB.inboxOf(JBConstants.NATIVE_TOKEN).nonce, 1);
@@ -245,8 +245,7 @@ contract RegressionRegistryPeerAuthBreakTest is Test, TestBaseWorkflow, IERC721R
         JBTerminalConfig[] memory terminals = new JBTerminalConfig[](1);
         terminals[0] = JBTerminalConfig({terminal: jbMultiTerminal(), accountingContextsToAccept: accountingContexts});
 
-        return jbController()
-            .launchProjectFor({
+        return jbController().launchProjectFor({
             owner: address(this),
             projectUri: "registry-peer-auth-break",
             rulesetConfigurations: rulesets,

@@ -79,12 +79,12 @@ contract RegistryPeerMismatchTest is Test {
         JBOptimismSucker(payable(suckerB))
             .fromRemote(
                 JBMessageRoot({
-                version: 1,
-                token: bytes32(0),
-                amount: 0,
-                remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(1))}),
-                accounts: new JBChainAccounting[](0)
-            })
+                    version: 1,
+                    token: bytes32(0),
+                    amount: 0,
+                    remoteRoot: JBInboxTreeRoot({nonce: 1, root: bytes32(uint256(1))}),
+                    accounts: new JBChainAccounting[](0)
+                })
             );
     }
 

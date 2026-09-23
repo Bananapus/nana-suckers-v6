@@ -214,8 +214,7 @@ contract ForkArbitrumDeployerTest is TestBaseWorkflow, IERC721Receiver {
         _terminalConfigurations[0] =
             JBTerminalConfig({terminal: jbMultiTerminal(), accountingContextsToAccept: _tokensToAccept});
 
-        jbController()
-            .launchProjectFor({
+        jbController().launchProjectFor({
             owner: address(this),
             projectUri: "arb-fork-test",
             rulesetConfigurations: _rulesetConfigurations,
@@ -365,8 +364,7 @@ contract ForkArbitrumNativeTransferTest is TestBaseWorkflow {
         _terminalConfigurations[0] =
             JBTerminalConfig({terminal: jbMultiTerminal(), accountingContextsToAccept: _tokensToAccept});
 
-        jbController()
-            .launchProjectFor({
+        jbController().launchProjectFor({
             owner: multisig(),
             projectUri: "arb-native-fork-test",
             rulesetConfigurations: _rulesetConfigurations,

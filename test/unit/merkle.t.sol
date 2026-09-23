@@ -134,16 +134,16 @@ contract MerkleUnitTest is JBSucker, Test {
         JBSucker(this)
             .claim(
                 JBClaim({
-                token: JBConstants.NATIVE_TOKEN,
-                leaf: JBLeaf({
-                index: 2,
-                beneficiary: bytes32(uint256(uint160(address(120)))),
-                projectTokenCount: 5 ether,
-                terminalTokenAmount: 5 ether,
-                metadata: bytes32(0)
-            }),
-                proof: __proof
-            })
+                    token: JBConstants.NATIVE_TOKEN,
+                    leaf: JBLeaf({
+                        index: 2,
+                        beneficiary: bytes32(uint256(uint160(address(120)))),
+                        projectTokenCount: 5 ether,
+                        terminalTokenAmount: 5 ether,
+                        metadata: bytes32(0)
+                    }),
+                    proof: __proof
+                })
             );
     }
 
@@ -170,16 +170,16 @@ contract MerkleUnitTest is JBSucker, Test {
         JBSucker(this)
             .claim(
                 JBClaim({
-                token: JBConstants.NATIVE_TOKEN,
-                leaf: JBLeaf({
-                index: 2,
-                beneficiary: bytes32(uint256(uint160(address(120)))),
-                projectTokenCount: 5 ether,
-                terminalTokenAmount: 5 ether,
-                metadata: bytes32(0)
-            }),
-                proof: __proof
-            })
+                    token: JBConstants.NATIVE_TOKEN,
+                    leaf: JBLeaf({
+                        index: 2,
+                        beneficiary: bytes32(uint256(uint160(address(120)))),
+                        projectTokenCount: 5 ether,
+                        terminalTokenAmount: 5 ether,
+                        metadata: bytes32(0)
+                    }),
+                    proof: __proof
+                })
             );
 
         // Attempt to do it again.
@@ -187,16 +187,16 @@ contract MerkleUnitTest is JBSucker, Test {
         JBSucker(this)
             .claim(
                 JBClaim({
-                token: JBConstants.NATIVE_TOKEN,
-                leaf: JBLeaf({
-                index: 2,
-                beneficiary: bytes32(uint256(uint160(address(120)))),
-                projectTokenCount: 5 ether,
-                terminalTokenAmount: 5 ether,
-                metadata: bytes32(0)
-            }),
-                proof: __proof
-            })
+                    token: JBConstants.NATIVE_TOKEN,
+                    leaf: JBLeaf({
+                        index: 2,
+                        beneficiary: bytes32(uint256(uint160(address(120)))),
+                        projectTokenCount: 5 ether,
+                        terminalTokenAmount: 5 ether,
+                        metadata: bytes32(0)
+                    }),
+                    proof: __proof
+                })
             );
     }
 

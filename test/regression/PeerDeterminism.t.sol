@@ -172,8 +172,7 @@ contract RegressionPeerDeterminismTest is Test, TestBaseWorkflow, IERC721Receive
         JBTerminalConfig[] memory terminals = new JBTerminalConfig[](1);
         terminals[0] = JBTerminalConfig({terminal: jbMultiTerminal(), accountingContextsToAccept: accountingContexts});
 
-        return jbController()
-            .launchProjectFor({
+        return jbController().launchProjectFor({
             owner: address(this),
             projectUri: "peer-determinism",
             rulesetConfigurations: rulesets,

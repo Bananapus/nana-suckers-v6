@@ -26,8 +26,7 @@ contract DeployMappingBypassTest is DeployerTests {
         _allowDeploying(projectId, operator);
 
         assertFalse(
-            jbPermissions()
-                .hasPermission({
+            jbPermissions().hasPermission({
                 operator: operator,
                 account: address(this),
                 projectId: projectId,
@@ -37,8 +36,7 @@ contract DeployMappingBypassTest is DeployerTests {
             })
         );
         assertFalse(
-            jbPermissions()
-                .hasPermission({
+            jbPermissions().hasPermission({
                 operator: address(registry),
                 account: address(this),
                 projectId: projectId,
