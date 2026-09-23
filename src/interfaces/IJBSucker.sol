@@ -186,8 +186,10 @@ interface IJBSucker is IERC165 {
     /// @notice The peer chains this sucker reports accounting for. With `includeVirtual` false, returns only the
     /// directly-connected peer chain (the one it is bridged to); with `includeVirtual` true, also returns every chain
     /// learned about through gossip relayed by that peer.
-    /// @dev The directly-connected peer is always present (with a zero value until its first record) so a
-    /// freshly-deployed active sucker immediately owns that chain's accounting during a migration window.
+    /// @dev The directly-connected peer is always present (with a zero value until its first record) so the registry
+    /// can enumerate that chain as soon as the sucker is deployed. Until the first record arrives, the entry is an
+    /// empty sentinel (value 0, freshness 0) that the registry skips, so a deprecated sucker's record keeps answering
+    /// for the chain until this sucker syncs real data.
     /// @param includeVirtual Whether to also include virtually-known (gossiped) peer chains.
     /// @return chainIds The peer chain IDs.
     function peerChainIds(bool includeVirtual) external view returns (uint256[] memory chainIds);

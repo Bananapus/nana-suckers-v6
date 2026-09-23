@@ -1011,6 +1011,8 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
     /// its deployer, registered in this registry, and immediately configured with its token mappings. Multiple suckers
     /// targeting the same peer chain are allowed for bridge resilience. The caller must have `DEPLOY_SUCKERS`
     /// permission, which also authorizes the initial token mappings in each deployment configuration.
+    /// @dev `DEPLOY_SUCKERS` alone covers only configurations with `peer == bytes32(0)`. Every configuration with a
+    /// non-zero `peer`, including this registry's own address, also requires `SET_SUCKER_PEER`.
     /// @param projectId The ID of the project to deploy suckers for.
     /// @param salt The deployment salt. For the suckers to be peers, this must be the same value on
     /// each chain where suckers are deployed.

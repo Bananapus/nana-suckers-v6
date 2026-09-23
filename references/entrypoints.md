@@ -66,7 +66,7 @@ The same `JBChainAccounting[] accounts` bundle is also carried by the root messa
 |-------|------|---------|
 | `chainId` | `uint256` | The source chain this record describes. A receiver ignores a record for its own chain or chain 0. |
 | `totalSupply` | `uint256` | Source-chain project-token supply, including reserved tokens. |
-| `contexts` | `JBSourceContext[]` | Raw source-chain surplus and balance contexts, un-valued (in the source chain's own token addresses and decimals). |
+| `contexts` | `JBSourceContext[]` | Source-chain surplus and balance contexts, un-valued, in the source chain's decimals. The sender's own record carries its own token addresses; a forwarded peer record carries the token keys stored by the sucker on the forwarding chain that received that record and whose copy the registry picked (the forwarding chain's local token where that sucker's mapping matched, otherwise the key it received). In hub-and-spoke, that is the hub's sucker for the record's origin chain, not the sucker sending the bundle. |
 | `timestamp` | `uint256` | Monotonic source-chain freshness key, gated independently per source chain. |
 
 ## Key functions
@@ -109,7 +109,7 @@ The same `JBChainAccounting[] accounts` bundle is also carried by the root messa
 | `amountToAddToBalanceOf(address token)` | Tokens received from bridging that are waiting to be added to the project's terminal balance. |
 | `executedLeafHashOf(address token, uint256 index)` | The committed leaf hash at `(token, index)`, or `bytes32(0)` if unexecuted. Beneficiary contracts re-derive this to authenticate a settlement that a front-runner's direct `claim` already executed. |
 | `peerChainIds(bool includeVirtual)` | The peer chains this sucker reports accounting for: its directly-connected peer, plus — when `includeVirtual` is true — every chain learned about through gossip. The registry aggregates the `includeVirtual: true` set. |
-| `peerChainAccountsOf()` | The raw, un-valued `JBChainAccounting[]` record this sucker holds for every known peer chain. The registry reads this to gather a project's cross-chain knowledge and re-gossip it. |
+| `peerChainAccountsOf()` | The un-valued `JBChainAccounting[]` record this sucker holds for every known peer chain, with mapped context token keys already re-keyed to this sucker's local token (unmapped keys as received). The registry reads this to gather a project's cross-chain knowledge and re-gossip it. |
 | `peerChainContextsOf(uint256 chainId)` | Per-context surplus and balance for one peer chain, resolved to local currencies and folded at read time. Un-valued; returned with the chain's freshness key. |
 | `peerChainTotalSupplyOf(uint256 chainId)` | The last-known total token supply on one peer chain (the registry sums these to compute effective cross-chain supply). |
 | `peerChainTotalSupplyValue(uint256 chainId)` | One peer chain's total supply bundled with its chain id and freshness key (`JBPeerChainValue`). |
@@ -121,8 +121,8 @@ The same `JBChainAccounting[] accounts` bundle is also carried by the root messa
 
 | Function | What it does |
 |----------|--------------|
-| `deploySuckersFor(uint256 projectId, bytes32 salt, JBSuckerDeployerConfig[] calldata configurations)` | Deploy one or more suckers for a project and apply each config's initial token mappings. Requires `DEPLOY_SUCKERS`. Returns the deployed sucker addresses. |
-| `removeDeprecatedSucker(uint256 projectId, address sucker)` | Remove a fully deprecated sucker from a project's inventory. |
+| `deploySuckersFor(uint256 projectId, bytes32 salt, JBSuckerDeployerConfig[] calldata configurations)` | Deploy one or more suckers for a project and apply each config's initial token mappings. Requires `DEPLOY_SUCKERS`; a config with a non-zero `peer` (including the registry's own address) also requires `SET_SUCKER_PEER`, so only `peer == bytes32(0)` deploys under `DEPLOY_SUCKERS` alone. Returns the deployed sucker addresses. |
+| `removeDeprecatedSucker(uint256 projectId, address sucker)` | Permissionlessly remove a fully deprecated sucker from a project's active listings (`suckersOf`, `suckerPairsOf`). It stays in `allSuckersOf` and `isSuckerOf`, so pending claims can still mint. |
 | `allowSuckerDeployer(address deployer)` / `allowSuckerDeployers(address[] calldata deployers)` | Add deployer(s) to the allowlist. Owner-only. |
 | `removeSuckerDeployer(address deployer)` | Remove a deployer from the allowlist. Owner-only. |
 | `allowTokenMapping(address localToken, uint256 remoteChainId, bytes32 remoteToken)` / `allowTokenMappings(address[] calldata localTokens, uint256[] calldata remoteChainIds, bytes32[] calldata remoteTokens)` | Add route-scoped approvals for native/native or different-address local/remote token mappings. Owner-only. |

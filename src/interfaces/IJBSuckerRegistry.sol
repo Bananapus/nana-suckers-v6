@@ -209,6 +209,8 @@ interface IJBSuckerRegistry {
     /// @notice Deploy one or more suckers for the specified project.
     /// @dev This call also applies each configuration's token mappings on the deployed suckers. `DEPLOY_SUCKERS`
     /// authorizes those initial mappings; use `MAP_SUCKER_TOKEN` for post-deployment mapping changes.
+    /// @dev `DEPLOY_SUCKERS` alone covers only configurations with `peer == bytes32(0)`. Every configuration with a
+    /// non-zero `peer`, including the registry's own address, also requires `SET_SUCKER_PEER`.
     /// @param projectId The ID of the project to deploy suckers for.
     /// @param salt The salt used for deterministic deployment.
     /// @param configurations The deployer configs to use.
