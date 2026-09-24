@@ -237,8 +237,8 @@ contract JBArbitrumSucker is JBSucker, IJBArbitrumSucker {
             // Convert bytes32 types to address at the Arbitrum bridge API boundary.
             IArbL2GatewayRouter(address(GATEWAYROUTER))
                 .outboundTransfer({
-                    l1Token: _toAddress(remoteToken.addr), to: peerAddress, amount: amount, data: bytes("")
-                });
+                l1Token: _toAddress(remoteToken.addr), to: peerAddress, amount: amount, data: bytes("")
+            });
 
             SafeERC20.forceApprove({token: IERC20(token), spender: gateway, value: 0});
         } else {
@@ -299,7 +299,8 @@ contract JBArbitrumSucker is JBSucker, IJBArbitrumSucker {
                 // The Arbitrum Inbox validates maxSubmissionCost against this actual payload, not the user data.
                 gateway = GATEWAYROUTER.getGateway(token);
                 uint256 outboundCalldataLength =
-                    IL1ArbitrumGateway(gateway).getOutboundCalldata({
+                    IL1ArbitrumGateway(gateway)
+                .getOutboundCalldata({
                     token: token, from: address(this), to: _peerAddress(), amount: amount, data: bytes("")
                 }).length;
                 maxSubmissionCostERC20 = ARBINBOX.calculateRetryableSubmissionFee({

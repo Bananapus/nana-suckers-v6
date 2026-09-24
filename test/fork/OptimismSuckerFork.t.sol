@@ -237,7 +237,8 @@ contract OptimismSuckerForkTest is TestBaseWorkflow {
         });
 
         // Launch the project with the configured ruleset and terminal.
-        jbController().launchProjectFor({
+        jbController()
+            .launchProjectFor({
             owner: multisig(), // Multisig owns the project.
             projectUri: "optimism-sucker-fork-test", // Descriptive URI.
             rulesetConfigurations: _rulesetConfigurations, // Single ruleset.

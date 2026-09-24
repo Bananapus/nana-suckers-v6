@@ -114,7 +114,8 @@ contract DeployerTests is Test, TestBaseWorkflow, IERC721Receiver {
             JBTerminalConfig({terminal: jbMultiTerminal(), accountingContextsToAccept: _tokensToAccept});
 
         // Create a first project to collect fees.
-        projectId = jbController().launchProjectFor({
+        projectId = jbController()
+            .launchProjectFor({
             owner: address(this),
             projectUri: "whatever",
             rulesetConfigurations: _rulesetConfigurations,

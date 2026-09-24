@@ -209,7 +209,8 @@ contract RegistrySetSuckerPeerGateTest is Test, TestBaseWorkflow, IERC721Receive
     }
 
     function _grantOperator(address operator, uint8[] memory ids) internal {
-        jbPermissions().setPermissionsFor({
+        jbPermissions()
+            .setPermissionsFor({
             account: projectOwner,
             // forge-lint: disable-next-line(unsafe-typecast)
             permissionsData: JBPermissionsData({operator: operator, projectId: uint64(projectId), permissionIds: ids})
@@ -268,7 +269,8 @@ contract RegistrySetSuckerPeerGateTest is Test, TestBaseWorkflow, IERC721Receive
         JBTerminalConfig[] memory terminals = new JBTerminalConfig[](1);
         terminals[0] = JBTerminalConfig({terminal: jbMultiTerminal(), accountingContextsToAccept: accountingContexts});
 
-        return jbController().launchProjectFor({
+        return jbController()
+            .launchProjectFor({
             owner: projectOwner,
             projectUri: "registry-set-sucker-peer-gate",
             rulesetConfigurations: rulesets,

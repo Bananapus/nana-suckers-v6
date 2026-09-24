@@ -56,9 +56,8 @@ contract PartialPullCCIPRouter is ICCIPRouter {
         }
 
         for (uint256 i; i < message.tokenAmounts.length; i++) {
-            IERC20(message.tokenAmounts[i].token).transferFrom({
-                from: msg.sender, to: address(this), value: message.tokenAmounts[i].amount / 2
-            });
+            IERC20(message.tokenAmounts[i].token)
+                .transferFrom({from: msg.sender, to: address(this), value: message.tokenAmounts[i].amount / 2});
         }
 
         return keccak256("partial-pull");

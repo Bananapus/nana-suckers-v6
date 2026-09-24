@@ -212,7 +212,8 @@ contract ForkCeloTest is TestBaseWorkflow {
         _terminalConfigurations[0] =
             JBTerminalConfig({terminal: jbMultiTerminal(), accountingContextsToAccept: _tokensToAccept});
 
-        jbController().launchProjectFor({
+        jbController()
+            .launchProjectFor({
             owner: multisig(),
             projectUri: "celo-fork-test-native",
             rulesetConfigurations: _rulesetConfigurations,
@@ -258,7 +259,8 @@ contract ForkCeloTest is TestBaseWorkflow {
         _terminalConfigurations[0] =
             JBTerminalConfig({terminal: jbMultiTerminal(), accountingContextsToAccept: _tokensToAccept});
 
-        jbController().launchProjectFor({
+        jbController()
+            .launchProjectFor({
             owner: multisig(),
             projectUri: "celo-fork-test-weth",
             rulesetConfigurations: _rulesetConfigurations,
