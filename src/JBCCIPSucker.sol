@@ -320,7 +320,7 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
     /// @dev Delegates CCIP message construction and sending to JBCCIPLib (via DELEGATECALL) to reduce bytecode.
     /// @dev Supports two fee modes:
     ///   - `transportPayment > 0`: pay CCIP fees in native ETH (existing behavior).
-    ///   - `transportPayment == 0`: pay CCIP fees in LINK from the sucker's pre-funded balance.
+    ///   - `transportPayment == 0`: pay CCIP fees in LINK pulled from the caller (`_msgSender()`) via `transferFrom`.
     ///     This enables chains with no meaningful native token (e.g. Tempo) to use CCIP.
     /// @param transportPayment The amount of `msg.value` that is going to get paid for sending this message.
     /// @param token The token to bridge the outbox tree for.
