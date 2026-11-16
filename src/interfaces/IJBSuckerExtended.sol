@@ -31,8 +31,8 @@ interface IJBSuckerExtended is IJBSucker {
     /// @param caller The address that opened the emergency hatch.
     event EmergencyHatchOpened(address[] tokens, address caller);
 
-    /// @notice Emitted when a failed `toRemoteFee` payment is retained for later refund.
-    /// @param account The account that can reclaim the retained fee.
+    /// @notice Emitted when a failed `toRemoteFee` payment is retained until the fee project can take it.
+    /// @param account The account credited as the fee beneficiary when the retained fee is paid.
     /// @param amount The retained fee amount.
     /// @param caller The address that caused the fee to be retained.
     event RetainedToRemoteFee(address indexed account, uint256 amount, address caller);
@@ -43,14 +43,11 @@ interface IJBSuckerExtended is IJBSucker {
     /// @param caller The address that caused the refund to be retained.
     event RetainedTransportPaymentRefund(address indexed account, uint256 amount, address caller);
 
-    /// @notice Emitted when an account claims retained `toRemoteFee` ETH.
-    /// @param account The account whose retained fee balance was claimed.
-    /// @param beneficiary The address that received the ETH.
-    /// @param amount The amount claimed.
-    /// @param caller The address that triggered the claim.
-    event RetainedToRemoteFeeClaimed(
-        address indexed account, address indexed beneficiary, uint256 amount, address caller
-    );
+    /// @notice Emitted when a retained `toRemoteFee` is paid to the fee project.
+    /// @param account The account whose retained fee was paid, credited as the fee beneficiary.
+    /// @param amount The amount paid.
+    /// @param caller The address that triggered the payment.
+    event RetainedToRemoteFeePaid(address indexed account, uint256 amount, address caller);
 
     /// @notice Emitted when an account claims retained transport-payment refund ETH.
     /// @param account The account whose retained refund balance was claimed.
@@ -83,9 +80,10 @@ interface IJBSuckerExtended is IJBSucker {
 
     // State-changing functions
 
-    /// @notice Claim retained failed-fee ETH.
-    /// @param beneficiary The address that should receive the retained ETH.
-    function claimRetainedToRemoteFee(address payable beneficiary) external;
+    /// @notice Pay a retained `toRemoteFee` to the fee project, crediting `account` as the fee beneficiary. Reverts if
+    /// the fee project still cannot take it.
+    /// @param account The account whose retained fee to pay.
+    function payRetainedToRemoteFeeOf(address account) external;
 
     /// @notice Claim retained failed transport-payment refund ETH.
     /// @param beneficiary The address that should receive the retained ETH.

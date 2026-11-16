@@ -124,6 +124,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
 
     /// @notice Thrown when an account attempts to claim a retained failed-fee refund but is owed nothing.
     error JBSucker_NoRetainedToRemoteFee(address account);
+    error JBSucker_RetainedToRemoteFeeNotPaid();
 
     /// @notice Thrown when an account attempts to claim a retained failed transport-payment refund but is owed nothing.
     error JBSucker_NoRetainedTransportPaymentRefund(address account);
@@ -422,24 +423,22 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         }
     }
 
-    /// @notice Claim retained failed-fee ETH.
-    /// @param beneficiary The address that should receive the retained ETH.
-    function claimRetainedToRemoteFee(address payable beneficiary) external override {
-        if (beneficiary == address(0)) revert JBSucker_ZeroBeneficiary({beneficiary: bytes32(0)});
-
-        address account = _msgSender();
+    /// @notice Pay a retained `toRemoteFee` to the fee project, crediting the account whose `toRemote` call it came
+    /// from.
+    /// @dev Permissionless. The pay runs with no catch, so a fee project that still cannot take it reverts this call
+    /// and the fee stays retained. The fee is never refunded: whether the original pay succeeded can depend on the
+    /// gas the caller chose, so a refund would be a fee anyone can waive.
+    /// @param account The account whose retained fee to pay.
+    function payRetainedToRemoteFeeOf(address account) external override {
         uint256 amount = retainedToRemoteFeeOf[account];
         if (amount == 0) revert JBSucker_NoRetainedToRemoteFee(account);
 
         retainedToRemoteFeeOf[account] = 0;
         retainedToRemoteFeeBalance -= amount;
 
-        _sendNativeTo({beneficiary: beneficiary, amount: amount});
+        if (!_payToRemoteFee({amount: amount, beneficiary: account})) revert JBSucker_RetainedToRemoteFeeNotPaid();
 
-        // State was cleared before sending ETH; the event is emitted after the transfer so failed sends do not log.
-        emit RetainedToRemoteFeeClaimed({
-            account: account, beneficiary: beneficiary, amount: amount, caller: _msgSender()
-        });
+        emit RetainedToRemoteFeePaid({account: account, amount: amount, caller: _msgSender()});
     }
 
     /// @notice Claim retained failed transport-payment refund ETH.
@@ -829,29 +828,12 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         }
         uint256 transportPayment = msg.value - _toRemoteFee;
 
-        // Best-effort: if the terminal doesn't exist or the pay call reverts, proceed without fee.
-        // On failure, the fee ETH is retained as refundable caller credit instead of being added back to
-        // transportPayment, avoiding DoS on zero-cost bridges that revert on non-zero transportPayment.
-        IJBTerminal feeTerminal = _primaryTerminalOf({forProjectId: FEE_PROJECT_ID, token: JBConstants.NATIVE_TOKEN});
-        bool feePaid;
-        if (address(feeTerminal) != address(0) && _toRemoteFee != 0) {
-            try feeTerminal.pay{value: _toRemoteFee}({
-                projectId: FEE_PROJECT_ID,
-                token: JBConstants.NATIVE_TOKEN,
-                amount: _toRemoteFee,
-                beneficiary: _msgSender(),
-                minReturnedTokens: 0,
-                memo: "",
-                metadata: ""
-            }) returns (
-                uint256
-            ) {
-                feePaid = true;
-            } catch {
-                // Fee payment failed. Keep transportPayment unchanged and retain the fee for caller refund below.
-            }
+        // Best-effort: if the terminal doesn't exist or the pay call reverts, proceed and retain the fee for the fee
+        // project (see `payRetainedToRemoteFeeOf`) instead of adding it back to transportPayment, avoiding DoS on
+        // zero-cost bridges that revert on non-zero transportPayment.
+        if (_toRemoteFee != 0 && !_payToRemoteFee({amount: _toRemoteFee, beneficiary: _msgSender()})) {
+            _retainToRemoteFee({account: _msgSender(), amount: _toRemoteFee});
         }
-        if (!feePaid && _toRemoteFee != 0) _retainToRemoteFee({account: _msgSender(), amount: _toRemoteFee});
 
         // Send the merkle root to the remote chain.
         _sendRoot({transportPayment: transportPayment, token: token, remoteToken: remoteToken});
@@ -993,8 +975,8 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         // bridged and cannot also be claimed into the project's local balance.
         uint256 amount = _balanceOf({token: token, addr: address(this)}) - _outboxOf[token].balance;
         if (token == JBConstants.NATIVE_TOKEN) {
-            // Native ETH can include caller refunds retained after failed fee payouts. Keep those credits reserved for
-            // their claimants before reporting any claimable project balance.
+            // Native ETH can include fees retained after failed fee payouts. Keep those reserved for the fee project
+            // before reporting any claimable project balance.
             uint256 retainedFeeBalance = retainedToRemoteFeeBalance;
             if (amount <= retainedFeeBalance) return 0;
             amount -= retainedFeeBalance;
@@ -1449,6 +1431,21 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         retainedToRemoteFeeOf[account] += amount;
         retainedToRemoteFeeBalance += amount;
         emit RetainedToRemoteFee({account: account, amount: amount, caller: _msgSender()});
+    }
+
+    /// @notice Pays a `toRemoteFee` to the fee project's native terminal.
+    /// @param amount The fee amount.
+    /// @param beneficiary The address credited as the fee beneficiary.
+    /// @return paid False if the fee project has no native terminal or its `pay` reverted.
+    function _payToRemoteFee(uint256 amount, address beneficiary) internal returns (bool paid) {
+        IJBTerminal feeTerminal = _primaryTerminalOf({forProjectId: FEE_PROJECT_ID, token: JBConstants.NATIVE_TOKEN});
+        if (address(feeTerminal) == address(0)) return false;
+
+        // A low-level call keeps the bytecode small: the directory only returns terminals with code.
+        // forge-lint: disable-next-line(unchecked-call)
+        (paid,) = address(feeTerminal).call{value: amount}(
+            abi.encodeCall(IJBTerminal.pay, (FEE_PROJECT_ID, JBConstants.NATIVE_TOKEN, amount, beneficiary, 0, "", ""))
+        );
     }
 
     /// @notice Retains a failed transport-payment refund as account-scoped native credit.
