@@ -61,7 +61,7 @@ library JBSuckerLib {
         uint8 messageVersion,
         uint256 sourceTimestamp
     )
-        external
+        internal
         view
         returns (JBAccountingSnapshot memory snapshot)
     {
@@ -105,7 +105,7 @@ library JBSuckerLib {
         uint8 messageVersion,
         uint256 sourceTimestamp
     )
-        external
+        internal
         view
         returns (JBMessageRoot memory message)
     {
@@ -131,7 +131,7 @@ library JBSuckerLib {
     /// @param branch The 32-element merkle proof branch.
     /// @param index The leaf index.
     /// @return The computed merkle root.
-    function computeBranchRoot(bytes32 item, bytes32[32] memory branch, uint256 index) external pure returns (bytes32) {
+    function computeBranchRoot(bytes32 item, bytes32[32] memory branch, uint256 index) internal pure returns (bytes32) {
         // Delegate to MerkleLib's unrolled assembly implementation.
         return MerkleLib.branchRoot({item: item, branch: branch, index: index});
     }
@@ -141,7 +141,7 @@ library JBSuckerLib {
     /// @param branch The 32-element branch array (caller copies from storage to memory).
     /// @param count The number of leaves inserted into the tree.
     /// @return current The merkle root.
-    function computeTreeRoot(bytes32[32] memory branch, uint256 count) external pure returns (bytes32 current) {
+    function computeTreeRoot(bytes32[32] memory branch, uint256 count) internal pure returns (bytes32 current) {
         // An empty tree has a well-known root.
         if (count == 0) return MerkleLib.Z_32;
 
@@ -204,7 +204,7 @@ library JBSuckerLib {
         uint256 projectId,
         JBSourceContext[] memory rawContexts
     )
-        external
+        internal
         view
         returns (JBPeerChainContext[] memory contexts)
     {
