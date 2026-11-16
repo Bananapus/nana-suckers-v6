@@ -31,7 +31,7 @@ library JBCCIPLib {
         address token,
         uint256 amount
     )
-        external
+        internal
         returns (Client.EVMTokenAmount[] memory tokenAmounts, address bridgeToken)
     {
         // If the amount is zero, return an empty array and the original token.
@@ -92,7 +92,7 @@ library JBCCIPLib {
         Client.EVMTokenAmount[] memory tokenAmounts,
         address refundRecipient
     )
-        external
+        internal
         returns (bool refundFailed, uint256 refundAmount)
     {
         // Cache to reduce stack pressure.
@@ -159,7 +159,7 @@ library JBCCIPLib {
     /// native. @dev Runs via DELEGATECALL so `address(this).balance` refers to the calling contract.
     /// @param ccipRouter The CCIP router (used to look up wrapped native token).
     /// @param destTokenAmounts The token amounts delivered by CCIP (length 0 or 1).
-    function unwrapReceivedTokens(ICCIPRouter ccipRouter, Client.EVMTokenAmount[] calldata destTokenAmounts) external {
+    function unwrapReceivedTokens(ICCIPRouter ccipRouter, Client.EVMTokenAmount[] calldata destTokenAmounts) internal {
         // Only process if exactly one token was delivered.
         if (destTokenAmounts.length == 1) {
             // Get a reference to the delivered token amount.
@@ -190,7 +190,7 @@ library JBCCIPLib {
     /// @param data The raw CCIP message data.
     /// @return messageType The message type (0 = root).
     /// @return payload The inner payload (encoded JBMessageRoot).
-    function decodeTypedMessage(bytes memory data) external pure returns (uint8 messageType, bytes memory payload) {
+    function decodeTypedMessage(bytes memory data) internal pure returns (uint8 messageType, bytes memory payload) {
         // ABI-decode the type and payload from the raw data.
         (messageType, payload) = abi.decode(data, (uint8, bytes));
     }
