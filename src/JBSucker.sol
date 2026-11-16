@@ -124,7 +124,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
 
     /// @notice Thrown when an account attempts to claim a retained failed-fee refund but is owed nothing.
     error JBSucker_NoRetainedToRemoteFee(address account);
-    error JBSucker_RetainedToRemoteFeeNotPaid();
+    error JBSucker_RetainedToRemoteFeeNotPaid(address account, uint256 amount);
 
     /// @notice Thrown when an account attempts to claim a retained failed transport-payment refund but is owed nothing.
     error JBSucker_NoRetainedTransportPaymentRefund(address account);
@@ -436,7 +436,9 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         retainedToRemoteFeeOf[account] = 0;
         retainedToRemoteFeeBalance -= amount;
 
-        if (!_payToRemoteFee({amount: amount, beneficiary: account})) revert JBSucker_RetainedToRemoteFeeNotPaid();
+        if (!_payToRemoteFee({amount: amount, beneficiary: account})) {
+            revert JBSucker_RetainedToRemoteFeeNotPaid({account: account, amount: amount});
+        }
 
         emit RetainedToRemoteFeePaid({account: account, amount: amount, caller: _msgSender()});
     }
@@ -1441,11 +1443,19 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         IJBTerminal feeTerminal = _primaryTerminalOf({forProjectId: FEE_PROJECT_ID, token: JBConstants.NATIVE_TOKEN});
         if (address(feeTerminal) == address(0)) return false;
 
-        // A low-level call keeps the bytecode small: the directory only returns terminals with code.
-        // forge-lint: disable-next-line(unchecked-call)
-        (paid,) = address(feeTerminal).call{value: amount}(
-            abi.encodeCall(IJBTerminal.pay, (FEE_PROJECT_ID, JBConstants.NATIVE_TOKEN, amount, beneficiary, 0, "", ""))
-        );
+        try feeTerminal.pay{value: amount}({
+            projectId: FEE_PROJECT_ID,
+            token: JBConstants.NATIVE_TOKEN,
+            amount: amount,
+            beneficiary: beneficiary,
+            minReturnedTokens: 0,
+            memo: "",
+            metadata: ""
+        }) {
+            return true;
+        } catch {
+            return false;
+        }
     }
 
     /// @notice Retains a failed transport-payment refund as account-scoped native credit.
