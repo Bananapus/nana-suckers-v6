@@ -104,14 +104,6 @@ interface IJBSucker is IERC165 {
     /// @return The directory contract.
     function DIRECTORY() external view returns (IJBDirectory);
 
-    /// @notice The minimum gas required for a basic cross-chain call.
-    /// @return The base gas limit.
-    function MESSENGER_BASE_GAS_LIMIT() external view returns (uint32);
-
-    /// @notice The minimum gas required for bridging ERC-20 tokens.
-    /// @return The ERC-20 minimum gas limit.
-    function MESSENGER_ERC20_MIN_GAS_LIMIT() external view returns (uint32);
-
     /// @notice The project registry (ERC-721 ownership).
     /// @return The projects contract.
     function PROJECTS() external view returns (IJBProjects);
@@ -244,11 +236,15 @@ interface IJBSucker is IERC165 {
 
     /// @notice Map a local token to a remote token for bridging.
     /// @param map The token mapping to add.
-    function mapToken(JBTokenMapping calldata map) external payable;
+    /// @param messagingGasLimit The destination gas limit for the final outbox flush a disable with pending claims
+    /// sends. Ignored when no message is sent.
+    function mapToken(JBTokenMapping calldata map, uint256 messagingGasLimit) external payable;
 
     /// @notice Map multiple local tokens to remote tokens for bridging.
     /// @param maps The token mappings to add.
-    function mapTokens(JBTokenMapping[] calldata maps) external payable;
+    /// @param messagingGasLimit The destination gas limit for any final outbox flush a disable with pending claims
+    /// sends. Ignored when no message is sent.
+    function mapTokens(JBTokenMapping[] calldata maps, uint256 messagingGasLimit) external payable;
 
     /// @notice Cash out project tokens and add a leaf to the outbox tree for bridging.
     /// @param projectTokenCount The number of project tokens to cash out.
@@ -269,9 +265,13 @@ interface IJBSucker is IERC165 {
 
     /// @notice Send peer-chain accounting data without sending an outbox root or paying the registry `toRemoteFee`.
     /// @dev The caller still provides bridge transport payment through `msg.value` when the bridge requires it.
-    function syncAccountingData() external payable;
+    /// @param messagingGasLimit The destination gas limit to request from the bridge. There is no default or floor;
+    /// simulate `fromRemoteAccounting` on the peer chain to size it.
+    function syncAccountingData(uint256 messagingGasLimit) external payable;
 
     /// @notice Send the outbox tree root and bridged assets to the remote peer.
     /// @param token The terminal token to bridge.
-    function toRemote(address token) external payable;
+    /// @param messagingGasLimit The destination gas limit to request from the bridge. There is no default or floor;
+    /// simulate `fromRemote` on the peer chain to size it.
+    function toRemote(address token, uint256 messagingGasLimit) external payable;
 }

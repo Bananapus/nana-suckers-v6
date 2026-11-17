@@ -76,10 +76,6 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     /// for cross-VM compatibility.
     error JBSucker_AmountExceedsUint128(uint256 amount);
 
-    /// @notice Thrown when a token mapping specifies a bridging gas limit below the minimum required to safely deliver
-    /// an ERC-20 on the remote chain.
-    error JBSucker_BelowMinGas(uint256 minGas, uint256 minGasLimit);
-
     /// @notice Thrown when an outbound action is attempted while the sucker is deprecated (or no longer accepting
     /// sends).
     error JBSucker_Deprecated(JBSuckerState state);
@@ -120,6 +116,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     error JBSucker_NotPeer(bytes32 caller);
 
     /// @notice Thrown when a send is attempted but there is nothing new in the outbox to bridge.
+    error JBSucker_ZeroMessagingGasLimit();
     error JBSucker_NothingToSend(address token, uint256 outboxBalance, uint256 treeCount, uint256 numberOfClaimsSent);
 
     /// @notice Thrown when an account attempts to claim a retained failed-fee refund but is owed nothing.
@@ -164,12 +161,6 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     // ------------------------- public constants ------------------------ //
     //*********************************************************************//
 
-    /// @notice A reasonable minimum gas limit for a basic cross-chain call to `fromRemote` on the remote chain.
-    uint32 public constant override MESSENGER_BASE_GAS_LIMIT = 300_000;
-
-    /// @notice A reasonable minimum gas limit for performing an ERC-20 transfer on the remote chain.
-    uint32 public constant override MESSENGER_ERC20_MIN_GAS_LIMIT = 200_000;
-
     /// @notice The message format version. Used to reject incompatible messages from remote chains.
     uint8 public constant MESSAGE_VERSION = 1;
 
@@ -185,12 +176,6 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     /// later proof matches. The window only widens which still-valid proofs are accepted; it never relaxes the
     /// double-spend guard.
     uint256 internal constant _INBOX_ROOT_RING_SIZE = 4;
-
-    /// @notice Extra destination gas budgeted per source accounting context carried in a gossip bundle.
-    /// @dev Covers the receiver's per-context storage writes in `_storeChainAccounting`, so the messaging gas limit
-    /// scales with the bundle (via `_messagingGasLimit`) instead of a fixed cap that would bound how large the
-    /// cross-chain mesh can grow before the destination call runs out of gas.
-    uint256 internal constant _MESSENGER_SOURCE_CONTEXT_GAS_LIMIT = 75_000;
 
     /// @notice The depth of the merkle tree used to store the outbox and inbox.
     uint32 internal constant _TREE_DEPTH = 32;
@@ -340,6 +325,17 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     /// simply vanishes.
     /// @custom:param chainId The peer chain to read the contexts of.
     mapping(uint256 chainId => JBSourceContext[]) private _peerContextsOf;
+
+    //*********************************************************************//
+    // -------------- internal transient stored properties -------------- //
+    //*********************************************************************//
+
+    /// @notice The destination gas limit the `toRemote` or `syncAccountingData` call in progress asked for.
+    /// @dev Set by the entry point and consumed once by `_messagingGasLimit`, so the chain-specific senders need no
+    /// extra parameter and a request cannot leak into a later send. There is no protocol default or floor: a
+    /// destination gas number is tuned to one set of gas rules and goes stale at the next repricing, so the caller,
+    /// who can simulate the remote `fromRemote` or `fromRemoteAccounting`, supplies it every time.
+    uint256 internal transient _messagingGasLimitRequest;
 
     //*********************************************************************//
     // ---------------------------- constructor -------------------------- //
@@ -629,7 +625,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     /// pending outbox entries. Requires `MAP_SUCKER_TOKEN` permission from the project owner or deployment registry.
     /// @param maps A list of local and remote terminal token addresses to map, and minimum amount/gas limits for
     /// bridging them.
-    function mapTokens(JBTokenMapping[] calldata maps) external payable override {
+    function mapTokens(JBTokenMapping[] calldata maps, uint256 messagingGasLimit) external payable override {
         uint256 disableCandidates;
 
         // Count mappings that currently need a final outbox flush. This is an upper bound because duplicated disables
@@ -649,11 +645,15 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         uint256 transportPaymentValue = disableCandidates == 0 ? 0 : msg.value / disableCandidates;
         uint256 transportPaymentSpent;
         for (uint256 i; i < maps.length;) {
+            // Disabling a mapping with pending claims flushes the outbox with a final message, which needs the
+            // caller's destination gas limit. The request is consumed per send, so set it before each mapping.
+            _messagingGasLimitRequest = messagingGasLimit;
             transportPaymentSpent += _mapToken({map: maps[i], transportPaymentValue: transportPaymentValue});
             unchecked {
                 ++i;
             }
         }
+        delete _messagingGasLimitRequest;
 
         // Return enable-only value, duplicate/no-op disable value, and integer-division dust to the caller.
         if (msg.value > transportPaymentSpent) {
@@ -771,9 +771,11 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     /// @notice Send the latest peer-chain accounting data without sending an outbox root or paying the registry
     /// `toRemoteFee`.
     /// @dev The caller still provides any bridge transport payment through `msg.value`.
-    function syncAccountingData() external payable override {
+    function syncAccountingData(uint256 messagingGasLimit) external payable override {
         // Accounting-only messages are outbound bridge messages and follow the same deprecation boundary as roots.
         _requireSendingEnabled();
+
+        _messagingGasLimitRequest = messagingGasLimit;
 
         uint256 sourceTimestamp = _nextSourceTimestamp();
         JBAccountingSnapshot memory snapshot = JBSuckerLib.buildAccountingSnapshot({
@@ -800,7 +802,9 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     /// `transportPayment = msg.value - fee`, which is critical for zero-cost bridges (OP, Base, Celo, Arb L2->L1)
     /// that revert on non-zero transport payment. The retained fee is excluded from `amountToAddToBalanceOf`.
     /// @param token The terminal token to bridge.
-    function toRemote(address token) external payable override {
+    function toRemote(address token, uint256 messagingGasLimit) external payable override {
+        _messagingGasLimitRequest = messagingGasLimit;
+
         JBRemoteToken memory remoteToken = _remoteTokenFor[token];
 
         // Ensure that the token does not have an emergency hatch enabled.
@@ -1106,8 +1110,11 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     /// @notice Map an ERC-20 token on the local chain to a remote-chain ERC-20 token for bridging.
     /// @param map The local and remote terminal token addresses to map, and minimum amount/gas limits for bridging
     /// them.
-    function mapToken(JBTokenMapping calldata map) public payable override {
+    function mapToken(JBTokenMapping calldata map, uint256 messagingGasLimit) public payable override {
+        // Only a disable with pending claims sends a message; the request is consumed by that send or cleared below.
+        _messagingGasLimitRequest = messagingGasLimit;
         uint256 transportPaymentSpent = _mapToken({map: map, transportPaymentValue: msg.value});
+        delete _messagingGasLimitRequest;
         if (msg.value > transportPaymentSpent) {
             _sendNativeTo({beneficiary: payable(_msgSender()), amount: msg.value - transportPaymentSpent});
         }
@@ -1893,23 +1900,14 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         return 14 days;
     }
 
-    /// @notice The destination gas limit a gossip-carrying message needs to store its bundle on the remote chain.
-    /// @dev A fixed base (`MESSENGER_BASE_GAS_LIMIT`) plus `_MESSENGER_SOURCE_CONTEXT_GAS_LIMIT` per source context, so
-    /// the budget grows with the bundle. Without this, a fixed cap would bound the mesh: once the bundle's contexts
-    /// exceed the cap, the destination `fromRemote`/`fromRemoteAccounting` runs out of gas. Every bridge variant sizes
-    /// its outbound gas limit from this so the OP-stack, Arbitrum, and CCIP suckers scale identically.
-    /// @param accounts The accounting records carried by the message.
+    /// @notice The destination gas limit for the message being sent, as the caller asked for it.
+    /// @dev Consumed once per send. Every bridge variant sizes its outbound gas limit from this, so the OP-stack,
+    /// Arbitrum and CCIP suckers behave identically. Reverts on zero: a message with no gas can never land.
     /// @return gasLimit The destination gas limit to request from the bridge.
-    function _messagingGasLimit(JBChainAccounting[] memory accounts) internal pure returns (uint256 gasLimit) {
-        uint256 contextCount;
-        uint256 numAccounts = accounts.length;
-        for (uint256 i; i < numAccounts;) {
-            contextCount += accounts[i].contexts.length;
-            unchecked {
-                ++i;
-            }
-        }
-        return MESSENGER_BASE_GAS_LIMIT + (contextCount * _MESSENGER_SOURCE_CONTEXT_GAS_LIMIT);
+    function _messagingGasLimit() internal returns (uint256 gasLimit) {
+        gasLimit = _messagingGasLimitRequest;
+        if (gasLimit == 0) revert JBSucker_ZeroMessagingGasLimit();
+        delete _messagingGasLimitRequest;
     }
 
     /// @notice The calldata. Preferred to use over `msg.data`.
@@ -2030,12 +2028,6 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
                 revert JBSucker_InvalidNativeRemoteAddress({remoteToken: map.remoteToken});
             }
             return;
-        }
-
-        // Enforce a reasonable minimum gas limit for bridging. A minimum which is too low could lead to the loss of
-        // funds.
-        if (map.minGas < MESSENGER_ERC20_MIN_GAS_LIMIT) {
-            revert JBSucker_BelowMinGas({minGas: map.minGas, minGasLimit: MESSENGER_ERC20_MIN_GAS_LIMIT});
         }
     }
 

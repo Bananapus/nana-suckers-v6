@@ -267,7 +267,7 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
     {
         _sendCcipMessage({
             transportPayment: transportPayment,
-            gasLimit: _messagingGasLimit({accounts: snapshot.accounts}),
+            gasLimit: _messagingGasLimit(),
             encodedPayload: abi.encode(_CCIP_MSG_TYPE_ACCOUNTING, abi.encode(snapshot)),
             tokenAmounts: new Client.EVMTokenAmount[](0)
         });
@@ -341,7 +341,7 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
         override
     {
         // Budget for the root receiver plus the accounting contexts carried in the root message.
-        uint256 gasLimit = _messagingGasLimit({accounts: suckerMessage.accounts});
+        uint256 gasLimit = _messagingGasLimit();
         Client.EVMTokenAmount[] memory tokenAmounts;
 
         if (amount != 0) {
@@ -378,7 +378,6 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
     /// @notice Validates a token mapping. Allows CCIP-specific mapping rules.
     /// @dev Unlike OP/Arbitrum suckers (which share ETH as native on both chains), this CCIP sucker can connect
     /// chains with different native tokens. This means `NATIVE_TOKEN` may map to an ERC-20 on the remote chain.
-    /// @param map The token mapping to validate.
     ///
     /// Example: ETH mainnet (native = ETH) <-> Celo (native = CELO, ETH is an ERC-20).
     ///   - On mainnet: `mapToken({localToken: NATIVE_TOKEN, remoteToken: celoETH_address})`
@@ -388,12 +387,9 @@ contract JBCCIPSucker is JBSucker, IAny2EVMMessageReceiver {
     ///
     /// The base class restriction (`NATIVE_TOKEN` can only map to `NATIVE_TOKEN` or `address(0)`) is intentionally
     /// removed here. The base class retains that restriction for OP/Arbitrum where both chains share ETH as native.
-    function _validateTokenMapping(JBTokenMapping calldata map) internal pure virtual override {
-        // Enforce a reasonable minimum gas limit for bridging. A minimum which is too low could lead to the loss of
-        // funds. CCIP wraps native tokens before bridging (see `_sendRootOverAMB`), so ALL tokens —
-        // including native — need sufficient gas for an ERC-20 transfer on the remote chain.
-        if (map.minGas < MESSENGER_ERC20_MIN_GAS_LIMIT) {
-            revert JBSucker_BelowMinGas({minGas: map.minGas, minGasLimit: MESSENGER_ERC20_MIN_GAS_LIMIT});
-        }
+    function _validateTokenMapping(JBTokenMapping calldata) internal pure virtual override {
+        // CCIP wraps native tokens before bridging (see `_sendRootOverAMB`), so the base class's native-token rule
+        // does not apply. The mapping's `minGas` is the project's own number; the protocol no longer imposes a floor
+        // on it, since any floor is tuned to one set of gas rules.
     }
 }

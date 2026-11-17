@@ -104,7 +104,7 @@ contract JBOptimismSucker is JBSucker, IJBOptimismSucker {
             target: _toAddress(peer()),
             message: abi.encodeCall(JBSucker.fromRemoteAccounting, (snapshot)),
             // Scale the destination gas with the bundle so a larger mesh's accounting still stores in one relay.
-            gasLimit: SafeCast.toUint32(_messagingGasLimit({accounts: snapshot.accounts}))
+            gasLimit: SafeCast.toUint32(_messagingGasLimit())
         });
     }
 
@@ -163,7 +163,7 @@ contract JBOptimismSucker is JBSucker, IJBOptimismSucker {
             target: peerAddress,
             message: abi.encodeCall(JBSucker.fromRemote, (message)),
             // Scale the destination gas with the bundle so a larger mesh's accounting still stores in one relay.
-            gasLimit: SafeCast.toUint32(_messagingGasLimit({accounts: message.accounts}))
+            gasLimit: SafeCast.toUint32(_messagingGasLimit())
         });
     }
 }

@@ -1078,7 +1078,8 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
             _suckersOf[projectId].set({key: address(sucker), value: _SUCKER_EXISTS});
 
             // Map the tokens for the sucker.
-            sucker.mapTokens(configuration.mappings);
+            // A fresh sucker has no pending claims, so no mapping here can send a message.
+            sucker.mapTokens({maps: configuration.mappings, messagingGasLimit: 0});
             emit SuckerDeployedFor({
                 projectId: projectId, sucker: address(sucker), configuration: configuration, caller: sender
             });
