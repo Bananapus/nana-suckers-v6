@@ -273,5 +273,7 @@ interface IJBSucker is IERC165 {
     /// @param token The terminal token to bridge.
     /// @param messagingGasLimit The destination gas limit to request from the bridge. There is no default or floor;
     /// simulate `fromRemote` on the peer chain to size it.
-    function toRemote(address token, uint256 messagingGasLimit) external payable;
+    /// @param feeBeneficiary The address that receives the fee project's tokens for the `toRemoteFee`, now or when a
+    /// retained fee is paid later. Integrators pass the user they act for.
+    function toRemote(address token, uint256 messagingGasLimit, address feeBeneficiary) external payable;
 }
