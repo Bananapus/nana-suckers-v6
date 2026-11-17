@@ -236,11 +236,15 @@ interface IJBSucker is IERC165 {
 
     /// @notice Map a local token to a remote token for bridging.
     /// @param map The token mapping to add.
-    function mapToken(JBTokenMapping calldata map) external payable;
+    /// @param messagingGasLimit The destination gas limit for the final outbox flush a disable with pending claims
+    /// sends. Ignored when no message is sent.
+    function mapToken(JBTokenMapping calldata map, uint256 messagingGasLimit) external payable;
 
     /// @notice Map multiple local tokens to remote tokens for bridging.
     /// @param maps The token mappings to add.
-    function mapTokens(JBTokenMapping[] calldata maps) external payable;
+    /// @param messagingGasLimit The destination gas limit for any final outbox flush a disable with pending claims
+    /// sends. Ignored when no message is sent.
+    function mapTokens(JBTokenMapping[] calldata maps, uint256 messagingGasLimit) external payable;
 
     /// @notice Cash out project tokens and add a leaf to the outbox tree for bridging.
     /// @param projectTokenCount The number of project tokens to cash out.

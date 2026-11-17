@@ -625,7 +625,7 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     /// pending outbox entries. Requires `MAP_SUCKER_TOKEN` permission from the project owner or deployment registry.
     /// @param maps A list of local and remote terminal token addresses to map, and minimum amount/gas limits for
     /// bridging them.
-    function mapTokens(JBTokenMapping[] calldata maps) external payable override {
+    function mapTokens(JBTokenMapping[] calldata maps, uint256 messagingGasLimit) external payable override {
         uint256 disableCandidates;
 
         // Count mappings that currently need a final outbox flush. This is an upper bound because duplicated disables
@@ -645,11 +645,15 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         uint256 transportPaymentValue = disableCandidates == 0 ? 0 : msg.value / disableCandidates;
         uint256 transportPaymentSpent;
         for (uint256 i; i < maps.length;) {
+            // Disabling a mapping with pending claims flushes the outbox with a final message, which needs the
+            // caller's destination gas limit. The request is consumed per send, so set it before each mapping.
+            _messagingGasLimitRequest = messagingGasLimit;
             transportPaymentSpent += _mapToken({map: maps[i], transportPaymentValue: transportPaymentValue});
             unchecked {
                 ++i;
             }
         }
+        delete _messagingGasLimitRequest;
 
         // Return enable-only value, duplicate/no-op disable value, and integer-division dust to the caller.
         if (msg.value > transportPaymentSpent) {
@@ -1106,8 +1110,11 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     /// @notice Map an ERC-20 token on the local chain to a remote-chain ERC-20 token for bridging.
     /// @param map The local and remote terminal token addresses to map, and minimum amount/gas limits for bridging
     /// them.
-    function mapToken(JBTokenMapping calldata map) public payable override {
+    function mapToken(JBTokenMapping calldata map, uint256 messagingGasLimit) public payable override {
+        // Only a disable with pending claims sends a message; the request is consumed by that send or cleared below.
+        _messagingGasLimitRequest = messagingGasLimit;
         uint256 transportPaymentSpent = _mapToken({map: map, transportPaymentValue: msg.value});
+        delete _messagingGasLimitRequest;
         if (msg.value > transportPaymentSpent) {
             _sendNativeTo({beneficiary: payable(_msgSender()), amount: msg.value - transportPaymentSpent});
         }
