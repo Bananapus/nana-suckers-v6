@@ -258,14 +258,15 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
                 uint256[] memory chainIds = chainIdsBySucker[i];
                 uint256 numChains = chainIds.length;
                 for (uint256 c; c < numChains;) {
-                    // One call returns this chain's value, peer chain ID, and freshness key together.
-                    try IJBSucker(allSuckers[i]).peerChainTotalSupplyValue(chainIds[c]) returns (
-                        JBPeerChainValue memory read
-                    ) {
-                        scratch.chainCount = _recordPeerChainValue({
-                            scratch: scratch, read: read, sucker: allSuckers[i], isActive: isActive
-                        });
-                    } catch {}
+                    // One call returns this chain's value, peer chain ID, and freshness key together. A revert
+                    // propagates: these totals price cash outs and loans, and a dropped chain would be an outcome the
+                    // gas chooser picks.
+                    scratch.chainCount = _recordPeerChainValue({
+                        scratch: scratch,
+                        read: IJBSucker(allSuckers[i]).peerChainTotalSupplyValue(chainIds[c]),
+                        sucker: allSuckers[i],
+                        isActive: isActive
+                    });
                     unchecked {
                         ++c;
                     }
@@ -441,14 +442,9 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
         internal
         view
     {
-        uint256[] memory chainIds;
         // Aggregate over direct peer chains and gossiped virtual chains so the result reflects every chain the project
         // knows, not only its direct bridges.
-        try IJBSucker(sucker).peerChainIds(true) returns (uint256[] memory ids) {
-            chainIds = ids;
-        } catch {
-            return;
-        }
+        uint256[] memory chainIds = IJBSucker(sucker).peerChainIds(true);
 
         uint256 numChains = chainIds.length;
         for (uint256 c; c < numChains;) {
@@ -544,21 +540,17 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
         internal
         view
     {
-        try IJBSucker(sucker).peerChainAccountsOf() returns (JBChainAccounting[] memory records) {
-            uint256 numRecords = records.length;
-            for (uint256 r; r < numRecords;) {
-                // Exclude the destination chain (authoritative about itself), the local chain, and chain 0.
-                if (
-                    records[r].chainId != exceptChainId && records[r].chainId != block.chainid
-                        && records[r].chainId != 0
-                ) {
-                    _recordPeerChainAccounting({scratch: scratch, record: records[r], isActive: isActive});
-                }
-                unchecked {
-                    ++r;
-                }
+        JBChainAccounting[] memory records = IJBSucker(sucker).peerChainAccountsOf();
+        uint256 numRecords = records.length;
+        for (uint256 r; r < numRecords;) {
+            // Exclude the destination chain (authoritative about itself), the local chain, and chain 0.
+            if (records[r].chainId != exceptChainId && records[r].chainId != block.chainid && records[r].chainId != 0) {
+                _recordPeerChainAccounting({scratch: scratch, record: records[r], isActive: isActive});
             }
-        } catch {}
+            unchecked {
+                ++r;
+            }
+        }
     }
 
     /// @notice The calldata. Preferred to use over `msg.data`.
@@ -599,12 +591,8 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
         chainIdsBySucker = new uint256[][](len);
         for (uint256 i; i < len;) {
             // The full set — directly-connected plus gossiped (virtual) chains — drives cross-chain aggregation.
-            try IJBSucker(allSuckers[i]).peerChainIds(true) returns (uint256[] memory chainIds) {
-                chainIdsBySucker[i] = chainIds;
-                totalChains += chainIds.length;
-            } catch {
-                chainIdsBySucker[i] = new uint256[](0);
-            }
+            chainIdsBySucker[i] = IJBSucker(allSuckers[i]).peerChainIds(true);
+            totalChains += chainIdsBySucker[i].length;
             unchecked {
                 ++i;
             }
@@ -787,18 +775,9 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
         view
         returns (bool ok, JBPeerChainValue memory read)
     {
-        JBPeerChainContext[] memory contexts;
-        uint256 snapshot;
-
-        // The sucker read is isolated so one reverting sucker/chain does not make the aggregate view unusable.
-        try IJBSucker(sucker).peerChainContextsOf(chainId) returns (
-            JBPeerChainContext[] memory readContexts, uint256 readSnapshot
-        ) {
-            contexts = readContexts;
-            snapshot = readSnapshot;
-        } catch {
-            return (false, read);
-        }
+        // A reverting sucker read reverts the aggregate: whether a call reverts can depend on the gas the caller
+        // chose, and these aggregates price cash outs and loans.
+        (JBPeerChainContext[] memory contexts, uint256 snapshot) = IJBSucker(sucker).peerChainContextsOf(chainId);
 
         uint256 value;
         uint256 numContexts = contexts.length;
@@ -894,22 +873,28 @@ contract JBSuckerRegistry is ERC2771Context, Ownable, JBPermissioned, IJBSuckerR
         // when a project has not configured a price feed.
         if (converted == 0 || fromCurrency == toCurrency) return (true, converted);
 
-        // Cross-currency valuation is best-effort. A reverting or zero price makes the caller drop this (sucker, chain)
-        // record rather than mix priced and unpriced contexts.
-        try PRICES.pricePerUnitOf({
-            projectId: projectId, pricingCurrency: fromCurrency, unitCurrency: toCurrency, decimals: _PRICE_FIDELITY
-        }) returns (
-            uint256 price
+        // Cross-currency valuation needs a feed. A missing feed (project or default) or a zero price makes the caller
+        // drop this (sucker, chain) record rather than mix priced and unpriced contexts: both are return values. A feed
+        // that reverts reverts the aggregate, since a success flag that depends on the gas the caller chose must not
+        // decide what a cash out or loan is worth.
+        if (
+            PRICES.priceFeedCountFor({projectId: projectId, pricingCurrency: fromCurrency, unitCurrency: toCurrency})
+                    == 0
+                && PRICES.priceFeedCountFor({projectId: 0, pricingCurrency: fromCurrency, unitCurrency: toCurrency})
+                    == 0
         ) {
-            if (price == 0) return (false, 0);
-
-            // `pricePerUnitOf` returns the `fromCurrency` price of one `toCurrency`, so division expresses the source
-            // amount in `toCurrency`.
-            converted = mulDiv({x: converted, y: 10 ** _PRICE_FIDELITY, denominator: price});
-            ok = true;
-        } catch {
             return (false, 0);
         }
+
+        uint256 price = PRICES.pricePerUnitOf({
+            projectId: projectId, pricingCurrency: fromCurrency, unitCurrency: toCurrency, decimals: _PRICE_FIDELITY
+        });
+        if (price == 0) return (false, 0);
+
+        // `pricePerUnitOf` returns the `fromCurrency` price of one `toCurrency`, so division expresses the source
+        // amount in `toCurrency`.
+        converted = mulDiv({x: converted, y: 10 ** _PRICE_FIDELITY, denominator: price});
+        ok = true;
     }
 
     //*********************************************************************//
