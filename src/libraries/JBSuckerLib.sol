@@ -35,9 +35,6 @@ library JBSuckerLib {
     //*********************************************************************//
 
     /// @notice The expected byte length returned by `IJBController.currentRulesetOf(...)`.
-    /// @dev A V6 ruleset return value contains one `JBRuleset` (9 words) and one `JBRulesetMetadata` (19 words).
-    uint256 internal constant _CURRENT_RULESET_OF_RETURN_BYTES = (9 + 19) * 32;
-
     //*********************************************************************//
     // ------------------------- external views -------------------------- //
     //*********************************************************************//
@@ -288,15 +285,11 @@ library JBSuckerLib {
         (uint256 localTotalSupply, JBSourceContext[] memory localContexts) =
             _snapshotAccountsOf({directory: directory, projectId: projectId});
 
-        // Gather every other chain's record the project knows, deduped per chain and minus the destination. The
-        // accounting gossip is best-effort, so a reverting registry must never break the essential root/token bridge:
-        // catch the failure and propagate just this chain's own record.
-        JBChainAccounting[] memory peers;
-        try registry.peerChainAccountsOf({projectId: projectId, exceptChainId: exceptChainId}) returns (
-            JBChainAccounting[] memory gathered
-        ) {
-            peers = gathered;
-        } catch {}
+        // Gather every other chain's record the project knows, deduped per chain and minus the destination. A
+        // reverting registry reverts the send: whether a call reverts can depend on the gas the caller chose, and a
+        // snapshot that silently drops peers would let any `toRemote` caller shape what peer chains value.
+        JBChainAccounting[] memory peers =
+            registry.peerChainAccountsOf({projectId: projectId, exceptChainId: exceptChainId});
 
         // The local record leads; forwarded peer records follow, keeping their own origin chain and freshness.
         accounts = new JBChainAccounting[](peers.length + 1);
@@ -340,9 +333,7 @@ library JBSuckerLib {
         // entries the caller appends.
         uint256 upperBound = extraSlots;
         for (uint256 i; i < numTerminals;) {
-            try terminals[i].accountingContextsOf(projectId) returns (JBAccountingContext[] memory contexts) {
-                upperBound += contexts.length;
-            } catch {}
+            upperBound += terminals[i].accountingContextsOf(projectId).length;
             unchecked {
                 ++i;
             }
@@ -354,15 +345,13 @@ library JBSuckerLib {
         // and raw balance in the context's own currency. The receiver aggregates entries that resolve to the same
         // local token.
         for (uint256 i; i < numTerminals;) {
-            try terminals[i].accountingContextsOf(projectId) returns (JBAccountingContext[] memory contexts) {
-                for (uint256 j; j < contexts.length;) {
-                    buf[count++] =
-                        _readSourceContext({terminal: terminals[i], projectId: projectId, context: contexts[j]});
-                    unchecked {
-                        ++j;
-                    }
+            JBAccountingContext[] memory contexts = terminals[i].accountingContextsOf(projectId);
+            for (uint256 j; j < contexts.length;) {
+                buf[count++] = _readSourceContext({terminal: terminals[i], projectId: projectId, context: contexts[j]});
+                unchecked {
+                    ++j;
                 }
-            } catch {}
+            }
             unchecked {
                 ++i;
             }
@@ -374,13 +363,13 @@ library JBSuckerLib {
     /// @param projectId The project ID.
     /// @return controller The project's controller, or zero if the lookup is not supported.
     function _controllerOf(IJBDirectory directory, uint256 projectId) internal view returns (IJBController controller) {
-        try directory.controllerOf(projectId) returns (IERC165 controllerIERC165) {
-            if (address(controllerIERC165) == address(0)) return IJBController(address(0));
+        IERC165 controllerIERC165 = directory.controllerOf(projectId);
+        if (address(controllerIERC165) == address(0)) return IJBController(address(0));
 
-            try controllerIERC165.supportsInterface(type(IJBController).interfaceId) returns (bool supported) {
-                if (supported) controller = IJBController(address(controllerIERC165));
-            } catch {}
-        } catch {}
+        // A controller that does not implement the interface contributes no supply; one whose reads revert reverts.
+        if (controllerIERC165.supportsInterface(type(IJBController).interfaceId)) {
+            controller = IJBController(address(controllerIERC165));
+        }
     }
 
     /// @notice The project's authoritative accounting-context currency for a local token, or a convention fallback.
@@ -400,20 +389,13 @@ library JBSuckerLib {
         view
         returns (uint32 currency)
     {
-        // Resolve the project's primary terminal for the token. An `address` return needs a full word.
-        (bool terminalOk, bytes memory terminalData) =
-            address(directory).staticcall(abi.encodeCall(IJBDirectory.primaryTerminalOf, (projectId, token)));
-        if (terminalOk && terminalData.length >= 32) {
-            address terminal = abi.decode(terminalData, (address));
-            if (terminal != address(0)) {
-                // Read the token's accounting context. The struct encodes to three words.
-                (bool contextOk, bytes memory contextData) =
-                    terminal.staticcall(abi.encodeCall(IJBTerminal.accountingContextForTokenOf, (projectId, token)));
-                if (contextOk && contextData.length >= 96) {
-                    JBAccountingContext memory accountingContext = abi.decode(contextData, (JBAccountingContext));
-                    if (accountingContext.currency != 0) return accountingContext.currency;
-                }
-            }
+        // Resolve the project's primary terminal for the token and read the token's accounting context. A revert
+        // propagates: a success flag that depends on the gas the caller chose must not pick the currency.
+        IJBTerminal terminal = directory.primaryTerminalOf({projectId: projectId, token: token});
+        if (address(terminal) != address(0)) {
+            JBAccountingContext memory accountingContext =
+                terminal.accountingContextForTokenOf({projectId: projectId, token: token});
+            if (accountingContext.currency != 0) return accountingContext.currency;
         }
         // forge-lint: disable-next-line(unsafe-typecast)
         return uint32(uint160(token));
@@ -435,26 +417,20 @@ library JBSuckerLib {
         view
         returns (uint256 additionalSupply, JBSourceContext[] memory additionalContexts)
     {
-        // Use staticcall because older/downstream controllers may not expose the exact typed return expected here.
-        (bool rulesetCallSucceeded, bytes memory rulesetData) =
-            address(controller).staticcall(abi.encodeCall(IJBController.currentRulesetOf, (projectId)));
-        if (!rulesetCallSucceeded || rulesetData.length < _CURRENT_RULESET_OF_RETURN_BYTES) {
-            return (0, new JBSourceContext[](0));
-        }
-
         // The ruleset metadata packs the active data hook; projects without a hook need no adjustment.
-        (JBRuleset memory ruleset,) = abi.decode(rulesetData, (JBRuleset, JBRulesetMetadata));
+        (JBRuleset memory ruleset,) = controller.currentRulesetOf(projectId);
 
         address dataHook = ruleset.dataHook();
         if (dataHook == address(0) || dataHook.code.length == 0) return (0, new JBSourceContext[](0));
 
-        // Ask the hook for any off-terminal supply and per-context surplus/balance. Non-supporting, broken, or
-        // malformed hooks are ignored so the baseline snapshot still goes out.
-        (bool hookCallSucceeded, bytes memory hookData) =
-            dataHook.staticcall(abi.encodeCall(IJBPeerChainAdjustedAccounts.peerChainAdjustedAccountsOf, (projectId)));
-        if (!hookCallSucceeded) return (0, new JBSourceContext[](0));
+        // Only hooks that declare the interface are asked, and a declared hook that reverts reverts the snapshot:
+        // whether a call reverts can depend on the gas the caller chose, and a dropped adjustment changes what peer
+        // chains value.
+        if (!IERC165(dataHook).supportsInterface(type(IJBPeerChainAdjustedAccounts).interfaceId)) {
+            return (0, new JBSourceContext[](0));
+        }
 
-        return JBPeerChainAdjustedAccountsLib.decode(hookData);
+        return IJBPeerChainAdjustedAccounts(dataHook).peerChainAdjustedAccountsOf(projectId);
     }
 
     /// @notice Reads one accounting context's raw surplus and balance into a `JBSourceContext`, performing no price
@@ -479,23 +455,17 @@ library JBSuckerLib {
         oneToken[0] = context.token;
 
         // Raw surplus for this one token, requested in its own currency so the terminal does not value it.
-        uint256 surplus;
-        try terminal.currentSurplusOf({
+        uint256 surplus = terminal.currentSurplusOf({
             projectId: projectId, tokens: oneToken, decimals: context.decimals, currency: context.currency
-        }) returns (
-            uint256 contextSurplus
-        ) {
-            surplus = contextSurplus;
-        } catch {}
+        });
 
-        // Raw recorded balance for this token.
+        // Raw recorded balance for this token. Only multi terminals hold balances of their own; others report zero by
+        // interface, not by a swallowed revert.
         uint256 balance;
-        try IJBMultiTerminal(address(terminal)).STORE()
-            .balanceOf({terminal: address(terminal), projectId: projectId, token: context.token}) returns (
-            uint256 contextBalance
-        ) {
-            balance = contextBalance;
-        } catch {}
+        if (IERC165(address(terminal)).supportsInterface(type(IJBMultiTerminal).interfaceId)) {
+            balance = IJBMultiTerminal(address(terminal)).STORE()
+                .balanceOf({terminal: address(terminal), projectId: projectId, token: context.token});
+        }
 
         return JBSourceContext({
             token: bytes32(uint256(uint160(context.token))),
@@ -541,9 +511,7 @@ library JBSuckerLib {
         IJBController controller = _controllerOf({directory: directory, projectId: projectId});
 
         if (address(controller) != address(0)) {
-            try controller.totalTokenSupplyWithReservedTokensOf(projectId) returns (uint256 supply) {
-                localTotalSupply = supply;
-            } catch {}
+            localTotalSupply = controller.totalTokenSupplyWithReservedTokensOf(projectId);
         }
 
         // Ask the project's data hook for any extra supply and per-context surplus/balance first, so the terminal
