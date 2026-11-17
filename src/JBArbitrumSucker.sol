@@ -161,7 +161,7 @@ contract JBArbitrumSucker is JBSucker, IJBArbitrumSucker {
                 amount: 0,
                 data: data,
                 remoteToken: remoteToken,
-                gasLimit: _messagingGasLimit({accounts: snapshot.accounts})
+                gasLimit: _messagingGasLimit()
             });
         } else {
             // L2→L1 via ArbSys is free — reject any transport payment.
@@ -199,7 +199,7 @@ contract JBArbitrumSucker is JBSucker, IJBArbitrumSucker {
                 amount: amount,
                 data: data,
                 remoteToken: remoteToken,
-                gasLimit: _messagingGasLimit({accounts: message.accounts})
+                gasLimit: _messagingGasLimit()
             });
         } else {
             // L2→L1 via ArbSys is free — reject any transport payment.

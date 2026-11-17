@@ -65,7 +65,7 @@ import {JBRemoteToken} from "./structs/JBRemoteToken.sol";
 ///   toRemote(USDC) -> CCIP bridge USDC -> Ethereum receives USDC -> swap USDC->ETH on best V3/V4 pool
 ///
 /// **Gas limit configuration**: When mapping tokens for swap suckers via `mapToken`, set
-/// `JBTokenMapping.minGas` to at least 600,000. Combined with the base `MESSENGER_BASE_GAS_LIMIT`
+/// `JBTokenMapping.minGas` to at least 600,000. Combined with the caller-supplied messaging gas limit
 /// of 300,000, this provides ~900,000 gas for `ccipReceive` — sufficient for V3/V4 swap execution,
 /// TWAP oracle consultation, and slippage computation. Insufficient gas causes the CCIP message to
 /// fail on delivery, requiring manual re-execution via CCIP's ManualExecution mechanism.
@@ -658,7 +658,7 @@ contract JBSwapCCIPSucker is JBCCIPSucker, IUnlockCallback, IUniswapV3SwapCallba
                 transportPayment: transportPayment,
                 feeToken: feeToken,
                 feeTokenPayer: feeToken != address(0) ? _msgSender() : address(0),
-                gasLimit: MESSENGER_BASE_GAS_LIMIT + remoteToken.minGas,
+                gasLimit: _messagingGasLimit() + remoteToken.minGas,
                 encodedPayload: encodedPayload,
                 tokenAmounts: tokenAmounts,
                 refundRecipient: _msgSender()

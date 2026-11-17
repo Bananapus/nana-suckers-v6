@@ -170,7 +170,7 @@ contract JBCeloSucker is JBOptimismSucker {
         OPMESSENGER.sendMessage({
             target: peerAddress,
             message: abi.encodeCall(JBSucker.fromRemote, (message)),
-            gasLimit: MESSENGER_BASE_GAS_LIMIT
+            gasLimit: _messagingGasLimit()
         });
     }
 
