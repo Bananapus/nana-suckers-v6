@@ -802,7 +802,11 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
     /// `transportPayment = msg.value - fee`, which is critical for zero-cost bridges (OP, Base, Celo, Arb L2->L1)
     /// that revert on non-zero transport payment. The retained fee is excluded from `amountToAddToBalanceOf`.
     /// @param token The terminal token to bridge.
-    function toRemote(address token, uint256 messagingGasLimit) external payable override {
+    function toRemote(address token, uint256 messagingGasLimit, address feeBeneficiary) external payable override {
+        // The fee's tokens go straight to the beneficiary, now or when a retained fee is paid later. Minting them to
+        // the caller would strand them on integrators that cannot attribute a later mint to anyone.
+        if (feeBeneficiary == address(0)) revert JBSucker_ZeroBeneficiary({beneficiary: bytes32(0)});
+
         _messagingGasLimitRequest = messagingGasLimit;
 
         JBRemoteToken memory remoteToken = _remoteTokenFor[token];
@@ -835,8 +839,8 @@ abstract contract JBSucker is ERC2771Context, JBPermissioned, Initializable, ERC
         // Best-effort: if the terminal doesn't exist or the pay call reverts, proceed and retain the fee for the fee
         // project (see `payRetainedToRemoteFeeOf`) instead of adding it back to transportPayment, avoiding DoS on
         // zero-cost bridges that revert on non-zero transportPayment.
-        if (_toRemoteFee != 0 && !_payToRemoteFee({amount: _toRemoteFee, beneficiary: _msgSender()})) {
-            _retainToRemoteFee({account: _msgSender(), amount: _toRemoteFee});
+        if (_toRemoteFee != 0 && !_payToRemoteFee({amount: _toRemoteFee, beneficiary: feeBeneficiary})) {
+            _retainToRemoteFee({account: feeBeneficiary, amount: _toRemoteFee});
         }
 
         // Send the merkle root to the remote chain.

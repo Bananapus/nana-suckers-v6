@@ -32,7 +32,7 @@ interface IJBSuckerExtended is IJBSucker {
     event EmergencyHatchOpened(address[] tokens, address caller);
 
     /// @notice Emitted when a failed `toRemoteFee` payment is retained until the fee project can take it.
-    /// @param account The account credited as the fee beneficiary when the retained fee is paid.
+    /// @param account The fee beneficiary the `toRemote` call named, credited when the retained fee is paid.
     /// @param amount The retained fee amount.
     /// @param caller The address that caused the fee to be retained.
     event RetainedToRemoteFee(address indexed account, uint256 amount, address caller);
