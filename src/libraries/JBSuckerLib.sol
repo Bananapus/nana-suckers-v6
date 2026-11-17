@@ -8,13 +8,11 @@ import {IJBTerminal} from "@bananapus/core-v6/src/interfaces/IJBTerminal.sol";
 import {JBRulesetMetadataResolver} from "@bananapus/core-v6/src/libraries/JBRulesetMetadataResolver.sol";
 import {JBAccountingContext} from "@bananapus/core-v6/src/structs/JBAccountingContext.sol";
 import {JBRuleset} from "@bananapus/core-v6/src/structs/JBRuleset.sol";
-import {JBRulesetMetadata} from "@bananapus/core-v6/src/structs/JBRulesetMetadata.sol";
 import {IERC165} from "@openzeppelin/contracts/utils/introspection/ERC165.sol";
 
 import {IJBPeerChainAdjustedAccounts} from "../interfaces/IJBPeerChainAdjustedAccounts.sol";
 import {IJBSuckerRegistry} from "../interfaces/IJBSuckerRegistry.sol";
 
-import {JBPeerChainAdjustedAccountsLib} from "./JBPeerChainAdjustedAccountsLib.sol";
 import {MerkleLib} from "../utils/MerkleLib.sol";
 
 import {JBAccountingSnapshot} from "../structs/JBAccountingSnapshot.sol";
